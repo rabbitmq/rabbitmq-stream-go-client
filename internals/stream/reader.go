@@ -34,3 +34,13 @@ func ReadUInt(inputBuff []byte) uint32 {
 func ReadInt(inputBuff []byte) int32 {
 	return int32(ReadUInt(inputBuff))
 }
+
+func ReadStringFromReader(readerStream io.Reader) string {
+	var buff = make([]byte, 2)
+	readerStream.Read(buff)
+	lenString := ReadShort(buff)
+	buff = make([]byte, lenString)
+	readerStream.Read(buff)
+	return string(buff)
+
+}

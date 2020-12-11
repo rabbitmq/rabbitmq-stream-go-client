@@ -16,7 +16,7 @@ type Response struct {
 
 func (response *Response) ReadResponseFromStream(readerStream io.Reader) {
 	response.FrameLen = ReadIntFromReader(readerStream)
-	response.Key = ReadShortFromReader(readerStream)
+	response.CommandID = ReadShortFromReader(readerStream)
 	response.Version = ReadShortFromReader(readerStream)
 	//response.CorrelationId = ReadIntFromReader(readerStream)
 	//response.ResponseCode = ReadShortFromReader(readerStream)
