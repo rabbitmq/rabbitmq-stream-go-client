@@ -2,73 +2,70 @@ package stream
 
 import (
 	"bytes"
-	"fmt"
-	"io"
 )
 
-type ReaderResponse struct {
-	SocketReader io.Reader
-	response     *Response
-}
+func (client *Client) handleResponse() interface{} {
+	response := &Response{}
+	response.FrameLen = ReadIntFromReader(client.reader)
+	response.CommandID = ReadShortFromReader(client.reader)
+	response.Version = ReadShortFromReader(client.reader)
+	//fmt.Printf("number:%d, \n", response.CommandID)
+	defer client.reader.Reset(client.socket)
 
-func (readerResponse ReaderResponse) handleResponse() interface{} {
-	readerResponse.response = &Response{}
-	readerResponse.response.ReadResponseFromStream(readerResponse.SocketReader)
-	fmt.Printf("number:%d, \n", readerResponse.response.CommandID)
-	switch readerResponse.response.CommandID {
+	switch response.CommandID {
 
 	case CommandPeerProperties:
 		{
-			return readerResponse.handlePeerProperties()
+			return client.handlePeerProperties(response)
 		}
 	case CommandSaslHandshake:
 		{
-			return readerResponse.handleSaslHandshakeResponse()
+			return client.handleSaslHandshakeResponse(response)
 		}
 	case CommandTune:
 		{
-			return readerResponse.handleTune()
+			return client.handleTune()
 		}
 	case CommandOpen, CommandDeclarePublisher:
 		{
-			readerResponse.handleGenericResponse()
+			return client.handleGenericResponse(response)
 		}
 	}
 	return nil
 }
 
-func (readerResponse ReaderResponse) handleSaslHandshakeResponse() interface{} {
-	readerResponse.response.CorrelationId = ReadIntFromReader(readerResponse.SocketReader)
-	readerResponse.response.ResponseCode = ReadShortFromReader(readerResponse.SocketReader)
-	mechanismsCount := ReadIntFromReader(readerResponse.SocketReader)
+func (client *Client) handleSaslHandshakeResponse(response *Response) interface{} {
+	response.CorrelationId = ReadIntFromReader(client.reader)
+	response.ResponseCode = ReadShortFromReader(client.reader)
+	mechanismsCount := ReadIntFromReader(client.reader)
 	var mechanisms []string
 	for i := 0; i < int(mechanismsCount); i++ {
-		mechanism := ReadStringFromReader(readerResponse.SocketReader)
+		mechanism := ReadStringFromReader(client.reader)
 		mechanisms = append(mechanisms, mechanism)
 	}
 	return mechanisms
 }
 
-func (readerResponse ReaderResponse) handlePeerProperties() interface{} {
-	readerResponse.response.CorrelationId = ReadIntFromReader(readerResponse.SocketReader)
-	readerResponse.response.ResponseCode = ReadShortFromReader(readerResponse.SocketReader)
+func (client *Client) handlePeerProperties(response *Response) interface{} {
+	response.CorrelationId = ReadIntFromReader(client.reader)
+	response.ResponseCode = ReadShortFromReader(client.reader)
 
-	serverPropertiesCount := ReadIntFromReader(readerResponse.SocketReader)
+	serverPropertiesCount := ReadIntFromReader(client.reader)
 	serverProperties := make(map[string]string)
 
 	for i := 0; i < int(serverPropertiesCount); i++ {
-		key := ReadStringFromReader(readerResponse.SocketReader)
-		value := ReadStringFromReader(readerResponse.SocketReader)
+		key := ReadStringFromReader(client.reader)
+		value := ReadStringFromReader(client.reader)
 		serverProperties[key] = value
 	}
 
 	return serverProperties
 }
 
-func (readerResponse ReaderResponse) handleTune() interface{} {
+func (client *Client) handleTune() interface{} {
 
-	serverMaxFrameSize := ReadIntFromReader(readerResponse.SocketReader)
-	serverHeartbeat := ReadIntFromReader(readerResponse.SocketReader)
+	serverMaxFrameSize := ReadIntFromReader(client.reader)
+	serverHeartbeat := ReadIntFromReader(client.reader)
 
 	maxFrameSize := serverMaxFrameSize
 	heartbeat := serverHeartbeat
@@ -84,11 +81,9 @@ func (readerResponse ReaderResponse) handleTune() interface{} {
 
 }
 
-func (readerResponse ReaderResponse) handleGenericResponse() interface{} {
+func (client *Client) handleGenericResponse(response *Response) interface{} {
 
-	readerResponse.response.CorrelationId = ReadIntFromReader(readerResponse.SocketReader)
-	readerResponse.response.ResponseCode = ReadShortFromReader(readerResponse.SocketReader)
-
-	return readerResponse.response.ResponseCode
-
+	response.ResponseCode = ReadShortFromReader(client.reader)
+	response.CorrelationId = ReadIntFromReader(client.reader)
+	return response.ResponseCode
 }

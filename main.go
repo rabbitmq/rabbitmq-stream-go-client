@@ -8,7 +8,7 @@ func main() {
 
 	var client = stream2.Client{}
 	_ = client.Create()
-//	client.CreateStream("my-golang-stream")
+	client.CreateStream("my-golang-stream")
 	client.DeclarePublisher(0,"my-golang-stream")
 	client.Publish("A")
 
