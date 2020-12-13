@@ -10,7 +10,7 @@ func main() {
 	_ = client.Create()
 //	client.CreateStream("my-golang-stream")
 	client.DeclarePublisher(0,"my-golang-stream")
-	client.Publish("hello")
+	client.Publish("A")
 
 
 

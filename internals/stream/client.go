@@ -25,12 +25,14 @@ type Client struct {
 const (
 	CommandCreateStream     = 998
 	Version0                = 0
-	CommandPeerProperties   = 15
+	CommandPeerProperties   = 15 //1
 	UnicodeNull             = "\u0000"
-	CommandSaslAuthenticate = 10
+	CommandSaslAuthenticate = 10 //3
 	CommandOpen             = 12
 	CommandPublish          = 0
 	CommandDeclarePublisher = 18
+	CommandSaslHandshake    = 9  //2
+	CommandTune             = 11 //3
 )
 
 func (client *Client) Create() error {
@@ -115,10 +117,34 @@ func (client *Client) peerProperties() {
 }
 
 func (client *Client) authenticate() {
-	saslMechanism := "PLAIN"
+
+	saslMechanisms := client.getSaslMechanisms()
+	saslMechanism := ""
+	for i := 0; i < len(saslMechanisms); i++ {
+		if saslMechanisms[i] == "PLAIN" {
+			saslMechanism = "PLAIN"
+		}
+	}
 	response := UnicodeNull + "guest" + UnicodeNull + "guest"
 	saslResponse := []byte(response)
 	client.sendSaslAuthenticate(saslMechanism, saslResponse)
+}
+
+func (client *Client) getSaslMechanisms() []string {
+	length := 2 + 2 + 4
+	correlationId := 3
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandSaslHandshake)
+	WriteShort(b, Version0)
+	WriteInt(b, correlationId)
+	_, _ = client.socket.Write(b.Bytes())
+	readerResponse := ReaderResponse{}
+	readerResponse.SocketReader = bufio.NewReader(client.socket)
+	data := readerResponse.handleResponse()
+	strings := data.([]string)
+	return strings
+
 }
 
 func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) {
@@ -137,6 +163,12 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	readerResponse := ReaderResponse{}
 	readerResponse.SocketReader = bufio.NewReader(client.socket)
 	readerResponse.handleResponse()
+	// double read for TUNE
+	readerResponse = ReaderResponse{}
+	readerResponse.SocketReader = bufio.NewReader(client.socket)
+	data := readerResponse.handleResponse()
+	tuneData := data.([]byte)
+	_, _ = client.socket.Write(tuneData)
 }
 
 func (client *Client) open(virtualHost string) {
@@ -149,6 +181,9 @@ func (client *Client) open(virtualHost string) {
 	WriteInt(b, correlationId)
 	WriteString(b, virtualHost)
 	client.socket.Write(b.Bytes())
+	readerResponse := ReaderResponse{}
+	readerResponse.SocketReader = bufio.NewReader(client.socket)
+	readerResponse.handleResponse()
 }
 
 func (client *Client) DeclarePublisher(publisherId byte, stream string) {
@@ -164,23 +199,25 @@ func (client *Client) DeclarePublisher(publisherId byte, stream string) {
 	WriteShort(b, int16(publisherReferenceSize))
 	WriteString(b, stream)
 	client.socket.Write(b.Bytes())
-	var buff = make([]byte, 8)
-	client.socket.Read(buff)
-	//data := binary.BigEndian.Uint32(buff)
-	fmt.Printf("aaa %s", string(buff))
+	readerResponse := ReaderResponse{}
+	readerResponse.SocketReader = bufio.NewReader(client.socket)
+	readerResponse.handleResponse()
+
 }
 
 func (client *Client) Publish(message string) {
-	length := 2 + 2 + 4 + 2 + len(message)
-	plublishId := 6
+	length := 2 + 2 + 1 + 4
+	var plublishId byte
+	plublishId = 0
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandPublish)
 	WriteShort(b, Version0)
-	WriteInt(b, plublishId)
+	WriteByte(b, plublishId)
 	WriteInt(b, 1)
 	WriteLong(b, 0)
-	WriteString(b, message)
+	WriteInt(b, len(message))
+	b.Write([]byte(message))
 	_, err := client.socket.Write(b.Bytes())
 	if err != nil {
 		fmt.Printf("%s", err)

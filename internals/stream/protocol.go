@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"fmt"
 	"io"
 )
 
@@ -21,7 +20,7 @@ func (response *Response) ReadResponseFromStream(readerStream io.Reader) {
 	//response.CorrelationId = ReadIntFromReader(readerStream)
 	//response.ResponseCode = ReadShortFromReader(readerStream)
 
-	fmt.Printf("peerProperties key:%d, CorrelationId:%d, Version:%d,ResponseCode:%d \n ", response.Key, response.CorrelationId, response.Version, response.ResponseCode)
+	//fmt.Printf("peerProperties key:%d, CorrelationId:%d, Version:%d,ResponseCode:%d \n ", response.Key, response.CorrelationId, response.Version, response.ResponseCode)
 
 }
 

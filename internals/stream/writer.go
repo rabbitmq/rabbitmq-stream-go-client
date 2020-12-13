@@ -30,6 +30,10 @@ func WriteByte(inputBuff *bytes.Buffer, value byte) {
 	buff[0] = value
 	inputBuff.Write(buff)
 }
+func WriteInt32(inputBuff *bytes.Buffer, value int32) {
+	WriteUInt(inputBuff, uint32(value))
+}
+
 
 func WriteInt(inputBuff *bytes.Buffer, value int) {
 	WriteUInt(inputBuff, uint32(value))
