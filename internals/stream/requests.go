@@ -134,7 +134,7 @@ func (client *Client) DeclarePublisher(publisherId byte, stream string) {
 }
 
 func (client *Client) Publish(message string) {
-	length := 2 + 2 + 1 + 4
+	length := 30
 	var publishId byte
 	publishId = 0
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -144,15 +144,21 @@ func (client *Client) Publish(message string) {
 	WriteByte(b, publishId)
 	WriteInt(b, 1)
 	WriteLong(b, 0)
-	WriteInt(b, len(message))
-	b.Write([]byte(message))
-	_, err := client.socket.Write(b.Bytes())
-	if err != nil {
-		fmt.Printf("%s", err)
-	}
+	WriteInt(b, 9)
 
-	var buff = make([]byte, 10)
-	client.socket.Read(buff)
+	WriteByte(b, 0)
+	WriteByte(b, 83)
+	WriteByte(b, 117)
+	WriteByte(b, 96)
+	WriteByte(b, 4)
+	WriteByte(b, 90)
+	WriteByte(b, 90)
+	WriteByte(b, 90)
+	WriteByte(b, 90)
 
-	fmt.Printf("aaa %s", string(buff))
+
+	//bb := []byte{0, 83, 117, byte(-96), 4, 90, 90, 90, 90}
+	//b.Write(bb)
+	client.writeAndFlush(b.Bytes())
+	//client.handleResponse()
 }

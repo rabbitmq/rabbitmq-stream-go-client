@@ -26,7 +26,7 @@ func (client *Client) handleResponse() interface{} {
 		{
 			return client.handleTune()
 		}
-	case CommandOpen, CommandDeclarePublisher:
+	case CommandOpen, CommandDeclarePublisher, CommandPublish:
 		{
 			return client.handleGenericResponse(response)
 		}
