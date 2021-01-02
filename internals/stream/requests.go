@@ -2,11 +2,10 @@ package stream
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/Azure/go-amqp"
 )
 
-func (client *Client) peerProperties() {
+func (client *Client) peerProperties() error {
 	clientPropertiesSize := 4 // size of the map, always there
 
 	client.clientProperties.items["connection_name"] = "rabbitmq-stream-locator"
@@ -35,11 +34,15 @@ func (client *Client) peerProperties() {
 		WriteString(b, element)
 	}
 
-	client.writeAndFlush(b.Bytes())
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return err
+	}
 	client.handleResponse()
+	return nil
 }
 
-func (client *Client) authenticate() {
+func (client *Client) authenticate(user string, password string) error {
 
 	saslMechanisms := client.getSaslMechanisms()
 	saslMechanism := ""
@@ -48,9 +51,9 @@ func (client *Client) authenticate() {
 			saslMechanism = "PLAIN"
 		}
 	}
-	response := UnicodeNull + "guest" + UnicodeNull + "guest"
+	response := UnicodeNull + user + UnicodeNull + password
 	saslResponse := []byte(response)
-	client.sendSaslAuthenticate(saslMechanism, saslResponse)
+	return client.sendSaslAuthenticate(saslMechanism, saslResponse)
 }
 
 func (client *Client) getSaslMechanisms() []string {
@@ -68,9 +71,8 @@ func (client *Client) getSaslMechanisms() []string {
 
 }
 
-func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) {
+func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	fmt.Print(length)
 	correlationId := 4
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -80,18 +82,21 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	WriteString(b, saslMechanism)
 	WriteInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
-	client.writeAndFlush(b.Bytes())
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return err
+	}
 
 	client.handleResponse()
 
 	// double read for TUNE
 	data := client.handleResponse()
 	tuneData := data.([]byte)
-	client.writeAndFlush(tuneData)
+	return client.writeAndFlush(tuneData)
 
 }
 
-func (client *Client) open(virtualHost string) {
+func (client *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
 	correlationId := 6
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -100,8 +105,12 @@ func (client *Client) open(virtualHost string) {
 	WriteShort(b, Version0)
 	WriteInt(b, correlationId)
 	WriteString(b, virtualHost)
-	client.writeAndFlush(b.Bytes())
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return err
+	}
 	client.handleResponse()
+	return nil
 }
 
 func (client *Client) writeAndFlush(buffer []byte) error {
@@ -117,7 +126,7 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 	return nil
 }
 
-func (client *Client) DeclarePublisher(publisherId byte, stream string) {
+func (client *Client) DeclarePublisher(publisherId byte, stream string) error {
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
 	correlationId := 6
@@ -129,12 +138,16 @@ func (client *Client) DeclarePublisher(publisherId byte, stream string) {
 	WriteByte(b, publisherId)
 	WriteShort(b, int16(publisherReferenceSize))
 	WriteString(b, stream)
-	client.writeAndFlush(b.Bytes())
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return err
+	}
 	client.handleResponse()
+	return nil
 
 }
 
-func (client *Client) BatchPublish(msgs []*amqp.Message) {
+func (client *Client) BatchPublish(msgs []*amqp.Message) error {
 	frameHeaderLength := 2 + 2 + 1 + 4
 
 	var msgLen int
@@ -163,6 +176,10 @@ func (client *Client) BatchPublish(msgs []*amqp.Message) {
 		seq += 1
 	}
 
-	client.writeAndFlush(b.Bytes())
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return err
+	}
 	client.handleResponse()
+	return nil
 }

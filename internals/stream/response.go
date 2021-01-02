@@ -9,7 +9,6 @@ func (client *Client) handleResponse() interface{} {
 	response.FrameLen = ReadIntFromReader(client.reader)
 	response.CommandID = ReadShortFromReader(client.reader)
 	response.Version = ReadShortFromReader(client.reader)
-	//fmt.Printf("number:%d, \n", response.CommandID)
 	defer client.reader.Reset(client.socket)
 
 	switch response.CommandID {
@@ -31,7 +30,7 @@ func (client *Client) handleResponse() interface{} {
 			return client.handleGenericResponse(response)
 		}
 
-	case COMMAND_PUBLISH_CONFIRM:
+	case CommandPublishConfirm:
 		{
 			client.handleConfirm(response)
 		}

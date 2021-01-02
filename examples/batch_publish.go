@@ -3,18 +3,20 @@ package main
 import (
 	"fmt"
 	"github.com/Azure/go-amqp"
-	stream "github.com/gsantomaggio/go-stream-client/internals/stream"
+	"github.com/gsantomaggio/go-stream-client/internals/stream"
 	"strconv"
 	"time"
 )
 
 func main() {
+	fmt.Println("Connecting ...")
 	var client = stream.Client{}
-	err := client.Create()
+	err := client.Connect("rabbitmq-stream://guest:guest@localhost:5555/%2f") // Connect
 	if err != nil {
 		fmt.Printf("error: %s", err)
 		return
 	}
+	fmt.Println("Connected!")
 	streamName := "go-java-stream-7"
 	err = client.CreateStream(streamName)
 	if err != nil {
@@ -22,14 +24,23 @@ func main() {
 		return
 	}
 
-	client.DeclarePublisher(0, streamName)
+	err = client.DeclarePublisher(0, streamName)
+	if err != nil {
+		fmt.Printf("error: %s", err)
+		return
+	}
 	t1 := time.Now()
 	for i := 0; i < 100; i++ {
 		var arr []*amqp.Message
 		for z := 0; z < 100; z++ {
 			arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(i))))
 		}
-		client.BatchPublish(arr)
+		err = client.BatchPublish(arr)
+		if err != nil {
+			fmt.Printf("error: %s", err)
+			return
+		}
+
 	}
 	t2 := time.Now()
 	diff := t2.Sub(t1)

@@ -3,8 +3,8 @@ package stream
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"net"
+	"net/url"
 )
 
 type TuneState struct {
@@ -32,27 +32,48 @@ const (
 	CommandSaslAuthenticate = 10 //3
 	CommandOpen             = 12
 	CommandPublish          = 0
-	COMMAND_PUBLISH_CONFIRM = 1
+	CommandPublishConfirm   = 1
 	CommandDeclarePublisher = 18
 	CommandSaslHandshake    = 9  //2
 	CommandTune             = 11 //3
 )
 
-func (client *Client) Create() error {
+func (client *Client) Connect(addr string) error {
+
+	u, err := url.Parse(addr)
+	if err != nil {
+		return err
+	}
+	host, port := u.Hostname(), u.Port()
+	if port == "" {
+		port = "5555"
+	}
+
 	client.tuneState.requestedHeartbeat = 60
 	client.tuneState.requestedMaxFrameSize = 1048576
 	client.clientProperties.items = make(map[string]string)
-	connection, err2 := net.Dial("tcp", "localhost:5555")
+	connection, err2 := net.Dial("tcp", net.JoinHostPort(host, port))
 	if err2 != nil {
-		fmt.Println(err2)
+		return err2
 	}
 	client.socket = connection
 	client.writer = bufio.NewWriter(client.socket)
 	client.reader = bufio.NewReader(client.socket)
 
-	client.peerProperties()
-	client.authenticate()
-	client.open("/")
+	err2 = client.peerProperties()
+	if err2 != nil {
+		return err2
+	}
+	pwd, _ := u.User.Password()
+	err2 = client.authenticate(u.User.Username(), pwd)
+	if err2 != nil {
+		return err2
+	}
+	vhost := "/"
+	if len(u.Path) > 1 {
+		vhost, _ = url.QueryUnescape(u.Path[1:])
+	}
+	client.open(vhost)
 
 	return nil
 }
@@ -82,7 +103,6 @@ func (client *Client) CreateStream(stream string) error {
 		WriteString(b, element)
 	}
 
-	client.writeAndFlush(b.Bytes())
+	return client.writeAndFlush(b.Bytes())
 
-	return nil
 }
