@@ -24,7 +24,8 @@ func main() {
 		return
 	}
 
-	err = client.DeclarePublisher(0, streamName)
+	producer, err := client.DeclarePublisher(streamName)
+
 	if err != nil {
 		fmt.Printf("error: %s", err)
 		return
@@ -35,7 +36,7 @@ func main() {
 		for z := 0; z < 100; z++ {
 			arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(i))))
 		}
-		err = client.BatchPublish(arr)
+		err = producer.BatchPublish(arr)
 		if err != nil {
 			fmt.Printf("error: %s", err)
 			return
