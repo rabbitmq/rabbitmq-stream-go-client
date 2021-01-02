@@ -26,8 +26,6 @@ func ReadIntFromReader(readerStream io.Reader) int32 {
 	return ReadInt(buff)
 }
 
-<<<<<<< HEAD
-=======
 func ReadInt64FromReader(readerStream io.Reader) int64 {
 	var buff = make([]byte, 8)
 	readerStream.Read(buff)
@@ -40,17 +38,11 @@ func ReadByteFromReader(readerStream io.Reader) byte {
 	return buff[0]
 }
 
->>>>>>> Add publish batch
 func ReadUInt(inputBuff []byte) uint32 {
 	data := binary.BigEndian.Uint32(inputBuff)
 	return data
 }
 
-<<<<<<< HEAD
-func ReadInt(inputBuff []byte) int32 {
-	return int32(ReadUInt(inputBuff))
-}
-=======
 func ReadUInt64(inputBuff []byte) uint64 {
 	data := binary.BigEndian.Uint64(inputBuff)
 	return data
@@ -62,8 +54,6 @@ func ReadInt(inputBuff []byte) int32 {
 func ReadInt64(inputBuff []byte) int64 {
 	return int64(ReadUInt64(inputBuff))
 }
-
->>>>>>> Add publish batch
 
 func ReadStringFromReader(readerStream io.Reader) string {
 	var buff = make([]byte, 2)

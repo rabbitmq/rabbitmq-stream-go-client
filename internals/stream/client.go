@@ -32,10 +32,7 @@ const (
 	CommandSaslAuthenticate = 10 //3
 	CommandOpen             = 12
 	CommandPublish          = 0
-<<<<<<< HEAD
-=======
 	COMMAND_PUBLISH_CONFIRM = 1
->>>>>>> Add publish batch
 	CommandDeclarePublisher = 18
 	CommandSaslHandshake    = 9  //2
 	CommandTune             = 11 //3
@@ -89,9 +86,3 @@ func (client *Client) CreateStream(stream string) error {
 
 	return nil
 }
-
-<<<<<<< HEAD
-=======
-
-
->>>>>>> Add publish batch
