@@ -26,11 +26,18 @@ func (client *Client) handleResponse() interface{} {
 		{
 			return client.handleTune()
 		}
-	case CommandOpen, CommandDeclarePublisher, CommandPublish:
+	case CommandOpen, CommandDeclarePublisher:
 		{
 			return client.handleGenericResponse(response)
 		}
+
+	case COMMAND_PUBLISH_CONFIRM:
+		{
+			client.handleConfirm(response)
+		}
+
 	}
+
 	return nil
 }
 
@@ -86,4 +93,18 @@ func (client *Client) handleGenericResponse(response *Response) interface{} {
 	response.ResponseCode = ReadShortFromReader(client.reader)
 	response.CorrelationId = ReadIntFromReader(client.reader)
 	return response.ResponseCode
+}
+
+func (client *Client) handleConfirm(response *Response) {
+	response.PublishID = ReadByteFromReader(client.reader)
+	//response.PublishingIdCount = ReadIntFromReader(client.reader)
+	publishingIdCount := ReadIntFromReader(client.reader)
+	//var _publishingId int64
+	for publishingIdCount != 0 {
+		//publishingId = ReadInt64FromReader(client.reader)
+		ReadInt64FromReader(client.reader)
+		//fmt.Print("publishingId %d",  publishingId)
+		publishingIdCount--
+	}
+
 }

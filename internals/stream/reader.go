@@ -26,13 +26,33 @@ func ReadIntFromReader(readerStream io.Reader) int32 {
 	return ReadInt(buff)
 }
 
+func ReadInt64FromReader(readerStream io.Reader) int64 {
+	var buff = make([]byte, 8)
+	readerStream.Read(buff)
+	return ReadInt64(buff)
+}
+
+func ReadByteFromReader(readerStream io.Reader) byte {
+	var buff = make([]byte, 1)
+	readerStream.Read(buff)
+	return buff[0]
+}
+
 func ReadUInt(inputBuff []byte) uint32 {
 	data := binary.BigEndian.Uint32(inputBuff)
 	return data
 }
 
+func ReadUInt64(inputBuff []byte) uint64 {
+	data := binary.BigEndian.Uint64(inputBuff)
+	return data
+}
+
 func ReadInt(inputBuff []byte) int32 {
 	return int32(ReadUInt(inputBuff))
+}
+func ReadInt64(inputBuff []byte) int64 {
+	return int64(ReadUInt64(inputBuff))
 }
 
 func ReadStringFromReader(readerStream io.Reader) string {
