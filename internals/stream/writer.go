@@ -30,11 +30,30 @@ func WriteByte(inputBuff *bytes.Buffer, value byte) {
 	buff[0] = value
 	inputBuff.Write(buff)
 }
+<<<<<<< HEAD
+=======
+
+func WriteInt8(inputBuff *bytes.Buffer, value int8) {
+	var buff = make([]byte, 1)
+	//buff[0] = byte(value)
+	binary.Write(inputBuff, binary.LittleEndian, value)
+	inputBuff.Write(buff)
+}
+
+func WriteBytes(inputBuff *bytes.Buffer, value []byte) {
+	inputBuff.Write(value)
+}
+
+
+>>>>>>> Add publish batch
 func WriteInt32(inputBuff *bytes.Buffer, value int32) {
 	WriteUInt(inputBuff, uint32(value))
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> Add publish batch
 func WriteInt(inputBuff *bytes.Buffer, value int) {
 	WriteUInt(inputBuff, uint32(value))
 }

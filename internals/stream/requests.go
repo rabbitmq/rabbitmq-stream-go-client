@@ -3,6 +3,10 @@ package stream
 import (
 	"bytes"
 	"fmt"
+<<<<<<< HEAD
+=======
+	"github.com/Azure/go-amqp"
+>>>>>>> Add publish batch
 )
 
 func (client *Client) peerProperties() {
@@ -133,8 +137,21 @@ func (client *Client) DeclarePublisher(publisherId byte, stream string) {
 
 }
 
+<<<<<<< HEAD
 func (client *Client) Publish(message string) {
 	length := 30
+=======
+func (client *Client) BatchPublish(msgs []*amqp.Message) {
+	frameHeaderLength := 2 + 2 + 1 + 4
+
+	var msgLen int
+	for _, msg := range msgs {
+		r, _ := msg.MarshalBinary()
+		msgLen += len(r) + 8 + 4
+	}
+
+	length := frameHeaderLength + msgLen
+>>>>>>> Add publish batch
 	var publishId byte
 	publishId = 0
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -142,6 +159,7 @@ func (client *Client) Publish(message string) {
 	WriteShort(b, CommandPublish)
 	WriteShort(b, Version0)
 	WriteByte(b, publishId)
+<<<<<<< HEAD
 	WriteInt(b, 1)
 	WriteLong(b, 0)
 	WriteInt(b, 9)
@@ -161,4 +179,20 @@ func (client *Client) Publish(message string) {
 	//b.Write(bb)
 	client.writeAndFlush(b.Bytes())
 	//client.handleResponse()
+=======
+	WriteInt(b, len(msgs)) //toExcluded - fromInclude
+
+	var seq int64
+	seq = 0
+	for _, msg := range msgs {
+		r, _ := msg.MarshalBinary()
+		WriteLong(b, seq)   // sequence
+		WriteInt(b, len(r)) // len
+		b.Write(r)
+		seq += 1
+	}
+
+	client.writeAndFlush(b.Bytes())
+	client.handleResponse()
+>>>>>>> Add publish batch
 }

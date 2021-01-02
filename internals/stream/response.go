@@ -26,11 +26,26 @@ func (client *Client) handleResponse() interface{} {
 		{
 			return client.handleTune()
 		}
+<<<<<<< HEAD
 	case CommandOpen, CommandDeclarePublisher, CommandPublish:
 		{
 			return client.handleGenericResponse(response)
 		}
 	}
+=======
+	case CommandOpen, CommandDeclarePublisher:
+		{
+			return client.handleGenericResponse(response)
+		}
+
+	case COMMAND_PUBLISH_CONFIRM:
+		{
+			client.handleConfirm(response)
+		}
+
+	}
+
+>>>>>>> Add publish batch
 	return nil
 }
 
@@ -87,3 +102,20 @@ func (client *Client) handleGenericResponse(response *Response) interface{} {
 	response.CorrelationId = ReadIntFromReader(client.reader)
 	return response.ResponseCode
 }
+<<<<<<< HEAD
+=======
+
+func (client *Client) handleConfirm(response *Response) {
+	response.PublishID = ReadByteFromReader(client.reader)
+	//response.PublishingIdCount = ReadIntFromReader(client.reader)
+	publishingIdCount := ReadIntFromReader(client.reader)
+	//var _publishingId int64
+	for publishingIdCount != 0 {
+		//publishingId = ReadInt64FromReader(client.reader)
+		ReadInt64FromReader(client.reader)
+		//fmt.Print("publishingId %d",  publishingId)
+		publishingIdCount--
+	}
+
+}
+>>>>>>> Add publish batch
