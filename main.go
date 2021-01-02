@@ -10,9 +10,18 @@ import (
 
 func main() {
 	var client = stream.Client{}
-	_ = client.Create()
+	err := client.Create()
+	if err != nil {
+		fmt.Printf("error: %s", err)
+		return
+	}
 	streamName := "go-java-stream-7"
-	client.CreateStream(streamName)
+	err = client.CreateStream(streamName)
+	if err != nil {
+		fmt.Printf("error: %s", err)
+		return
+	}
+
 	client.DeclarePublisher(0, streamName)
 	t1 := time.Now()
 	for i := 0; i < 100; i++ {
@@ -21,7 +30,6 @@ func main() {
 			arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(i))))
 		}
 		client.BatchPublish(arr)
-		//time.Sleep(3 * time.Millisecond)
 	}
 	t2 := time.Now()
 	diff := t2.Sub(t1)
