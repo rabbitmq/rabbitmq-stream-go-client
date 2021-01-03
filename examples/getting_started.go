@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/go-amqp"
-	"github.com/gsantomaggio/go-stream-client/internals/stream"
+	"github.com/gsantomaggio/go-stream-client/pkg/stream"
 	"os"
 	"strconv"
 	"time"
