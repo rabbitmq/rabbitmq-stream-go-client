@@ -45,11 +45,11 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 
 		err := producer.LikedClient.writeAndFlush(b.Bytes())
 		if err != nil {
-			respChan <- &WriteResponse{0, err}
+			respChan <- &WriteResponse{Err: err}
 			return
 		}
 		producer.LikedClient.handleResponse()
-		respChan <- &WriteResponse{0, nil}
+		respChan <- &WriteResponse{}
 	}(msgs)
 
 	select {

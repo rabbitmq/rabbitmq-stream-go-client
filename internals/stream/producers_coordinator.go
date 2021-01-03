@@ -1,6 +1,8 @@
 package stream
 
-import "sync"
+import (
+	"sync"
+)
 
 var producersCoordinator *ProducersCoordinator
 
