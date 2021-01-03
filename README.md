@@ -13,7 +13,7 @@ A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-s
     	"context"
     	"fmt"
     	"github.com/Azure/go-amqp"
-    	"github.com/gsantomaggio/go-stream-client/internals/stream"
+    	"github.com/gsantomaggio/go-stream-client/pkg/stream"
     	"os"
     	"strconv"
     	"time"
@@ -62,7 +62,5 @@ A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-s
     	_, _ = reader.ReadString('\n')
     	fmt.Print("Bye bye")
     }
-
-
 ```
  
