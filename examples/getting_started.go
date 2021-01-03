@@ -11,7 +11,7 @@ import (
 
 func main() {
 	fmt.Println("Connecting ...")
-	var client = stream.Client{}                                              // create Client Struct
+	var client = stream.NewStreamingClient()                                              // create Client Struct
 	err := client.Connect("rabbitmq-stream://guest:guest@localhost:5555/%2f") // Connect
 	if err != nil {
 		fmt.Printf("error: %s", err)

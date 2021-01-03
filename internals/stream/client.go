@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"net"
 	"net/url"
+	"sync"
 )
 
 type TuneState struct {
@@ -16,12 +17,18 @@ type ClientProperties struct {
 	items map[string]string
 }
 
+type AtomicInt struct {
+	value int
+	mutex *sync.Mutex
+}
+
 type Client struct {
 	socket           net.Conn
 	clientProperties ClientProperties
 	tuneState        TuneState
 	writer           *bufio.Writer
 	reader           *bufio.Reader
+	correlationID    *AtomicInt
 }
 
 const (
@@ -37,6 +44,26 @@ const (
 	CommandSaslHandshake    = 9  //2
 	CommandTune             = 11 //3
 )
+
+func NewAtomicInt() *AtomicInt {
+	atomicInt := &AtomicInt{}
+	atomicInt.value = 0
+	atomicInt.mutex = &sync.Mutex{}
+	return atomicInt
+}
+
+func NewStreamingClient() *Client {
+	client := &Client{}
+	client.correlationID = NewAtomicInt()
+	return client
+}
+
+func (client *Client) increaseAndGetCorrelationID() int {
+	client.correlationID.mutex.Lock()
+	defer client.correlationID.mutex.Unlock()
+	client.correlationID.value += 1
+	return client.correlationID.value
+}
 
 func (client *Client) Connect(addr string) error {
 
@@ -83,7 +110,7 @@ func (client *Client) Connect(addr string) error {
 
 func (client *Client) CreateStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream) + 4
-	correlationId := 0
+	correlationId := client.increaseAndGetCorrelationID()
 	arguments := make(map[string]string)
 	arguments["queue-leader-locator"] = "least-leaders"
 	for key, element := range arguments {
@@ -118,7 +145,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
-	correlationId := 6
+	correlationId := client.increaseAndGetCorrelationID()
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeclarePublisher)
@@ -151,7 +178,7 @@ func (client *Client) peerProperties() error {
 
 	length := 2 + 2 + 4 + clientPropertiesSize
 
-	correlationId := 2
+	correlationId := client.increaseAndGetCorrelationID()
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)
@@ -189,7 +216,7 @@ func (client *Client) authenticate(user string, password string) error {
 
 func (client *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
-	correlationId := 3
+	correlationId := client.increaseAndGetCorrelationID()
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
@@ -204,7 +231,7 @@ func (client *Client) getSaslMechanisms() []string {
 
 func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	correlationId := 4
+	correlationId := client.increaseAndGetCorrelationID()
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslAuthenticate)
@@ -229,7 +256,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 
 func (client *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
-	correlationId := 6
+	correlationId := client.increaseAndGetCorrelationID()
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandOpen)

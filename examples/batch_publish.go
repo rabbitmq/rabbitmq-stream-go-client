@@ -24,7 +24,7 @@ func main() {
 		return
 	}
 
-	producer, err := client.DeclarePublisher(streamName)
+	producer, err := client.NewProducer(streamName)
 
 	if err != nil {
 		fmt.Printf("error: %s", err)
