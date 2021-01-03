@@ -5,7 +5,7 @@ import (
 )
 
 func (client *Client) handleResponse() interface{} {
-	response := &Response{}
+	response := &StreamingResponse{}
 	response.FrameLen = ReadIntFromReader(client.reader)
 	response.CommandID = ReadShortFromReader(client.reader)
 	response.Version = ReadShortFromReader(client.reader)
@@ -32,7 +32,7 @@ func (client *Client) handleResponse() interface{} {
 
 	case CommandPublishConfirm:
 		{
-			client.handleConfirm(response)
+			return client.handleConfirm(response)
 		}
 
 	}
@@ -40,7 +40,7 @@ func (client *Client) handleResponse() interface{} {
 	return nil
 }
 
-func (client *Client) handleSaslHandshakeResponse(response *Response) interface{} {
+func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse) interface{} {
 	response.CorrelationId = ReadIntFromReader(client.reader)
 	response.ResponseCode = ReadShortFromReader(client.reader)
 	mechanismsCount := ReadIntFromReader(client.reader)
@@ -52,7 +52,7 @@ func (client *Client) handleSaslHandshakeResponse(response *Response) interface{
 	return mechanisms
 }
 
-func (client *Client) handlePeerProperties(response *Response) interface{} {
+func (client *Client) handlePeerProperties(response *StreamingResponse) interface{} {
 	response.CorrelationId = ReadIntFromReader(client.reader)
 	response.ResponseCode = ReadShortFromReader(client.reader)
 
@@ -87,14 +87,14 @@ func (client *Client) handleTune() interface{} {
 
 }
 
-func (client *Client) handleGenericResponse(response *Response) interface{} {
+func (client *Client) handleGenericResponse(response *StreamingResponse) interface{} {
 
 	response.ResponseCode = ReadShortFromReader(client.reader)
 	response.CorrelationId = ReadIntFromReader(client.reader)
 	return response.ResponseCode
 }
 
-func (client *Client) handleConfirm(response *Response) {
+func (client *Client) handleConfirm(response *StreamingResponse) interface{} {
 	response.PublishID = ReadByteFromReader(client.reader)
 	//response.PublishingIdCount = ReadIntFromReader(client.reader)
 	publishingIdCount := ReadIntFromReader(client.reader)
@@ -105,5 +105,6 @@ func (client *Client) handleConfirm(response *Response) {
 		//fmt.Print("publishingId %d",  publishingId)
 		publishingIdCount--
 	}
+	return 0
 
 }

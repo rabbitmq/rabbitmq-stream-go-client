@@ -1,6 +1,6 @@
 package stream
 
-type Response struct {
+type StreamingResponse struct {
 	FrameLen          int32
 	CommandID         int16
 	Key               int16
@@ -9,4 +9,9 @@ type Response struct {
 	ResponseCode      int16
 	PublishID         byte
 	PublishingIdCount int32
+}
+
+type WriteResponse struct {
+	Code int
+	Err  error
 }
