@@ -1,7 +1,6 @@
 # GO stream client
 ---
-[![Github build status](![Build](https://github.com/Gsantomaggio/go-stream-client/workflows/Build/badge.svg))](https://github.com/Gsantomaggio/go-stream-client/actions)
-
+![Build](https://github.com/Gsantomaggio/go-stream-client/workflows/Build/badge.svg)
 
 A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 
