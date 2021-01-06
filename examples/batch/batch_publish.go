@@ -19,7 +19,7 @@ func main() {
 		return
 	}
 	fmt.Println("Connected!")
-	streamName := "20000"
+	streamName := "ml"
 	err = client.CreateStream(streamName)
 	if err != nil {
 		fmt.Printf("error: %s", err)
@@ -33,19 +33,18 @@ func main() {
 		return
 	}
 	t1 := time.Now()
-	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
-	defer cancel()
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 100000; i++ {
+		ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 		var arr []*amqp.Message
 		for z := 0; z < 100; z++ {
 			arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(i))))
 		}
 
 		_, err = producer.BatchPublish(ctx, arr)
+		cancel()
 		if err != nil {
 			fmt.Printf("error: %s", err)
 			return
-
 		}
 
 	}
