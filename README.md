@@ -1,4 +1,4 @@
-# GO stream client
+# GO stream client for RabbitMQ streaming queues
 ---
 ![Build](https://github.com/Gsantomaggio/go-stream-client/workflows/Build/badge.svg)
 
