@@ -8,6 +8,8 @@ func (client *Client) handleResponse() interface{} {
 	response := &StreamingResponse{}
 	response.FrameLen = ReadIntFromReader(client.reader)
 	response.CommandID = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
+	response.Version = ReadShortFromReader(client.reader)
+
 	defer client.reader.Reset(client.socket)
 
 	switch response.CommandID {
