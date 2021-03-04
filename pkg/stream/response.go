@@ -26,7 +26,9 @@ func (client *Client) handleResponse() interface{} {
 		{
 			return client.handleTune()
 		}
-	case CommandOpen, CommandDeclarePublisher, CommandDeletePublisher:
+	case CommandOpen, CommandDeclarePublisher,
+		CommandDeletePublisher, CommandDeleteStream,
+		CommandCreateStream:
 		{
 			return client.handleGenericResponse(response)
 		}
@@ -89,9 +91,8 @@ func (client *Client) handleTune() interface{} {
 }
 
 func (client *Client) handleGenericResponse(response *StreamingResponse) interface{} {
-
-	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
 	response.CorrelationId = ReadIntFromReader(client.reader)
+	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
 	return response.ResponseCode
 }
 

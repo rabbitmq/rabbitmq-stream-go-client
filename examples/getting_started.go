@@ -48,7 +48,13 @@ func main() {
 			return
 		}
 
-		err = producer.Close() // batch send
+		err = producer.Close()
+		if err != nil {
+			fmt.Printf("error: %s", err)
+			return
+		}
+
+		err = client.DeleteStream(streamName) // Remove the streaming queue and the data
 		if err != nil {
 			fmt.Printf("error: %s", err)
 			return
