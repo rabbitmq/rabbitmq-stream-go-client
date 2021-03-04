@@ -48,6 +48,12 @@ func main() {
 			return
 		}
 
+		err = producer.Close() // batch send
+		if err != nil {
+			fmt.Printf("error: %s", err)
+			return
+		}
+
 	}
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Press any key to finish ")

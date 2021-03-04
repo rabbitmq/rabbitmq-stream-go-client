@@ -286,6 +286,23 @@ func (client *Client) open(virtualHost string) error {
 	return nil
 }
 
+func (client *Client) deletePublisher(publisherId byte) error {
+	length := 2 + 2 + 4 + 1
+	correlationId := client.increaseAndGetCorrelationID()
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandDeletePublisher)
+	WriteShort(b, Version1)
+	WriteInt(b, correlationId)
+	WriteByte(b, publisherId)
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return err
+	}
+	client.handleResponse()
+	return nil
+}
+
 func (client *Client) writeAndFlush(buffer []byte) error {
 
 	_, err := client.writer.Write(buffer)

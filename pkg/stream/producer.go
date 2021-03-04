@@ -67,3 +67,8 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 	}
 	return 0, nil
 }
+
+func (producer *Producer) Close() error {
+	return producer.LikedClient.deletePublisher(producer.ProducerID)
+
+}
