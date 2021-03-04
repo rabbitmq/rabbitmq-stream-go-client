@@ -32,17 +32,32 @@ type Client struct {
 }
 
 const (
-	CommandCreateStream     = 998
-	Version0                = 0
-	CommandPeerProperties   = 15 //1
-	UnicodeNull             = "\u0000"
-	CommandSaslAuthenticate = 10 //3
-	CommandOpen             = 12
-	CommandPublish          = 0
-	CommandPublishConfirm   = 1
-	CommandDeclarePublisher = 18
-	CommandSaslHandshake    = 9  //2
-	CommandTune             = 11 //3
+	CommandDeclarePublisher       = 1
+	CommandPublish                = 2
+	CommandPublishConfirm         = 3
+	CommandPublishError           = 4
+	CommandQueryPublisherSequence = 5
+	CommandDeletePublisher        = 6
+	CommandSubscribe              = 7
+	CommandDeliver                = 8
+	CommandCredit                 = 9
+	CommandCommitOffset           = 10
+	CommandQueryOffset            = 11
+	CommandUnsubscribe            = 12
+	CommandCreateStream           = 13
+	CommandDeleteStream           = 14
+	CommandMetadata               = 15
+	CommandMetadataUpdate         = 16
+	CommandPeerProperties         = 17
+	CommandSaslHandshake          = 18
+	CommandSaslAuthenticate       = 19
+	CommandTune                   = 20
+	CommandOpen                   = 21
+	CommandClose                  = 22
+	CommandHeartbeat              = 23
+
+	Version1    = 1
+	UnicodeNull = "\u0000"
 )
 
 func NewAtomicInt() *AtomicInt {
@@ -73,7 +88,7 @@ func (client *Client) Connect(addr string) error {
 	}
 	host, port := u.Hostname(), u.Port()
 	if port == "" {
-		port = "5555"
+		port = "5551"
 	}
 
 	client.tuneState.requestedHeartbeat = 60
@@ -122,7 +137,7 @@ func (client *Client) CreateStream(stream string) error {
 	WriteInt(b, length)
 
 	WriteShort(b, CommandCreateStream)
-	WriteShort(b, Version0)
+	WriteShort(b, Version1)
 
 	WriteInt(b, correlationId)
 	WriteString(b, stream)
@@ -149,7 +164,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeclarePublisher)
-	WriteShort(b, Version0)
+	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteByte(b, producer.ProducerID)
 	WriteShort(b, int16(publisherReferenceSize))
@@ -168,7 +183,7 @@ func (client *Client) peerProperties() error {
 
 	client.clientProperties.items["connection_name"] = "rabbitmq-stream-locator"
 	client.clientProperties.items["product"] = "RabbitMQ Stream"
-	client.clientProperties.items["copyright"] = "Copyright (c) 2020 VMware, Inc. or its affiliates."
+	client.clientProperties.items["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
 	client.clientProperties.items["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
 	client.clientProperties.items["version"] = "0.1.0"
 	client.clientProperties.items["platform"] = "Golang"
@@ -183,7 +198,7 @@ func (client *Client) peerProperties() error {
 
 	WriteInt(b, length)
 	WriteShort(b, CommandPeerProperties)
-	WriteShort(b, Version0)
+	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteInt(b, len(client.clientProperties.items))
 
@@ -220,7 +235,7 @@ func (client *Client) getSaslMechanisms() []string {
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
-	WriteShort(b, Version0)
+	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	client.writeAndFlush(b.Bytes())
 	data := client.handleResponse()
@@ -235,7 +250,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslAuthenticate)
-	WriteShort(b, Version0)
+	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteString(b, saslMechanism)
 	WriteInt(b, len(challengeResponse))
@@ -260,7 +275,7 @@ func (client *Client) open(virtualHost string) error {
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandOpen)
-	WriteShort(b, Version0)
+	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteString(b, virtualHost)
 	err := client.writeAndFlush(b.Bytes())

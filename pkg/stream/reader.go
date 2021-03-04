@@ -10,6 +10,12 @@ func ReadUShort(inputBuff []byte) uint16 {
 	return data
 }
 
+func ReadUShortFromReader(readerStream io.Reader) uint16 {
+	var buff = make([]byte, 2)
+	readerStream.Read(buff)
+	return ReadUShort(buff)
+}
+
 func ReadShortFromReader(readerStream io.Reader) int16 {
 	var buff = make([]byte, 2)
 	readerStream.Read(buff)
@@ -24,6 +30,12 @@ func ReadIntFromReader(readerStream io.Reader) int32 {
 	var buff = make([]byte, 4)
 	readerStream.Read(buff)
 	return ReadInt(buff)
+}
+
+func ReadUIntFromReader(readerStream io.Reader) uint32 {
+	var buff = make([]byte, 4)
+	readerStream.Read(buff)
+	return ReadUInt(buff)
 }
 
 func ReadInt64FromReader(readerStream io.Reader) int64 {
@@ -62,5 +74,4 @@ func ReadStringFromReader(readerStream io.Reader) string {
 	buff = make([]byte, lenString)
 	readerStream.Read(buff)
 	return string(buff)
-
 }

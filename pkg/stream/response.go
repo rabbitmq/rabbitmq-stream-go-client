@@ -7,8 +7,7 @@ import (
 func (client *Client) handleResponse() interface{} {
 	response := &StreamingResponse{}
 	response.FrameLen = ReadIntFromReader(client.reader)
-	response.CommandID = ReadShortFromReader(client.reader)
-	response.Version = ReadShortFromReader(client.reader)
+	response.CommandID = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
 	defer client.reader.Reset(client.socket)
 
 	switch response.CommandID {
@@ -42,7 +41,7 @@ func (client *Client) handleResponse() interface{} {
 
 func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse) interface{} {
 	response.CorrelationId = ReadIntFromReader(client.reader)
-	response.ResponseCode = ReadShortFromReader(client.reader)
+	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
 	mechanismsCount := ReadIntFromReader(client.reader)
 	var mechanisms []string
 	for i := 0; i < int(mechanismsCount); i++ {
@@ -54,7 +53,7 @@ func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse) i
 
 func (client *Client) handlePeerProperties(response *StreamingResponse) interface{} {
 	response.CorrelationId = ReadIntFromReader(client.reader)
-	response.ResponseCode = ReadShortFromReader(client.reader)
+	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
 
 	serverPropertiesCount := ReadIntFromReader(client.reader)
 	serverProperties := make(map[string]string)
@@ -79,8 +78,8 @@ func (client *Client) handleTune() interface{} {
 	length := 2 + 2 + 4 + 4
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
-	WriteShort(b, CommandTune)
-	WriteShort(b, Version0)
+	WriteUShort(b, UShortEncodeResponseCode(CommandTune))
+	WriteShort(b, Version1)
 	WriteInt32(b, maxFrameSize)
 	WriteInt32(b, heartbeat)
 	return b.Bytes()
@@ -89,7 +88,7 @@ func (client *Client) handleTune() interface{} {
 
 func (client *Client) handleGenericResponse(response *StreamingResponse) interface{} {
 
-	response.ResponseCode = ReadShortFromReader(client.reader)
+	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
 	response.CorrelationId = ReadIntFromReader(client.reader)
 	return response.ResponseCode
 }

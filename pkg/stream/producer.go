@@ -29,7 +29,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 		var b = bytes.NewBuffer(make([]byte, 0, length+4))
 		WriteInt(b, length)
 		WriteShort(b, CommandPublish)
-		WriteShort(b, Version0)
+		WriteShort(b, Version1)
 		WriteByte(b, publishId)
 		WriteInt(b, len(msgs)) //toExcluded - fromInclude
 
