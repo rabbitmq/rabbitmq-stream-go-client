@@ -2,45 +2,51 @@ package stream
 
 import (
 	"bytes"
+	"fmt"
 )
 
-func (client *Client) handleResponse() interface{} {
-	response := &StreamingResponse{}
-	response.FrameLen = ReadIntFromReader(client.reader)
-	response.CommandID = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
-	response.Version = ReadShortFromReader(client.reader)
+func (client *Client) handleResponse() {
 
-	defer client.reader.Reset(client.socket)
+	for {
 
-	switch response.CommandID {
+		response := &StreamingResponse{}
+		response.FrameLen = ReadIntFromReader(client.reader)
+		response.CommandID = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
+		response.Version = ReadShortFromReader(client.reader)
 
-	case CommandPeerProperties:
-		{
-			return client.handlePeerProperties(response)
-		}
-	case CommandSaslHandshake:
-		{
-			return client.handleSaslHandshakeResponse(response)
-		}
-	case CommandTune:
-		{
-			return client.handleTune()
-		}
-	case CommandOpen, CommandDeclarePublisher,
-		CommandDeletePublisher, CommandDeleteStream,
-		CommandCreateStream:
-		{
-			return client.handleGenericResponse(response)
-		}
+		//defer
+		fmt.Printf("CommandID %d \n", response.CommandID)
+		switch response.CommandID {
 
-	case CommandPublishConfirm:
-		{
-			return client.handleConfirm(response)
-		}
+		case CommandPeerProperties:
+			{
+				client.handlePeerProperties(response)
+			}
+		case CommandSaslHandshake:
+			{
+				client.handleSaslHandshakeResponse(response)
+			}
+		case CommandTune:
+			{
+				client.handleTune()
+			}
+		case CommandOpen, CommandDeclarePublisher,
+			CommandDeletePublisher, CommandDeleteStream,
+			CommandCreateStream:
+			{
+				client.handleGenericResponse(response)
+			}
 
+		case CommandPublishConfirm:
+			{
+				 client.handleConfirm(response)
+			}
+
+		}
+		client.reader.Reset(client.socket)
 	}
 
-	return nil
+
 }
 
 func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse) interface{} {
@@ -52,6 +58,7 @@ func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse) i
 		mechanism := ReadStringFromReader(client.reader)
 		mechanisms = append(mechanisms, mechanism)
 	}
+	GetResponses().items[response.CorrelationId].dataString <- mechanisms
 	return mechanisms
 }
 
@@ -67,7 +74,7 @@ func (client *Client) handlePeerProperties(response *StreamingResponse) interfac
 		value := ReadStringFromReader(client.reader)
 		serverProperties[key] = value
 	}
-
+	GetResponses().items[response.CorrelationId].isDone <- true
 	return serverProperties
 }
 

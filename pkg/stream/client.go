@@ -81,7 +81,7 @@ func (client *Client) increaseAndGetCorrelationID() int {
 }
 
 func (client *Client) Connect(addr string) error {
-
+	InitCoordinators()
 	u, err := url.Parse(addr)
 	if err != nil {
 		return err
@@ -101,8 +101,10 @@ func (client *Client) Connect(addr string) error {
 	client.socket = connection
 	client.writer = bufio.NewWriter(client.socket)
 	client.reader = bufio.NewReader(client.socket)
-
+	go client.handleResponse()
+	//time.Sleep(1 * time.Second)
 	err2 = client.peerProperties()
+
 	if err2 != nil {
 		return err2
 	}
@@ -119,7 +121,7 @@ func (client *Client) Connect(addr string) error {
 	if err2 != nil {
 		return err2
 	}
-	InitProducersCoordinator()
+
 	return nil
 }
 
@@ -152,7 +154,7 @@ func (client *Client) CreateStream(stream string) error {
 	if err != nil {
 		return err
 	}
-	client.handleResponse()
+	//client.handleResponse()
 	return nil
 }
 
@@ -161,7 +163,7 @@ func (client *Client) NewProducer(stream string) (*Producer, error) {
 }
 
 func (client *Client) declarePublisher(stream string) (*Producer, error) {
-	producer, _ := GetProducersCoordinator().registerNewProducer()
+	producer, _ := GetProducers().registerNewProducer()
 
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
@@ -178,7 +180,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	if err != nil {
 		return nil, err
 	}
-	client.handleResponse()
+	//client.handleResponse()
 	producer.LikedClient = client
 	return producer, nil
 }
@@ -197,14 +199,14 @@ func (client *Client) peerProperties() error {
 	}
 
 	length := 2 + 2 + 4 + clientPropertiesSize
-
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)
 	WriteShort(b, CommandPeerProperties)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	WriteInt(b, len(client.clientProperties.items))
 
 	for key, element := range client.clientProperties.items {
@@ -216,7 +218,8 @@ func (client *Client) peerProperties() error {
 	if err != nil {
 		return err
 	}
-	client.handleResponse()
+	<-resp.isDone
+
 	return nil
 }
 
@@ -236,27 +239,28 @@ func (client *Client) authenticate(user string, password string) error {
 
 func (client *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	client.writeAndFlush(b.Bytes())
-	data := client.handleResponse()
-	strings := data.([]string)
-	return strings
+	data := <-resp.dataString
+	return data
 
 }
 
 func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslAuthenticate)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	WriteString(b, saslMechanism)
 	WriteInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
@@ -264,14 +268,13 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	if err != nil {
 		return err
 	}
-
-	client.handleResponse()
+	//<-resp.isDone
+	//client.handleResponse()
 
 	// double read for TUNE
-	data := client.handleResponse()
-	tuneData := data.([]byte)
-	return client.writeAndFlush(tuneData)
+	tuneData := <-resp.dataBytes
 
+	return client.writeAndFlush(tuneData)
 }
 
 func (client *Client) open(virtualHost string) error {
