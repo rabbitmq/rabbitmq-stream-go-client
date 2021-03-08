@@ -28,41 +28,47 @@ func main() {
 		return
 	}
 
-	producer, err := client.NewProducer(streamName) // Get a new producer to publish the messages
+	var arr []*amqp.Message // amqp 1.0 message from https://github.com/Azure/go-amqp
+	for z := 0; z < 10; z++ {
+		arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(z))))
+	}
+
+	{
+		for i := 0; i < 20; i++ {
+			producer, err := client.NewProducer(streamName) // Get a new producer to publish the messages
+			if err != nil {
+				fmt.Printf("error: %s", err)
+				return
+			}
+			go func(id int, producer *stream.Producer) {
+				fmt.Printf("starting producer: %d, item: %d \n", producer.ProducerID, id)
+				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+				for z := 0; z < 1000; z++ {
+					_, err = producer.BatchPublish(ctx, arr) // batch send
+					if err != nil {
+						fmt.Printf("error: %s", err)
+						return
+					}
+				}
+				fmt.Printf("end producer: %d, item: %d \n", producer.ProducerID, id)
+
+			}(i, producer)
+		}
+	}
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Press any key to finish ")
+	_, _ = reader.ReadString('\n')
+	err = stream.GetProducers().CloseAllProducers()
 	if err != nil {
 		fmt.Printf("error: %s", err)
 		return
 	}
 
-	var arr []*amqp.Message // amqp 1.0 message from https://github.com/Azure/go-amqp
-	for z := 0; z < 100; z++ {
-		arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(z))))
+	err = client.DeleteStream(streamName) // Remove the streaming queue and the data
+	if err != nil {
+		fmt.Printf("error: %s", err)
+		return
 	}
-
-	{
-		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		_, err = producer.BatchPublish(ctx, arr) // batch send
-		if err != nil {
-			fmt.Printf("error: %s", err)
-			return
-		}
-
-		err = producer.Close()
-		if err != nil {
-			fmt.Printf("error: %s", err)
-			return
-		}
-
-		err = client.DeleteStream(streamName) // Remove the streaming queue and the data
-		if err != nil {
-			fmt.Printf("error: %s", err)
-			return
-		}
-
-	}
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Press any key to finish ")
-	_, _ = reader.ReadString('\n')
 	fmt.Print("Bye bye")
 }

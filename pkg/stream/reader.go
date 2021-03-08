@@ -2,6 +2,7 @@ package stream
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
@@ -28,7 +29,10 @@ func ReadShort(inputBuff []byte) int16 {
 
 func ReadIntFromReader(readerStream io.Reader) int32 {
 	var buff = make([]byte, 4)
-	readerStream.Read(buff)
+	v, err := readerStream.Read(buff)
+	if err != nil {
+		fmt.Printf("err %s v %d", err, v)
+	}
 	return ReadInt(buff)
 }
 
