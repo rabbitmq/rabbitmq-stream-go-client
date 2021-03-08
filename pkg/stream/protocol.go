@@ -1,14 +1,14 @@
 package stream
 
 type StreamingResponse struct {
-	FrameLen          int32
+	FrameLen          uint32
 	CommandID         uint16
-	Key               int16
-	Version           int16
-	CorrelationId     int32
+	Key               uint16
+	Version           uint16
+	CorrelationId     uint32
 	ResponseCode      uint16
-	PublishID         byte
-	PublishingIdCount int32
+	PublishID         uint8
+	PublishingIdCount uint64
 }
 
 type WriteResponse struct {

@@ -28,7 +28,8 @@ type Client struct {
 	tuneState        TuneState
 	writer           *bufio.Writer
 	reader           *bufio.Reader
-	correlationID    *AtomicInt
+	mutexWrite       *sync.Mutex
+	mutexRead        *sync.Mutex
 }
 
 const (
@@ -68,20 +69,19 @@ func NewAtomicInt() *AtomicInt {
 }
 
 func NewStreamingClient() *Client {
-	client := &Client{}
-	client.correlationID = NewAtomicInt()
+	client := &Client{mutexWrite: &sync.Mutex{}, mutexRead: &sync.Mutex{}}
 	return client
 }
 
-func (client *Client) increaseAndGetCorrelationID() int {
-	client.correlationID.mutex.Lock()
-	defer client.correlationID.mutex.Unlock()
-	client.correlationID.value += 1
-	return client.correlationID.value
-}
+//func (client *Client) increaseAndGetCorrelationID() int {
+//	client.correlationID.mutex.Lock()
+//	defer client.correlationID.mutex.Unlock()
+//	client.correlationID.value += 1
+//	return client.correlationID.value
+//}
 
 func (client *Client) Connect(addr string) error {
-
+	InitCoordinators()
 	u, err := url.Parse(addr)
 	if err != nil {
 		return err
@@ -100,9 +100,11 @@ func (client *Client) Connect(addr string) error {
 	}
 	client.socket = connection
 	client.writer = bufio.NewWriter(client.socket)
-	client.reader = bufio.NewReader(client.socket)
-
+	//client.reader = bufio.NewReader(client.socket)
+	go client.handleResponse(connection)
+	//time.Sleep(1 * time.Second)
 	err2 = client.peerProperties()
+
 	if err2 != nil {
 		return err2
 	}
@@ -119,13 +121,14 @@ func (client *Client) Connect(addr string) error {
 	if err2 != nil {
 		return err2
 	}
-	InitProducersCoordinator()
+
 	return nil
 }
 
 func (client *Client) CreateStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream) + 4
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	correlationId := resp.subId
 	arguments := make(map[string]string)
 	arguments["queue-leader-locator"] = "least-leaders"
 	for key, element := range arguments {
@@ -139,7 +142,7 @@ func (client *Client) CreateStream(stream string) error {
 	WriteShort(b, CommandCreateStream)
 	WriteShort(b, Version1)
 
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	WriteString(b, stream)
 	WriteInt(b, len(arguments))
 
@@ -152,7 +155,7 @@ func (client *Client) CreateStream(stream string) error {
 	if err != nil {
 		return err
 	}
-	client.handleResponse()
+	<-resp.isDone
 	return nil
 }
 
@@ -161,16 +164,18 @@ func (client *Client) NewProducer(stream string) (*Producer, error) {
 }
 
 func (client *Client) declarePublisher(stream string) (*Producer, error) {
-	producer, _ := GetProducersCoordinator().registerNewProducer()
+	producer, _ := GetProducers().registerNewProducer()
 
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeclarePublisher)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	WriteByte(b, producer.ProducerID)
 	WriteShort(b, int16(publisherReferenceSize))
 	WriteString(b, stream)
@@ -178,7 +183,8 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	if err != nil {
 		return nil, err
 	}
-	client.handleResponse()
+	<-resp.isDone
+	//client.handleResponse()
 	producer.LikedClient = client
 	return producer, nil
 }
@@ -197,14 +203,14 @@ func (client *Client) peerProperties() error {
 	}
 
 	length := 2 + 2 + 4 + clientPropertiesSize
-
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)
 	WriteShort(b, CommandPeerProperties)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	WriteInt(b, len(client.clientProperties.items))
 
 	for key, element := range client.clientProperties.items {
@@ -216,7 +222,8 @@ func (client *Client) peerProperties() error {
 	if err != nil {
 		return err
 	}
-	client.handleResponse()
+	<-resp.isDone
+
 	return nil
 }
 
@@ -236,27 +243,29 @@ func (client *Client) authenticate(user string, password string) error {
 
 func (client *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	client.writeAndFlush(b.Bytes())
-	data := client.handleResponse()
-	strings := data.([]string)
-	return strings
+	data := <-resp.dataString
+	return data
 
 }
 
 func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	respTune := GetResponses().addResponderWitName("tune")
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslAuthenticate)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	WriteString(b, saslMechanism)
 	WriteInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
@@ -264,68 +273,72 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	if err != nil {
 		return err
 	}
-
-	client.handleResponse()
+	<-resp.isDone
+	//client.handleResponse()
 
 	// double read for TUNE
-	data := client.handleResponse()
-	tuneData := data.([]byte)
-	return client.writeAndFlush(tuneData)
+	tuneData := <-respTune.dataBytes
 
+	return client.writeAndFlush(tuneData)
 }
 
 func (client *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandOpen)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	WriteString(b, virtualHost)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
 		return err
 	}
-	client.handleResponse()
+	<-resp.isDone
 	return nil
 }
 
 func (client *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeletePublisher)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	WriteByte(b, publisherId)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
 		return err
 	}
-	client.handleResponse()
+	<-resp.isDone
+
 	return nil
 }
 
 func (client *Client) DeleteStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream)
-	correlationId := client.increaseAndGetCorrelationID()
+	resp := GetResponses().addResponder()
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeleteStream)
 	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteInt(b, int(correlationId))
 	WriteString(b, stream)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
 		return err
 	}
-	client.handleResponse()
+	<-resp.isDone
 	return nil
 }
 
 func (client *Client) writeAndFlush(buffer []byte) error {
+	client.mutexWrite.Lock()
 
 	_, err := client.writer.Write(buffer)
 	if err != nil {
@@ -335,5 +348,6 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 	if err != nil {
 		return err
 	}
+	client.mutexWrite.Unlock()
 	return nil
 }
