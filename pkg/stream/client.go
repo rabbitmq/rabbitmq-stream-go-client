@@ -100,8 +100,8 @@ func (client *Client) Connect(addr string) error {
 	}
 	client.socket = connection
 	client.writer = bufio.NewWriter(client.socket)
-	client.reader = bufio.NewReader(client.socket)
-	go client.handleResponse()
+	//client.reader = bufio.NewReader(client.socket)
+	go client.handleResponse(connection)
 	//time.Sleep(1 * time.Second)
 	err2 = client.peerProperties()
 

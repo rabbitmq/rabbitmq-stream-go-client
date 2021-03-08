@@ -107,7 +107,7 @@ func (s Responses) addResponder() *Response {
 	return res
 }
 
-func (s Responses) GetResponderById(id int32) *Response {
+func (s Responses) GetResponderById(id uint32) *Response {
 	sa := strconv.Itoa(int(id))
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

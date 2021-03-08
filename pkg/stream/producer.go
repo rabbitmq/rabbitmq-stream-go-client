@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/go-amqp"
-	"time"
 )
 
 type Producer struct {
@@ -31,7 +30,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandPublish)
-	WriteShort(b, Version1)
+	WriteUShort(b, Version1)
 	WriteByte(b, publishId)
 	WriteInt(b, len(msgs)) //toExcluded - fromInclude
 
@@ -53,12 +52,12 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 	}
 	//<-producer.PublishConfirm.isDone
 
-	select {
-	case _ = <-producer.PublishConfirm.isDone:
-		return 0, nil
-	case <-time.After(200 * time.Millisecond):
-		//fmt.Printf("timeout id:%d \n", producer.ProducerID)
-	}
+	//select {
+	//case _ = <-producer.PublishConfirm.isDone:
+	//	return 0, nil
+	//case <-time.After(200 * time.Millisecond):
+	//	//fmt.Printf("timeout id:%d \n", producer.ProducerID)
+	//}
 	//producer.LikedClient.handleResponse()
 	//respChan <- &WriteResponse{}
 	//}(msgs)

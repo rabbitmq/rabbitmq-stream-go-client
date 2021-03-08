@@ -29,7 +29,7 @@ func main() {
 	}
 
 	var arr []*amqp.Message // amqp 1.0 message from https://github.com/Azure/go-amqp
-	for z := 0; z < 10; z++ {
+	for z := 0; z < 100; z++ {
 		arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(z))))
 	}
 
@@ -42,8 +42,7 @@ func main() {
 			}
 			go func(id int, producer *stream.Producer) {
 				fmt.Printf("starting producer: %d, item: %d \n", producer.ProducerID, id)
-				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-				defer cancel()
+				start := time.Now()
 				for z := 0; z < 1000; z++ {
 					_, err = producer.BatchPublish(ctx, arr) // batch send
 					if err != nil {
@@ -51,7 +50,8 @@ func main() {
 						return
 					}
 				}
-				fmt.Printf("end producer: %d, item: %d \n", producer.ProducerID, id)
+				elapsed := time.Since(start)
+				fmt.Printf("end producer: %d, item: %d took %s\n", producer.ProducerID, id, elapsed)
 
 			}(i, producer)
 		}

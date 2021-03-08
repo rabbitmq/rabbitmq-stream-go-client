@@ -1,62 +1,67 @@
 package stream
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
-	"time"
+	"net"
 )
 
-func (client *Client) handleResponse() {
-
+func (client *Client) handleResponse(conn net.Conn) {
+	r := bufio.NewReader(conn)
 	for {
 		response := &StreamingResponse{}
-		response.FrameLen = ReadIntFromReader(client.reader)
-		response.CommandID = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
-		response.Version = ReadShortFromReader(client.reader)
+		response.FrameLen = ReadUIntFromReader(r)
+		response.CommandID = UShortExtractResponseCode(ReadUShortFromReader(r))
+		response.Version = ReadUShortFromReader(r)
 
 		//defer
-		//fmt.Printf("CommandID %d \n", response.CommandID)
+		//fmt.Printf(" CommandID %d buff:%d \n", response.CommandID, r.Buffered())
 		switch response.CommandID {
 
 		case CommandPeerProperties:
 			{
-				client.handlePeerProperties(response)
+				client.handlePeerProperties(response, r)
 			}
 		case CommandSaslHandshake:
 			{
 
-				client.handleSaslHandshakeResponse(response)
+				client.handleSaslHandshakeResponse(response, r)
 			}
 		case CommandTune:
 			{
-				client.handleTune(response)
+				client.handleTune(response, r)
 			}
 		case CommandOpen, CommandDeclarePublisher,
 			CommandDeletePublisher, CommandDeleteStream,
 			CommandCreateStream, CommandSaslAuthenticate:
 			{
-				client.handleGenericResponse(response)
+				client.handleGenericResponse(response, r)
 			}
 
 		case CommandPublishConfirm:
 			{
-				client.handleConfirm(response)
+				client.handleConfirm(response, r)
+			}
+		default:
+			{
+				fmt.Printf("dont CommandID %d buff:%d \n", response.CommandID, r.Buffered())
 			}
 
 		}
-
+		//r = bufio.NewReader(conn)
 
 	}
 
 }
 
-func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse) interface{} {
-	response.CorrelationId = ReadIntFromReader(client.reader)
-	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
-	mechanismsCount := ReadIntFromReader(client.reader)
+func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse, r *bufio.Reader) interface{} {
+	response.CorrelationId = ReadUIntFromReader(r)
+	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
+	mechanismsCount := ReadUIntFromReader(r)
 	var mechanisms []string
 	for i := 0; i < int(mechanismsCount); i++ {
-		mechanism := ReadStringFromReader(client.reader)
+		mechanism := ReadStringFromReader(r)
 		mechanisms = append(mechanisms, mechanism)
 	}
 
@@ -64,28 +69,28 @@ func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse) i
 	return mechanisms
 }
 
-func (client *Client) handlePeerProperties(response *StreamingResponse) interface{} {
-	response.CorrelationId = ReadIntFromReader(client.reader)
-	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
+func (client *Client) handlePeerProperties(response *StreamingResponse, r *bufio.Reader) interface{} {
+	response.CorrelationId = ReadUIntFromReader(r)
+	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
 	if response.ResponseCode != 1 {
 		fmt.Printf("Errr ResponseCode: %d ", response.ResponseCode)
 	}
-	serverPropertiesCount := ReadIntFromReader(client.reader)
+	serverPropertiesCount := ReadUIntFromReader(r)
 	serverProperties := make(map[string]string)
 
 	for i := 0; i < int(serverPropertiesCount); i++ {
-		key := ReadStringFromReader(client.reader)
-		value := ReadStringFromReader(client.reader)
+		key := ReadStringFromReader(r)
+		value := ReadStringFromReader(r)
 		serverProperties[key] = value
 	}
 	GetResponses().GetResponderById(response.CorrelationId).isDone <- true
 	return serverProperties
 }
 
-func (client *Client) handleTune(response *StreamingResponse) interface{} {
+func (client *Client) handleTune(response *StreamingResponse, r *bufio.Reader) interface{} {
 
-	serverMaxFrameSize := ReadIntFromReader(client.reader)
-	serverHeartbeat := ReadIntFromReader(client.reader)
+	serverMaxFrameSize := ReadUIntFromReader(r)
+	serverHeartbeat := ReadUIntFromReader(r)
 
 	maxFrameSize := serverMaxFrameSize
 	heartbeat := serverHeartbeat
@@ -95,23 +100,23 @@ func (client *Client) handleTune(response *StreamingResponse) interface{} {
 	WriteInt(b, length)
 	WriteUShort(b, UShortEncodeResponseCode(CommandTune))
 	WriteShort(b, Version1)
-	WriteInt32(b, maxFrameSize)
-	WriteInt32(b, heartbeat)
+	WriteUInt(b, maxFrameSize)
+	WriteUInt(b, heartbeat)
 	GetResponses().GetResponderByName("tune").dataBytes <- b.Bytes()
 	return b.Bytes()
 
 }
 
-func (client *Client) handleGenericResponse(response *StreamingResponse) interface{} {
-	response.CorrelationId = ReadIntFromReader(client.reader)
-	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
+func (client *Client) handleGenericResponse(response *StreamingResponse, r *bufio.Reader) interface{} {
+	response.CorrelationId = ReadUIntFromReader(r)
+	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
 	if response.ResponseCode != 1 {
 		fmt.Printf("Errr ResponseCode: %d \n", response.ResponseCode)
 
 	}
-	var r = GetResponses().GetResponderById(response.CorrelationId)
-	if r != nil {
-		r.isDone <- true
+	var res = GetResponses().GetResponderById(response.CorrelationId)
+	if res != nil {
+		res.isDone <- true
 	} else {
 		println("Errr")
 	}
@@ -119,31 +124,31 @@ func (client *Client) handleGenericResponse(response *StreamingResponse) interfa
 	return response.ResponseCode
 }
 
-func (client *Client) handleConfirm(response *StreamingResponse) interface{} {
-	response.PublishID = ReadByteFromReader(client.reader)
+func (client *Client) handleConfirm(response *StreamingResponse, r *bufio.Reader) interface{} {
+	response.PublishID = ReadByteFromReader(r)
 	//response.PublishingIdCount = ReadIntFromReader(client.reader)
-	publishingIdCount := ReadIntFromReader(client.reader)
+	publishingIdCount := ReadUIntFromReader(r)
 	//var _publishingId int64
 	for publishingIdCount != 0 {
-		ReadInt64FromReader(client.reader)
+		ReadInt64FromReader(r)
 		publishingIdCount--
 	}
 
-	fmt.Printf("publishedid before: %d   \n", response.PublishID)
-
-	v := GetProducers().GetProducerById(response.PublishID)
-	if v != nil {
-		select {
-		case v.PublishConfirm.isDone <- true:
-			//return 0, nil
-		case <-time.After(200 * time.Millisecond):
-			//fmt.Printf("timeout id:%d \n", producer.ProducerID)
-		}
-	} else {
-		fmt.Printf("niiillllllll publishedid before %d \n", response.PublishID)
-	}
-
-	fmt.Printf("publishedid after: %d \n", response.PublishID)
+	//fmt.Printf("publishedid before: %d   \n", response.PublishID)
+	//
+	//v := GetProducers().GetProducerById(response.PublishID)
+	//if v != nil {
+	//	select {
+	//	case v.PublishConfirm.isDone <- true:
+	//		//return 0, nil
+	//	case <-time.After(200 * time.Millisecond):
+	//		//fmt.Printf("timeout id:%d \n", producer.ProducerID)
+	//	}
+	//} else {
+	//	fmt.Printf("niiillllllll publishedid before %d \n", response.PublishID)
+	//}
+	//
+	//fmt.Printf("publishedid after: %d \n", response.PublishID)
 	return 0
 
 }
