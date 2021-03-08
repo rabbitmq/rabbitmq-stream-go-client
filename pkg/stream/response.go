@@ -9,7 +9,6 @@ import (
 func (client *Client) handleResponse() {
 
 	for {
-		//client.mutexRead.Lock()
 		response := &StreamingResponse{}
 		response.FrameLen = ReadIntFromReader(client.reader)
 		response.CommandID = UShortExtractResponseCode(ReadUShortFromReader(client.reader))
@@ -45,8 +44,7 @@ func (client *Client) handleResponse() {
 			}
 
 		}
-		//client.reader = bufio.NewReader(client.socket)
-		//client.mutexRead.Unlock()
+
 
 	}
 
@@ -127,24 +125,10 @@ func (client *Client) handleConfirm(response *StreamingResponse) interface{} {
 	publishingIdCount := ReadIntFromReader(client.reader)
 	//var _publishingId int64
 	for publishingIdCount != 0 {
-		//publishingId := ReadInt64FromReader(client.reader)
 		ReadInt64FromReader(client.reader)
-		//fmt.Printf("publishedid before: %d  publishingId %d \n", response.PublishID, publishingId)
-		//go func() {
-		//v := GetProducers().GetProducerById(response.PublishID)
-		//if v != nil {
-		//	v.PublishConfirm.isDone <- true
-		//} else {
-		//	fmt.Printf("niiillllllll publishedid before %d \n", response.PublishID)
-		//}
-		//}()
-		//fmt.Print("publishingId %d",  publishingId)
 		publishingIdCount--
 	}
-	//go func() {
-	//	GetResponses().GetResponderByName(fmt.Sprintf("pubid_%d", response.PublishID)).isDone <- true
-	//
-	//}()
+
 	fmt.Printf("publishedid before: %d   \n", response.PublishID)
 
 	v := GetProducers().GetProducerById(response.PublishID)
