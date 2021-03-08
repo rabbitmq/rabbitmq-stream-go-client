@@ -34,6 +34,6 @@ func ReadByteFromReader(readerStream io.Reader) uint8 {
 func ReadStringFromReader(readerStream io.Reader) string {
 	lenString := ReadUShortFromReader(readerStream)
 	buff := make([]byte, lenString)
-	readerStream.Read(buff)
+	_ = binary.Read(readerStream, binary.BigEndian, &buff)
 	return string(buff)
 }

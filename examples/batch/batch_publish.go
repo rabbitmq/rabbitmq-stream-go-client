@@ -1,55 +1,79 @@
 package main
 
 import (
-	"context"
+	"bufio"
 	"fmt"
 	"github.com/Azure/go-amqp"
 	"github.com/gsantomaggio/go-stream-client/pkg/stream"
+	"os"
 	"strconv"
+	"sync"
 	"time"
 )
 
 func main() {
 	fmt.Println("Connecting ...")
-	ctx := context.Background()
-	var client = stream.NewStreamingClient()
-	err := client.Connect("rabbitmq-stream://guest:guest@localhost:5555/%2f") // Connect
+	var client = stream.NewStreamingClient()                                  // create Client Struct
+	err := client.Connect("rabbitmq-stream://guest:guest@localhost:5551/%2f") // Connect
 	if err != nil {
 		fmt.Printf("error: %s", err)
 		return
 	}
 	fmt.Println("Connected!")
-	streamName := "ml"
-	err = client.CreateStream(streamName)
+	streamName := "golang-stream"
+	err = client.CreateStream(streamName) // Create the streaming queue
 	if err != nil {
 		fmt.Printf("error: %s", err)
 		return
 	}
 
-	producer, err := client.NewProducer(streamName)
+	var arr []*amqp.Message // amqp 1.0 message from https://github.com/Azure/go-amqp
+	for z := 0; z < 100; z++ {
+		arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(z))))
+	}
 
+	{
+		var wg sync.WaitGroup
+		for i := 0; i < 1; i++ {
+			wg.Add(1)
+			producer, err := client.NewProducer(streamName) // Get a new producer to publish the messages
+			if err != nil {
+				fmt.Printf("error: %s", err)
+				return
+			}
+			go func(id int, producer *stream.Producer, wg *sync.WaitGroup) {
+				defer wg.Done()
+				fmt.Printf("starting producer: %d, item: %d \n", producer.ProducerID, id)
+				start := time.Now()
+				for z := 0; z < 100; z++ {
+					_, err = producer.BatchPublish(nil, arr) // batch send
+					if err != nil {
+						fmt.Printf("error: %s", err)
+						return
+					}
+				}
+				elapsed := time.Since(start)
+				fmt.Printf("end producer: %d, item: %d took %s\n", producer.ProducerID, id, elapsed)
+
+			}(i, producer, &wg)
+		}
+		wg.Wait()
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Press any key to finish ")
+	_, _ = reader.ReadString('\n')
+
+	fmt.Print("Closing all producers ")
+	err = stream.GetProducers().CloseAllProducers()
 	if err != nil {
 		fmt.Printf("error: %s", err)
 		return
 	}
-	t1 := time.Now()
-	for i := 0; i < 100000; i++ {
-		ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
-		var arr []*amqp.Message
-		for z := 0; z < 100; z++ {
-			arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(i))))
-		}
-
-		_, err = producer.BatchPublish(ctx, arr)
-		cancel()
-		if err != nil {
-			fmt.Printf("error: %s", err)
-			return
-		}
-
+	err = client.DeleteStream(streamName) // Remove the streaming queue and the data
+	if err != nil {
+		fmt.Printf("error: %s", err)
+		return
 	}
-	t2 := time.Now()
-	diff := t2.Sub(t1)
-	fmt.Printf("sent in: %f", diff.Seconds())
-	time.Sleep(5 * time.Second)
+	fmt.Print("Bye bye")
 }
