@@ -15,8 +15,6 @@ func (client *Client) handleResponse(conn net.Conn) {
 		response.CommandID = UShortExtractResponseCode(ReadUShortFromReader(r))
 		response.Version = ReadUShortFromReader(r)
 
-		//defer
-		//fmt.Printf(" CommandID %d buff:%d \n", response.CommandID, r.Buffered())
 		switch response.CommandID {
 
 		case CommandPeerProperties:
