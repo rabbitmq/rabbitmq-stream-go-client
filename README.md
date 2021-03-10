@@ -4,11 +4,19 @@
 
 A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 
-### How to use
+### How to easy test
 ---
-
-See the [Getting started example](https://github.com/Gsantomaggio/go-stream-client/blob/main/examples/getting_started.go)
-
+- Run RabbitMQ docker image with streaming:
+   ```
+   docker run -it --rm --name rabbitmq -p 5551:5551 -p 5672:5672 -p 15672:15672 \
+   -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
+   pivotalrabbitmq/rabbitmq-stream
+ 
+  ```
+- Run getting started example:
+  ```
+   go run examples/getting_started.go
+  ```
 
 ### Methods Implemented:
 ---
