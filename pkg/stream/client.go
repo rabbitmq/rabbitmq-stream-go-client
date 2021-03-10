@@ -61,12 +61,6 @@ const (
 	UnicodeNull = "\u0000"
 )
 
-func NewAtomicInt() *AtomicInt {
-	atomicInt := &AtomicInt{}
-	atomicInt.value = 0
-	atomicInt.mutex = &sync.Mutex{}
-	return atomicInt
-}
 
 func NewStreamingClient() *Client {
 	client := &Client{mutexWrite: &sync.Mutex{}, mutexRead: &sync.Mutex{}}
@@ -164,7 +158,7 @@ func (client *Client) NewProducer(stream string) (*Producer, error) {
 }
 
 func (client *Client) declarePublisher(stream string) (*Producer, error) {
-	producer, _ := GetProducers().registerNewProducer()
+	producer, _ := GetProducers().NewProducer()
 
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
@@ -316,6 +310,11 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	}
 	<-resp.isDone
 
+	err = GetProducers().RemoveProducerById(publisherId)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -339,7 +338,6 @@ func (client *Client) DeleteStream(stream string) error {
 
 func (client *Client) writeAndFlush(buffer []byte) error {
 	client.mutexWrite.Lock()
-
 	_, err := client.writer.Write(buffer)
 	if err != nil {
 		return err

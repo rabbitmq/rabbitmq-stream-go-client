@@ -3,7 +3,6 @@ package stream
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"github.com/Azure/go-amqp"
 )
 
@@ -46,8 +45,6 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 
 	err := producer.LikedClient.writeAndFlush(b.Bytes())
 	if err != nil {
-		fmt.Printf("errror publish")
-		//respChan <- &WriteResponse{Err: err}
 		return 0, err
 	}
 	//<-producer.PublishConfirm.isDone

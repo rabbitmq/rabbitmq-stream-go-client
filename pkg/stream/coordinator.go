@@ -41,7 +41,7 @@ func GetProducers() *Producers {
 	return producers
 }
 
-func (c *Producers) registerNewProducer() (*Producer, error) {
+func (c *Producers) NewProducer() (*Producer, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	var lastId = byte(len(c.items))
@@ -65,13 +65,23 @@ func (c Producers) GetProducerById(id byte) *Producer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.items[id] == nil {
-		fmt.Printf("errrrr Producer nill  %d \n", id)
+		fmt.Printf("Can't find Producer  %d \n", id)
 		return nil
 	}
 	return c.items[id]
 }
 
-// TODO: remove publisher
+func (c Producers) RemoveProducerById(id byte) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.items[id] == nil {
+		fmt.Printf("Can't find Producer  %d \n", id)
+		return nil
+	}
+	delete(c.items, id)
+
+	return nil
+}
 
 func GetResponses() *Responses {
 	return responses
@@ -112,7 +122,7 @@ func (s Responses) GetResponderById(id uint32) *Response {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if s.items[sa] == nil {
-		fmt.Printf("errrrr Response nill %s \n", sa)
+		fmt.Printf(" Response nill %s \n", sa)
 		return nil
 	}
 	return s.items[sa]
