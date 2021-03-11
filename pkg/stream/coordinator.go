@@ -1,7 +1,7 @@
 package stream
 
 import (
-	"fmt"
+	"github.com/pkg/errors"
 	"strconv"
 	"sync"
 )
@@ -20,13 +20,6 @@ type Responses struct {
 	mutex *sync.Mutex
 }
 
-type Response struct {
-	isDone     chan bool
-	dataString chan []string
-	dataBytes  chan []byte
-	subId      int32
-}
-
 func InitCoordinators() {
 	producers = &Producers{}
 	producers.mutex = &sync.Mutex{}
@@ -41,13 +34,14 @@ func GetProducers() *Producers {
 	return producers
 }
 
-func (c *Producers) NewProducer() (*Producer, error) {
+func (c *Producers) New() *Producer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	var lastId = byte(len(c.items))
-	var producer = &Producer{ProducerID: lastId, PublishConfirm: &Response{isDone: make(chan bool)}}
+	var lastId = uint8(len(c.items))
+	var producer = &Producer{ProducerID: lastId, PublishConfirm:
+	&Response{isDone: make(chan bool)}}
 	c.items[lastId] = producer
-	return producer, nil
+	return producer
 }
 
 func (c *Producers) CloseAllProducers() error {
@@ -61,75 +55,98 @@ func (c *Producers) CloseAllProducers() error {
 	return nil
 }
 
-func (c Producers) GetProducerById(id byte) *Producer {
+func (c Producers) GetById(id uint8) (*Producer, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.items[id] == nil {
-		fmt.Printf("Can't find Producer  %d \n", id)
-		return nil
+		return nil, errors.New("Producer not found #{id}")
 	}
-	return c.items[id]
+	return c.items[id], nil
 }
 
-func (c Producers) RemoveProducerById(id byte) error {
+func (c Producers) RemoveById(id byte) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.items[id] == nil {
-		fmt.Printf("Can't find Producer  %d \n", id)
-		return nil
+		return errors.New("Producer not found #{id}")
 	}
 	delete(c.items, id)
 
 	return nil
 }
 
+func (c Producers) Count() int {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return len(c.items)
+}
+
 func GetResponses() *Responses {
 	return responses
 }
 
-func (s Responses) addResponderWitName(value string) *Response {
-
-	s.mutex.Lock()
-	var lastId int32
-	lastId = int32(len(s.items))
+func newResponse() *Response {
 	res := &Response{}
 	res.isDone = make(chan bool, 1)
 	res.dataString = make(chan []string, 0)
 	res.dataBytes = make(chan []byte, 0)
+	return res
+}
+func (s Responses) NewWitName(value string) *Response {
+	s.mutex.Lock()
+	var lastId int
+	lastId = len(s.items)
+	res := newResponse()
 	res.subId = lastId
 	s.items[value] = res
 	s.mutex.Unlock()
 	return res
 }
 
-func (s Responses) addResponder() *Response {
+func (s Responses) New() *Response {
 	s.mutex.Lock()
-	var lastId int32
-	lastId = int32(len(s.items))
-	res := &Response{}
-	res.isDone = make(chan bool, 1)
-	res.dataString = make(chan []string, 0)
-	res.dataBytes = make(chan []byte, 0)
-
+	var lastId int
+	lastId = len(s.items)
+	res := newResponse()
 	res.subId = lastId
 	s.items[strconv.Itoa(int(lastId))] = res
 	s.mutex.Unlock()
 	return res
 }
 
-func (s Responses) GetResponderById(id uint32) *Response {
+func (s Responses) GetById(id uint32) (*Response, error) {
 	sa := strconv.Itoa(int(id))
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if s.items[sa] == nil {
-		fmt.Printf(" Response nill %s \n", sa)
-		return nil
+		return nil, errors.New("Response not found #{id}")
 	}
-	return s.items[sa]
+	return s.items[sa], nil
 }
 
-func (s Responses) GetResponderByName(id string) *Response {
+func (s Responses) GetByName(id string) (*Response, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return s.items[id]
+	if s.items[id] == nil {
+		return nil, errors.New("Response not found #{id}")
+	}
+	return s.items[id], nil
+}
+
+func (s Responses) RemoveById(id int) error {
+	sa := strconv.Itoa(id)
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.items[sa] == nil {
+		return errors.New("Response not found #{id}")
+	}
+	delete(s.items, sa)
+
+	return nil
+}
+
+func (s Responses) Count() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return len(s.items)
 }

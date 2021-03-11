@@ -7,7 +7,7 @@ import (
 )
 
 type Producer struct {
-	ProducerID     byte
+	ProducerID     uint8
 	LikedClient    *Client
 	PublishConfirm *Response
 }
@@ -24,7 +24,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 	}
 
 	length := frameHeaderLength + msgLen
-	var publishId byte
+	var publishId uint8
 	publishId = producer.ProducerID
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)

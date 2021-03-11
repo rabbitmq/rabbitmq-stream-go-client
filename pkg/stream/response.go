@@ -7,6 +7,13 @@ import (
 	"net"
 )
 
+type Response struct {
+	isDone     chan bool
+	dataString chan []string
+	dataBytes  chan []byte
+	subId      int
+}
+
 func (client *Client) handleResponse(conn net.Conn) {
 	r := bufio.NewReader(conn)
 	for {
@@ -53,9 +60,9 @@ func (client *Client) handleResponse(conn net.Conn) {
 
 }
 
-func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse, r *bufio.Reader) interface{} {
-	response.CorrelationId = ReadUIntFromReader(r)
-	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
+func (client *Client) handleSaslHandshakeResponse(streamingRes *StreamingResponse, r *bufio.Reader) interface{} {
+	streamingRes.CorrelationId = ReadUIntFromReader(r)
+	streamingRes.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
 	mechanismsCount := ReadUIntFromReader(r)
 	var mechanisms []string
 	for i := 0; i < int(mechanismsCount); i++ {
@@ -63,15 +70,21 @@ func (client *Client) handleSaslHandshakeResponse(response *StreamingResponse, r
 		mechanisms = append(mechanisms, mechanism)
 	}
 
-	GetResponses().GetResponderById(response.CorrelationId).dataString <- mechanisms
+	res, err := GetResponses().GetById(streamingRes.CorrelationId)
+	if err != nil {
+		// TODO handle response
+		return err
+	}
+	res.dataString <- mechanisms
+
 	return mechanisms
 }
 
-func (client *Client) handlePeerProperties(response *StreamingResponse, r *bufio.Reader) interface{} {
-	response.CorrelationId = ReadUIntFromReader(r)
-	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
-	if response.ResponseCode != 1 {
-		fmt.Printf("Errr ResponseCode: %d ", response.ResponseCode)
+func (client *Client) handlePeerProperties(streamingRes *StreamingResponse, r *bufio.Reader) interface{} {
+	streamingRes.CorrelationId = ReadUIntFromReader(r)
+	streamingRes.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
+	if streamingRes.ResponseCode != 1 {
+		fmt.Printf("Errr ResponseCode: %d ", streamingRes.ResponseCode)
 	}
 	serverPropertiesCount := ReadUIntFromReader(r)
 	serverProperties := make(map[string]string)
@@ -81,7 +94,12 @@ func (client *Client) handlePeerProperties(response *StreamingResponse, r *bufio
 		value := ReadStringFromReader(r)
 		serverProperties[key] = value
 	}
-	GetResponses().GetResponderById(response.CorrelationId).isDone <- true
+	res, err := GetResponses().GetById(streamingRes.CorrelationId)
+	if err != nil {
+		// TODO handle response
+		return err
+	}
+	res.isDone <- true
 	return serverProperties
 }
 
@@ -100,7 +118,12 @@ func (client *Client) handleTune(response *StreamingResponse, r *bufio.Reader) i
 	WriteShort(b, Version1)
 	WriteUInt(b, maxFrameSize)
 	WriteUInt(b, heartbeat)
-	GetResponses().GetResponderByName("tune").dataBytes <- b.Bytes()
+	res, err := GetResponses().GetByName("tune")
+	if err != nil {
+		// TODO handle response
+		return err
+	}
+	res.dataBytes <- b.Bytes()
 	return b.Bytes()
 
 }
@@ -112,13 +135,12 @@ func (client *Client) handleGenericResponse(response *StreamingResponse, r *bufi
 		fmt.Printf("Errr ResponseCode: %d \n", response.ResponseCode)
 
 	}
-	var res = GetResponses().GetResponderById(response.CorrelationId)
-	if res != nil {
-		res.isDone <- true
-	} else {
-		println("Errr")
+	res, err := GetResponses().GetById(response.CorrelationId)
+	if err != nil {
+		// TODO handle response
+		return err
 	}
-
+	res.isDone <- true
 	return response.ResponseCode
 }
 
@@ -134,7 +156,7 @@ func (client *Client) handleConfirm(response *StreamingResponse, r *bufio.Reader
 
 	//fmt.Printf("publishedid before: %d   \n", response.PublishID)
 	//
-	//v := GetProducers().GetProducerById(response.PublishID)
+	//v := GetProducers().GetById(response.PublishID)
 	//if v != nil {
 	//	select {
 	//	case v.PublishConfirm.isDone <- true:
