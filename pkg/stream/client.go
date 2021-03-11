@@ -17,11 +17,6 @@ type ClientProperties struct {
 	items map[string]string
 }
 
-type AtomicInt struct {
-	value int
-	mutex *sync.Mutex
-}
-
 type Client struct {
 	socket           net.Conn
 	clientProperties ClientProperties
@@ -61,24 +56,10 @@ const (
 	UnicodeNull = "\u0000"
 )
 
-func NewAtomicInt() *AtomicInt {
-	atomicInt := &AtomicInt{}
-	atomicInt.value = 0
-	atomicInt.mutex = &sync.Mutex{}
-	return atomicInt
-}
-
 func NewStreamingClient() *Client {
 	client := &Client{mutexWrite: &sync.Mutex{}, mutexRead: &sync.Mutex{}}
 	return client
 }
-
-//func (client *Client) increaseAndGetCorrelationID() int {
-//	client.correlationID.mutex.Lock()
-//	defer client.correlationID.mutex.Unlock()
-//	client.correlationID.value += 1
-//	return client.correlationID.value
-//}
 
 func (client *Client) Connect(addr string) error {
 	InitCoordinators()
@@ -127,7 +108,7 @@ func (client *Client) Connect(addr string) error {
 
 func (client *Client) CreateStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream) + 4
-	resp := GetResponses().addResponder()
+	resp := GetResponses().New()
 	correlationId := resp.subId
 	arguments := make(map[string]string)
 	arguments["queue-leader-locator"] = "least-leaders"
@@ -164,11 +145,11 @@ func (client *Client) NewProducer(stream string) (*Producer, error) {
 }
 
 func (client *Client) declarePublisher(stream string) (*Producer, error) {
-	producer, _ := GetProducers().registerNewProducer()
+	producer := GetProducers().New()
 
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
-	resp := GetResponses().addResponder()
+	resp := GetResponses().New()
 
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -203,7 +184,7 @@ func (client *Client) peerProperties() error {
 	}
 
 	length := 2 + 2 + 4 + clientPropertiesSize
-	resp := GetResponses().addResponder()
+	resp := GetResponses().New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
@@ -243,7 +224,7 @@ func (client *Client) authenticate(user string, password string) error {
 
 func (client *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
-	resp := GetResponses().addResponder()
+	resp := GetResponses().New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -258,8 +239,8 @@ func (client *Client) getSaslMechanisms() []string {
 
 func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	resp := GetResponses().addResponder()
-	respTune := GetResponses().addResponderWitName("tune")
+	resp := GetResponses().New()
+	respTune := GetResponses().NewWitName("tune")
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -284,7 +265,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 
 func (client *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
-	resp := GetResponses().addResponder()
+	resp := GetResponses().New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -302,7 +283,7 @@ func (client *Client) open(virtualHost string) error {
 
 func (client *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
-	resp := GetResponses().addResponder()
+	resp := GetResponses().New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -316,12 +297,17 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	}
 	<-resp.isDone
 
+	err = GetProducers().RemoveById(publisherId)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (client *Client) DeleteStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream)
-	resp := GetResponses().addResponder()
+	resp := GetResponses().New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -339,7 +325,6 @@ func (client *Client) DeleteStream(stream string) error {
 
 func (client *Client) writeAndFlush(buffer []byte) error {
 	client.mutexWrite.Lock()
-
 	_, err := client.writer.Write(buffer)
 	if err != nil {
 		return err

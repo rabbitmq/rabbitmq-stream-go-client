@@ -3,12 +3,11 @@ package stream
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"github.com/Azure/go-amqp"
 )
 
 type Producer struct {
-	ProducerID     byte
+	ProducerID     uint8
 	LikedClient    *Client
 	PublishConfirm *Response
 }
@@ -25,7 +24,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 	}
 
 	length := frameHeaderLength + msgLen
-	var publishId byte
+	var publishId uint8
 	publishId = producer.ProducerID
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -46,8 +45,6 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 
 	err := producer.LikedClient.writeAndFlush(b.Bytes())
 	if err != nil {
-		fmt.Printf("errror publish")
-		//respChan <- &WriteResponse{Err: err}
 		return 0, err
 	}
 	//<-producer.PublishConfirm.isDone
