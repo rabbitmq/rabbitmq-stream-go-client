@@ -139,6 +139,10 @@ func (client *Client) CreateStream(stream string) error {
 		return err
 	}
 	<-resp.isDone
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -148,7 +152,7 @@ func (client *Client) NewProducer(stream string) (*Producer, error) {
 
 func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	producer := client.producers.New()
-
+	producer.LikedClient = client
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
 	resp := client.responses.New()
@@ -167,7 +171,10 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 		return nil, err
 	}
 	<-resp.isDone
-	producer.LikedClient = client
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return nil, err
+	}
 	return producer, nil
 }
 
