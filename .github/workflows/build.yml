@@ -12,12 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       rabbitmq-streaming:
-          container:
-            image: pivotalrabbitmq/rabbitmq-stream
-            env:
-              RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_stream"
-            ports:
-              - 5551:5551
+        image: pivotalrabbitmq/rabbitmq-stream
+          env:
+            RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_stream"
+          ports:
+            - 5551:5551
     steps:
     - uses: actions/checkout@v2
 
