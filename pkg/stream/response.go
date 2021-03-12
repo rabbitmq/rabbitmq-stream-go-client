@@ -70,7 +70,7 @@ func (client *Client) handleSaslHandshakeResponse(streamingRes *StreamingRespons
 		mechanisms = append(mechanisms, mechanism)
 	}
 
-	res, err := GetResponses().GetById(streamingRes.CorrelationId)
+	res, err := client.responses.GetById(streamingRes.CorrelationId)
 	if err != nil {
 		// TODO handle response
 		return err
@@ -94,7 +94,7 @@ func (client *Client) handlePeerProperties(streamingRes *StreamingResponse, r *b
 		value := ReadStringFromReader(r)
 		serverProperties[key] = value
 	}
-	res, err := GetResponses().GetById(streamingRes.CorrelationId)
+	res, err := client.responses.GetById(streamingRes.CorrelationId)
 	if err != nil {
 		// TODO handle response
 		return err
@@ -118,7 +118,7 @@ func (client *Client) handleTune(response *StreamingResponse, r *bufio.Reader) i
 	WriteShort(b, Version1)
 	WriteUInt(b, maxFrameSize)
 	WriteUInt(b, heartbeat)
-	res, err := GetResponses().GetByName("tune")
+	res, err := client.responses.GetByName("tune")
 	if err != nil {
 		// TODO handle response
 		return err
@@ -135,7 +135,7 @@ func (client *Client) handleGenericResponse(response *StreamingResponse, r *bufi
 		fmt.Printf("Errr ResponseCode: %d \n", response.ResponseCode)
 
 	}
-	res, err := GetResponses().GetById(response.CorrelationId)
+	res, err := client.responses.GetById(response.CorrelationId)
 	if err != nil {
 		// TODO handle response
 		return err
@@ -156,7 +156,7 @@ func (client *Client) handleConfirm(response *StreamingResponse, r *bufio.Reader
 
 	//fmt.Printf("publishedid before: %d   \n", response.PublishID)
 	//
-	//v := GetProducers().GetById(response.PublishID)
+	//v := client.producers.GetById(response.PublishID)
 	//if v != nil {
 	//	select {
 	//	case v.PublishConfirm.isDone <- true:
