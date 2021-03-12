@@ -13,18 +13,14 @@ type Producers struct {
 }
 
 type Responses struct {
-	items map[string]*Response
-	mutex *sync.Mutex
+	counter int
+	items   map[string]*Response
+	mutex   *sync.Mutex
 }
 
 func NewProducers() *Producers {
 	return &Producers{mutex: &sync.Mutex{},
 		items: make(map[byte]*Producer)}
-}
-
-func NewResponses() *Responses {
-	return &Responses{mutex: &sync.Mutex{},
-		items: make(map[string]*Response)}
 }
 
 func (c *Producers) New() *Producer {
@@ -74,6 +70,11 @@ func (c Producers) Count() int {
 	return len(c.items)
 }
 
+func NewResponses() *Responses {
+	return &Responses{mutex: &sync.Mutex{},
+		items: make(map[string]*Response)}
+}
+
 func newResponse() *Response {
 	res := &Response{}
 	res.isDone = make(chan bool, 1)
@@ -83,10 +84,9 @@ func newResponse() *Response {
 }
 func (s Responses) NewWitName(value string) *Response {
 	s.mutex.Lock()
-	var lastId int
-	lastId = len(s.items)
+	s.counter += 1
 	res := newResponse()
-	res.subId = lastId
+	res.subId = s.counter
 	s.items[value] = res
 	s.mutex.Unlock()
 	return res
@@ -94,11 +94,10 @@ func (s Responses) NewWitName(value string) *Response {
 
 func (s Responses) New() *Response {
 	s.mutex.Lock()
-	var lastId int
-	lastId = len(s.items)
+	s.counter += 1
 	res := newResponse()
-	res.subId = lastId
-	s.items[strconv.Itoa(lastId)] = res
+	res.subId = s.counter
+	s.items[strconv.Itoa(s.counter)] = res
 	s.mutex.Unlock()
 	return res
 }
@@ -130,6 +129,17 @@ func (s Responses) RemoveById(id int) error {
 		return errors.New("Response #{id} not found ")
 	}
 	delete(s.items, sa)
+
+	return nil
+}
+
+func (s Responses) RemoveByName(id string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.items[id] == nil {
+		return errors.New("Response #{id} not found ")
+	}
+	delete(s.items, id)
 
 	return nil
 }

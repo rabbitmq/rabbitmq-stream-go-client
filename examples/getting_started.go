@@ -34,12 +34,12 @@ func main() {
 		return
 	}
 	numberOfMessages := 1000
-	batchsize := 100
+	batchSize := 100
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
 	// message aggregation
 	var arr []*amqp.Message
-	for z := 0; z < batchsize; z++ {
+	for z := 0; z < batchSize; z++ {
 		arr = append(arr, amqp.NewMessage([]byte("hello stream_"+strconv.Itoa(z))))
 	}
 	start := time.Now()
@@ -51,7 +51,7 @@ func main() {
 		}
 	}
 	elapsed := time.Since(start)
-	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchsize, elapsed)
+	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
 
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Press any key to stop ")

@@ -85,9 +85,7 @@ func (client *Client) Connect(addr string) error {
 	}
 	client.socket = connection
 	client.writer = bufio.NewWriter(client.socket)
-	//client.reader = bufio.NewReader(client.socket)
 	go client.handleResponse(connection)
-	//time.Sleep(1 * time.Second)
 	err2 = client.peerProperties()
 
 	if err2 != nil {
@@ -207,6 +205,10 @@ func (client *Client) peerProperties() error {
 		return err
 	}
 	<-resp.isDone
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -236,6 +238,10 @@ func (client *Client) getSaslMechanisms() []string {
 	WriteInt(b, correlationId)
 	client.writeAndFlush(b.Bytes())
 	data := <-resp.dataString
+	err := client.responses.RemoveById(correlationId)
+	if err != nil {
+		return nil
+	}
 	return data
 
 }
@@ -259,9 +265,17 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	}
 
 	<-resp.isDone
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return err
+	}
 
 	// double read for TUNE
 	tuneData := <-respTune.dataBytes
+	err = client.responses.RemoveByName("tune")
+	if err != nil {
+		return err
+	}
 
 	return client.writeAndFlush(tuneData)
 }
@@ -281,6 +295,10 @@ func (client *Client) open(virtualHost string) error {
 		return err
 	}
 	<-resp.isDone
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -299,6 +317,10 @@ func (client *Client) deletePublisher(publisherId byte) error {
 		return err
 	}
 	<-resp.isDone
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return err
+	}
 
 	err = client.producers.RemoveById(publisherId)
 	if err != nil {
@@ -323,6 +345,10 @@ func (client *Client) DeleteStream(stream string) error {
 		return err
 	}
 	<-resp.isDone
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
