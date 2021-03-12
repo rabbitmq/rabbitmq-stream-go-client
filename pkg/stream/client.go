@@ -24,7 +24,8 @@ type Client struct {
 	writer           *bufio.Writer
 	reader           *bufio.Reader
 	mutexWrite       *sync.Mutex
-	mutexRead        *sync.Mutex
+	producers        *Producers
+	responses        *Responses
 }
 
 const (
@@ -57,12 +58,15 @@ const (
 )
 
 func NewStreamingClient() *Client {
-	client := &Client{mutexWrite: &sync.Mutex{}, mutexRead: &sync.Mutex{}}
+	client := &Client{
+		mutexWrite: &sync.Mutex{},
+		producers:  NewProducers(),
+		responses:  NewResponses(),
+	}
 	return client
 }
 
 func (client *Client) Connect(addr string) error {
-	InitCoordinators()
 	u, err := url.Parse(addr)
 	if err != nil {
 		return err
@@ -108,7 +112,7 @@ func (client *Client) Connect(addr string) error {
 
 func (client *Client) CreateStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream) + 4
-	resp := GetResponses().New()
+	resp := client.responses.New()
 	correlationId := resp.subId
 	arguments := make(map[string]string)
 	arguments["queue-leader-locator"] = "least-leaders"
@@ -123,7 +127,7 @@ func (client *Client) CreateStream(stream string) error {
 	WriteShort(b, CommandCreateStream)
 	WriteShort(b, Version1)
 
-	WriteInt(b, int(correlationId))
+	WriteInt(b, correlationId)
 	WriteString(b, stream)
 	WriteInt(b, len(arguments))
 
@@ -145,11 +149,11 @@ func (client *Client) NewProducer(stream string) (*Producer, error) {
 }
 
 func (client *Client) declarePublisher(stream string) (*Producer, error) {
-	producer := GetProducers().New()
+	producer := client.producers.New()
 
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
-	resp := GetResponses().New()
+	resp := client.responses.New()
 
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -184,7 +188,7 @@ func (client *Client) peerProperties() error {
 	}
 
 	length := 2 + 2 + 4 + clientPropertiesSize
-	resp := GetResponses().New()
+	resp := client.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
@@ -224,7 +228,7 @@ func (client *Client) authenticate(user string, password string) error {
 
 func (client *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
-	resp := GetResponses().New()
+	resp := client.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -239,8 +243,8 @@ func (client *Client) getSaslMechanisms() []string {
 
 func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	resp := GetResponses().New()
-	respTune := GetResponses().NewWitName("tune")
+	resp := client.responses.New()
+	respTune := client.responses.NewWitName("tune")
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -265,7 +269,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 
 func (client *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
-	resp := GetResponses().New()
+	resp := client.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -283,7 +287,7 @@ func (client *Client) open(virtualHost string) error {
 
 func (client *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
-	resp := GetResponses().New()
+	resp := client.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -297,7 +301,7 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	}
 	<-resp.isDone
 
-	err = GetProducers().RemoveById(publisherId)
+	err = client.producers.RemoveById(publisherId)
 	if err != nil {
 		return err
 	}
@@ -307,7 +311,7 @@ func (client *Client) deletePublisher(publisherId byte) error {
 
 func (client *Client) DeleteStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream)
-	resp := GetResponses().New()
+	resp := client.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -335,4 +339,8 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 	}
 	client.mutexWrite.Unlock()
 	return nil
+}
+
+func (client *Client) CloseAllProducers() error {
+	return client.producers.CloseAllProducers()
 }

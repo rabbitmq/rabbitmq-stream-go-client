@@ -58,7 +58,7 @@ func main() {
 	_, _ = reader.ReadString('\n')
 
 	fmt.Print("Closing all producers ")
-	err = stream.GetProducers().CloseAllProducers()
+	err = client.CloseAllProducers()
 	if err != nil {
 		fmt.Printf("error removing producers: %s", err)
 		return

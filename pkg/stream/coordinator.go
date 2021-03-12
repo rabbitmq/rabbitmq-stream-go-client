@@ -6,9 +6,6 @@ import (
 	"sync"
 )
 
-var producers *Producers
-var responses *Responses
-
 type Producers struct {
 	items       map[byte]*Producer
 	mutex       *sync.Mutex
@@ -20,18 +17,14 @@ type Responses struct {
 	mutex *sync.Mutex
 }
 
-func InitCoordinators() {
-	producers = &Producers{}
-	producers.mutex = &sync.Mutex{}
-	producers.items = make(map[byte]*Producer)
-
-	responses = &Responses{}
-	responses.mutex = &sync.Mutex{}
-	responses.items = make(map[string]*Response)
+func NewProducers() *Producers {
+	return &Producers{mutex: &sync.Mutex{},
+		items: make(map[byte]*Producer)}
 }
 
-func GetProducers() *Producers {
-	return producers
+func NewResponses() *Responses {
+	return &Responses{mutex: &sync.Mutex{},
+		items: make(map[string]*Response)}
 }
 
 func (c *Producers) New() *Producer {
@@ -79,10 +72,6 @@ func (c Producers) Count() int {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	return len(c.items)
-}
-
-func GetResponses() *Responses {
-	return responses
 }
 
 func newResponse() *Response {

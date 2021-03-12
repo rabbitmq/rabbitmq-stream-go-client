@@ -34,7 +34,7 @@ func main() {
 
 	{
 		var wg sync.WaitGroup
-		for i := 0; i < 1; i++ {
+		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			producer, err := client.NewProducer(streamName) // Get a new producer to publish the messages
 			if err != nil {
@@ -45,7 +45,7 @@ func main() {
 				defer wg.Done()
 				fmt.Printf("starting producer: %d, item: %d \n", producer.ProducerID, id)
 				start := time.Now()
-				for z := 0; z < 100; z++ {
+				for z := 0; z < 1000; z++ {
 					_, err = producer.BatchPublish(nil, arr) // batch send
 					if err != nil {
 						fmt.Printf("error: %s", err)
@@ -65,7 +65,7 @@ func main() {
 	_, _ = reader.ReadString('\n')
 
 	fmt.Print("Closing all producers ")
-	err = stream.GetProducers().CloseAllProducers()
+	err = client.CloseAllProducers()
 	if err != nil {
 		fmt.Printf("error: %s", err)
 		return
@@ -75,5 +75,5 @@ func main() {
 		fmt.Printf("error: %s", err)
 		return
 	}
-	fmt.Print("Bye bye")
+	fmt.Println("Bye bye")
 }
