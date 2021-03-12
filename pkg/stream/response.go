@@ -3,64 +3,72 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 )
 
-type Response struct {
-	isDone     chan bool
-	dataString chan []string
-	dataBytes  chan []byte
-	subId      int
+type ReaderProtocol struct {
+	FrameLen          uint32
+	CommandID         uint16
+	Key               uint16
+	Version           uint16
+	CorrelationId     uint32
+	ResponseCode      uint16
+	PublishID         uint8
+	PublishingIdCount uint64
 }
 
 func (client *Client) handleResponse(conn net.Conn) {
-	r := bufio.NewReader(conn)
+	buffer := bufio.NewReader(conn)
 	for {
-		response := &StreamingResponse{}
-		response.FrameLen = ReadUIntFromReader(r)
-		response.CommandID = UShortExtractResponseCode(ReadUShortFromReader(r))
-		response.Version = ReadUShortFromReader(r)
+		readerProtocol := &ReaderProtocol{}
+		readerProtocol.FrameLen = ReadUIntFromReader(buffer)
+		readerProtocol.CommandID = UShortExtractResponseCode(ReadUShortFromReader(buffer))
+		readerProtocol.Version = ReadUShortFromReader(buffer)
 
-		switch response.CommandID {
+		switch readerProtocol.CommandID {
 
 		case CommandPeerProperties:
 			{
-				client.handlePeerProperties(response, r)
+				client.handlePeerProperties(readerProtocol, buffer)
 			}
 		case CommandSaslHandshake:
 			{
-
-				client.handleSaslHandshakeResponse(response, r)
+				client.handleSaslHandshakeResponse(readerProtocol, buffer)
 			}
 		case CommandTune:
 			{
-				client.handleTune(r)
+				client.handleTune(buffer)
 			}
 		case CommandOpen, CommandDeclarePublisher,
 			CommandDeletePublisher, CommandDeleteStream,
 			CommandCreateStream, CommandSaslAuthenticate:
 			{
-				client.handleGenericResponse(response, r)
+				client.handleGenericResponse(readerProtocol, buffer)
 			}
 
 		case CommandPublishConfirm:
 			{
-				client.handleConfirm(response, r)
+				client.handleConfirm(readerProtocol, buffer)
+			}
+		case CommandHeartbeat:
+			{
+				client.sendHeartbeat()
 			}
 		default:
 			{
-				fmt.Printf("dont CommandID %d buff:%d \n", response.CommandID, r.Buffered())
+				fmt.Printf("dont CommandID %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 			}
 
 		}
-		//r = bufio.NewReader(conn)
 
 	}
 
 }
 
-func (client *Client) handleSaslHandshakeResponse(streamingRes *StreamingResponse, r *bufio.Reader) interface{} {
+func (client *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bufio.Reader) interface{} {
 	streamingRes.CorrelationId = ReadUIntFromReader(r)
 	streamingRes.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
 	mechanismsCount := ReadUIntFromReader(r)
@@ -80,7 +88,7 @@ func (client *Client) handleSaslHandshakeResponse(streamingRes *StreamingRespons
 	return mechanisms
 }
 
-func (client *Client) handlePeerProperties(streamingRes *StreamingResponse, r *bufio.Reader) interface{} {
+func (client *Client) handlePeerProperties(streamingRes *ReaderProtocol, r *bufio.Reader) interface{} {
 	streamingRes.CorrelationId = ReadUIntFromReader(r)
 	streamingRes.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
 	if streamingRes.ResponseCode != 1 {
@@ -128,7 +136,7 @@ func (client *Client) handleTune(r *bufio.Reader) interface{} {
 
 }
 
-func (client *Client) handleGenericResponse(response *StreamingResponse, r *bufio.Reader) interface{} {
+func (client *Client) handleGenericResponse(response *ReaderProtocol, r *bufio.Reader) interface{} {
 	response.CorrelationId = ReadUIntFromReader(r)
 	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
 	if response.ResponseCode != 1 {
@@ -144,7 +152,7 @@ func (client *Client) handleGenericResponse(response *StreamingResponse, r *bufi
 	return response.ResponseCode
 }
 
-func (client *Client) handleConfirm(response *StreamingResponse, r *bufio.Reader) interface{} {
+func (client *Client) handleConfirm(response *ReaderProtocol, r *bufio.Reader) interface{} {
 	response.PublishID = ReadByteFromReader(r)
 	//response.PublishingIdCount = ReadIntFromReader(client.reader)
 	publishingIdCount := ReadUIntFromReader(r)
@@ -156,4 +164,48 @@ func (client *Client) handleConfirm(response *StreamingResponse, r *bufio.Reader
 
 	return 0
 
+}
+
+func (client *Client) sendHeartbeat() {
+	//length := 4 + 2 + 2
+	//var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	//WriteInt(b, length)
+	//WriteUShort(b, UShortEncodeResponseCode(CommandHeartbeat))
+	//
+	//ByteBuf bb = allocate(ctx.alloc(), 4 + 2 + 2);
+	//bb.writeInt(4).writeShort(encodeRequestCode(COMMAND_HEARTBEAT)).writeShort(VERSION_1);
+	//ctx.writeAndFlush(bb);
+
+}
+
+func ReadUShortFromReader(readerStream io.Reader) uint16 {
+	var res uint16
+	_ = binary.Read(readerStream, binary.BigEndian, &res)
+	return res
+}
+
+func ReadUIntFromReader(readerStream io.Reader) uint32 {
+	var res uint32
+	_ = binary.Read(readerStream, binary.BigEndian, &res)
+	return res
+}
+
+func ReadInt64FromReader(readerStream io.Reader) int64 {
+	var res int64
+	_ = binary.Read(readerStream, binary.BigEndian, &res)
+	return res
+}
+
+func ReadByteFromReader(readerStream io.Reader) uint8 {
+	var res uint8
+	_ = binary.Read(readerStream, binary.BigEndian, &res)
+	return res
+
+}
+
+func ReadStringFromReader(readerStream io.Reader) string {
+	lenString := ReadUShortFromReader(readerStream)
+	buff := make([]byte, lenString)
+	_ = binary.Read(readerStream, binary.BigEndian, &buff)
+	return string(buff)
 }

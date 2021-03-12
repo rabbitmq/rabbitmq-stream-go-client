@@ -17,6 +17,13 @@ type Responses struct {
 	mutex   *sync.Mutex
 }
 
+type Response struct {
+	isDone     chan bool
+	dataString chan []string
+	dataBytes  chan []byte
+	subId      int
+}
+
 func NewProducers() *Producers {
 	return &Producers{mutex: &sync.Mutex{},
 		items: make(map[byte]*Producer)}

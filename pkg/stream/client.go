@@ -376,3 +376,5 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 func (client *Client) CloseAllProducers() error {
 	return client.producers.CloseAllProducers()
 }
+
+
