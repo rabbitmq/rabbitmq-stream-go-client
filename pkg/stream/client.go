@@ -160,7 +160,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	WriteInt(b, length)
 	WriteShort(b, CommandDeclarePublisher)
 	WriteShort(b, Version1)
-	WriteInt(b, int(correlationId))
+	WriteInt(b, correlationId)
 	WriteByte(b, producer.ProducerID)
 	WriteShort(b, int16(publisherReferenceSize))
 	WriteString(b, stream)
@@ -169,7 +169,6 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 		return nil, err
 	}
 	<-resp.isDone
-	//client.handleResponse()
 	producer.LikedClient = client
 	return producer, nil
 }
@@ -195,7 +194,7 @@ func (client *Client) peerProperties() error {
 	WriteInt(b, length)
 	WriteShort(b, CommandPeerProperties)
 	WriteShort(b, Version1)
-	WriteInt(b, int(correlationId))
+	WriteInt(b, correlationId)
 	WriteInt(b, len(client.clientProperties.items))
 
 	for key, element := range client.clientProperties.items {
@@ -234,7 +233,7 @@ func (client *Client) getSaslMechanisms() []string {
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
 	WriteShort(b, Version1)
-	WriteInt(b, int(correlationId))
+	WriteInt(b, correlationId)
 	client.writeAndFlush(b.Bytes())
 	data := <-resp.dataString
 	return data
@@ -250,7 +249,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslAuthenticate)
 	WriteShort(b, Version1)
-	WriteInt(b, int(correlationId))
+	WriteInt(b, correlationId)
 	WriteString(b, saslMechanism)
 	WriteInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
@@ -258,8 +257,8 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	if err != nil {
 		return err
 	}
+
 	<-resp.isDone
-	//client.handleResponse()
 
 	// double read for TUNE
 	tuneData := <-respTune.dataBytes
@@ -275,7 +274,7 @@ func (client *Client) open(virtualHost string) error {
 	WriteInt(b, length)
 	WriteShort(b, CommandOpen)
 	WriteShort(b, Version1)
-	WriteInt(b, int(correlationId))
+	WriteInt(b, correlationId)
 	WriteString(b, virtualHost)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
@@ -293,7 +292,7 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	WriteInt(b, length)
 	WriteShort(b, CommandDeletePublisher)
 	WriteShort(b, Version1)
-	WriteInt(b, int(correlationId))
+	WriteInt(b, correlationId)
 	WriteByte(b, publisherId)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
@@ -317,7 +316,7 @@ func (client *Client) DeleteStream(stream string) error {
 	WriteInt(b, length)
 	WriteShort(b, CommandDeleteStream)
 	WriteShort(b, Version1)
-	WriteInt(b, int(correlationId))
+	WriteInt(b, correlationId)
 	WriteString(b, stream)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {

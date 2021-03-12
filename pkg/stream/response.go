@@ -35,7 +35,7 @@ func (client *Client) handleResponse(conn net.Conn) {
 			}
 		case CommandTune:
 			{
-				client.handleTune(response, r)
+				client.handleTune(r)
 			}
 		case CommandOpen, CommandDeclarePublisher,
 			CommandDeletePublisher, CommandDeleteStream,
@@ -103,7 +103,7 @@ func (client *Client) handlePeerProperties(streamingRes *StreamingResponse, r *b
 	return serverProperties
 }
 
-func (client *Client) handleTune(response *StreamingResponse, r *bufio.Reader) interface{} {
+func (client *Client) handleTune(r *bufio.Reader) interface{} {
 
 	serverMaxFrameSize := ReadUIntFromReader(r)
 	serverHeartbeat := ReadUIntFromReader(r)
@@ -154,21 +154,6 @@ func (client *Client) handleConfirm(response *StreamingResponse, r *bufio.Reader
 		publishingIdCount--
 	}
 
-	//fmt.Printf("publishedid before: %d   \n", response.PublishID)
-	//
-	//v := client.producers.GetById(response.PublishID)
-	//if v != nil {
-	//	select {
-	//	case v.PublishConfirm.isDone <- true:
-	//		//return 0, nil
-	//	case <-time.After(200 * time.Millisecond):
-	//		//fmt.Printf("timeout id:%d \n", producer.ProducerID)
-	//	}
-	//} else {
-	//	fmt.Printf("niiillllllll publishedid before %d \n", response.PublishID)
-	//}
-	//
-	//fmt.Printf("publishedid after: %d \n", response.PublishID)
 	return 0
 
 }

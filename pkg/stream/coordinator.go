@@ -52,7 +52,7 @@ func (c Producers) GetById(id uint8) (*Producer, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.items[id] == nil {
-		return nil, errors.New("Producer not found #{id}")
+		return nil, errors.New("Producer #{id} not found ")
 	}
 	return c.items[id], nil
 }
@@ -61,7 +61,7 @@ func (c Producers) RemoveById(id byte) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.items[id] == nil {
-		return errors.New("Producer not found #{id}")
+		return errors.New("Producer #{id} not found ")
 	}
 	delete(c.items, id)
 
@@ -98,7 +98,7 @@ func (s Responses) New() *Response {
 	lastId = len(s.items)
 	res := newResponse()
 	res.subId = lastId
-	s.items[strconv.Itoa(int(lastId))] = res
+	s.items[strconv.Itoa(lastId)] = res
 	s.mutex.Unlock()
 	return res
 }
@@ -108,7 +108,7 @@ func (s Responses) GetById(id uint32) (*Response, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if s.items[sa] == nil {
-		return nil, errors.New("Response not found #{id}")
+		return nil, errors.New("Response #{id} not found ")
 	}
 	return s.items[sa], nil
 }
@@ -117,7 +117,7 @@ func (s Responses) GetByName(id string) (*Response, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if s.items[id] == nil {
-		return nil, errors.New("Response not found #{id}")
+		return nil, errors.New("Response #{id} not found ")
 	}
 	return s.items[id], nil
 }
@@ -127,7 +127,7 @@ func (s Responses) RemoveById(id int) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if s.items[sa] == nil {
-		return errors.New("Response not found #{id}")
+		return errors.New("Response #{id} not found ")
 	}
 	delete(s.items, sa)
 
