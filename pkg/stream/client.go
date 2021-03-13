@@ -28,35 +28,6 @@ type Client struct {
 	responses        *Responses
 }
 
-const (
-	CommandDeclarePublisher       = 1
-	CommandPublish                = 2
-	CommandPublishConfirm         = 3
-	CommandPublishError           = 4
-	CommandQueryPublisherSequence = 5
-	CommandDeletePublisher        = 6
-	CommandSubscribe              = 7
-	CommandDeliver                = 8
-	CommandCredit                 = 9
-	CommandCommitOffset           = 10
-	CommandQueryOffset            = 11
-	CommandUnsubscribe            = 12
-	CommandCreateStream           = 13
-	CommandDeleteStream           = 14
-	CommandMetadata               = 15
-	CommandMetadataUpdate         = 16
-	CommandPeerProperties         = 17
-	CommandSaslHandshake          = 18
-	CommandSaslAuthenticate       = 19
-	CommandTune                   = 20
-	CommandOpen                   = 21
-	CommandClose                  = 22
-	CommandHeartbeat              = 23
-
-	Version1    = 1
-	UnicodeNull = "\u0000"
-)
-
 func NewStreamingClient() *Client {
 	client := &Client{
 		mutexWrite: &sync.Mutex{},
@@ -86,7 +57,7 @@ func (client *Client) Connect(addr string) error {
 	client.socket = connection
 	client.writer = bufio.NewWriter(client.socket)
 	go client.handleResponse(connection)
-	err2 = client.peerProperties()
+	_, err2 = client.peerProperties()
 
 	if err2 != nil {
 		return err2
@@ -100,7 +71,7 @@ func (client *Client) Connect(addr string) error {
 	if len(u.Path) > 1 {
 		vhost, _ = url.QueryUnescape(u.Path[1:])
 	}
-	err2 = client.open(vhost)
+	_, err2 = client.open(vhost)
 	if err2 != nil {
 		return err2
 	}
@@ -108,23 +79,20 @@ func (client *Client) Connect(addr string) error {
 	return nil
 }
 
-func (client *Client) CreateStream(stream string) error {
-	length := 2 + 2 + 4 + 2 + len(stream) + 4
+func (client *Client) CreateStream(stream string) (*Code, error) {
+
 	resp := client.responses.New()
+	length := 2 + 2 + 4 + 2 + len(stream) + 4
 	correlationId := resp.subId
 	arguments := make(map[string]string)
 	arguments["queue-leader-locator"] = "least-leaders"
 	for key, element := range arguments {
 		length = length + 2 + len(key) + 2 + len(element)
 	}
-
 	var b = bytes.NewBuffer(make([]byte, 0, length))
-
 	WriteInt(b, length)
-
 	WriteShort(b, CommandCreateStream)
 	WriteShort(b, Version1)
-
 	WriteInt(b, correlationId)
 	WriteString(b, stream)
 	WriteInt(b, len(arguments))
@@ -136,14 +104,14 @@ func (client *Client) CreateStream(stream string) error {
 
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	<-resp.isDone
+	code := <-resp.code
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return &code, nil
 }
 
 func (client *Client) NewProducer(stream string) (*Producer, error) {
@@ -170,7 +138,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	if err != nil {
 		return nil, err
 	}
-	<-resp.isDone
+	<-resp.code
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return nil, err
@@ -178,7 +146,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	return producer, nil
 }
 
-func (client *Client) peerProperties() error {
+func (client *Client) peerProperties() (*Code, error) {
 	clientPropertiesSize := 4 // size of the map, always there
 
 	client.clientProperties.items["connection_name"] = "rabbitmq-stream-locator"
@@ -209,15 +177,14 @@ func (client *Client) peerProperties() error {
 
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	<-resp.isDone
+	code := <-resp.code
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	return nil
+	return &code, nil
 }
 
 func (client *Client) authenticate(user string, password string) error {
@@ -271,7 +238,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 		return err
 	}
 
-	<-resp.isDone
+	<-resp.code
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return err
@@ -287,7 +254,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	return client.writeAndFlush(tuneData)
 }
 
-func (client *Client) open(virtualHost string) error {
+func (client *Client) open(virtualHost string) (*Code, error) {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
 	resp := client.responses.New()
 	correlationId := resp.subId
@@ -299,14 +266,14 @@ func (client *Client) open(virtualHost string) error {
 	WriteString(b, virtualHost)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	<-resp.isDone
+	code := <-resp.code
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return &code, nil
 }
 
 func (client *Client) deletePublisher(publisherId byte) error {
@@ -323,12 +290,11 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	if err != nil {
 		return err
 	}
-	<-resp.isDone
+	<-resp.code
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return err
 	}
-
 	err = client.producers.RemoveById(publisherId)
 	if err != nil {
 		return err
@@ -337,7 +303,7 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	return nil
 }
 
-func (client *Client) DeleteStream(stream string) error {
+func (client *Client) DeleteStream(stream string) (*Code, error) {
 	length := 2 + 2 + 4 + 2 + len(stream)
 	resp := client.responses.New()
 	correlationId := resp.subId
@@ -349,14 +315,14 @@ func (client *Client) DeleteStream(stream string) error {
 	WriteString(b, stream)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	<-resp.isDone
+	code := <-resp.code
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return &code, nil
 }
 
 func (client *Client) writeAndFlush(buffer []byte) error {
@@ -376,5 +342,3 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 func (client *Client) CloseAllProducers() error {
 	return client.producers.CloseAllProducers()
 }
-
-

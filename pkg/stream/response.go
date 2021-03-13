@@ -3,9 +3,7 @@ package stream
 import (
 	"bufio"
 	"bytes"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"net"
 )
 
@@ -24,9 +22,9 @@ func (client *Client) handleResponse(conn net.Conn) {
 	buffer := bufio.NewReader(conn)
 	for {
 		readerProtocol := &ReaderProtocol{}
-		readerProtocol.FrameLen = ReadUIntFromReader(buffer)
-		readerProtocol.CommandID = UShortExtractResponseCode(ReadUShortFromReader(buffer))
-		readerProtocol.Version = ReadUShortFromReader(buffer)
+		readerProtocol.FrameLen = ReadUInt(buffer)
+		readerProtocol.CommandID = UShortExtractResponseCode(ReadUShort(buffer))
+		readerProtocol.Version = ReadUShort(buffer)
 
 		switch readerProtocol.CommandID {
 
@@ -69,12 +67,12 @@ func (client *Client) handleResponse(conn net.Conn) {
 }
 
 func (client *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bufio.Reader) interface{} {
-	streamingRes.CorrelationId = ReadUIntFromReader(r)
-	streamingRes.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
-	mechanismsCount := ReadUIntFromReader(r)
+	streamingRes.CorrelationId = ReadUInt(r)
+	streamingRes.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
+	mechanismsCount := ReadUInt(r)
 	var mechanisms []string
 	for i := 0; i < int(mechanismsCount); i++ {
-		mechanism := ReadStringFromReader(r)
+		mechanism := ReadString(r)
 		mechanisms = append(mechanisms, mechanism)
 	}
 
@@ -88,33 +86,33 @@ func (client *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, 
 	return mechanisms
 }
 
-func (client *Client) handlePeerProperties(streamingRes *ReaderProtocol, r *bufio.Reader) interface{} {
-	streamingRes.CorrelationId = ReadUIntFromReader(r)
-	streamingRes.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
-	if streamingRes.ResponseCode != 1 {
-		fmt.Printf("Errr ResponseCode: %d ", streamingRes.ResponseCode)
+func (client *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId = ReadUInt(r)
+	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
+	if readProtocol.ResponseCode != 1 {
+		fmt.Printf("Errr ResponseCode: %d ", readProtocol.ResponseCode)
 	}
-	serverPropertiesCount := ReadUIntFromReader(r)
+	serverPropertiesCount := ReadUInt(r)
 	serverProperties := make(map[string]string)
 
 	for i := 0; i < int(serverPropertiesCount); i++ {
-		key := ReadStringFromReader(r)
-		value := ReadStringFromReader(r)
+		key := ReadString(r)
+		value := ReadString(r)
 		serverProperties[key] = value
 	}
-	res, err := client.responses.GetById(streamingRes.CorrelationId)
+	res, err := client.responses.GetById(readProtocol.CorrelationId)
 	if err != nil {
 		// TODO handle response
-		return err
+		return
 	}
-	res.isDone <- true
-	return serverProperties
+	res.code <- Code{id: readProtocol.ResponseCode}
+
 }
 
 func (client *Client) handleTune(r *bufio.Reader) interface{} {
 
-	serverMaxFrameSize := ReadUIntFromReader(r)
-	serverHeartbeat := ReadUIntFromReader(r)
+	serverMaxFrameSize := ReadUInt(r)
+	serverHeartbeat := ReadUInt(r)
 
 	maxFrameSize := serverMaxFrameSize
 	heartbeat := serverHeartbeat
@@ -136,29 +134,24 @@ func (client *Client) handleTune(r *bufio.Reader) interface{} {
 
 }
 
-func (client *Client) handleGenericResponse(response *ReaderProtocol, r *bufio.Reader) interface{} {
-	response.CorrelationId = ReadUIntFromReader(r)
-	response.ResponseCode = UShortExtractResponseCode(ReadUShortFromReader(r))
-	if response.ResponseCode != 1 {
-		fmt.Printf("Errr ResponseCode: %d \n", response.ResponseCode)
-
-	}
-	res, err := client.responses.GetById(response.CorrelationId)
+func (client *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId = ReadUInt(r)
+	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
+	res, err := client.responses.GetById(readProtocol.CorrelationId)
 	if err != nil {
-		// TODO handle response
-		return err
+		// TODO handle readProtocol
+		return
 	}
-	res.isDone <- true
-	return response.ResponseCode
+	res.code <- Code{id: readProtocol.ResponseCode}
 }
 
-func (client *Client) handleConfirm(response *ReaderProtocol, r *bufio.Reader) interface{} {
-	response.PublishID = ReadByteFromReader(r)
-	//response.PublishingIdCount = ReadIntFromReader(client.reader)
-	publishingIdCount := ReadUIntFromReader(r)
+func (client *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
+	readProtocol.PublishID = ReadByte(r)
+	//readProtocol.PublishingIdCount = ReadIntFromReader(client.reader)
+	publishingIdCount := ReadUInt(r)
 	//var _publishingId int64
 	for publishingIdCount != 0 {
-		ReadInt64FromReader(r)
+		ReadInt64(r)
 		publishingIdCount--
 	}
 
@@ -178,34 +171,3 @@ func (client *Client) sendHeartbeat() {
 
 }
 
-func ReadUShortFromReader(readerStream io.Reader) uint16 {
-	var res uint16
-	_ = binary.Read(readerStream, binary.BigEndian, &res)
-	return res
-}
-
-func ReadUIntFromReader(readerStream io.Reader) uint32 {
-	var res uint32
-	_ = binary.Read(readerStream, binary.BigEndian, &res)
-	return res
-}
-
-func ReadInt64FromReader(readerStream io.Reader) int64 {
-	var res int64
-	_ = binary.Read(readerStream, binary.BigEndian, &res)
-	return res
-}
-
-func ReadByteFromReader(readerStream io.Reader) uint8 {
-	var res uint8
-	_ = binary.Read(readerStream, binary.BigEndian, &res)
-	return res
-
-}
-
-func ReadStringFromReader(readerStream io.Reader) string {
-	lenString := ReadUShortFromReader(readerStream)
-	buff := make([]byte, lenString)
-	_ = binary.Read(readerStream, binary.BigEndian, &buff)
-	return string(buff)
-}

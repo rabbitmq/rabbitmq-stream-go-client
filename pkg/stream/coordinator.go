@@ -17,8 +17,13 @@ type Responses struct {
 	mutex   *sync.Mutex
 }
 
+type Code struct {
+	id          uint16
+	description string
+}
+
 type Response struct {
-	isDone     chan bool
+	code       chan Code
 	dataString chan []string
 	dataBytes  chan []byte
 	subId      int
@@ -34,7 +39,7 @@ func (c *Producers) New() *Producer {
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
 	var producer = &Producer{ProducerID: lastId, PublishConfirm:
-	&Response{isDone: make(chan bool)}}
+	&Response{code: make(chan Code)}}
 	c.items[lastId] = producer
 	return producer
 }
@@ -82,11 +87,12 @@ func NewResponses() *Responses {
 
 func newResponse() *Response {
 	res := &Response{}
-	res.isDone = make(chan bool, 1)
+	res.code = make(chan Code, 0)
 	res.dataString = make(chan []string, 0)
 	res.dataBytes = make(chan []byte, 0)
 	return res
 }
+
 func (s *Responses) NewWitName(value string) *Response {
 	s.mutex.Lock()
 	s.counter++
