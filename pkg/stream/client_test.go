@@ -79,6 +79,9 @@ var _ = Describe("Streaming client", func() {
 			}
 			wg.Wait()
 		})
-
+		It("Delete Stream", func() {
+			err := client.DeleteStream("test-stream")
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 })
