@@ -21,7 +21,7 @@ func main() {
 	}
 	fmt.Println("Connected to localhost")
 	streamName := "golang-stream"
-	err = client.CreateStream(streamName) // Create the streaming queue
+	_, err = client.CreateStream(streamName) // Create the streaming queue
 	if err != nil {
 		fmt.Printf("Error creating stream: %s", err)
 		return
@@ -63,7 +63,7 @@ func main() {
 		fmt.Printf("error removing producers: %s", err)
 		return
 	}
-	err = client.DeleteStream(streamName) // Remove the streaming queue and the data
+	_, err = client.DeleteStream(streamName) // Remove the streaming queue and the data
 	if err != nil {
 		fmt.Printf("error deleting stream: %s \n", err)
 		return

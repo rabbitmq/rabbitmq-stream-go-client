@@ -2,6 +2,7 @@ package stream
 
 import (
 	"github.com/Azure/go-amqp"
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"strconv"
@@ -10,8 +11,10 @@ import (
 )
 
 var client *Client
+var streamName string
 var _ = BeforeSuite(func() {
 	client = NewStreamingClient()
+	streamName = uuid.New().String()
 })
 
 var _ = AfterSuite(func() {
@@ -32,18 +35,21 @@ var _ = Describe("Streaming client", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 		It("Create Stream", func() {
-			err := client.CreateStream("test-stream")
+			code, err := client.CreateStream(streamName)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(client.responses.Count()).To(Equal(0))
+			Expect(code.id).To(Equal(ResponseCodeOk))
+
 		})
 		It("New/Close Publisher", func() {
-			producer, err := client.NewProducer("test-stream")
+			producer, err := client.NewProducer(streamName)
 			Expect(err).NotTo(HaveOccurred())
 			err = producer.Close()
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("New/Publish/Close Publisher", func() {
-			producer, err := client.NewProducer("test-stream")
+			producer, err := client.NewProducer(streamName)
 			Expect(err).NotTo(HaveOccurred())
 			var arr []*amqp.Message
 			for z := 0; z < 10; z++ {
@@ -63,7 +69,7 @@ var _ = Describe("Streaming client", func() {
 				wg.Add(1)
 				go func(wg *sync.WaitGroup) {
 					defer wg.Done()
-					producer, err := client.NewProducer("test-stream")
+					producer, err := client.NewProducer(streamName)
 					Expect(err).NotTo(HaveOccurred())
 					var arr []*amqp.Message
 					for z := 0; z < 5; z++ {
@@ -80,8 +86,24 @@ var _ = Describe("Streaming client", func() {
 			wg.Wait()
 		})
 		It("Delete Stream", func() {
-			err := client.DeleteStream("test-stream")
+			code, err := client.DeleteStream(streamName)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(code.id).To(Equal(ResponseCodeOk))
 		})
+		It("Create two times Stream", func() {
+			code, err := client.CreateStream(streamName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(code.id).To(Equal(ResponseCodeOk))
+
+			code, err = client.CreateStream(streamName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(code.id).To(Equal(ResponseCodeStreamAlreadyExists))
+
+			code, err = client.DeleteStream(streamName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(code.id).To(Equal(ResponseCodeOk))
+		})
+
+
 	})
 })
