@@ -206,9 +206,8 @@ func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reade
 				fmt.Printf("%s", err)
 				//}
 			}
-			fmt.Printf("%s\n", msg.Data)
 			c, _ := client.consumers.GetById(subscriptionId)
-			h := *c.handler
+			h := c.handler
 			h.Messages(&msg)
 		}
 		numRecords--

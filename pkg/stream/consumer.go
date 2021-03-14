@@ -12,15 +12,15 @@ type Handler interface {
 type Consumer struct {
 	ID       uint8
 	response *Response
-	handler  *Handler
+	handler  Handler
 }
 
-func (client *Client) NewConsumer(stream string, handler *Handler) (*Consumer, error) {
+func (client *Client) NewConsumer(stream string, handler Handler) (*Consumer, error) {
 
 	return client.declareConsumer(stream, handler)
 }
 
-func (client *Client) declareConsumer(stream string, handler *Handler) (*Consumer, error) {
+func (client *Client) declareConsumer(stream string, handler Handler) (*Consumer, error) {
 	consumer := client.consumers.New(handler)
 	length := 2 + 2 + 4 + 1 + 2 + len(stream) + 2 + 2 // misses the offset
 	//if (offsetSpecification.isOffset() || offsetSpecification.isTimestamp()) {
@@ -34,7 +34,7 @@ func (client *Client) declareConsumer(stream string, handler *Handler) (*Consume
 	WriteUShort(b, CommandSubscribe)
 	WriteUShort(b, Version1)
 	WriteInt(b, correlationId)
-	WriteByte(b, 1)
+	WriteByte(b, consumer.ID)
 
 	WriteString(b, stream)
 

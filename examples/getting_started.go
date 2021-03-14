@@ -6,16 +6,16 @@ import (
 	"github.com/Azure/go-amqp"
 	"github.com/gsantomaggio/go-stream-client/pkg/stream"
 	"os"
-	"strconv"
 	"time"
 )
 
 type Sub struct {
+	count int64
 }
 
 func (h *Sub) Messages(message *amqp.Message) {
-
-	fmt.Printf(" yesssss %s", message.Data)
+	h.count++
+	fmt.Printf(" yesssss %s %d \n", message.Data, h.count)
 
 }
 
@@ -36,6 +36,14 @@ func main() {
 		return
 	}
 
+
+	sub := &Sub{}
+	_, err = client.NewConsumer(streamName, sub)
+	if err != nil {
+		fmt.Printf("Error NewConsumer: %s", err)
+		return
+	}
+
 	// Get a new producer to publish the messages
 	producer, err := client.NewProducer(streamName)
 	if err != nil {
@@ -47,12 +55,14 @@ func main() {
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
 	// message aggregation
-	var arr []*amqp.Message
-	for z := 0; z < batchSize; z++ {
-		arr = append(arr, amqp.NewMessage([]byte("hello stream_"+strconv.Itoa(z))))
-	}
+
 	start := time.Now()
 	for z := 0; z < numberOfMessages; z++ {
+		var arr []*amqp.Message
+		for f := 0; f < batchSize; f++ {
+			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d_%d", z, f) )))
+		}
+		time.Sleep(1 * time.Second)
 		_, err = producer.BatchPublish(nil, arr) // batch send
 		if err != nil {
 			fmt.Printf("Error publish: %s", err)
@@ -62,13 +72,8 @@ func main() {
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
 
-	sub := &Sub{}
 
-	_, err = client.NewConsumer(streamName, sub)
-	if err != nil {
-		fmt.Printf("Error NewConsumer: %s", err)
-		return
-	}
+
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')

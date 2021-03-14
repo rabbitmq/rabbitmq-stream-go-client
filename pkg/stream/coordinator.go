@@ -169,7 +169,7 @@ func NewConsumers() *Consumers {
 		items: make(map[byte]*Consumer)}
 }
 
-func (c *Consumers) New(handler *Handler) *Consumer {
+func (c *Consumers) New(handler Handler) *Consumer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
