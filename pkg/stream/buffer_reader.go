@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"bufio"
 	"encoding/binary"
 	"io"
 )
@@ -17,6 +18,17 @@ func ReadUInt(readerStream io.Reader) uint32 {
 	return res
 }
 
+func PeekByte(readerStream *bufio.Reader) uint8 {
+	res, _ := readerStream.Peek(1)
+	return res[0]
+}
+
+func ReadInt(readerStream io.Reader) uint {
+	var res uint
+	_ = binary.Read(readerStream, binary.BigEndian, &res)
+	return res
+}
+
 func ReadInt64(readerStream io.Reader) int64 {
 	var res int64
 	_ = binary.Read(readerStream, binary.BigEndian, &res)
@@ -27,7 +39,6 @@ func ReadByte(readerStream io.Reader) uint8 {
 	var res uint8
 	_ = binary.Read(readerStream, binary.BigEndian, &res)
 	return res
-
 }
 
 func ReadString(readerStream io.Reader) string {
@@ -37,3 +48,8 @@ func ReadString(readerStream io.Reader) string {
 	return string(buff)
 }
 
+func ReadUint8Array(readerStream io.Reader, size uint32) []uint8 {
+	var res = make([]uint8, size)
+	_ = binary.Read(readerStream, binary.BigEndian, &res)
+	return res
+}

@@ -33,7 +33,7 @@ func main() {
 		fmt.Printf("Error creating producer: %s", err)
 		return
 	}
-	numberOfMessages := 1000
+	numberOfMessages := 100
 	batchSize := 100
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
@@ -53,9 +53,16 @@ func main() {
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
 
+
+	_, err = client.NewConsumer(streamName)
+	if err != nil {
+		fmt.Printf("Error NewConsumer: %s", err)
+		return
+	}
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
+
 
 	fmt.Print("Closing all producers ")
 	err = client.CloseAllProducers()

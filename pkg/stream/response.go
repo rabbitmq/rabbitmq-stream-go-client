@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/Azure/go-amqp"
 	"net"
 )
 
@@ -42,7 +43,7 @@ func (client *Client) handleResponse(conn net.Conn) {
 			}
 		case CommandOpen, CommandDeclarePublisher,
 			CommandDeletePublisher, CommandDeleteStream,
-			CommandCreateStream, CommandSaslAuthenticate:
+			CommandCreateStream, CommandSaslAuthenticate, CommandSubscribe:
 			{
 				client.handleGenericResponse(readerProtocol, buffer)
 			}
@@ -50,6 +51,11 @@ func (client *Client) handleResponse(conn net.Conn) {
 		case CommandPublishConfirm:
 			{
 				client.handleConfirm(readerProtocol, buffer)
+			}
+		case CommandDeliver:
+			{
+				client.handleDeliver(readerProtocol, buffer)
+
 			}
 		case CommandHeartbeat:
 			{
@@ -171,3 +177,64 @@ func (client *Client) sendHeartbeat() {
 
 }
 
+func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reader) {
+
+	//message.readByte();
+	//read += 1;
+	//
+	//byte chunkType = message.readByte();
+	//if (chunkType != 0) {
+	//	throw new IllegalStateException("Invalid chunk type: " + chunkType);
+	//}
+	//read += 1;
+	//
+	//int numEntries = message.readUnsignedShort();
+	//read += 2;
+	//long numRecords = message.readUnsignedInt();
+	//read += 4;
+	//message.readLong(); // timestamp
+	//read += 8;
+	//message.readLong(); // epoch, unsigned long
+	//read += 8;
+	//long offset = message.readLong(); // unsigned long
+	//read += 8;
+	//long crc = message.readUnsignedInt();
+	//read += 4;
+	//long dataLength = message.readUnsignedInt();
+	//read += 4;
+	//message.readUnsignedInt(); // trailer length, unused here
+	//read += 4;
+	subscriptionId := ReadByte(r)
+	b := ReadByte(r)
+	chunkType := ReadByte(r)
+	numEntries := ReadUShort(r)
+	numRecords := ReadUInt(r)
+	timestamp := ReadInt64(r)
+	epoch := ReadInt64(r)
+	unsigned := ReadInt64(r)
+	crc := ReadUInt(r)
+	dataLength := ReadUInt(r)
+	trailer := ReadUInt(r)
+	fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
+		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
+
+	//messages
+	for numRecords != 0 {
+		entryType := PeekByte(r)
+		if (entryType & 0x80) == 0 {
+			sizeMessage := ReadUInt(r)
+
+			arrayMessage := ReadUint8Array(r, sizeMessage)
+			msg := amqp.Message{}
+			err := msg.UnmarshalBinary(arrayMessage)
+			if err != nil {
+				fmt.Printf("%s", err)
+				//}
+			}
+			fmt.Printf("%s\n", msg.Data)
+
+		}
+		numRecords--
+	}
+
+}

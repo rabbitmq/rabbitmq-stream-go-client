@@ -77,5 +77,70 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 
 func (producer *Producer) Close() error {
 	return producer.LikedClient.deletePublisher(producer.ProducerID)
-
 }
+
+
+func (client *Client) NewProducer(stream string) (*Producer, error) {
+	return client.declarePublisher(stream)
+}
+
+func (client *Client) declarePublisher(stream string) (*Producer, error) {
+	producer := client.producers.New()
+	producer.LikedClient = client
+	publisherReferenceSize := 0
+	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
+	resp := client.responses.New()
+	correlationId := resp.subId
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandDeclarePublisher)
+	WriteShort(b, Version1)
+	WriteInt(b, correlationId)
+	WriteByte(b, producer.ProducerID)
+	WriteShort(b, int16(publisherReferenceSize))
+	WriteString(b, stream)
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	<-resp.code
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return nil, err
+	}
+	return producer, nil
+}
+
+
+func (client *Client) deletePublisher(publisherId byte) error {
+	length := 2 + 2 + 4 + 1
+	resp := client.responses.New()
+	correlationId := resp.subId
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandDeletePublisher)
+	WriteShort(b, Version1)
+	WriteInt(b, correlationId)
+	WriteByte(b, publisherId)
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return err
+	}
+	<-resp.code
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return err
+	}
+	err = client.producers.RemoveById(publisherId)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
+func (client *Client) CloseAllProducers() error {
+	return client.producers.CloseAllProducers()
+}
+
