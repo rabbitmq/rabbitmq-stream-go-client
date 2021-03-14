@@ -26,6 +26,7 @@ type Client struct {
 	mutexWrite       *sync.Mutex
 	producers        *Producers
 	responses        *Responses
+	consumers        *Consumers
 }
 
 func NewStreamingClient() *Client {
@@ -33,6 +34,7 @@ func NewStreamingClient() *Client {
 		mutexWrite: &sync.Mutex{},
 		producers:  NewProducers(),
 		responses:  NewResponses(),
+		consumers:  NewConsumers(),
 	}
 	return client
 }
@@ -113,8 +115,6 @@ func (client *Client) CreateStream(stream string) (*Code, error) {
 	}
 	return &code, nil
 }
-
-
 
 func (client *Client) peerProperties() (*Code, error) {
 	clientPropertiesSize := 4 // size of the map, always there
@@ -246,7 +246,6 @@ func (client *Client) open(virtualHost string) (*Code, error) {
 	return &code, nil
 }
 
-
 func (client *Client) DeleteStream(stream string) (*Code, error) {
 	length := 2 + 2 + 4 + 2 + len(stream)
 	resp := client.responses.New()
@@ -269,9 +268,6 @@ func (client *Client) DeleteStream(stream string) (*Code, error) {
 	return &code, nil
 }
 
-
-
-
 func (client *Client) writeAndFlush(buffer []byte) error {
 	client.mutexWrite.Lock()
 	_, err := client.writer.Write(buffer)
@@ -285,8 +281,5 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 	client.mutexWrite.Unlock()
 	return nil
 }
-
-
-
 
 //Consumers

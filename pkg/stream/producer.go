@@ -7,9 +7,9 @@ import (
 )
 
 type Producer struct {
-	ProducerID     uint8
-	LikedClient    *Client
-	PublishConfirm *Response
+	ID          uint8
+	LikedClient *Client
+	response    *Response
 }
 
 func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message) (int, error) {
@@ -25,7 +25,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 
 	length := frameHeaderLength + msgLen
 	var publishId uint8
-	publishId = producer.ProducerID
+	publishId = producer.ID
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandPublish)
@@ -47,13 +47,13 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 	if err != nil {
 		return 0, err
 	}
-	//<-producer.PublishConfirm.isDone
+	//<-producer.response.isDone
 
 	//select {
-	//case _ = <-producer.PublishConfirm.isDone:
+	//case _ = <-producer.response.isDone:
 	//	return 0, nil
 	//case <-time.After(200 * time.Millisecond):
-	//	//fmt.Printf("timeout id:%d \n", producer.ProducerID)
+	//	//fmt.Printf("timeout id:%d \n", producer.ID)
 	//}
 	//producer.LikedClient.handleResponse()
 	//respChan <- &WriteResponse{}
@@ -76,7 +76,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 }
 
 func (producer *Producer) Close() error {
-	return producer.LikedClient.deletePublisher(producer.ProducerID)
+	return producer.LikedClient.deletePublisher(producer.ID)
 }
 
 
@@ -96,7 +96,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	WriteShort(b, CommandDeclarePublisher)
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
-	WriteByte(b, producer.ProducerID)
+	WriteByte(b, producer.ID)
 	WriteShort(b, int16(publisherReferenceSize))
 	WriteString(b, stream)
 	err := client.writeAndFlush(b.Bytes())

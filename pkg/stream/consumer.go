@@ -2,17 +2,26 @@ package stream
 
 import (
 	"bytes"
+	"github.com/Azure/go-amqp"
 )
 
+type Handler interface {
+	Messages(message *amqp.Message)
+}
+
 type Consumer struct {
+	ID       uint8
+	response *Response
+	handler  *Handler
 }
 
-func (client *Client) NewConsumer(stream string) (*Consumer, error) {
-	return client.declareConsumer(stream)
+func (client *Client) NewConsumer(stream string, handler *Handler) (*Consumer, error) {
+
+	return client.declareConsumer(stream, handler)
 }
 
-func (client *Client) declareConsumer(stream string) (*Consumer, error) {
-
+func (client *Client) declareConsumer(stream string, handler *Handler) (*Consumer, error) {
+	consumer := client.consumers.New(handler)
 	length := 2 + 2 + 4 + 1 + 2 + len(stream) + 2 + 2 // misses the offset
 	//if (offsetSpecification.isOffset() || offsetSpecification.isTimestamp()) {
 	//	length += 8;
@@ -43,7 +52,5 @@ func (client *Client) declareConsumer(stream string) (*Consumer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return consumer, nil
 }
-
-

@@ -10,8 +10,8 @@ var _ = Describe("Coordinator", func() {
 	Describe("Add/Remove Producers", func() {
 		It("Add/Remove producer ", func() {
 			p := client.producers.New()
-			Expect(p.ProducerID).To(Equal(uint8(0)))
-			err := client.producers.RemoveById(p.ProducerID)
+			Expect(p.ID).To(Equal(uint8(0)))
+			err := client.producers.RemoveById(p.ID)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -23,7 +23,7 @@ var _ = Describe("Coordinator", func() {
 			var producersId []uint8
 			for i := 0; i < 100; i++ {
 				p := client.producers.New()
-				producersId = append(producersId, p.ProducerID)
+				producersId = append(producersId, p.ID)
 			}
 			Expect(client.producers.Count()).To(Equal(100))
 			for _, pid := range producersId {

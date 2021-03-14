@@ -11,6 +11,11 @@ type Producers struct {
 	mutex *sync.Mutex
 }
 
+type Consumers struct {
+	items map[byte]*Consumer
+	mutex *sync.Mutex
+}
+
 type Responses struct {
 	counter int
 	items   map[string]*Response
@@ -38,7 +43,7 @@ func (c *Producers) New() *Producer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
-	var producer = &Producer{ProducerID: lastId, PublishConfirm:
+	var producer = &Producer{ID: lastId, response:
 	&Response{code: make(chan Code)}}
 	c.items[lastId] = producer
 	return producer
@@ -157,4 +162,29 @@ func (s *Responses) Count() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return len(s.items)
+}
+
+func NewConsumers() *Consumers {
+	return &Consumers{mutex: &sync.Mutex{},
+		items: make(map[byte]*Consumer)}
+}
+
+func (c *Consumers) New(handler *Handler) *Consumer {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	var lastId = uint8(len(c.items))
+	var item = &Consumer{ID: lastId, response:
+	&Response{code: make(chan Code)}, handler: handler}
+	c.items[lastId] = item
+	return item
+}
+
+
+func (c *Consumers) GetById(id uint8) (*Consumer, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.items[id] == nil {
+		return nil, errors.New("Consumer #{id} not found ")
+	}
+	return c.items[id], nil
 }

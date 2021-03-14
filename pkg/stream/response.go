@@ -179,31 +179,6 @@ func (client *Client) sendHeartbeat() {
 
 func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reader) {
 
-	//message.readByte();
-	//read += 1;
-	//
-	//byte chunkType = message.readByte();
-	//if (chunkType != 0) {
-	//	throw new IllegalStateException("Invalid chunk type: " + chunkType);
-	//}
-	//read += 1;
-	//
-	//int numEntries = message.readUnsignedShort();
-	//read += 2;
-	//long numRecords = message.readUnsignedInt();
-	//read += 4;
-	//message.readLong(); // timestamp
-	//read += 8;
-	//message.readLong(); // epoch, unsigned long
-	//read += 8;
-	//long offset = message.readLong(); // unsigned long
-	//read += 8;
-	//long crc = message.readUnsignedInt();
-	//read += 4;
-	//long dataLength = message.readUnsignedInt();
-	//read += 4;
-	//message.readUnsignedInt(); // trailer length, unused here
-	//read += 4;
 	subscriptionId := ReadByte(r)
 	b := ReadByte(r)
 	chunkType := ReadByte(r)
@@ -232,7 +207,9 @@ func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reade
 				//}
 			}
 			fmt.Printf("%s\n", msg.Data)
-
+			c, _ := client.consumers.GetById(subscriptionId)
+			h := *c.handler
+			h.Messages(&msg)
 		}
 		numRecords--
 	}

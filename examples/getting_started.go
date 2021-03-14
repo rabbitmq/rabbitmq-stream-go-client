@@ -10,6 +10,15 @@ import (
 	"time"
 )
 
+type Sub struct {
+}
+
+func (h *Sub) Messages(message *amqp.Message) {
+
+	fmt.Printf(" yesssss %s", message.Data)
+
+}
+
 func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
@@ -53,8 +62,9 @@ func main() {
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
 
+	sub := &Sub{}
 
-	_, err = client.NewConsumer(streamName)
+	_, err = client.NewConsumer(streamName, sub)
 	if err != nil {
 		fmt.Printf("Error NewConsumer: %s", err)
 		return
@@ -62,7 +72,6 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
-
 
 	fmt.Print("Closing all producers ")
 	err = client.CloseAllProducers()
