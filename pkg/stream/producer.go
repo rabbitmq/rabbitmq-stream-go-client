@@ -85,8 +85,7 @@ func (client *Client) NewProducer(stream string) (*Producer, error) {
 }
 
 func (client *Client) declarePublisher(stream string) (*Producer, error) {
-	producer := client.producers.New()
-	producer.LikedClient = client
+	producer := client.producers.New(client)
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
 	resp := client.responses.New()

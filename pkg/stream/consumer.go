@@ -10,17 +10,18 @@ type Handler interface {
 }
 
 type Consumer struct {
-	ID       uint8
-	response *Response
+	ID          uint8
+	response    *Response
+	LikedClient *Client
 }
 
-func (client *Client) NewConsumer(stream string, handler Handler) (*Consumer, error) {
+func (client *Client) NewConsumer(stream string, m func(subscriberId byte, message *amqp.Message)) (*Consumer, error) {
 
-	return client.declareConsumer(stream, handler)
+	return client.declareConsumer(stream, m)
 }
 
-func (client *Client) declareConsumer(stream string, handler Handler) (*Consumer, error) {
-	consumer := client.consumers.New()
+func (client *Client) declareConsumer(stream string, m func(subscriberId byte, message *amqp.Message)) (*Consumer, error) {
+	consumer := client.consumers.New(client)
 	length := 2 + 2 + 4 + 1 + 2 + len(stream) + 2 + 2 // misses the offset
 	//if (offsetSpecification.isOffset() || offsetSpecification.isTimestamp()) {
 	//	length += 8;
@@ -47,22 +48,25 @@ func (client *Client) declareConsumer(stream string, handler Handler) (*Consumer
 	client.writeAndFlush(b.Bytes())
 
 	<-resp.code
+	err := client.responses.RemoveById(correlationId)
+	if err != nil {
+		return nil, err
+	}
 
-	//var wg sync.WaitGroup
-	//wg.Add(1)
 	go func() {
 		for true {
+			select {
+			case code := <-consumer.response.code:
+				if code.id == CloseSubscribe {
+					return
+				}
 
-			messages := <-consumer.response.data
-			handler.Messages(messages.(*amqp.Message))
+			case messages := <-consumer.response.data:
+				m(consumer.ID, messages.(*amqp.Message))
+			}
 		}
-
 	}()
-	//wg.Wait()
-	//err := client.responses.RemoveById(correlationId)
-	//if err != nil {
-	//	return nil, err
-	//}
+
 	return consumer, nil
 }
 
@@ -78,4 +82,8 @@ func (client *Client) credit(subscriptionId byte, credit int16) {
 	WriteByte(b, subscriptionId)
 	WriteShort(b, credit)
 	client.writeAndFlush(b.Bytes())
+}
+
+func (consumer *Consumer) UnSubscribe() error {
+	return consumer.LikedClient.UnSubscribe(consumer.ID)
 }

@@ -9,7 +9,7 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
 		It("Add/Remove subscribe ", func() {
-			p := client.producers.New()
+			p := client.producers.New(client)
 			Expect(p.ID).To(Equal(uint8(0)))
 			err := client.producers.RemoveById(p.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -22,7 +22,7 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete producers ", func() {
 			var producersId []uint8
 			for i := 0; i < 100; i++ {
-				p := client.producers.New()
+				p := client.producers.New(client)
 				producersId = append(producersId, p.ID)
 			}
 			Expect(client.producers.Count()).To(Equal(100))

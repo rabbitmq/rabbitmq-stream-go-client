@@ -64,6 +64,7 @@ func (client *Client) handleResponse(conn net.Conn) {
 		default:
 			{
 				fmt.Printf("dont CommandID %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+				break
 			}
 
 		}
@@ -180,18 +181,18 @@ func (client *Client) sendHeartbeat() {
 func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reader) {
 
 	subscriptionId := ReadByte(r)
-	b := ReadByte(r)
-	chunkType := ReadByte(r)
-	numEntries := ReadUShort(r)
+	_ = ReadByte(r)
+	_ = ReadByte(r)
+	_ = ReadUShort(r)
 	numRecords := ReadUInt(r)
-	timestamp := ReadInt64(r)
-	epoch := ReadInt64(r)
-	unsigned := ReadInt64(r)
-	crc := ReadUInt(r)
-	dataLength := ReadUInt(r)
-	trailer := ReadUInt(r)
-	fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
-		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
+	_ = ReadInt64(r)
+	_ = ReadInt64(r)
+	_ = ReadInt64(r)
+	_ = ReadUInt(r)
+	_ = ReadUInt(r)
+	_ = ReadUInt(r)
+	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
+	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
 	client.credit(subscriptionId, 1)
 	//messages
 	for numRecords != 0 {
@@ -207,6 +208,7 @@ func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reade
 				//}
 			}
 			c, _ := client.consumers.GetById(subscriptionId)
+			c.response.code <- Code{id: ResponseCodeOk}
 			c.response.data <- &msg
 
 		}

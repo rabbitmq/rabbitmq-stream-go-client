@@ -282,4 +282,36 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 	return nil
 }
 
+func (client *Client) UnSubscribe(id uint8) error {
+	length := 2 + 2 + 4 + 1
+	resp := client.responses.New()
+	correlationId := resp.subId
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandUnsubscribe)
+	WriteShort(b, Version1)
+	WriteInt(b, correlationId)
+	WriteByte(b, id)
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return err
+	}
+	<-resp.code
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return err
+	}
+
+
+
+
+
+	consumer, err := client.consumers.GetById(id)
+	if err != nil {
+		return err
+	}
+	consumer.response.code <- Code{id: CloseSubscribe}
+	return nil
+}
+
 //Consumers

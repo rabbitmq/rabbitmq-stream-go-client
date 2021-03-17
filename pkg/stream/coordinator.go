@@ -28,9 +28,9 @@ type Code struct {
 }
 
 type Response struct {
-	code      chan Code
-	data      chan interface{}
-	subId     int
+	code  chan Code
+	data  chan interface{}
+	subId int
 }
 
 func NewProducers() *Producers {
@@ -38,12 +38,13 @@ func NewProducers() *Producers {
 		items: make(map[byte]*Producer)}
 }
 
-func (c *Producers) New() *Producer {
+func (c *Producers) New(linkedClient *Client) *Producer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
 	var producer = &Producer{ID: lastId, response:
 	&Response{code: make(chan Code)}}
+	producer.LikedClient = linkedClient
 	c.items[lastId] = producer
 	return producer
 }
@@ -92,7 +93,7 @@ func NewResponses() *Responses {
 func newResponse() *Response {
 	res := &Response{}
 	res.code = make(chan Code, 0)
-	res.data = make(chan interface{}, 10)
+	res.data = make(chan interface{}, 0)
 	return res
 }
 
@@ -167,15 +168,15 @@ func NewConsumers() *Consumers {
 		items: make(map[byte]*Consumer)}
 }
 
-func (c *Consumers) New() *Consumer {
+func (c *Consumers) New(linkedClient *Client) *Consumer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
 	var item = &Consumer{ID: lastId, response: newResponse()}
+	item.LikedClient = linkedClient
 	c.items[lastId] = item
 	return item
 }
-
 
 func (c *Consumers) GetById(id uint8) (*Consumer, error) {
 	c.mutex.Lock()
