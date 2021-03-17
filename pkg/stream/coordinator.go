@@ -28,10 +28,9 @@ type Code struct {
 }
 
 type Response struct {
-	code       chan Code
-	dataString chan []string
-	dataBytes  chan []byte
-	subId      int
+	code      chan Code
+	data      chan interface{}
+	subId     int
 }
 
 func NewProducers() *Producers {
@@ -93,8 +92,7 @@ func NewResponses() *Responses {
 func newResponse() *Response {
 	res := &Response{}
 	res.code = make(chan Code, 0)
-	res.dataString = make(chan []string, 0)
-	res.dataBytes = make(chan []byte, 0)
+	res.data = make(chan interface{}, 10)
 	return res
 }
 
@@ -169,12 +167,11 @@ func NewConsumers() *Consumers {
 		items: make(map[byte]*Consumer)}
 }
 
-func (c *Consumers) New(handler Handler) *Consumer {
+func (c *Consumers) New() *Consumer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
-	var item = &Consumer{ID: lastId, response:
-	&Response{code: make(chan Code)}, handler: handler}
+	var item = &Consumer{ID: lastId, response: newResponse()}
 	c.items[lastId] = item
 	return item
 }

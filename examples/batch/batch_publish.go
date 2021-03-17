@@ -12,6 +12,7 @@ import (
 )
 
 func main() {
+	fmt.Println("RabbitMQ golang streaming client")
 	fmt.Println("Connecting ...")
 	var client = stream.NewStreamingClient()                                  // create Client Struct
 	err := client.Connect("rabbitmq-stream://guest:guest@localhost:5551/%2f") // Connect
@@ -26,15 +27,19 @@ func main() {
 		fmt.Printf("error: %s", err)
 		return
 	}
-
+	producers := 10
+	iterations := 2000
+	messages := 100
+	fmt.Printf("starting with %d producers, %d messages and  %d iterations \n", producers, iterations, messages)
 	var arr []*amqp.Message // amqp 1.0 message from https://github.com/Azure/go-amqp
-	for z := 0; z < 100; z++ {
+	for z := 0; z < messages; z++ {
 		arr = append(arr, amqp.NewMessage([]byte("hello world_"+strconv.Itoa(z))))
 	}
+	start := time.Now()		
 
 	{
 		var wg sync.WaitGroup
-		for i := 0; i < 10; i++ {
+		for i := 0; i < producers; i++ {
 			wg.Add(1)
 			producer, err := client.NewProducer(streamName) // Get a new producer to publish the messages
 			if err != nil {
@@ -43,21 +48,20 @@ func main() {
 			}
 			go func(id int, producer *stream.Producer, wg *sync.WaitGroup) {
 				defer wg.Done()
-				fmt.Printf("starting producer: %d, item: %d \n", producer.ID, id)
-				start := time.Now()
-				for z := 0; z < 1000; z++ {
+				for z := 0; z < iterations; z++ {
 					_, err = producer.BatchPublish(nil, arr) // batch send
 					if err != nil {
 						fmt.Printf("error: %s", err)
 						return
 					}
 				}
-				elapsed := time.Since(start)
-				fmt.Printf("end producer: %d, item: %d took %s\n", producer.ID, id, elapsed)
+			
 
 			}(i, producer, &wg)
 		}
 		wg.Wait()
+		elapsed := time.Since(start)
+		fmt.Printf("%s  to publish %d messages\n", elapsed, producers * iterations *  messages)
 	}
 
 	reader := bufio.NewReader(os.Stdin)

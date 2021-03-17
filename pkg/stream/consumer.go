@@ -12,7 +12,6 @@ type Handler interface {
 type Consumer struct {
 	ID       uint8
 	response *Response
-	handler  Handler
 }
 
 func (client *Client) NewConsumer(stream string, handler Handler) (*Consumer, error) {
@@ -21,7 +20,7 @@ func (client *Client) NewConsumer(stream string, handler Handler) (*Consumer, er
 }
 
 func (client *Client) declareConsumer(stream string, handler Handler) (*Consumer, error) {
-	consumer := client.consumers.New(handler)
+	consumer := client.consumers.New()
 	length := 2 + 2 + 4 + 1 + 2 + len(stream) + 2 + 2 // misses the offset
 	//if (offsetSpecification.isOffset() || offsetSpecification.isTimestamp()) {
 	//	length += 8;
@@ -48,9 +47,21 @@ func (client *Client) declareConsumer(stream string, handler Handler) (*Consumer
 	client.writeAndFlush(b.Bytes())
 
 	<-resp.code
-	err := client.responses.RemoveById(correlationId)
-	if err != nil {
-		return nil, err
-	}
+
+	//var wg sync.WaitGroup
+	//wg.Add(1)
+	go func() {
+		for true {
+
+			messages := <-consumer.response.data
+			handler.Messages(messages.(*amqp.Message))
+		}
+
+	}()
+	//wg.Wait()
+	//err := client.responses.RemoveById(correlationId)
+	//if err != nil {
+	//	return nil, err
+	//}
 	return consumer, nil
 }

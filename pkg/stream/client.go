@@ -181,12 +181,12 @@ func (client *Client) getSaslMechanisms() []string {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	client.writeAndFlush(b.Bytes())
-	data := <-resp.dataString
+	data := <-resp.data
 	err := client.responses.RemoveById(correlationId)
 	if err != nil {
 		return nil
 	}
-	return data
+	return data.([]string)
 
 }
 
@@ -215,13 +215,13 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	}
 
 	// double read for TUNE
-	tuneData := <-respTune.dataBytes
+	tuneData := <-respTune.data
 	err = client.responses.RemoveByName("tune")
 	if err != nil {
 		return err
 	}
 
-	return client.writeAndFlush(tuneData)
+	return client.writeAndFlush(tuneData.([]byte))
 }
 
 func (client *Client) open(virtualHost string) (*Code, error) {

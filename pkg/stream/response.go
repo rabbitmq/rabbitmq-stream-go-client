@@ -87,7 +87,7 @@ func (client *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, 
 		// TODO handle response
 		return err
 	}
-	res.dataString <- mechanisms
+	res.data <- mechanisms
 
 	return mechanisms
 }
@@ -135,7 +135,7 @@ func (client *Client) handleTune(r *bufio.Reader) interface{} {
 		// TODO handle response
 		return err
 	}
-	res.dataBytes <- b.Bytes()
+	res.data <- b.Bytes()
 	return b.Bytes()
 
 }
@@ -207,8 +207,8 @@ func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reade
 				//}
 			}
 			c, _ := client.consumers.GetById(subscriptionId)
-			h := c.handler
-			h.Messages(&msg)
+			c.response.data <- &msg
+
 		}
 		numRecords--
 	}
