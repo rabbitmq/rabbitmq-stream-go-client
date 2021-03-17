@@ -48,7 +48,6 @@ func main() {
 		for f := 0; f < batchSize; f++ {
 			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d_%d", z, f) )))
 		}
-		time.Sleep(1 * time.Second)
 		_, err = producer.BatchPublish(nil, arr) // batch send
 		if err != nil {
 			fmt.Printf("Error publish: %s", err)
