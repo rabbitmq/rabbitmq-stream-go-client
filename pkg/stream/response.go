@@ -192,7 +192,7 @@ func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reade
 	trailer := ReadUInt(r)
 	fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
 		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
-
+	client.credit(subscriptionId, 1)
 	//messages
 	for numRecords != 0 {
 		entryType := PeekByte(r)

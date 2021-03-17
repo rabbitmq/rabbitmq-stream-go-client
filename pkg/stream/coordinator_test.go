@@ -8,14 +8,14 @@ import (
 var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
-		It("Add/Remove producer ", func() {
+		It("Add/Remove subscribe ", func() {
 			p := client.producers.New()
 			Expect(p.ID).To(Equal(uint8(0)))
 			err := client.producers.RemoveById(p.ID)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("not found producer by id ", func() {
+		It("not found subscribe by id ", func() {
 			err := client.producers.RemoveById(200)
 			Expect(err).To(HaveOccurred())
 		})
@@ -41,7 +41,7 @@ var _ = Describe("Coordinator", func() {
 			err := client.responses.RemoveById(r.subId)
 			Expect(err).NotTo(HaveOccurred())
 		})
-		It("not found producer by id ", func() {
+		It("not found subscribe by id ", func() {
 			err := client.responses.RemoveById(200)
 			Expect(err).To(HaveOccurred())
 		})

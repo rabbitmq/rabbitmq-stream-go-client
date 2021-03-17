@@ -65,3 +65,17 @@ func (client *Client) declareConsumer(stream string, handler Handler) (*Consumer
 	//}
 	return consumer, nil
 }
+
+func (client *Client) credit(subscriptionId byte, credit int16) {
+	//if (credit < 0 || credit > Short.MAX_VALUE) {
+	//throw new IllegalArgumentException("Credit value must be between 0 and " + Short.MAX_VALUE);
+	//}
+	length := 2 + 2 + 1 + 2
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandCredit)
+	WriteShort(b, Version1)
+	WriteByte(b, subscriptionId)
+	WriteShort(b, credit)
+	client.writeAndFlush(b.Bytes())
+}

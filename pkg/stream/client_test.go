@@ -57,7 +57,7 @@ var _ = Describe("Streaming client", func() {
 			}
 			_, err = producer.BatchPublish(nil, arr) // batch send
 			Expect(err).NotTo(HaveOccurred())
-			// we can't close the producer until the publish is finished
+			// we can't close the subscribe until the publish is finished
 			time.Sleep(500 * time.Millisecond)
 			err = producer.Close()
 			Expect(err).NotTo(HaveOccurred())
@@ -77,7 +77,7 @@ var _ = Describe("Streaming client", func() {
 					}
 					_, err = producer.BatchPublish(nil, arr) // batch send
 					Expect(err).NotTo(HaveOccurred())
-					// we can't close the producer until the publish is finished
+					// we can't close the subscribe until the publish is finished
 					time.Sleep(500 * time.Millisecond)
 					err = producer.Close()
 					Expect(err).NotTo(HaveOccurred())

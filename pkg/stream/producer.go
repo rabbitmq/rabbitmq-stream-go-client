@@ -47,15 +47,15 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 	if err != nil {
 		return 0, err
 	}
-	//<-producer.response.isDone
+	//<-subscribe.response.isDone
 
 	//select {
-	//case _ = <-producer.response.isDone:
+	//case _ = <-subscribe.response.isDone:
 	//	return 0, nil
 	//case <-time.After(200 * time.Millisecond):
-	//	//fmt.Printf("timeout id:%d \n", producer.ID)
+	//	//fmt.Printf("timeout id:%d \n", subscribe.ID)
 	//}
-	//producer.LikedClient.handleResponse()
+	//subscribe.LikedClient.handleResponse()
 	//respChan <- &WriteResponse{}
 	//}(msgs)
 

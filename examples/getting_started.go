@@ -9,15 +9,7 @@ import (
 	"time"
 )
 
-type Sub struct {
-	count int64
-}
 
-func (h *Sub) Messages(message *amqp.Message) {
-	h.count++
-	fmt.Printf(" yesssss %s %d \n", message.Data, h.count)
-
-}
 
 func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
@@ -37,17 +29,11 @@ func main() {
 	}
 
 
-	sub := &Sub{}
-	_, err = client.NewConsumer(streamName, sub)
-	if err != nil {
-		fmt.Printf("Error NewConsumer: %s", err)
-		return
-	}
 
-	// Get a new producer to publish the messages
+	// Get a new subscribe to publish the messages
 	producer, err := client.NewProducer(streamName)
 	if err != nil {
-		fmt.Printf("Error creating producer: %s", err)
+		fmt.Printf("Error creating subscribe: %s", err)
 		return
 	}
 	numberOfMessages := 100

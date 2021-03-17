@@ -28,7 +28,7 @@ func main() {
 		return
 	}
 	producers := 10
-	iterations := 2000
+	iterations := 500
 	messages := 100
 	fmt.Printf("starting with %d producers, %d messages and  %d iterations \n", producers, iterations, messages)
 	var arr []*amqp.Message // amqp 1.0 message from https://github.com/Azure/go-amqp
@@ -41,7 +41,7 @@ func main() {
 		var wg sync.WaitGroup
 		for i := 0; i < producers; i++ {
 			wg.Add(1)
-			producer, err := client.NewProducer(streamName) // Get a new producer to publish the messages
+			producer, err := client.NewProducer(streamName) // Get a new subscribe to publish the messages
 			if err != nil {
 				fmt.Printf("error: %s", err)
 				return
