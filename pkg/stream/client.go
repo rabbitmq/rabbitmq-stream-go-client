@@ -26,6 +26,7 @@ type Client struct {
 	mutexWrite       *sync.Mutex
 	producers        *Producers
 	responses        *Responses
+	consumers        *Consumers
 }
 
 func NewStreamingClient() *Client {
@@ -33,6 +34,7 @@ func NewStreamingClient() *Client {
 		mutexWrite: &sync.Mutex{},
 		producers:  NewProducers(),
 		responses:  NewResponses(),
+		consumers:  NewConsumers(),
 	}
 	return client
 }
@@ -114,38 +116,6 @@ func (client *Client) CreateStream(stream string) (*Code, error) {
 	return &code, nil
 }
 
-func (client *Client) NewProducer(stream string) (*Producer, error) {
-	return client.declarePublisher(stream)
-}
-
-func (client *Client) declarePublisher(stream string) (*Producer, error) {
-	producer := client.producers.New()
-	producer.LikedClient = client
-	publisherReferenceSize := 0
-	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
-	resp := client.responses.New()
-
-	correlationId := resp.subId
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandDeclarePublisher)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
-	WriteByte(b, producer.ProducerID)
-	WriteShort(b, int16(publisherReferenceSize))
-	WriteString(b, stream)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return nil, err
-	}
-	<-resp.code
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return nil, err
-	}
-	return producer, nil
-}
-
 func (client *Client) peerProperties() (*Code, error) {
 	clientPropertiesSize := 4 // size of the map, always there
 
@@ -211,12 +181,12 @@ func (client *Client) getSaslMechanisms() []string {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	client.writeAndFlush(b.Bytes())
-	data := <-resp.dataString
+	data := <-resp.data
 	err := client.responses.RemoveById(correlationId)
 	if err != nil {
 		return nil
 	}
-	return data
+	return data.([]string)
 
 }
 
@@ -245,13 +215,13 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	}
 
 	// double read for TUNE
-	tuneData := <-respTune.dataBytes
+	tuneData := <-respTune.data
 	err = client.responses.RemoveByName("tune")
 	if err != nil {
 		return err
 	}
 
-	return client.writeAndFlush(tuneData)
+	return client.writeAndFlush(tuneData.([]byte))
 }
 
 func (client *Client) open(virtualHost string) (*Code, error) {
@@ -274,33 +244,6 @@ func (client *Client) open(virtualHost string) (*Code, error) {
 		return nil, err
 	}
 	return &code, nil
-}
-
-func (client *Client) deletePublisher(publisherId byte) error {
-	length := 2 + 2 + 4 + 1
-	resp := client.responses.New()
-	correlationId := resp.subId
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandDeletePublisher)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
-	WriteByte(b, publisherId)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return err
-	}
-	<-resp.code
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return err
-	}
-	err = client.producers.RemoveById(publisherId)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (client *Client) DeleteStream(stream string) (*Code, error) {
@@ -339,6 +282,36 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 	return nil
 }
 
-func (client *Client) CloseAllProducers() error {
-	return client.producers.CloseAllProducers()
+func (client *Client) UnSubscribe(id uint8) error {
+	length := 2 + 2 + 4 + 1
+	resp := client.responses.New()
+	correlationId := resp.subId
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandUnsubscribe)
+	WriteShort(b, Version1)
+	WriteInt(b, correlationId)
+	WriteByte(b, id)
+	err := client.writeAndFlush(b.Bytes())
+	if err != nil {
+		return err
+	}
+	<-resp.code
+	err = client.responses.RemoveById(correlationId)
+	if err != nil {
+		return err
+	}
+
+
+
+
+
+	consumer, err := client.consumers.GetById(id)
+	if err != nil {
+		return err
+	}
+	consumer.response.code <- Code{id: CloseSubscribe}
+	return nil
 }
+
+//Consumers

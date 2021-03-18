@@ -11,6 +11,11 @@ type Producers struct {
 	mutex *sync.Mutex
 }
 
+type Consumers struct {
+	items map[byte]*Consumer
+	mutex *sync.Mutex
+}
+
 type Responses struct {
 	counter int
 	items   map[string]*Response
@@ -23,10 +28,9 @@ type Code struct {
 }
 
 type Response struct {
-	code       chan Code
-	dataString chan []string
-	dataBytes  chan []byte
-	subId      int
+	code  chan Code
+	data  chan interface{}
+	subId int
 }
 
 func NewProducers() *Producers {
@@ -34,12 +38,13 @@ func NewProducers() *Producers {
 		items: make(map[byte]*Producer)}
 }
 
-func (c *Producers) New() *Producer {
+func (c *Producers) New(linkedClient *Client) *Producer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
-	var producer = &Producer{ProducerID: lastId, PublishConfirm:
+	var producer = &Producer{ID: lastId, response:
 	&Response{code: make(chan Code)}}
+	producer.LikedClient = linkedClient
 	c.items[lastId] = producer
 	return producer
 }
@@ -88,8 +93,7 @@ func NewResponses() *Responses {
 func newResponse() *Response {
 	res := &Response{}
 	res.code = make(chan Code, 0)
-	res.dataString = make(chan []string, 0)
-	res.dataBytes = make(chan []byte, 0)
+	res.data = make(chan interface{}, 0)
 	return res
 }
 
@@ -157,4 +161,28 @@ func (s *Responses) Count() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return len(s.items)
+}
+
+func NewConsumers() *Consumers {
+	return &Consumers{mutex: &sync.Mutex{},
+		items: make(map[byte]*Consumer)}
+}
+
+func (c *Consumers) New(linkedClient *Client) *Consumer {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	var lastId = uint8(len(c.items))
+	var item = &Consumer{ID: lastId, response: newResponse()}
+	item.LikedClient = linkedClient
+	c.items[lastId] = item
+	return item
+}
+
+func (c *Consumers) GetById(id uint8) (*Consumer, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.items[id] == nil {
+		return nil, errors.New("Consumer #{id} not found ")
+	}
+	return c.items[id], nil
 }

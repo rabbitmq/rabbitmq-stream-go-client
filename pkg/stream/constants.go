@@ -46,4 +46,8 @@ const (
 	ResponseCodeAccessRefused                 = uint16(16)
 	ResponseCodePreconditionFailed            = uint16(17)
 	ResponseCodePublisherDoesNotExist         = uint16(18)
+
+	/// responses out of protocol
+	CloseSubscribe        = uint16(60)
+
 )

@@ -8,22 +8,22 @@ import (
 var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
-		It("Add/Remove producer ", func() {
-			p := client.producers.New()
-			Expect(p.ProducerID).To(Equal(uint8(0)))
-			err := client.producers.RemoveById(p.ProducerID)
+		It("Add/Remove subscribe ", func() {
+			p := client.producers.New(client)
+			Expect(p.ID).To(Equal(uint8(0)))
+			err := client.producers.RemoveById(p.ID)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("not found producer by id ", func() {
+		It("not found subscribe by id ", func() {
 			err := client.producers.RemoveById(200)
 			Expect(err).To(HaveOccurred())
 		})
 		It("massive insert/delete producers ", func() {
 			var producersId []uint8
 			for i := 0; i < 100; i++ {
-				p := client.producers.New()
-				producersId = append(producersId, p.ProducerID)
+				p := client.producers.New(client)
+				producersId = append(producersId, p.ID)
 			}
 			Expect(client.producers.Count()).To(Equal(100))
 			for _, pid := range producersId {
@@ -41,7 +41,7 @@ var _ = Describe("Coordinator", func() {
 			err := client.responses.RemoveById(r.subId)
 			Expect(err).NotTo(HaveOccurred())
 		})
-		It("not found producer by id ", func() {
+		It("not found subscribe by id ", func() {
 			err := client.responses.RemoveById(200)
 			Expect(err).To(HaveOccurred())
 		})

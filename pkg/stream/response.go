@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/Azure/go-amqp"
 	"net"
 )
 
@@ -42,7 +43,7 @@ func (client *Client) handleResponse(conn net.Conn) {
 			}
 		case CommandOpen, CommandDeclarePublisher,
 			CommandDeletePublisher, CommandDeleteStream,
-			CommandCreateStream, CommandSaslAuthenticate:
+			CommandCreateStream, CommandSaslAuthenticate, CommandSubscribe:
 			{
 				client.handleGenericResponse(readerProtocol, buffer)
 			}
@@ -51,6 +52,11 @@ func (client *Client) handleResponse(conn net.Conn) {
 			{
 				client.handleConfirm(readerProtocol, buffer)
 			}
+		case CommandDeliver:
+			{
+				client.handleDeliver(readerProtocol, buffer)
+
+			}
 		case CommandHeartbeat:
 			{
 				client.sendHeartbeat()
@@ -58,6 +64,7 @@ func (client *Client) handleResponse(conn net.Conn) {
 		default:
 			{
 				fmt.Printf("dont CommandID %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+				break
 			}
 
 		}
@@ -81,7 +88,7 @@ func (client *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, 
 		// TODO handle response
 		return err
 	}
-	res.dataString <- mechanisms
+	res.data <- mechanisms
 
 	return mechanisms
 }
@@ -129,7 +136,7 @@ func (client *Client) handleTune(r *bufio.Reader) interface{} {
 		// TODO handle response
 		return err
 	}
-	res.dataBytes <- b.Bytes()
+	res.data <- b.Bytes()
 	return b.Bytes()
 
 }
@@ -171,3 +178,41 @@ func (client *Client) sendHeartbeat() {
 
 }
 
+func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reader) {
+
+	subscriptionId := ReadByte(r)
+	_ = ReadByte(r)
+	_ = ReadByte(r)
+	_ = ReadUShort(r)
+	numRecords := ReadUInt(r)
+	_ = ReadInt64(r)
+	_ = ReadInt64(r)
+	_ = ReadInt64(r)
+	_ = ReadUInt(r)
+	_ = ReadUInt(r)
+	_ = ReadUInt(r)
+	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
+	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
+	client.credit(subscriptionId, 1)
+	//messages
+	for numRecords != 0 {
+		entryType := PeekByte(r)
+		if (entryType & 0x80) == 0 {
+			sizeMessage := ReadUInt(r)
+
+			arrayMessage := ReadUint8Array(r, sizeMessage)
+			msg := amqp.Message{}
+			err := msg.UnmarshalBinary(arrayMessage)
+			if err != nil {
+				fmt.Printf("%s", err)
+				//}
+			}
+			c, _ := client.consumers.GetById(subscriptionId)
+			c.response.code <- Code{id: ResponseCodeOk}
+			c.response.data <- &msg
+
+		}
+		numRecords--
+	}
+
+}
