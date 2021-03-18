@@ -59,7 +59,8 @@ func (client *Client) handleResponse(conn net.Conn) {
 			}
 		case CommandHeartbeat:
 			{
-				client.sendHeartbeat()
+				fmt.Printf("CommandHeartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+
 			}
 		default:
 			{
@@ -166,17 +167,7 @@ func (client *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reade
 
 }
 
-func (client *Client) sendHeartbeat() {
-	//length := 4 + 2 + 2
-	//var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	//WriteInt(b, length)
-	//WriteUShort(b, UShortEncodeResponseCode(CommandHeartbeat))
-	//
-	//ByteBuf bb = allocate(ctx.alloc(), 4 + 2 + 2);
-	//bb.writeInt(4).writeShort(encodeRequestCode(COMMAND_HEARTBEAT)).writeShort(VERSION_1);
-	//ctx.writeAndFlush(bb);
 
-}
 
 func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reader) {
 

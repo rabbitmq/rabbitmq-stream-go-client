@@ -186,3 +186,21 @@ func (c *Consumers) GetById(id uint8) (*Consumer, error) {
 	}
 	return c.items[id], nil
 }
+
+
+func (c *Consumers) Count() int {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return len(c.items)
+}
+
+
+func (c *Consumers) RemoveById(id byte) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.items[id] == nil {
+		return errors.New("Consumer #{id} not found ")
+	}
+	delete(c.items, id)
+	return nil
+}

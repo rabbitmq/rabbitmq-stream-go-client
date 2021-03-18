@@ -3,9 +3,11 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"net"
 	"net/url"
 	"sync"
+	"time"
 )
 
 type TuneState struct {
@@ -77,6 +79,7 @@ func (client *Client) Connect(addr string) error {
 	if err2 != nil {
 		return err2
 	}
+	client.HeartBeat()
 
 	return nil
 }
@@ -302,16 +305,47 @@ func (client *Client) UnSubscribe(id uint8) error {
 		return err
 	}
 
-
-
-
-
 	consumer, err := client.consumers.GetById(id)
 	if err != nil {
 		return err
 	}
-	consumer.response.code <- Code{id: CloseSubscribe}
+	consumer.response.code <- Code{id: CloseChannel}
 	return nil
 }
 
-//Consumers
+func (client *Client) HeartBeat() {
+
+	ticker := time.NewTicker(40 * time.Second)
+	resp := client.responses.NewWitName("heartbeat")
+	go func() {
+		for {
+			select {
+			case <-resp.code:
+				client.responses.RemoveByName("heartbeat")
+				return
+			case t := <-ticker.C:
+				fmt.Printf("sendHeartbeat: %s \n", t)
+				client.sendHeartbeat()
+			}
+		}
+	}()
+
+	fmt.Println("Ticker stopped")
+
+}
+
+func (client *Client) sendHeartbeat() {
+	length := 4 + 2 + 2
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, 4)
+	WriteShort(b, CommandHeartbeat)
+	WriteShort(b, Version1)
+
+	client.writeAndFlush(b.Bytes())
+}
+
+func (client *Client) Close() {
+	r, _ := client.responses.GetByName("heartbeat")
+	r.code <- Code{id: CloseChannel}
+
+}

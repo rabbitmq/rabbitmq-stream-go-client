@@ -51,12 +51,15 @@ var _ = Describe("Coordinator", func() {
 				r := client.responses.New()
 				responsesId = append(responsesId, r.subId)
 			}
-			Expect(client.responses.Count()).To(Equal(100))
+			// one client.responses is allocated by the heartbeat
+			// this is why 100 + 1
+			Expect(client.responses.Count()).To(Equal(101))
 			for _, pid := range responsesId {
 				err := client.responses.RemoveById(pid)
 				Expect(err).NotTo(HaveOccurred())
 			}
-			Expect(client.responses.Count()).To(Equal(0))
+			//one client.responses is allocated by the heartbeat
+			Expect(client.responses.Count()).To(Equal(1))
 		})
 	})
 
