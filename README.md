@@ -27,8 +27,11 @@ A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-s
  - DeclarePublisher
  - Close Publisher
  - Publish
+ - Subscribe (basic version)
+ - UnSubscribe
+ - HeartBeat
  
  ### Work in Progress
  ---
  
-  The POC is a work in progress, the code isn't too accurate, and the tests are missing
+  The POC is a work in progress, the code isn't too accurate

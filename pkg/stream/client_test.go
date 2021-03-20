@@ -18,8 +18,12 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	client.Close()
+	time.Sleep(500 * time.Millisecond)
 	Expect(client.producers.Count()).To(Equal(0))
 	Expect(client.responses.Count()).To(Equal(0))
+	Expect(client.consumers.Count()).To(Equal(0))
+
 })
 
 var _ = Describe("Streaming client", func() {
@@ -37,7 +41,6 @@ var _ = Describe("Streaming client", func() {
 		It("Create Stream", func() {
 			code, err := client.CreateStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(client.responses.Count()).To(Equal(0))
 			Expect(code.id).To(Equal(ResponseCodeOk))
 
 		})

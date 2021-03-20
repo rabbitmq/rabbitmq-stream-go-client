@@ -48,6 +48,6 @@ const (
 	ResponseCodePublisherDoesNotExist         = uint16(18)
 
 	/// responses out of protocol
-	CloseSubscribe        = uint16(60)
+	CloseChannel = uint16(60)
 
 )

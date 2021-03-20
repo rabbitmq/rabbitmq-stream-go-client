@@ -57,7 +57,8 @@ func (client *Client) declareConsumer(stream string, m func(subscriberId byte, m
 		for true {
 			select {
 			case code := <-consumer.response.code:
-				if code.id == CloseSubscribe {
+				if code.id == CloseChannel {
+					_ = client.consumers.RemoveById(consumer.ID)
 					return
 				}
 
