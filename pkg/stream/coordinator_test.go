@@ -34,6 +34,33 @@ var _ = Describe("Coordinator", func() {
 		})
 	})
 
+	Describe("Add/Remove consumers", func() {
+		It("Add/Remove consumers ", func() {
+			p := client.consumers.New(client)
+			Expect(p.ID).To(Equal(uint8(0)))
+			err := client.consumers.RemoveById(p.ID)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("not found consumers by id ", func() {
+			err := client.consumers.RemoveById(200)
+			Expect(err).To(HaveOccurred())
+		})
+		It("massive insert/delete consumers ", func() {
+			var consumersId []uint8
+			for i := 0; i < 100; i++ {
+				p := client.consumers.New(client)
+				consumersId = append(consumersId, p.ID)
+			}
+			Expect(client.consumers.Count()).To(Equal(100))
+			for _, pid := range consumersId {
+				err := client.consumers.RemoveById(pid)
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(client.consumers.Count()).To(Equal(0))
+		})
+	})
+
 	Describe("Add/Remove Response", func() {
 		It("Add/Remove Response ", func() {
 			r := client.responses.New()
@@ -41,7 +68,7 @@ var _ = Describe("Coordinator", func() {
 			err := client.responses.RemoveById(r.subId)
 			Expect(err).NotTo(HaveOccurred())
 		})
-		It("not found subscribe by id ", func() {
+		It("not found Response by id ", func() {
 			err := client.responses.RemoveById(200)
 			Expect(err).To(HaveOccurred())
 		})

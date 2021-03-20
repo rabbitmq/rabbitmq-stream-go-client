@@ -329,9 +329,6 @@ func (client *Client) HeartBeat() {
 			}
 		}
 	}()
-
-	fmt.Println("Ticker stopped")
-
 }
 
 func (client *Client) sendHeartbeat() {
