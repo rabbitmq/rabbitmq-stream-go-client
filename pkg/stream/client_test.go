@@ -41,8 +41,6 @@ var _ = Describe("Streaming client", func() {
 		It("Create Stream", func() {
 			code, err := client.CreateStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
-			// one client.responses is allocated by the heartbeat
-			Expect(client.responses.Count()).To(Equal(1))
 			Expect(code.id).To(Equal(ResponseCodeOk))
 
 		})
