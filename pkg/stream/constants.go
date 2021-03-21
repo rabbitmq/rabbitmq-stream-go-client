@@ -52,6 +52,6 @@ const (
 	/// responses out of protocol
 	CloseChannel = uint16(60)
 	///
-	DefaultSocketCallTimeout = 2 * time.Second
+	DefaultSocketCallTimeout = 5 * time.Second
 
 )
