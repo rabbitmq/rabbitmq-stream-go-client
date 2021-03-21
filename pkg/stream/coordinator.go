@@ -30,7 +30,7 @@ type Code struct {
 type Response struct {
 	code  chan Code
 	data  chan interface{}
-	SubId int
+	subId int
 }
 
 func NewProducers() *Producers {
@@ -101,7 +101,7 @@ func (s *Responses) NewWitName(value string) *Response {
 	s.mutex.Lock()
 	s.counter++
 	res := NewResponse()
-	res.SubId = s.counter
+	res.subId = s.counter
 	s.items[value] = res
 	s.mutex.Unlock()
 	return res
@@ -112,7 +112,7 @@ func (s *Responses) New() *Response {
 	defer s.mutex.Unlock()
 	s.counter++
 	res := NewResponse()
-	res.SubId = s.counter
+	res.subId = s.counter
 	s.items[strconv.Itoa(s.counter)] = res
 	return res
 }

@@ -88,7 +88,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
 	resp := client.responses.New()
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeclarePublisher)
@@ -115,7 +115,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 func (client *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
 	resp := client.responses.New()
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeletePublisher)

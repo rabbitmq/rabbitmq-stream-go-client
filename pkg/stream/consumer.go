@@ -27,7 +27,7 @@ func (client *Client) declareConsumer(stream string, m func(subscriberId byte, m
 	//	length += 8;
 	//}
 	resp := client.responses.New()
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)

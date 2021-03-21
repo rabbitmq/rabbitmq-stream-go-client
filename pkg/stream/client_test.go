@@ -10,49 +10,49 @@ import (
 	"time"
 )
 
-var client *Client
+var testClient *Client
 var testStreamName string
 var _ = BeforeSuite(func() {
-	client = NewStreamingClient()
+	testClient = NewStreamingClient()
 	testStreamName = uuid.New().String()
 })
 
 var _ = AfterSuite(func() {
-	client.Close()
+	testClient.Close()
 	time.Sleep(500 * time.Millisecond)
-	Expect(client.producers.Count()).To(Equal(0))
-	Expect(client.responses.Count()).To(Equal(0))
-	Expect(client.consumers.Count()).To(Equal(0))
+	Expect(testClient.producers.Count()).To(Equal(0))
+	Expect(testClient.responses.Count()).To(Equal(0))
+	Expect(testClient.consumers.Count()).To(Equal(0))
 
 })
 
-var _ = Describe("Streaming client", func() {
+var _ = Describe("Streaming testClient", func() {
 	BeforeEach(func() {
 
 	})
 	AfterEach(func() {
 	})
 
-	Describe("Streaming client", func() {
+	Describe("Streaming testClient", func() {
 		It("Connection ", func() {
-			err := client.Connect("rabbitmq-stream://guest:guest@localhost:5551/%2f")
+			err := testClient.Connect("rabbitmq-stream://guest:guest@localhost:5551/%2f")
 			Expect(err).NotTo(HaveOccurred())
 		})
 		It("Create Stream", func() {
-			code, err := client.CreateStream(testStreamName)
+			code, err := testClient.CreateStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(code.id).To(Equal(ResponseCodeOk))
 
 		})
 		It("New/UnSubscribe Publisher", func() {
-			producer, err := client.NewProducer(testStreamName)
+			producer, err := testClient.NewProducer(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			err = producer.Close()
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("New/Publish/UnSubscribe Publisher", func() {
-			producer, err := client.NewProducer(testStreamName)
+			producer, err := testClient.NewProducer(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			var arr []*amqp.Message
 			for z := 0; z < 10; z++ {
@@ -66,13 +66,13 @@ var _ = Describe("Streaming client", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("Multi-thread New/Publish/UnSubscribe Publisher", func() {
+		It("Multi-thread New/Publish/UnSubscribe", func() {
 			var wg sync.WaitGroup
 			for i := 0; i < 10; i++ {
 				wg.Add(1)
 				go func(wg *sync.WaitGroup) {
 					defer wg.Done()
-					producer, err := client.NewProducer(testStreamName)
+					producer, err := testClient.NewProducer(testStreamName)
 					Expect(err).NotTo(HaveOccurred())
 					var arr []*amqp.Message
 					for z := 0; z < 5; z++ {
@@ -89,29 +89,29 @@ var _ = Describe("Streaming client", func() {
 			wg.Wait()
 		})
 		It("Delete Stream", func() {
-			code, err := client.DeleteStream(testStreamName)
+			code, err := testClient.DeleteStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(code.id).To(Equal(ResponseCodeOk))
 		})
 		It("Create two times Stream", func() {
-			code, err := client.CreateStream(testStreamName)
+			code, err := testClient.CreateStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(code.id).To(Equal(ResponseCodeOk))
 
-			code, err = client.CreateStream(testStreamName)
+			code, err = testClient.CreateStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(code.id).To(Equal(ResponseCodeStreamAlreadyExists))
 
-			code, err = client.DeleteStream(testStreamName)
+			code, err = testClient.DeleteStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(code.id).To(Equal(ResponseCodeOk))
 		})
 
 		It("Subscribe and Unsubscribe", func() {
-			code, err := client.CreateStream(testStreamName)
+			code, err := testClient.CreateStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(code.id).To(Equal(ResponseCodeOk))
-			consumer, err := client.NewConsumer(testStreamName, func(subscriberId byte, message *amqp.Message) {
+			consumer, err := testClient.NewConsumer(testStreamName, func(subscriberId byte, message *amqp.Message) {
 
 			})
 
@@ -120,18 +120,18 @@ var _ = Describe("Streaming client", func() {
 
 			err = consumer.UnSubscribe()
 			Expect(err).NotTo(HaveOccurred())
-			code, err = client.DeleteStream(testStreamName)
+			code, err = testClient.DeleteStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(code.id).To(Equal(ResponseCodeOk))
 
 		})
 
 		It("Subscribe Count Messages", func() {
-			code, err := client.CreateStream(testStreamName)
+			code, err := testClient.CreateStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(code.id).To(Equal(ResponseCodeOk))
 
-			producer, err := client.NewProducer(testStreamName)
+			producer, err := testClient.NewProducer(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			var arr []*amqp.Message
 			for z := 0; z < 5; z++ {
@@ -142,7 +142,7 @@ var _ = Describe("Streaming client", func() {
 			var wg sync.WaitGroup
 			wg.Add(1)
 			count := 0
-			consumer, err := client.NewConsumer(testStreamName, func(subscriberId byte, message *amqp.Message) {
+			consumer, err := testClient.NewConsumer(testStreamName, func(subscriberId byte, message *amqp.Message) {
 				count++
 				if count >= 5 {
 					wg.Done()
@@ -160,10 +160,27 @@ var _ = Describe("Streaming client", func() {
 			err = producer.Close()
 			Expect(err).NotTo(HaveOccurred())
 
-			code, err = client.DeleteStream(testStreamName)
+			code, err = testClient.DeleteStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(code.id).To(Equal(ResponseCodeOk))
 		})
 
+		It("massive insert and delete all ", func() {
+			code, err := testClient.CreateStream("producers")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(code.id).To(Equal(ResponseCodeOk))
+			var producersId []uint8
+			for i := 0; i < 100; i++ {
+				p, err := testClient.NewProducer("producers")
+				Expect(err).NotTo(HaveOccurred())
+				producersId = append(producersId, p.ID)
+			}
+			Expect(testClient.producers.Count()).To(Equal(100))
+			err = testClient.CloseAllProducers()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(testClient.producers.Count()).To(Equal(0))
+			_, err = testClient.DeleteStream("producers")
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 })

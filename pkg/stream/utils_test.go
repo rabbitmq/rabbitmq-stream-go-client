@@ -11,7 +11,7 @@ var _ = Describe("Utils", func() {
 
 	It("Timeout calls No Error", func() {
 		response := NewResponse()
-		response.SubId = 9
+		response.subId = 9
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {
@@ -30,7 +30,7 @@ var _ = Describe("Utils", func() {
 
 	It("Timeout calls No Error", func() {
 		response := NewResponse()
-		response.SubId = 9
+		response.subId = 9
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {

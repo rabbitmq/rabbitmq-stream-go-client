@@ -111,7 +111,7 @@ func (client *Client) CreateStream(stream string) (Code, error) {
 
 	resp := client.responses.New()
 	length := 2 + 2 + 4 + 2 + len(stream) + 4
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	arguments := make(map[string]string)
 	arguments["queue-leader-locator"] = "least-leaders"
 	for key, element := range arguments {
@@ -161,7 +161,7 @@ func (client *Client) peerProperties() (Code, error) {
 
 	length := 2 + 2 + 4 + clientPropertiesSize
 	resp := client.responses.New()
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)
@@ -207,7 +207,7 @@ func (client *Client) authenticate(user string, password string) error {
 func (client *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
 	resp := client.responses.New()
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
@@ -227,7 +227,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
 	resp := client.responses.New()
 	respTune := client.responses.NewWitName("tune")
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslAuthenticate)
@@ -263,7 +263,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 func (client *Client) open(virtualHost string) (Code, error) {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
 	resp := client.responses.New()
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandOpen)
@@ -289,7 +289,7 @@ func (client *Client) open(virtualHost string) (Code, error) {
 func (client *Client) DeleteStream(stream string) (Code, error) {
 	length := 2 + 2 + 4 + 2 + len(stream)
 	resp := client.responses.New()
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeleteStream)
@@ -313,6 +313,7 @@ func (client *Client) DeleteStream(stream string) (Code, error) {
 
 func (client *Client) writeAndFlush(buffer []byte) error {
 	client.socket.mutex.Lock()
+	defer client.socket.mutex.Unlock()
 	_, err := client.writer.Write(buffer)
 	if err != nil {
 		return err
@@ -321,14 +322,14 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 	if err != nil {
 		return err
 	}
-	client.socket.mutex.Unlock()
+
 	return nil
 }
 
 func (client *Client) UnSubscribe(id uint8) error {
 	length := 2 + 2 + 4 + 1
 	resp := client.responses.New()
-	correlationId := resp.SubId
+	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandUnsubscribe)
