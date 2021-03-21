@@ -19,13 +19,30 @@ type ClientProperties struct {
 	items map[string]string
 }
 
+type Socket struct {
+	connection net.Conn
+	connected  bool
+	mutex      *sync.Mutex
+}
+
+func (socket *Socket) SetConnect(value bool) {
+	socket.mutex.Lock()
+	defer socket.mutex.Unlock()
+	socket.connected = value
+}
+
+func (socket *Socket) GetConnect() bool {
+	socket.mutex.Lock()
+	defer socket.mutex.Unlock()
+	return socket.connected
+}
+
 type Client struct {
-	socket           net.Conn
+	socket           Socket
 	clientProperties ClientProperties
 	tuneState        TuneState
 	writer           *bufio.Writer
 	reader           *bufio.Reader
-	mutexWrite       *sync.Mutex
 	producers        *Producers
 	responses        *Responses
 	consumers        *Consumers
@@ -33,7 +50,6 @@ type Client struct {
 
 func NewStreamingClient() *Client {
 	client := &Client{
-		mutexWrite: &sync.Mutex{},
 		producers:  NewProducers(),
 		responses:  NewResponses(),
 		consumers:  NewConsumers(),
@@ -58,9 +74,16 @@ func (client *Client) Connect(addr string) error {
 	if err2 != nil {
 		return err2
 	}
-	client.socket = connection
-	client.writer = bufio.NewWriter(client.socket)
-	go client.handleResponse(connection)
+	client.socket = struct {
+		connection net.Conn
+		connected  bool
+		mutex      *sync.Mutex
+	}{connection: connection, mutex: &sync.Mutex{}}
+
+	client.writer = bufio.NewWriter(client.socket.connection)
+	client.socket.SetConnect(true)
+
+	go client.handleResponse()
 	_, err2 = client.peerProperties()
 
 	if err2 != nil {
@@ -272,7 +295,7 @@ func (client *Client) DeleteStream(stream string) (*Code, error) {
 }
 
 func (client *Client) writeAndFlush(buffer []byte) error {
-	client.mutexWrite.Lock()
+	client.socket.mutex.Lock()
 	_, err := client.writer.Write(buffer)
 	if err != nil {
 		return err
@@ -281,7 +304,7 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 	if err != nil {
 		return err
 	}
-	client.mutexWrite.Unlock()
+	client.socket.mutex.Unlock()
 	return nil
 }
 
@@ -341,8 +364,19 @@ func (client *Client) sendHeartbeat() {
 	client.writeAndFlush(b.Bytes())
 }
 
-func (client *Client) Close() {
-	r, _ := client.responses.GetByName("heartbeat")
-	r.code <- Code{id: CloseChannel}
-
+func (client *Client) Close() error {
+	client.socket.mutex.Lock()
+	defer client.socket.mutex.Unlock()
+	if client.socket.connected {
+		r, err := client.responses.GetByName("heartbeat")
+		if err != nil {
+			return err
+		}
+		r.code <- Code{id: CloseChannel}
+		err = client.socket.connection.Close()
+		client.socket.connected = false
+		return err
+	}
+	//}
+	return nil
 }

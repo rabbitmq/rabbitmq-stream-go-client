@@ -73,6 +73,10 @@ func main() {
 		fmt.Printf("error deleting stream: %s \n", err)
 		return
 	}
-	client.Close()
+	err = client.Close()
+	if err != nil {
+		fmt.Printf("error closing client: %s \n", err)
+		return
+	}
 	fmt.Println("Bye bye")
 }

@@ -19,7 +19,7 @@ func main() {
 		return
 	}
 	fmt.Println("Connected to localhost")
-	streamName := "golang-stream"
+	streamName := "golang-stream-1"
 	_, err = client.CreateStream(streamName) // Create the streaming queue
 	if err != nil {
 		fmt.Printf("Error creating stream: %s", err)
@@ -53,7 +53,8 @@ func main() {
 
 		if z%1000 == 0 {
 			elapsed := time.Since(start)
-			fmt.Printf("%d messages, published in: %s\n", z*batchSize, elapsed)
+			fmt.Printf("%d messages, published in: %s\n", 1000*batchSize, elapsed)
+			start = time.Now()
 
 		}
 	}

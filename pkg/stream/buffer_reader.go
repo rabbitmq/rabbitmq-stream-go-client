@@ -12,10 +12,10 @@ func ReadUShort(readerStream io.Reader) uint16 {
 	return res
 }
 
-func ReadUInt(readerStream io.Reader) uint32 {
+func ReadUInt(readerStream io.Reader) (uint32, error) {
 	var res uint32
-	_ = binary.Read(readerStream, binary.BigEndian, &res)
-	return res
+	err := binary.Read(readerStream, binary.BigEndian, &res)
+	return res, err
 }
 
 func PeekByte(readerStream *bufio.Reader) uint8 {

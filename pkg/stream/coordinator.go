@@ -49,7 +49,7 @@ func (c *Producers) New(linkedClient *Client) *Producer {
 	return producer
 }
 
-func (c *Producers) CloseAllProducers() error {
+func (c *Producers) CloseAll() error {
 	for _, i2 := range c.items {
 		err := i2.Close()
 		if err != nil {
@@ -202,5 +202,16 @@ func (c *Consumers) RemoveById(id byte) error {
 		return errors.New("Consumer #{id} not found ")
 	}
 	delete(c.items, id)
+	return nil
+}
+
+func (c *Consumers) UnsubscribeAll() error {
+	for _, i2 := range c.items {
+		err := i2.UnSubscribe()
+		if err != nil {
+			return err
+		}
+
+	}
 	return nil
 }
