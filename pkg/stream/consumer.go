@@ -27,7 +27,7 @@ func (client *Client) declareConsumer(stream string, m func(subscriberId byte, m
 	//	length += 8;
 	//}
 	resp := client.responses.New()
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)
@@ -47,8 +47,11 @@ func (client *Client) declareConsumer(stream string, m func(subscriberId byte, m
 
 	client.writeAndFlush(b.Bytes())
 
-	<-resp.code
-	err := client.responses.RemoveById(correlationId)
+	_, err := WaitCodeWithDefaultTimeOut(resp, CommandSubscribe)
+	if err != nil {
+		return nil, err
+	}
+	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return nil, err
 	}

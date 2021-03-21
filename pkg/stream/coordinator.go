@@ -30,7 +30,7 @@ type Code struct {
 type Response struct {
 	code  chan Code
 	data  chan interface{}
-	subId int
+	SubId int
 }
 
 func NewProducers() *Producers {
@@ -90,7 +90,7 @@ func NewResponses() *Responses {
 		items: make(map[string]*Response)}
 }
 
-func newResponse() *Response {
+func NewResponse() *Response {
 	res := &Response{}
 	res.code = make(chan Code, 0)
 	res.data = make(chan interface{}, 0)
@@ -100,8 +100,8 @@ func newResponse() *Response {
 func (s *Responses) NewWitName(value string) *Response {
 	s.mutex.Lock()
 	s.counter++
-	res := newResponse()
-	res.subId = s.counter
+	res := NewResponse()
+	res.SubId = s.counter
 	s.items[value] = res
 	s.mutex.Unlock()
 	return res
@@ -111,8 +111,8 @@ func (s *Responses) New() *Response {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.counter++
-	res := newResponse()
-	res.subId = s.counter
+	res := NewResponse()
+	res.SubId = s.counter
 	s.items[strconv.Itoa(s.counter)] = res
 	return res
 }
@@ -172,7 +172,7 @@ func (c *Consumers) New(linkedClient *Client) *Consumer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
-	var item = &Consumer{ID: lastId, response: newResponse()}
+	var item = &Consumer{ID: lastId, response: NewResponse()}
 	item.LikedClient = linkedClient
 	c.items[lastId] = item
 	return item

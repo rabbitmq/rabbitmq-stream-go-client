@@ -88,7 +88,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
 	resp := client.responses.New()
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeclarePublisher)
@@ -101,7 +101,10 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	if err != nil {
 		return nil, err
 	}
-	<-resp.code
+	_, err = WaitCodeWithDefaultTimeOut(resp, CommandDeclarePublisher)
+	if err != nil {
+		return nil, err
+	}
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return nil, err
@@ -112,7 +115,7 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 func (client *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
 	resp := client.responses.New()
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeletePublisher)
@@ -123,7 +126,10 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	if err != nil {
 		return err
 	}
-	<-resp.code
+	_, err = WaitCodeWithDefaultTimeOut(resp, CommandDeletePublisher)
+	if err != nil {
+		return err
+	}
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return err

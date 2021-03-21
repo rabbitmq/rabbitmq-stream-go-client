@@ -1,5 +1,7 @@
 package stream
 
+import "time"
+
 const (
 	CommandDeclarePublisher       = 1
 	CommandPublish                = 2
@@ -49,5 +51,7 @@ const (
 
 	/// responses out of protocol
 	CloseChannel = uint16(60)
+	///
+	DefaultSocketCallTimeout = 2 * time.Second
 
 )

@@ -50,9 +50,9 @@ type Client struct {
 
 func NewStreamingClient() *Client {
 	client := &Client{
-		producers:  NewProducers(),
-		responses:  NewResponses(),
-		consumers:  NewConsumers(),
+		producers: NewProducers(),
+		responses: NewResponses(),
+		consumers: NewConsumers(),
 	}
 	return client
 }
@@ -107,11 +107,11 @@ func (client *Client) Connect(addr string) error {
 	return nil
 }
 
-func (client *Client) CreateStream(stream string) (*Code, error) {
+func (client *Client) CreateStream(stream string) (Code, error) {
 
 	resp := client.responses.New()
 	length := 2 + 2 + 4 + 2 + len(stream) + 4
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	arguments := make(map[string]string)
 	arguments["queue-leader-locator"] = "least-leaders"
 	for key, element := range arguments {
@@ -132,17 +132,21 @@ func (client *Client) CreateStream(stream string) (*Code, error) {
 
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
-		return nil, err
+		return Code{}, err
 	}
-	code := <-resp.code
+	code, err := WaitCodeWithDefaultTimeOut(resp, CommandCreateStream)
+	if err != nil {
+		return Code{}, err
+	}
+
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
-		return nil, err
+		return Code{}, err
 	}
-	return &code, nil
+	return code, nil
 }
 
-func (client *Client) peerProperties() (*Code, error) {
+func (client *Client) peerProperties() (Code, error) {
 	clientPropertiesSize := 4 // size of the map, always there
 
 	client.clientProperties.items["connection_name"] = "rabbitmq-stream-locator"
@@ -157,7 +161,7 @@ func (client *Client) peerProperties() (*Code, error) {
 
 	length := 2 + 2 + 4 + clientPropertiesSize
 	resp := client.responses.New()
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)
@@ -173,14 +177,17 @@ func (client *Client) peerProperties() (*Code, error) {
 
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
-		return nil, err
+		return Code{}, err
 	}
-	code := <-resp.code
+	code, err := WaitCodeWithDefaultTimeOut(resp, CommandPeerProperties)
+	if err != nil {
+		return Code{}, err
+	}
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
-		return nil, err
+		return Code{}, err
 	}
-	return &code, nil
+	return code, nil
 }
 
 func (client *Client) authenticate(user string, password string) error {
@@ -200,7 +207,7 @@ func (client *Client) authenticate(user string, password string) error {
 func (client *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
 	resp := client.responses.New()
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
@@ -220,7 +227,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
 	resp := client.responses.New()
 	respTune := client.responses.NewWitName("tune")
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslAuthenticate)
@@ -234,7 +241,10 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 		return err
 	}
 
-	<-resp.code
+	_, err = WaitCodeWithDefaultTimeOut(resp, CommandSaslAuthenticate)
+	if err != nil {
+		return err
+	}
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return err
@@ -250,10 +260,10 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	return client.writeAndFlush(tuneData.([]byte))
 }
 
-func (client *Client) open(virtualHost string) (*Code, error) {
+func (client *Client) open(virtualHost string) (Code, error) {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
 	resp := client.responses.New()
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandOpen)
@@ -262,20 +272,24 @@ func (client *Client) open(virtualHost string) (*Code, error) {
 	WriteString(b, virtualHost)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
-		return nil, err
+		return Code{}, err
 	}
-	code := <-resp.code
+	code, err := WaitCodeWithDefaultTimeOut(resp, CommandOpen)
+	if err != nil {
+		return Code{}, err
+	}
+
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
-		return nil, err
+		return Code{}, err
 	}
-	return &code, nil
+	return code, nil
 }
 
-func (client *Client) DeleteStream(stream string) (*Code, error) {
+func (client *Client) DeleteStream(stream string) (Code, error) {
 	length := 2 + 2 + 4 + 2 + len(stream)
 	resp := client.responses.New()
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeleteStream)
@@ -284,14 +298,17 @@ func (client *Client) DeleteStream(stream string) (*Code, error) {
 	WriteString(b, stream)
 	err := client.writeAndFlush(b.Bytes())
 	if err != nil {
-		return nil, err
+		return Code{}, err
 	}
-	code := <-resp.code
+	code, err := WaitCodeWithDefaultTimeOut(resp, CommandDeleteStream)
+	if err != nil {
+		return Code{}, err
+	}
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
-		return nil, err
+		return Code{}, err
 	}
-	return &code, nil
+	return code, nil
 }
 
 func (client *Client) writeAndFlush(buffer []byte) error {
@@ -311,7 +328,7 @@ func (client *Client) writeAndFlush(buffer []byte) error {
 func (client *Client) UnSubscribe(id uint8) error {
 	length := 2 + 2 + 4 + 1
 	resp := client.responses.New()
-	correlationId := resp.subId
+	correlationId := resp.SubId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandUnsubscribe)
@@ -322,7 +339,10 @@ func (client *Client) UnSubscribe(id uint8) error {
 	if err != nil {
 		return err
 	}
-	<-resp.code
+	_, err = WaitCodeWithDefaultTimeOut(resp, CommandUnsubscribe)
+	if err != nil {
+		return  err
+	}
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return err

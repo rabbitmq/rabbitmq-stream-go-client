@@ -9,6 +9,7 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
 		It("Add/Remove Producers ", func() {
+
 			p := client.producers.New(client)
 			Expect(p.ID).To(Equal(uint8(0)))
 			err := client.producers.RemoveById(p.ID)
@@ -64,8 +65,8 @@ var _ = Describe("Coordinator", func() {
 	Describe("Add/Remove Response", func() {
 		It("Add/Remove Response ", func() {
 			r := client.responses.New()
-			Expect(r.subId).ToNot(Equal(0))
-			err := client.responses.RemoveById(r.subId)
+			Expect(r.SubId).ToNot(Equal(0))
+			err := client.responses.RemoveById(r.SubId)
 			Expect(err).NotTo(HaveOccurred())
 		})
 		It("not found Response by id ", func() {
@@ -76,7 +77,7 @@ var _ = Describe("Coordinator", func() {
 			var responsesId []int
 			for i := 0; i < 100; i++ {
 				r := client.responses.New()
-				responsesId = append(responsesId, r.subId)
+				responsesId = append(responsesId, r.SubId)
 			}
 
 			for _, pid := range responsesId {

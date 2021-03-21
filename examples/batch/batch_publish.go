@@ -16,7 +16,9 @@ func main() {
 	fmt.Println("RabbitMQ golang streaming client")
 	fmt.Println("Connecting ...")
 	var client = stream.NewStreamingClient()                                           // create Client Struct
-	err := client.Connect("rabbitmq-stream://test:test@stream.4messages.net:5551/%2f") // Connect
+	//address := "rabbitmq-stream://test:test@stream.4messages.net:5551/%2f"
+	address := "rabbitmq-stream://guest:guest@localhost:5551/%2f"
+	err := client.Connect(address) // Connect
 	if err != nil {
 		fmt.Printf("error: %s", err)
 		return
@@ -24,22 +26,21 @@ func main() {
 	fmt.Println("Connected!")
 	streamName := uuid.New().String()
 	fmt.Printf("Stream %s \n", streamName)
-	fmt.Printf("Stream %s \n", streamName)
 	_, err = client.CreateStream(streamName) // Create the streaming queue
 	if err != nil {
 		fmt.Printf("error: %s", err)
 		return
 	}
-	producers := 1
-	consumers := 50
-	iterations := 10
-	messages := 1
+	producers := 10
+	consumers := 10
+	iterations := 4000
+	messages := 100
 	counters := map[byte]int64{}
 	var lock = sync.RWMutex{}
 
 	go func() {
 		for {
-			time.Sleep(4 * time.Second)
+			time.Sleep(5 * time.Second)
 			lock.RLock()
 
 			fmt.Printf("Counters: %d \n", counters)
@@ -52,7 +53,7 @@ func main() {
 			lock.Lock()
 			defer lock.Unlock()
 			counters[subscriberId] = counters[subscriberId] + 1
-			fmt.Printf("data: %s \n", message.Data)
+			//fmt.Printf("data: %s \n", message.Data)
 		})
 		if err != nil {
 			fmt.Printf("error: %s", err)
