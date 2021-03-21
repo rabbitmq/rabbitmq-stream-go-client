@@ -79,7 +79,6 @@ func (producer *Producer) Close() error {
 	return producer.LikedClient.deletePublisher(producer.ID)
 }
 
-
 func (client *Client) NewProducer(stream string) (*Producer, error) {
 	return client.declarePublisher(stream)
 }
@@ -110,7 +109,6 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	return producer, nil
 }
 
-
 func (client *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
 	resp := client.responses.New()
@@ -138,8 +136,10 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	return nil
 }
 
-
 func (client *Client) CloseAllProducers() error {
-	return client.producers.CloseAllProducers()
+	return client.producers.CloseAll()
 }
 
+func (client *Client) UnSubscribeAll() error {
+	return client.consumers.UnsubscribeAll()
+}

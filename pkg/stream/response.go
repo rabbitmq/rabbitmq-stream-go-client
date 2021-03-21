@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Azure/go-amqp"
-	"net"
 )
 
 type ReaderProtocol struct {
@@ -19,11 +18,17 @@ type ReaderProtocol struct {
 	PublishingIdCount uint64
 }
 
-func (client *Client) handleResponse(conn net.Conn) {
-	buffer := bufio.NewReader(conn)
-	for {
+func (client *Client) handleResponse() {
+	buffer := bufio.NewReader(client.socket.connection)
+	for  {
 		readerProtocol := &ReaderProtocol{}
-		readerProtocol.FrameLen = ReadUInt(buffer)
+		frameLen, err := ReadUInt(buffer)
+		if err != nil {
+			fmt.Printf("Socket Error %s \n", err)
+			_ = client.Close()
+			break
+		}
+		readerProtocol.FrameLen = frameLen
 		readerProtocol.CommandID = UShortExtractResponseCode(ReadUShort(buffer))
 		readerProtocol.Version = ReadUShort(buffer)
 
@@ -54,8 +59,12 @@ func (client *Client) handleResponse(conn net.Conn) {
 			}
 		case CommandDeliver:
 			{
-				client.handleDeliver(readerProtocol, buffer)
+				client.handleDeliver(buffer)
 
+			}
+		case CommandCredit:
+			{
+			client.CreditNotificationFrameHandler(readerProtocol, buffer)
 			}
 		case CommandHeartbeat:
 			{
@@ -67,17 +76,15 @@ func (client *Client) handleResponse(conn net.Conn) {
 				fmt.Printf("dont CommandID %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 				break
 			}
-
 		}
-
 	}
 
 }
 
 func (client *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bufio.Reader) interface{} {
-	streamingRes.CorrelationId = ReadUInt(r)
+	streamingRes.CorrelationId,_ = ReadUInt(r)
 	streamingRes.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
-	mechanismsCount := ReadUInt(r)
+	mechanismsCount,_ := ReadUInt(r)
 	var mechanisms []string
 	for i := 0; i < int(mechanismsCount); i++ {
 		mechanism := ReadString(r)
@@ -95,12 +102,12 @@ func (client *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, 
 }
 
 func (client *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Reader) {
-	readProtocol.CorrelationId = ReadUInt(r)
+	readProtocol.CorrelationId,_ = ReadUInt(r)
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
 	if readProtocol.ResponseCode != 1 {
 		fmt.Printf("Errr ResponseCode: %d ", readProtocol.ResponseCode)
 	}
-	serverPropertiesCount := ReadUInt(r)
+	serverPropertiesCount,_ := ReadUInt(r)
 	serverProperties := make(map[string]string)
 
 	for i := 0; i < int(serverPropertiesCount); i++ {
@@ -119,8 +126,8 @@ func (client *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufi
 
 func (client *Client) handleTune(r *bufio.Reader) interface{} {
 
-	serverMaxFrameSize := ReadUInt(r)
-	serverHeartbeat := ReadUInt(r)
+	serverMaxFrameSize,_ := ReadUInt(r)
+	serverHeartbeat,_ := ReadUInt(r)
 
 	maxFrameSize := serverMaxFrameSize
 	heartbeat := serverHeartbeat
@@ -143,7 +150,7 @@ func (client *Client) handleTune(r *bufio.Reader) interface{} {
 }
 
 func (client *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {
-	readProtocol.CorrelationId = ReadUInt(r)
+	readProtocol.CorrelationId,_ = ReadUInt(r)
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
 	res, err := client.responses.GetById(readProtocol.CorrelationId)
 	if err != nil {
@@ -156,7 +163,7 @@ func (client *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *buf
 func (client *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 	readProtocol.PublishID = ReadByte(r)
 	//readProtocol.PublishingIdCount = ReadIntFromReader(client.reader)
-	publishingIdCount := ReadUInt(r)
+	publishingIdCount,_ := ReadUInt(r)
 	//var _publishingId int64
 	for publishingIdCount != 0 {
 		ReadInt64(r)
@@ -167,21 +174,19 @@ func (client *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reade
 
 }
 
-
-
-func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reader) {
+func (client *Client) handleDeliver(r *bufio.Reader) {
 
 	subscriptionId := ReadByte(r)
 	_ = ReadByte(r)
 	_ = ReadByte(r)
 	_ = ReadUShort(r)
-	numRecords := ReadUInt(r)
+	numRecords,_ := ReadUInt(r)
 	_ = ReadInt64(r)
 	_ = ReadInt64(r)
 	_ = ReadInt64(r)
-	_ = ReadUInt(r)
-	_ = ReadUInt(r)
-	_ = ReadUInt(r)
+	_,_ = ReadUInt(r)
+	_,_ = ReadUInt(r)
+	_,_ = ReadUInt(r)
 	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
 	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
 	client.credit(subscriptionId, 1)
@@ -189,7 +194,7 @@ func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reade
 	for numRecords != 0 {
 		entryType := PeekByte(r)
 		if (entryType & 0x80) == 0 {
-			sizeMessage := ReadUInt(r)
+			sizeMessage,_ := ReadUInt(r)
 
 			arrayMessage := ReadUint8Array(r, sizeMessage)
 			msg := amqp.Message{}
@@ -206,4 +211,10 @@ func (client *Client) handleDeliver(readProtocol *ReaderProtocol, r *bufio.Reade
 		numRecords--
 	}
 
+}
+
+func (client *Client) CreditNotificationFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
+	subscriptionId := ReadByte(r)
+	fmt.Printf("CreditNotificationFrameHandler %d \n", subscriptionId)
 }
