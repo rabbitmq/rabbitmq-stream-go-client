@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       rabbitmq-streaming:
-        image: pivotalrabbitmq/rabbitmq-streaming
+        image: pivotalrabbitmq/rabbitmq-stream
         env:
           RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_stream"
         ports:
