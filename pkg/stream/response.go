@@ -162,7 +162,7 @@ func (client *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *buf
 
 func (client *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 	readProtocol.PublishID = ReadByte(r)
-	//readProtocol.PublishingIdCount = ReadIntFromReader(client.reader)
+	//readProtocol.PublishingIdCount = ReadIntFromReader(testClient.reader)
 	publishingIdCount,_ := ReadUInt(r)
 	//var _publishingId int64
 	for publishingIdCount != 0 {

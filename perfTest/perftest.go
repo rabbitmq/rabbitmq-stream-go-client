@@ -12,6 +12,12 @@ import (
 func main() {
 	fmt.Println("PerfTest")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
+	/// Constants
+	numberOfMessages := 1_000_000
+	batchSize := 100
+	//numberOfProducers := 3
+	///
+
 	var client = stream.NewStreamingClient()                                           // create Client Struct
 	err := client.Connect("rabbitmq-stream://test:test@stream.4messages.net:5551/%2f") // Connect
 	if err != nil {
@@ -19,7 +25,7 @@ func main() {
 		return
 	}
 	fmt.Println("Connected to localhost")
-	streamName := "golang-stream-1"
+	streamName := "golang-stream-2"
 	_, err = client.CreateStream(streamName) // Create the streaming queue
 	if err != nil {
 		fmt.Printf("Error creating stream: %s", err)
@@ -32,8 +38,6 @@ func main() {
 		fmt.Printf("Error creating subscribe: %s", err)
 		return
 	}
-	numberOfMessages := 1_000_000
-	batchSize := 100
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
 	// message aggregation
@@ -63,11 +67,7 @@ func main() {
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	fmt.Print("Closing all producers ")
-	err = client.CloseAllProducers()
-	if err != nil {
-		fmt.Printf("error removing producers: %s", err)
-		return
-	}
+
 	_, err = client.DeleteStream(streamName) // Remove the streaming queue and the data
 	if err != nil {
 		fmt.Printf("error deleting stream: %s \n", err)

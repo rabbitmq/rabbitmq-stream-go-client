@@ -101,7 +101,10 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	if err != nil {
 		return nil, err
 	}
-	<-resp.code
+	_, err = WaitCodeWithDefaultTimeOut(resp, CommandDeclarePublisher)
+	if err != nil {
+		return nil, err
+	}
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return nil, err
@@ -123,7 +126,10 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	if err != nil {
 		return err
 	}
-	<-resp.code
+	_, err = WaitCodeWithDefaultTimeOut(resp, CommandDeletePublisher)
+	if err != nil {
+		return err
+	}
 	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return err
@@ -136,10 +142,5 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	return nil
 }
 
-func (client *Client) CloseAllProducers() error {
-	return client.producers.CloseAll()
-}
 
-func (client *Client) UnSubscribeAll() error {
-	return client.consumers.UnsubscribeAll()
-}
+

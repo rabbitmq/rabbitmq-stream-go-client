@@ -47,8 +47,11 @@ func (client *Client) declareConsumer(stream string, m func(subscriberId byte, m
 
 	client.writeAndFlush(b.Bytes())
 
-	<-resp.code
-	err := client.responses.RemoveById(correlationId)
+	_, err := WaitCodeWithDefaultTimeOut(resp, CommandSubscribe)
+	if err != nil {
+		return nil, err
+	}
+	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return nil, err
 	}
@@ -88,3 +91,4 @@ func (client *Client) credit(subscriptionId byte, credit int16) {
 func (consumer *Consumer) UnSubscribe() error {
 	return consumer.LikedClient.UnSubscribe(consumer.ID)
 }
+

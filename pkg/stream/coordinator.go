@@ -49,16 +49,7 @@ func (c *Producers) New(linkedClient *Client) *Producer {
 	return producer
 }
 
-func (c *Producers) CloseAll() error {
-	for _, i2 := range c.items {
-		err := i2.Close()
-		if err != nil {
-			return err
-		}
 
-	}
-	return nil
-}
 
 func (c *Producers) GetById(id uint8) (*Producer, error) {
 	c.mutex.Lock()
@@ -90,7 +81,7 @@ func NewResponses() *Responses {
 		items: make(map[string]*Response)}
 }
 
-func newResponse() *Response {
+func NewResponse() *Response {
 	res := &Response{}
 	res.code = make(chan Code, 0)
 	res.data = make(chan interface{}, 0)
@@ -100,7 +91,7 @@ func newResponse() *Response {
 func (s *Responses) NewWitName(value string) *Response {
 	s.mutex.Lock()
 	s.counter++
-	res := newResponse()
+	res := NewResponse()
 	res.subId = s.counter
 	s.items[value] = res
 	s.mutex.Unlock()
@@ -111,7 +102,7 @@ func (s *Responses) New() *Response {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.counter++
-	res := newResponse()
+	res := NewResponse()
 	res.subId = s.counter
 	s.items[strconv.Itoa(s.counter)] = res
 	return res
@@ -172,7 +163,7 @@ func (c *Consumers) New(linkedClient *Client) *Consumer {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
-	var item = &Consumer{ID: lastId, response: newResponse()}
+	var item = &Consumer{ID: lastId, response: NewResponse()}
 	item.LikedClient = linkedClient
 	c.items[lastId] = item
 	return item
@@ -202,16 +193,5 @@ func (c *Consumers) RemoveById(id byte) error {
 		return errors.New("Consumer #{id} not found ")
 	}
 	delete(c.items, id)
-	return nil
-}
-
-func (c *Consumers) UnsubscribeAll() error {
-	for _, i2 := range c.items {
-		err := i2.UnSubscribe()
-		if err != nil {
-			return err
-		}
-
-	}
 	return nil
 }
