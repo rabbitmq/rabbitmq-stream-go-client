@@ -4,31 +4,27 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/Azure/go-amqp"
-	"github.com/gsantomaggio/go-stream-client/pkg/stream"
+	"github.com/gsantomaggio/go-stream-client/pkg/streaming"
 	"os"
 	"time"
 )
 
-
-
 func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
-	var client = stream.NewStreamingClient()                                  // create Client Struct
-	err := client.Connect("rabbitmq-stream://guest:guest@localhost:5551/%2f") // Connect
+	var client = streaming.NewStreamingClient()                                  // create Client Struct
+	err := client.Connect("rabbitmq-streaming://guest:guest@localhost:5551/%2f") // Connect
 	if err != nil {
 		fmt.Printf("Error during connection: %s", err)
 		return
 	}
 	fmt.Println("Connected to localhost")
-	streamName := "golang-stream"
-	_, err = client.CreateStream(streamName) // Create the streaming queue
+	streamName := "golang-streamingh12"
+	err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create the streaming queue
 	if err != nil {
-		fmt.Printf("Error creating stream: %s", err)
+		fmt.Printf("Error creating streaming: %s", err)
 		return
 	}
-
-
 
 	// Get a new subscribe to publish the messages
 	producer, err := client.NewProducer(streamName)
@@ -57,15 +53,13 @@ func main() {
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
 
-
-
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 
-	_, err = client.DeleteStream(streamName) // Remove the streaming queue and the data
+	err = client.DeleteStream(streamName) // Remove the streaming queue and the data
 	if err != nil {
-		fmt.Printf("error deleting stream: %s \n", err)
+		fmt.Printf("error deleting streaming: %s \n", err)
 		return
 	}
 	err = client.Close()

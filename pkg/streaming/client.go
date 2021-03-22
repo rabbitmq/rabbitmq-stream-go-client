@@ -1,4 +1,4 @@
-package stream
+package streaming
 
 import (
 	"bufio"
@@ -19,30 +19,10 @@ type ClientProperties struct {
 	items map[string]string
 }
 
-type Socket struct {
-	connection net.Conn
-	connected  bool
-	mutex      *sync.Mutex
-}
-
-func (socket *Socket) SetConnect(value bool) {
-	socket.mutex.Lock()
-	defer socket.mutex.Unlock()
-	socket.connected = value
-}
-
-func (socket *Socket) GetConnect() bool {
-	socket.mutex.Lock()
-	defer socket.mutex.Unlock()
-	return socket.connected
-}
-
 type Client struct {
 	socket           Socket
 	clientProperties ClientProperties
 	tuneState        TuneState
-	writer           *bufio.Writer
-	reader           *bufio.Reader
 	producers        *Producers
 	responses        *Responses
 	consumers        *Consumers
@@ -74,17 +54,12 @@ func (client *Client) Connect(addr string) error {
 	if err2 != nil {
 		return err2
 	}
-	client.socket = struct {
-		connection net.Conn
-		connected  bool
-		mutex      *sync.Mutex
-	}{connection: connection, mutex: &sync.Mutex{}}
-
-	client.writer = bufio.NewWriter(client.socket.connection)
+	client.socket = Socket{connection: connection, mutex: &sync.Mutex{},
+		writer: bufio.NewWriter(connection)}
 	client.socket.SetConnect(true)
 
 	go client.handleResponse()
-	_, err2 = client.peerProperties()
+	err2 = client.peerProperties()
 
 	if err2 != nil {
 		return err2
@@ -98,7 +73,7 @@ func (client *Client) Connect(addr string) error {
 	if len(u.Path) > 1 {
 		vhost, _ = url.QueryUnescape(u.Path[1:])
 	}
-	_, err2 = client.open(vhost)
+	err2 = client.open(vhost)
 	if err2 != nil {
 		return err2
 	}
@@ -107,49 +82,10 @@ func (client *Client) Connect(addr string) error {
 	return nil
 }
 
-func (client *Client) CreateStream(stream string) (Code, error) {
-
-	resp := client.responses.New()
-	length := 2 + 2 + 4 + 2 + len(stream) + 4
-	correlationId := resp.subId
-	arguments := make(map[string]string)
-	arguments["queue-leader-locator"] = "least-leaders"
-	for key, element := range arguments {
-		length = length + 2 + len(key) + 2 + len(element)
-	}
-	var b = bytes.NewBuffer(make([]byte, 0, length))
-	WriteInt(b, length)
-	WriteShort(b, CommandCreateStream)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
-	WriteString(b, stream)
-	WriteInt(b, len(arguments))
-
-	for key, element := range arguments {
-		WriteString(b, key)
-		WriteString(b, element)
-	}
-
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return Code{}, err
-	}
-	code, err := WaitCodeWithDefaultTimeOut(resp, CommandCreateStream)
-	if err != nil {
-		return Code{}, err
-	}
-
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return Code{}, err
-	}
-	return code, nil
-}
-
-func (client *Client) peerProperties() (Code, error) {
+func (client *Client) peerProperties() error {
 	clientPropertiesSize := 4 // size of the map, always there
 
-	client.clientProperties.items["connection_name"] = "rabbitmq-stream-locator"
+	client.clientProperties.items["connection_name"] = "rabbitmq-StreamCreator-locator"
 	client.clientProperties.items["product"] = "RabbitMQ Stream"
 	client.clientProperties.items["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
 	client.clientProperties.items["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
@@ -175,19 +111,7 @@ func (client *Client) peerProperties() (Code, error) {
 		WriteString(b, element)
 	}
 
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return Code{}, err
-	}
-	code, err := WaitCodeWithDefaultTimeOut(resp, CommandPeerProperties)
-	if err != nil {
-		return Code{}, err
-	}
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return Code{}, err
-	}
-	return code, nil
+	return client.HandleWrite(b.Bytes(), resp)
 }
 
 func (client *Client) authenticate(user string, password string) error {
@@ -213,9 +137,9 @@ func (client *Client) getSaslMechanisms() []string {
 	WriteShort(b, CommandSaslHandshake)
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
-	client.writeAndFlush(b.Bytes())
+	err := client.socket.writeAndFlush(b.Bytes())
 	data := <-resp.data
-	err := client.responses.RemoveById(correlationId)
+	err = client.responses.RemoveById(correlationId)
 	if err != nil {
 		return nil
 	}
@@ -236,19 +160,7 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	WriteString(b, saslMechanism)
 	WriteInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return err
-	}
-
-	_, err = WaitCodeWithDefaultTimeOut(resp, CommandSaslAuthenticate)
-	if err != nil {
-		return err
-	}
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return err
-	}
+	err := client.HandleWrite(b.Bytes(), resp)
 
 	// double read for TUNE
 	tuneData := <-respTune.data
@@ -257,10 +169,10 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 		return err
 	}
 
-	return client.writeAndFlush(tuneData.([]byte))
+	return client.socket.writeAndFlush(tuneData.([]byte))
 }
 
-func (client *Client) open(virtualHost string) (Code, error) {
+func (client *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
 	resp := client.responses.New()
 	correlationId := resp.subId
@@ -270,23 +182,10 @@ func (client *Client) open(virtualHost string) (Code, error) {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteString(b, virtualHost)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return Code{}, err
-	}
-	code, err := WaitCodeWithDefaultTimeOut(resp, CommandOpen)
-	if err != nil {
-		return Code{}, err
-	}
-
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return Code{}, err
-	}
-	return code, nil
+	return client.HandleWrite(b.Bytes(), resp)
 }
 
-func (client *Client) DeleteStream(stream string) (Code, error) {
+func (client *Client) DeleteStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream)
 	resp := client.responses.New()
 	correlationId := resp.subId
@@ -296,34 +195,8 @@ func (client *Client) DeleteStream(stream string) (Code, error) {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteString(b, stream)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return Code{}, err
-	}
-	code, err := WaitCodeWithDefaultTimeOut(resp, CommandDeleteStream)
-	if err != nil {
-		return Code{}, err
-	}
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return Code{}, err
-	}
-	return code, nil
-}
 
-func (client *Client) writeAndFlush(buffer []byte) error {
-	client.socket.mutex.Lock()
-	defer client.socket.mutex.Unlock()
-	_, err := client.writer.Write(buffer)
-	if err != nil {
-		return err
-	}
-	err = client.writer.Flush()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return client.HandleWrite(b.Bytes(), resp)
 }
 
 func (client *Client) UnSubscribe(id uint8) error {
@@ -336,18 +209,7 @@ func (client *Client) UnSubscribe(id uint8) error {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteByte(b, id)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return err
-	}
-	_, err = WaitCodeWithDefaultTimeOut(resp, CommandUnsubscribe)
-	if err != nil {
-		return  err
-	}
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return err
-	}
+	err := client.HandleWrite(b.Bytes(), resp)
 
 	consumer, err := client.consumers.GetById(id)
 	if err != nil {
@@ -382,7 +244,7 @@ func (client *Client) sendHeartbeat() {
 	WriteShort(b, CommandHeartbeat)
 	WriteShort(b, Version1)
 
-	client.writeAndFlush(b.Bytes())
+	client.socket.writeAndFlush(b.Bytes())
 }
 
 func (client *Client) Close() error {

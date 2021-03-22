@@ -1,4 +1,4 @@
-package stream
+package streaming
 
 import (
 	"github.com/Azure/go-amqp"
@@ -23,7 +23,6 @@ var _ = AfterSuite(func() {
 	Expect(testClient.producers.Count()).To(Equal(0))
 	Expect(testClient.responses.Count()).To(Equal(0))
 	Expect(testClient.consumers.Count()).To(Equal(0))
-
 })
 
 var _ = Describe("Streaming testClient", func() {
@@ -35,16 +34,15 @@ var _ = Describe("Streaming testClient", func() {
 
 	Describe("Streaming testClient", func() {
 		It("Connection ", func() {
-			err := testClient.Connect("rabbitmq-stream://guest:guest@localhost:5551/%2f")
+			err := testClient.Connect("rabbitmq-StreamCreator://guest:guest@localhost:5551/%2f")
 			Expect(err).NotTo(HaveOccurred())
 		})
 		It("Create Stream", func() {
-			code, err := testClient.CreateStream(testStreamName)
+			err := testClient.StreamCreator().Stream(testStreamName).Create()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeOk))
 
 		})
-		It("New/UnSubscribe Publisher", func() {
+		It("New/Close Publisher", func() {
 			producer, err := testClient.NewProducer(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 			err = producer.Close()
@@ -89,28 +87,21 @@ var _ = Describe("Streaming testClient", func() {
 			wg.Wait()
 		})
 		It("Delete Stream", func() {
-			code, err := testClient.DeleteStream(testStreamName)
+			err := testClient.DeleteStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeOk))
 		})
 		It("Create two times Stream", func() {
-			code, err := testClient.CreateStream(testStreamName)
+			err := testClient.StreamCreator().Stream(testStreamName).Create()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeOk))
-
-			code, err = testClient.CreateStream(testStreamName)
+			err = testClient.StreamCreator().Stream(testStreamName).Create()
+			Expect(err).To(HaveOccurred())
+			err = testClient.DeleteStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeStreamAlreadyExists))
-
-			code, err = testClient.DeleteStream(testStreamName)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeOk))
 		})
 
 		It("Subscribe and Unsubscribe", func() {
-			code, err := testClient.CreateStream(testStreamName)
+			err := testClient.StreamCreator().Stream(testStreamName).Create()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeOk))
 			consumer, err := testClient.NewConsumer(testStreamName, func(subscriberId byte, message *amqp.Message) {
 
 			})
@@ -120,16 +111,14 @@ var _ = Describe("Streaming testClient", func() {
 
 			err = consumer.UnSubscribe()
 			Expect(err).NotTo(HaveOccurred())
-			code, err = testClient.DeleteStream(testStreamName)
+			err = testClient.DeleteStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeOk))
 
 		})
 
 		It("Subscribe Count Messages", func() {
-			code, err := testClient.CreateStream(testStreamName)
+			err := testClient.StreamCreator().Stream(testStreamName).Create()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeOk))
 
 			producer, err := testClient.NewProducer(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
@@ -160,12 +149,9 @@ var _ = Describe("Streaming testClient", func() {
 			err = producer.Close()
 			Expect(err).NotTo(HaveOccurred())
 
-			code, err = testClient.DeleteStream(testStreamName)
+			err = testClient.DeleteStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeOk))
 		})
-
-
 
 	})
 })

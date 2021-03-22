@@ -1,4 +1,4 @@
-package stream
+package streaming
 
 import (
 	"bytes"
@@ -45,16 +45,7 @@ func (client *Client) declareConsumer(stream string, m func(subscriberId byte, m
 	//}
 	WriteShort(b, 10)
 
-	client.writeAndFlush(b.Bytes())
-
-	_, err := WaitCodeWithDefaultTimeOut(resp, CommandSubscribe)
-	if err != nil {
-		return nil, err
-	}
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return nil, err
-	}
+	res := client.HandleWrite(b.Bytes(), resp)
 
 	go func() {
 		for true {
@@ -71,7 +62,7 @@ func (client *Client) declareConsumer(stream string, m func(subscriberId byte, m
 		}
 	}()
 
-	return consumer, nil
+	return consumer, res
 }
 
 func (client *Client) credit(subscriptionId byte, credit int16) {
@@ -85,10 +76,9 @@ func (client *Client) credit(subscriptionId byte, credit int16) {
 	WriteShort(b, Version1)
 	WriteByte(b, subscriptionId)
 	WriteShort(b, credit)
-	client.writeAndFlush(b.Bytes())
+	client.socket.writeAndFlush(b.Bytes())
 }
 
 func (consumer *Consumer) UnSubscribe() error {
 	return consumer.LikedClient.UnSubscribe(consumer.ID)
 }
-

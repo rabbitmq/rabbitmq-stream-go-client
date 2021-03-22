@@ -1,4 +1,4 @@
-package stream
+package streaming
 
 import (
 	"bytes"
@@ -43,7 +43,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 		seq += 1
 	}
 
-	err := producer.LikedClient.writeAndFlush(b.Bytes())
+	err := producer.LikedClient.socket.writeAndFlush(b.Bytes())
 	if err != nil {
 		return 0, err
 	}
@@ -97,19 +97,8 @@ func (client *Client) declarePublisher(stream string) (*Producer, error) {
 	WriteByte(b, producer.ID)
 	WriteShort(b, int16(publisherReferenceSize))
 	WriteString(b, stream)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return nil, err
-	}
-	_, err = WaitCodeWithDefaultTimeOut(resp, CommandDeclarePublisher)
-	if err != nil {
-		return nil, err
-	}
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return nil, err
-	}
-	return producer, nil
+	res := client.HandleWrite(b.Bytes(), resp)
+	return producer, res
 }
 
 func (client *Client) deletePublisher(publisherId byte) error {
@@ -122,18 +111,7 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteByte(b, publisherId)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return err
-	}
-	_, err = WaitCodeWithDefaultTimeOut(resp, CommandDeletePublisher)
-	if err != nil {
-		return err
-	}
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return err
-	}
+	err := client.HandleWrite(b.Bytes(), resp)
 	err = client.producers.RemoveById(publisherId)
 	if err != nil {
 		return err
@@ -141,6 +119,3 @@ func (client *Client) deletePublisher(publisherId byte) error {
 
 	return nil
 }
-
-
-

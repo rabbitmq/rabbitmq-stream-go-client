@@ -1,4 +1,4 @@
-package stream
+package streaming
 
 import (
 	"github.com/pkg/errors"
@@ -31,6 +31,7 @@ type Response struct {
 	code  chan Code
 	data  chan interface{}
 	subId int
+	sourceCommand string
 }
 
 func NewProducers() *Producers {
