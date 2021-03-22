@@ -165,22 +165,7 @@ var _ = Describe("Streaming testClient", func() {
 			Expect(code.id).To(Equal(ResponseCodeOk))
 		})
 
-		It("massive insert and delete all ", func() {
-			code, err := testClient.CreateStream("producers")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(code.id).To(Equal(ResponseCodeOk))
-			var producersId []uint8
-			for i := 0; i < 100; i++ {
-				p, err := testClient.NewProducer("producers")
-				Expect(err).NotTo(HaveOccurred())
-				producersId = append(producersId, p.ID)
-			}
-			Expect(testClient.producers.Count()).To(Equal(100))
-			err = testClient.CloseAllProducers()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(testClient.producers.Count()).To(Equal(0))
-			_, err = testClient.DeleteStream("producers")
-			Expect(err).NotTo(HaveOccurred())
-		})
+
+
 	})
 })

@@ -11,7 +11,10 @@ var _ = Describe("Coordinator", func() {
 		It("Add/Remove Producers ", func() {
 			p := testClient.producers.New(testClient)
 			Expect(p.ID).To(Equal(uint8(0)))
-			err := testClient.producers.RemoveById(p.ID)
+			same,err := testClient.producers.GetById(0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(p.ID).To(Equal(same.ID))
+			err = testClient.producers.RemoveById(p.ID)
 			Expect(err).NotTo(HaveOccurred())
 		})
 

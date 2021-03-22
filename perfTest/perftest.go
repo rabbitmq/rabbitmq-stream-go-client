@@ -67,11 +67,7 @@ func main() {
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	fmt.Print("Closing all producers ")
-	err = client.CloseAllProducers()
-	if err != nil {
-		fmt.Printf("error removing producers: %s", err)
-		return
-	}
+
 	_, err = client.DeleteStream(streamName) // Remove the streaming queue and the data
 	if err != nil {
 		fmt.Printf("error deleting stream: %s \n", err)

@@ -142,10 +142,5 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	return nil
 }
 
-func (client *Client) CloseAllProducers() error {
-	return client.producers.CloseAll()
-}
 
-func (client *Client) UnSubscribeAll() error {
-	return client.consumers.UnsubscribeAll()
-}
+

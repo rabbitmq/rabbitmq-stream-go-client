@@ -91,3 +91,4 @@ func (client *Client) credit(subscriptionId byte, credit int16) {
 func (consumer *Consumer) UnSubscribe() error {
 	return consumer.LikedClient.UnSubscribe(consumer.ID)
 }
+
