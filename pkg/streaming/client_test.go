@@ -47,8 +47,7 @@ var _ = Describe("Streaming testClient", func() {
 			_, err := NewClientCreator().
 				Uri("rabbitmq-StreamCreator://g:g@noendpoint:5551/%2f").
 				Connect()
-			Expect(fmt.Sprintf("%s", err)).
-				To(ContainSubstring("no such host"))
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("Create Stream", func() {
