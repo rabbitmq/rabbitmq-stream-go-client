@@ -22,8 +22,7 @@ func main() {
 	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
 	///
 
-	var client = streaming.NewStreamingClient() // create Client Struct
-	err := client.Connect(uris)                 // Connect
+	client, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
 	if err != nil {
 		fmt.Printf("Error during connection: %s", err)
 		return
@@ -40,7 +39,7 @@ func main() {
 			return
 		}
 		for p := 0; p < numberOfProducers; p++ {
-			producer, err := client.NewProducer(streamName)
+			producer, err := client.ProducerCreator().Stream(streamName).Build()
 			if err != nil {
 				fmt.Printf("Error producer: %s", err)
 				return

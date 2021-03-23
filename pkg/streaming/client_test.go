@@ -13,7 +13,9 @@ import (
 var testClient *Client
 var testStreamName string
 var _ = BeforeSuite(func() {
-	testClient = NewStreamingClient()
+	client, err := NewClientCreator().Connect()
+	testClient = client
+	Expect(err).NotTo(HaveOccurred())
 	testStreamName = uuid.New().String()
 })
 
@@ -34,7 +36,7 @@ var _ = Describe("Streaming testClient", func() {
 
 	Describe("Streaming testClient", func() {
 		It("Connection ", func() {
-			err := testClient.Connect("rabbitmq-StreamCreator://guest:guest@localhost:5551/%2f")
+			err := testClient.connect("rabbitmq-StreamCreator://guest:guest@localhost:5551/%2f")
 			Expect(err).NotTo(HaveOccurred())
 		})
 		It("Create Stream", func() {
@@ -43,14 +45,14 @@ var _ = Describe("Streaming testClient", func() {
 
 		})
 		It("New/Close Publisher", func() {
-			producer, err := testClient.NewProducer(testStreamName)
+			producer, err := testClient.ProducerCreator().Stream(testStreamName).Build()
 			Expect(err).NotTo(HaveOccurred())
 			err = producer.Close()
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("New/Publish/UnSubscribe Publisher", func() {
-			producer, err := testClient.NewProducer(testStreamName)
+			producer, err := testClient.ProducerCreator().Stream(testStreamName).Build()
 			Expect(err).NotTo(HaveOccurred())
 			var arr []*amqp.Message
 			for z := 0; z < 10; z++ {
@@ -70,7 +72,7 @@ var _ = Describe("Streaming testClient", func() {
 				wg.Add(1)
 				go func(wg *sync.WaitGroup) {
 					defer wg.Done()
-					producer, err := testClient.NewProducer(testStreamName)
+					producer, err := testClient.ProducerCreator().Stream(testStreamName).Build()
 					Expect(err).NotTo(HaveOccurred())
 					var arr []*amqp.Message
 					for z := 0; z < 5; z++ {
@@ -123,7 +125,7 @@ var _ = Describe("Streaming testClient", func() {
 			err := testClient.StreamCreator().Stream(testStreamName).Create()
 			Expect(err).NotTo(HaveOccurred())
 
-			producer, err := testClient.NewProducer(testStreamName)
+			producer, err := testClient.ProducerCreator().Stream(testStreamName).Build()
 			Expect(err).NotTo(HaveOccurred())
 			var arr []*amqp.Message
 			for z := 0; z < 5; z++ {

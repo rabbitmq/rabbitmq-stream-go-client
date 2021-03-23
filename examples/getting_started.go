@@ -17,25 +17,25 @@ func checkErr(err error) {
 func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
-	var client = streaming.NewStreamingClient()                                  // create Client Struct
-	err := client.Connect("rabbitmq-streaming://guest:guest@localhost:5551/%2f") // Connect
+	client, err := streaming.NewClientCreator().Connect() // create Client Struct
 	checkErr(err)
 
 	fmt.Println("Connected to localhost")
 	streamName := "golang-streamingh12"
 	err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create the streaming queue
+
 	checkErr(err)
 
 	consumer, err := client.ConsumerCreator().
 		Stream(streamName).
-		Name("myconsumer").
+		Name("my_consumer").
 		MessagesHandler(func(consumerId uint8, message *amqp.Message) {
 			fmt.Printf("received %d, message %s \n", consumerId, message.Data)
 		}).Build()
 	checkErr(err)
 
 	// Get a new producer to publish the messages
-	producer, err := client.NewProducer(streamName)
+	producer, err := client.ProducerCreator().Stream(streamName).Build()
 	checkErr(err)
 
 	numberOfMessages := 100

@@ -28,16 +28,7 @@ type Client struct {
 	consumers        *Consumers
 }
 
-func NewStreamingClient() *Client {
-	client := &Client{
-		producers: NewProducers(),
-		responses: NewResponses(),
-		consumers: NewConsumers(),
-	}
-	return client
-}
-
-func (client *Client) Connect(addr string) error {
+func (client *Client) connect(addr string) error {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return err
