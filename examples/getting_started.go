@@ -9,35 +9,27 @@ import (
 	"time"
 )
 
-func checkErr(err error) {
-	if err != nil {
-		fmt.Printf("Error operation: %s", err)
-	}
-}
 func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 	client, err := streaming.NewClientCreator().Connect() // create Client Struct
-	checkErr(err)
+	streaming.CheckErr(err)
 
 	fmt.Println("Connected to localhost")
 	streamName := "golang-streamingh12"
 	err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create the streaming queue
 
-	checkErr(err)
-
+	streaming.CheckErr(err)
 	consumer, err := client.ConsumerCreator().
 		Stream(streamName).
 		Name("my_consumer").
 		MessagesHandler(func(consumerId uint8, message *amqp.Message) {
 			fmt.Printf("received %d, message %s \n", consumerId, message.Data)
 		}).Build()
-	checkErr(err)
-
+	streaming.CheckErr(err)
 	// Get a new producer to publish the messages
 	producer, err := client.ProducerCreator().Stream(streamName).Build()
-	checkErr(err)
-
+	streaming.CheckErr(err)
 	numberOfMessages := 100
 	batchSize := 100
 
@@ -51,8 +43,7 @@ func main() {
 			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d_%d", z, f) )))
 		}
 		_, err = producer.BatchPublish(nil, arr) // batch send
-		checkErr(err)
-
+		streaming.CheckErr(err)
 	}
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
@@ -62,13 +53,10 @@ func main() {
 	_, _ = reader.ReadString('\n')
 
 	err = consumer.UnSubscribe()
-	checkErr(err)
-
+	streaming.CheckErr(err)
 	err = client.DeleteStream(streamName) // Remove the streaming queue and the data
-	checkErr(err)
-
+	streaming.CheckErr(err)
 	err = client.Close()
-	checkErr(err)
-
+	streaming.CheckErr(err)
 	fmt.Println("Bye bye")
 }

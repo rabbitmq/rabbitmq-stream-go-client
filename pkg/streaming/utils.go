@@ -34,3 +34,10 @@ func WaitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 	}
 
 }
+
+
+func CheckErr(err error) {
+	if err != nil {
+		fmt.Printf("Error operation: %s", err)
+	}
+}

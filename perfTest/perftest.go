@@ -23,10 +23,7 @@ func main() {
 	///
 
 	client, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
-	if err != nil {
-		fmt.Printf("Error during connection: %s", err)
-		return
-	}
+	streaming.CheckErr(err)
 	fmt.Printf("Connected to %s \n", uris)
 
 	var producers []*streaming.Producer
@@ -34,16 +31,10 @@ func main() {
 	for i := 0; i < numberOfStreams; i++ {
 		streamName := fmt.Sprintf("golang-streaming-%d", i)
 		err = client.StreamCreator().Stream(streamName).Create()
-		if err != nil {
-			fmt.Printf("Error creating streaming: %s", err)
-			return
-		}
+		streaming.CheckErr(err)
 		for p := 0; p < numberOfProducers; p++ {
 			producer, err := client.ProducerCreator().Stream(streamName).Build()
-			if err != nil {
-				fmt.Printf("Error producer: %s", err)
-				return
-			}
+			streaming.CheckErr(err)
 			producers = append(producers, producer)
 		}
 
@@ -56,10 +47,7 @@ func main() {
 
 				}).Build()
 
-			if err != nil {
-				fmt.Printf("Error consumer: %s", err)
-				return
-			}
+			streaming.CheckErr(err)
 			consumers = append(consumers, consumer)
 		}
 
@@ -79,10 +67,7 @@ func main() {
 		go func(prod *streaming.Producer, wg *sync.WaitGroup) {
 			for m := 0; m < numberOfMessages; m++ {
 				_, err = prod.BatchPublish(nil, arr) // batch send
-				if err != nil {
-					fmt.Printf("Error publish: %s", err)
-					return
-				}
+				streaming.CheckErr(err)
 			}
 			wg.Done()
 		}(producer, &wg)
@@ -95,17 +80,21 @@ func main() {
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	for _, producer := range producers {
-		producer.Close()
+		err = producer.Close()
+		streaming.CheckErr(err)
 	}
 	for _, consumer := range consumers {
-		consumer.UnSubscribe()
+		err = consumer.UnSubscribe()
+		streaming.CheckErr(err)
 	}
 
 	for i := 0; i < numberOfStreams; i++ {
 		streamName := fmt.Sprintf("golang-streaming-%d", i)
-		client.DeleteStream(streamName)
+		err = client.DeleteStream(streamName)
+		streaming.CheckErr(err)
 	}
 
-	client.Close()
+	err = client.Close()
+	streaming.CheckErr(err)
 	fmt.Println("Bye bye")
 }
