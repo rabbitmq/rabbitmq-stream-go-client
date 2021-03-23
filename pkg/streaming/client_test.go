@@ -1,6 +1,7 @@
 package streaming
 
 import (
+	"fmt"
 	"github.com/Azure/go-amqp"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
@@ -35,10 +36,21 @@ var _ = Describe("Streaming testClient", func() {
 	})
 
 	Describe("Streaming testClient", func() {
-		It("Connection ", func() {
-			err := testClient.connect("rabbitmq-StreamCreator://guest:guest@localhost:5551/%2f")
-			Expect(err).NotTo(HaveOccurred())
+		It("Connection Authentication Failure", func() {
+			_, err := NewClientCreator().
+				Uri("rabbitmq-StreamCreator://wrong_user:wrong_password@localhost:5551/%2f").
+				Connect()
+			Expect(fmt.Sprintf("%s", err)).
+				To(ContainSubstring("Authentication Failure"))
 		})
+		It("Connection No Endpoint", func() {
+			_, err := NewClientCreator().
+				Uri("rabbitmq-StreamCreator://g:g@noendpoint:5551/%2f").
+				Connect()
+			Expect(fmt.Sprintf("%s", err)).
+				To(ContainSubstring("no such host"))
+		})
+
 		It("Create Stream", func() {
 			err := testClient.StreamCreator().Stream(testStreamName).Create()
 			Expect(err).NotTo(HaveOccurred())

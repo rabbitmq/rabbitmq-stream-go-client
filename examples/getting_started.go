@@ -13,7 +13,8 @@ import (
 func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
-	client, err := streaming.NewClientCreator().Connect() // create Client Struct
+	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
+	client, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
 	streaming.CheckErr(err)
 
 	fmt.Println("Connected to localhost")

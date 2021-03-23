@@ -152,7 +152,9 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	WriteInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
 	err := client.HandleWrite(b.Bytes(), resp)
-
+	if err != nil {
+		return err
+	}
 	// double read for TUNE
 	tuneData := <-respTune.data
 	err = client.responses.RemoveByName("tune")

@@ -25,19 +25,17 @@ func WaitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 	select {
 	case code := <-response.code:
 		if code.id != ResponseCodeOk {
-			return errors.New(fmt.Sprintf("Error code%d", code.id))
+			return errors.New(fmt.Sprintf("Error: %s", LookErrorCode(code.id)))
 		}
 		return nil
 	case <-time.After(timeout):
 		fmt.Printf("Timeout waiting Code, operation:%d \n", response.subId)
 		return errors.New(fmt.Sprintf("Timeout waiting Code, operation:%d \n", response.subId))
 	}
-
 }
-
 
 func CheckErr(err error) {
 	if err != nil {
-		fmt.Printf("Error operation: %s", err)
+		fmt.Printf("Error operation: %s \n", err)
 	}
 }
