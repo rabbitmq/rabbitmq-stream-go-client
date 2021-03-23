@@ -5,7 +5,7 @@
 
 A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 
-### How to easy test
+### How to test
 ---
 - Run RabbitMQ docker image with streaming:
    ```
@@ -18,11 +18,37 @@ A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-s
   ```
    go run examples/getting_started.go
   ```
+### API
+
+```golang
+client, err := streaming.NewClientCreator().Uri(uris).Connect() // Create and Connect a client
+```
+
+```golang
+err = client.StreamCreator().Stream(streamName).Create() // Create streaming queue without parameters
+err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create streaming queue parameters
+```
+
+```golang
+/// Implement a consumer
+consumer, err := client.ConsumerCreator().
+		Stream(streamName).
+		Name("my_consumer").
+		MessagesHandler(func(consumerId uint8, message *amqp.Message) {
+			fmt.Printf("received %d, message %s \n", consumerId, message.Data)
+		}).Build()
+```
+
+```golang
+/// get a producer
+producer, err := client.ProducerCreator().Stream(streamName).Build()
+```
+
 
 ### Methods Implemented:
 ---
  - Open(vhost)
- - CreateStream (basic version)
+ - CreateStream
  - DeleteStream
  - DeclarePublisher
  - Close Publisher
