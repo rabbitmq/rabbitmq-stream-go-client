@@ -22,7 +22,7 @@ A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-s
 ### Methods Implemented:
 ---
  - Open(vhost)
- - CreateStream (basic version)
+ - CreateStream
  - DeleteStream
  - DeclarePublisher
  - Close Publisher
