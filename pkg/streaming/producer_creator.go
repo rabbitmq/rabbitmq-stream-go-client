@@ -1,4 +1,4 @@
-package stream
+package streaming
 
 import (
 	"bytes"
@@ -10,6 +10,39 @@ type Producer struct {
 	ID          uint8
 	LikedClient *Client
 	response    *Response
+}
+
+type ProducerCreator struct {
+	client          *Client
+	streamName      string
+}
+
+func (client *Client) ProducerCreator() *ProducerCreator {
+	return &ProducerCreator{client: client}
+}
+
+func (c *ProducerCreator) Stream(streamName string) *ProducerCreator {
+	c.streamName = streamName
+	return c
+}
+
+func (c *ProducerCreator) Build() (*Producer, error) {
+	producer := c.client.producers.New(c.client)
+	publisherReferenceSize := 0
+	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(c.streamName)
+	resp := c.client.responses.New()
+	correlationId := resp.subId
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandDeclarePublisher)
+	WriteShort(b, Version1)
+	WriteInt(b, correlationId)
+	WriteByte(b, producer.ID)
+	WriteShort(b, int16(publisherReferenceSize))
+	WriteString(b, c.streamName)
+	res := c.client.HandleWrite(b.Bytes(), resp)
+	return producer, res
+
 }
 
 func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message) (int, error) {
@@ -43,7 +76,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 		seq += 1
 	}
 
-	err := producer.LikedClient.writeAndFlush(b.Bytes())
+	err := producer.LikedClient.socket.writeAndFlush(b.Bytes())
 	if err != nil {
 		return 0, err
 	}
@@ -79,39 +112,6 @@ func (producer *Producer) Close() error {
 	return producer.LikedClient.deletePublisher(producer.ID)
 }
 
-func (client *Client) NewProducer(stream string) (*Producer, error) {
-	return client.declarePublisher(stream)
-}
-
-func (client *Client) declarePublisher(stream string) (*Producer, error) {
-	producer := client.producers.New(client)
-	publisherReferenceSize := 0
-	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(stream)
-	resp := client.responses.New()
-	correlationId := resp.subId
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandDeclarePublisher)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
-	WriteByte(b, producer.ID)
-	WriteShort(b, int16(publisherReferenceSize))
-	WriteString(b, stream)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return nil, err
-	}
-	_, err = WaitCodeWithDefaultTimeOut(resp, CommandDeclarePublisher)
-	if err != nil {
-		return nil, err
-	}
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return nil, err
-	}
-	return producer, nil
-}
-
 func (client *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
 	resp := client.responses.New()
@@ -122,18 +122,7 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteByte(b, publisherId)
-	err := client.writeAndFlush(b.Bytes())
-	if err != nil {
-		return err
-	}
-	_, err = WaitCodeWithDefaultTimeOut(resp, CommandDeletePublisher)
-	if err != nil {
-		return err
-	}
-	err = client.responses.RemoveById(correlationId)
-	if err != nil {
-		return err
-	}
+	err := client.HandleWrite(b.Bytes(), resp)
 	err = client.producers.RemoveById(publisherId)
 	if err != nil {
 		return err
@@ -141,6 +130,3 @@ func (client *Client) deletePublisher(publisherId byte) error {
 
 	return nil
 }
-
-
-

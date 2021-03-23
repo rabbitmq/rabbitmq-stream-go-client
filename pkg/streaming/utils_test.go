@@ -1,4 +1,4 @@
-package stream
+package streaming
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -15,13 +15,13 @@ var _ = Describe("Utils", func() {
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {
-			_, err := WaitCodeWithDefaultTimeOut(res, 99)
+			err := WaitCodeWithDefaultTimeOut(res)
 			Expect(err).ToNot(HaveOccurred())
 			wg.Done()
 		}(response)
 		time.Sleep(200 * time.Millisecond)
 		response.code <- Code{
-			id:          999,
+			id:          ResponseCodeOk,
 			description: "TEST",
 		}
 
@@ -34,7 +34,7 @@ var _ = Describe("Utils", func() {
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {
-			_, err := WaitCodeWithDefaultTimeOut(res, 99)
+			err := WaitCodeWithDefaultTimeOut(res)
 			Expect(err).To(HaveOccurred())
 			wg.Done()
 		}(response)

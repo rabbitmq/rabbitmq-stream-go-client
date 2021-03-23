@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/Azure/go-amqp"
-	"github.com/gsantomaggio/go-stream-client/pkg/stream"
+	"github.com/gsantomaggio/go-stream-client/pkg/streaming"
 	"os"
 	"sync"
 	"time"
@@ -19,43 +19,35 @@ func main() {
 	numberOfProducers := 3
 	numberOfConsumers := 3
 	numberOfStreams := 3
-	uris := "rabbitmq-stream://guest:guest@localhost:5551/%2f"
+	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
 	///
 
-	var client = stream.NewStreamingClient() // create Client Struct
-	err := client.Connect(uris)              // Connect
-	if err != nil {
-		fmt.Printf("Error during connection: %s", err)
-		return
-	}
+	client, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
+	streaming.CheckErr(err)
 	fmt.Printf("Connected to %s \n", uris)
 
-	var producers []*stream.Producer
-	var consumers []*stream.Consumer
+	var producers []*streaming.Producer
+	var consumers []*streaming.Consumer
 	for i := 0; i < numberOfStreams; i++ {
-		streamName := fmt.Sprintf("golang-stream-%d", i)
-		_, err = client.CreateStream(streamName) // Create the streaming queue
-		if err != nil {
-			fmt.Printf("Error creating stream: %s", err)
-			return
-		}
+		streamName := fmt.Sprintf("golang-streaming-%d", i)
+		err = client.StreamCreator().Stream(streamName).Create()
+		streaming.CheckErr(err)
 		for p := 0; p < numberOfProducers; p++ {
-			producer, err := client.NewProducer(streamName)
-			if err != nil {
-				fmt.Printf("Error producer: %s", err)
-				return
-			}
+			producer, err := client.ProducerCreator().Stream(streamName).Build()
+			streaming.CheckErr(err)
 			producers = append(producers, producer)
 		}
 
 		for p := 0; p < numberOfConsumers; p++ {
-			consumer, err := client.NewConsumer(streamName, func(subscriberId byte, message *amqp.Message) {
 
-			})
-			if err != nil {
-				fmt.Printf("Error consumer: %s", err)
-				return
-			}
+			consumer, err := client.ConsumerCreator().
+				Stream(streamName).
+				Name("my_consumer").
+				MessagesHandler(func(consumerId uint8, message *amqp.Message) {
+
+				}).Build()
+
+			streaming.CheckErr(err)
 			consumers = append(consumers, consumer)
 		}
 
@@ -72,13 +64,10 @@ func main() {
 	wg := sync.WaitGroup{}
 	for _, producer := range producers {
 		wg.Add(1)
-		go func(prod *stream.Producer, wg *sync.WaitGroup) {
+		go func(prod *streaming.Producer, wg *sync.WaitGroup) {
 			for m := 0; m < numberOfMessages; m++ {
 				_, err = prod.BatchPublish(nil, arr) // batch send
-				if err != nil {
-					fmt.Printf("Error publish: %s", err)
-					return
-				}
+				streaming.CheckErr(err)
 			}
 			wg.Done()
 		}(producer, &wg)
@@ -91,17 +80,21 @@ func main() {
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	for _, producer := range producers {
-		producer.Close()
+		err = producer.Close()
+		streaming.CheckErr(err)
 	}
 	for _, consumer := range consumers {
-		consumer.UnSubscribe()
+		err = consumer.UnSubscribe()
+		streaming.CheckErr(err)
 	}
 
 	for i := 0; i < numberOfStreams; i++ {
-		streamName := fmt.Sprintf("golang-stream-%d", i)
-		client.DeleteStream(streamName)
+		streamName := fmt.Sprintf("golang-streaming-%d", i)
+		err = client.DeleteStream(streamName)
+		streaming.CheckErr(err)
 	}
 
-	client.Close()
+	err = client.Close()
+	streaming.CheckErr(err)
 	fmt.Println("Bye bye")
 }

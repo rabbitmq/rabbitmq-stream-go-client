@@ -1,4 +1,4 @@
-package stream
+package streaming
 
 import "time"
 
@@ -53,5 +53,8 @@ const (
 	CloseChannel = uint16(60)
 	///
 	DefaultSocketCallTimeout = 3 * time.Second
+
+	///
+	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
 
 )

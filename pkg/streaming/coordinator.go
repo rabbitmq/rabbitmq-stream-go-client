@@ -1,4 +1,4 @@
-package stream
+package streaming
 
 import (
 	"github.com/pkg/errors"
@@ -28,9 +28,10 @@ type Code struct {
 }
 
 type Response struct {
-	code  chan Code
-	data  chan interface{}
-	subId int
+	code          chan Code
+	data          chan interface{}
+	subId         int
+	sourceCommand string
 }
 
 func NewProducers() *Producers {
@@ -48,8 +49,6 @@ func (c *Producers) New(linkedClient *Client) *Producer {
 	c.items[lastId] = producer
 	return producer
 }
-
-
 
 func (c *Producers) GetById(id uint8) (*Producer, error) {
 	c.mutex.Lock()
@@ -164,7 +163,7 @@ func (c *Consumers) New(linkedClient *Client) *Consumer {
 	defer c.mutex.Unlock()
 	var lastId = uint8(len(c.items))
 	var item = &Consumer{ID: lastId, response: NewResponse()}
-	item.LikedClient = linkedClient
+	item.client = linkedClient
 	c.items[lastId] = item
 	return item
 }
@@ -178,13 +177,11 @@ func (c *Consumers) GetById(id uint8) (*Consumer, error) {
 	return c.items[id], nil
 }
 
-
 func (c *Consumers) Count() int {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	return len(c.items)
 }
-
 
 func (c *Consumers) RemoveById(id byte) error {
 	c.mutex.Lock()
