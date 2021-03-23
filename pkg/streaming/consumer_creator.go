@@ -5,28 +5,50 @@ import (
 	"github.com/Azure/go-amqp"
 )
 
-type Handler interface {
-	Messages(message *amqp.Message)
-}
+
+
 
 type Consumer struct {
-	ID          uint8
-	response    *Response
-	LikedClient *Client
+	ID       uint8
+	client   *Client
+	response *Response
 }
 
-func (client *Client) NewConsumer(stream string, m func(subscriberId byte, message *amqp.Message)) (*Consumer, error) {
+type MessagesHandler func(consumerId uint8, message *amqp.Message)
 
-	return client.declareConsumer(stream, m)
+type ConsumerCreator struct {
+	client          *Client
+	consumerName    string
+	streamName      string
+	messagesHandler MessagesHandler
 }
 
-func (client *Client) declareConsumer(stream string, m func(subscriberId byte, message *amqp.Message)) (*Consumer, error) {
-	consumer := client.consumers.New(client)
-	length := 2 + 2 + 4 + 1 + 2 + len(stream) + 2 + 2 // misses the offset
+func (client *Client) ConsumerCreator() *ConsumerCreator {
+	return &ConsumerCreator{client: client}
+}
+
+func (c *ConsumerCreator) Name(consumerName string) *ConsumerCreator {
+	c.consumerName = consumerName
+	return c
+}
+
+func (c *ConsumerCreator) Stream(streamName string) *ConsumerCreator {
+	c.streamName = streamName
+	return c
+}
+
+func (c *ConsumerCreator) MessagesHandler(handlerFunc MessagesHandler) *ConsumerCreator {
+	c.messagesHandler = handlerFunc
+	return c
+}
+
+func (c *ConsumerCreator) Build() (*Consumer, error) {
+	consumer := c.client.consumers.New(c.client)
+	length := 2 + 2 + 4 + 1 + 2 + len(c.streamName) + 2 + 2 // misses the offset
 	//if (offsetSpecification.isOffset() || offsetSpecification.isTimestamp()) {
 	//	length += 8;
 	//}
-	resp := client.responses.New()
+	resp := c.client.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
@@ -36,7 +58,7 @@ func (client *Client) declareConsumer(stream string, m func(subscriberId byte, m
 	WriteInt(b, correlationId)
 	WriteByte(b, consumer.ID)
 
-	WriteString(b, stream)
+	WriteString(b, c.streamName)
 
 	WriteShort(b, 1)
 
@@ -45,24 +67,25 @@ func (client *Client) declareConsumer(stream string, m func(subscriberId byte, m
 	//}
 	WriteShort(b, 10)
 
-	res := client.HandleWrite(b.Bytes(), resp)
+	res := c.client.HandleWrite(b.Bytes(), resp)
 
 	go func() {
 		for true {
 			select {
 			case code := <-consumer.response.code:
 				if code.id == CloseChannel {
-					_ = client.consumers.RemoveById(consumer.ID)
+					_ = c.client.consumers.RemoveById(consumer.ID)
 					return
 				}
 
 			case messages := <-consumer.response.data:
-				m(consumer.ID, messages.(*amqp.Message))
+				c.messagesHandler(consumer.ID, messages.(*amqp.Message))
 			}
 		}
 	}()
 
 	return consumer, res
+
 }
 
 func (client *Client) credit(subscriptionId byte, credit int16) {
@@ -80,5 +103,5 @@ func (client *Client) credit(subscriptionId byte, credit int16) {
 }
 
 func (consumer *Consumer) UnSubscribe() error {
-	return consumer.LikedClient.UnSubscribe(consumer.ID)
+	return consumer.client.UnSubscribe(consumer.ID)
 }

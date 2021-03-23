@@ -9,29 +9,35 @@ import (
 	"time"
 )
 
+func checkErr(err error) {
+	if err != nil {
+		fmt.Printf("Error operation: %s", err)
+	}
+}
 func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 	var client = streaming.NewStreamingClient()                                  // create Client Struct
 	err := client.Connect("rabbitmq-streaming://guest:guest@localhost:5551/%2f") // Connect
-	if err != nil {
-		fmt.Printf("Error during connection: %s", err)
-		return
-	}
+	checkErr(err)
+
 	fmt.Println("Connected to localhost")
 	streamName := "golang-streamingh12"
 	err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create the streaming queue
-	if err != nil {
-		fmt.Printf("Error creating streaming: %s", err)
-		return
-	}
+	checkErr(err)
 
-	// Get a new subscribe to publish the messages
+	consumer, err := client.ConsumerCreator().
+		Stream(streamName).
+		Name("myconsumer").
+		MessagesHandler(func(consumerId uint8, message *amqp.Message) {
+			fmt.Printf("received %d, message %s \n", consumerId, message.Data)
+		}).Build()
+	checkErr(err)
+
+	// Get a new producer to publish the messages
 	producer, err := client.NewProducer(streamName)
-	if err != nil {
-		fmt.Printf("Error creating subscribe: %s", err)
-		return
-	}
+	checkErr(err)
+
 	numberOfMessages := 100
 	batchSize := 100
 
@@ -45,10 +51,8 @@ func main() {
 			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d_%d", z, f) )))
 		}
 		_, err = producer.BatchPublish(nil, arr) // batch send
-		if err != nil {
-			fmt.Printf("Error publish: %s", err)
-			return
-		}
+		checkErr(err)
+
 	}
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
@@ -57,15 +61,14 @@ func main() {
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 
+	err = consumer.UnSubscribe()
+	checkErr(err)
+
 	err = client.DeleteStream(streamName) // Remove the streaming queue and the data
-	if err != nil {
-		fmt.Printf("error deleting streaming: %s \n", err)
-		return
-	}
+	checkErr(err)
+
 	err = client.Close()
-	if err != nil {
-		fmt.Printf("error closing client: %s \n", err)
-		return
-	}
+	checkErr(err)
+
 	fmt.Println("Bye bye")
 }

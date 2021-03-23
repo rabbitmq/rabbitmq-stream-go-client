@@ -11,7 +11,6 @@ type Socket struct {
 	connection net.Conn
 	connected  bool
 	writer     *bufio.Writer
-	reader     *bufio.Reader
 	mutex      *sync.Mutex
 }
 

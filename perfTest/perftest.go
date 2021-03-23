@@ -49,9 +49,14 @@ func main() {
 		}
 
 		for p := 0; p < numberOfConsumers; p++ {
-			consumer, err := client.NewConsumer(streamName, func(subscriberId byte, message *amqp.Message) {
 
-			})
+			consumer, err := client.ConsumerCreator().
+				Stream(streamName).
+				Name("my_consumer").
+				MessagesHandler(func(consumerId uint8, message *amqp.Message) {
+
+				}).Build()
+
 			if err != nil {
 				fmt.Printf("Error consumer: %s", err)
 				return

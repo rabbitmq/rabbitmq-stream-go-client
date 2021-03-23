@@ -102,9 +102,12 @@ var _ = Describe("Streaming testClient", func() {
 		It("Subscribe and Unsubscribe", func() {
 			err := testClient.StreamCreator().Stream(testStreamName).Create()
 			Expect(err).NotTo(HaveOccurred())
-			consumer, err := testClient.NewConsumer(testStreamName, func(subscriberId byte, message *amqp.Message) {
 
-			})
+			consumer, err := testClient.ConsumerCreator().
+				Stream(testStreamName).
+				Name("my_consumer").
+				MessagesHandler(func(consumerId uint8, message *amqp.Message) {
+				}).Build()
 
 			Expect(err).NotTo(HaveOccurred())
 			time.Sleep(500 * time.Millisecond)
@@ -116,7 +119,7 @@ var _ = Describe("Streaming testClient", func() {
 
 		})
 
-		It("Subscribe Count Messages", func() {
+		It("Subscribe Count MessagesHandler", func() {
 			err := testClient.StreamCreator().Stream(testStreamName).Create()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -131,12 +134,16 @@ var _ = Describe("Streaming testClient", func() {
 			var wg sync.WaitGroup
 			wg.Add(1)
 			count := 0
-			consumer, err := testClient.NewConsumer(testStreamName, func(subscriberId byte, message *amqp.Message) {
-				count++
-				if count >= 5 {
-					wg.Done()
-				}
-			})
+			consumer, err := testClient.ConsumerCreator().
+				Stream(testStreamName).
+				Name("my_consumer").
+				MessagesHandler(func(consumerId uint8, message *amqp.Message) {
+					count++
+					if count >= 5 {
+						wg.Done()
+					}
+
+				}).Build()
 
 			wg.Wait()
 			Expect(err).NotTo(HaveOccurred())
