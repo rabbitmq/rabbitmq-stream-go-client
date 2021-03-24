@@ -6,8 +6,8 @@ import (
 )
 
 type Consumer struct {
-	ID       uint8
-	response *Response
+	ID         uint8
+	response   *Response
 	parameters *ConsumerCreator
 }
 
@@ -48,8 +48,8 @@ func (c *ConsumerCreator) Offset(offsetSpecification OffsetSpecification) *Consu
 func (c *ConsumerCreator) Build() (*Consumer, error) {
 	consumer := c.client.consumers.New(c)
 	length := 2 + 2 + 4 + 1 + 2 + len(c.streamName) + 2 + 2
-	//|| offsetSpecification.isTimestamp()
-	if c.offsetSpecification.isOffset() {
+	if c.offsetSpecification.isOffset() ||
+		c.offsetSpecification.isTimestamp() {
 		length += 8
 	}
 	resp := c.client.responses.New()
@@ -65,8 +65,9 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 	WriteString(b, c.streamName)
 
 	WriteShort(b, c.offsetSpecification.typeOfs)
-	//|| offsetSpecification.isTimestamp()
-	if c.offsetSpecification.isOffset() {
+
+	if c.offsetSpecification.isOffset() ||
+		c.offsetSpecification.isTimestamp() {
 		WriteLong(b, c.offsetSpecification.offset)
 	}
 	WriteShort(b, 10)
@@ -132,14 +133,29 @@ func (o OffsetSpecification) First() OffsetSpecification {
 	return o
 }
 
+func (o OffsetSpecification) Last() OffsetSpecification {
+	o.typeOfs = typeLast
+	return o
+}
+
 func (o OffsetSpecification) Offset(offset int64) OffsetSpecification {
 	o.typeOfs = typeOffset
 	o.offset = offset
 	return o
 }
 
+func (o OffsetSpecification) Timestamp(offset int64) OffsetSpecification {
+	o.typeOfs = typeTimestamp
+	o.offset = offset
+	return o
+}
+
 func (o OffsetSpecification) isOffset() bool {
 	return o.typeOfs == typeOffset
+}
+
+func (o OffsetSpecification) isTimestamp() bool {
+	return o.typeOfs == typeTimestamp
 }
 
 //func (offset Offset) first()  {

@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"sync"
@@ -13,7 +14,7 @@ var testProducerStream string
 var _ = Describe("Streaming Producers", func() {
 
 	BeforeEach(func() {
-		testProducerStream = "testProducerStream"
+		testProducerStream = uuid.New().String()
 		err := testClient.StreamCreator().Stream(testProducerStream).Create()
 		Expect(err).NotTo(HaveOccurred())
 
