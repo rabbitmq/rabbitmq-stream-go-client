@@ -20,11 +20,6 @@ func (sck *Socket) SetConnect(value bool) {
 	sck.connected = value
 }
 
-func (sck *Socket) GetConnect() bool {
-	sck.mutex.Lock()
-	defer sck.mutex.Unlock()
-	return sck.connected
-}
 
 func (sck *Socket) writeAndFlush(buffer []byte) error {
 	sck.mutex.Lock()

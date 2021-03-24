@@ -34,9 +34,6 @@ func (c *Client) connect(addr string) error {
 		return err
 	}
 	host, port := u.Hostname(), u.Port()
-	if port == "" {
-		port = "5551"
-	}
 
 	c.tuneState.requestedHeartbeat = 60
 	c.tuneState.requestedMaxFrameSize = 1048576

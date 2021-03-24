@@ -33,9 +33,3 @@ func WaitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 		return errors.New(fmt.Sprintf("Timeout waiting Code, operation:%d \n", response.subId))
 	}
 }
-
-func CheckErr(err error) {
-	if err != nil {
-		fmt.Printf("Error operation: %s \n", err)
-	}
-}
