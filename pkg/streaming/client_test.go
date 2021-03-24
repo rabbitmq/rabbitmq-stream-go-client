@@ -60,6 +60,25 @@ var _ = Describe("Streaming testClient", func() {
 		It("Create Stream", func() {
 			err := testClient.StreamCreator().Stream(testStreamName).Create()
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Create Stream with parameter MaxLengthBytes", func() {
+			streamP := uuid.New().String()
+			err := testClient.StreamCreator().Stream(streamP).
+				MaxLengthBytes(100).Create()
+			Expect(err).NotTo(HaveOccurred())
+			err = testClient.DeleteStream(streamP)
+			Expect(err).NotTo(HaveOccurred())
+
+		})
+
+		It("Create Stream with parameter MaxAge", func() {
+			streamP := uuid.New().String()
+			err := testClient.StreamCreator().Stream(streamP).
+				MaxAge(120 * time.Hour).Create()
+			Expect(err).NotTo(HaveOccurred())
+			err = testClient.DeleteStream(streamP)
+			Expect(err).NotTo(HaveOccurred())
 
 		})
 
@@ -77,10 +96,6 @@ var _ = Describe("Streaming testClient", func() {
 			err = testClient.DeleteStream(testStreamName)
 			Expect(err).NotTo(HaveOccurred())
 		})
-
-
-
-
 
 	})
 })
