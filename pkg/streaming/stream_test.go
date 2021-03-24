@@ -1,16 +1,15 @@
-package streaming_test
+package streaming
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/Azure/go-amqp"
+	"strconv"
 )
 
-var _ = Describe("Stream", func() {
-	Describe("Add", func() {
+func CreateArrayMessagesForTesting(numberOfMessages int) []*amqp.Message {
+	var arr []*amqp.Message
+	for z := 0; z < numberOfMessages; z++ {
+		arr = append(arr, amqp.NewMessage([]byte("test_"+strconv.Itoa(z))))
+	}
+	return arr
 
-		It("adds two numbers", func() {
-			sum := 2 + 3
-			Expect(sum).To(Equal(5))
-		})
-	})
-})
+}

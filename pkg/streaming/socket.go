@@ -41,13 +41,13 @@ func (sck *Socket) writeAndFlush(buffer []byte) error {
 	return nil
 }
 
-func (client *Client) HandleWrite(buffer []byte, response *Response) error {
+func (c *Client) HandleWrite(buffer []byte, response *Response) error {
 
-	result := client.socket.writeAndFlush(buffer)
+	result := c.socket.writeAndFlush(buffer)
 	resultCode := WaitCodeWithDefaultTimeOut(response)
 	/// we need to remove the response before evaluate the
 	// buffer errSocket
-	result = client.responses.RemoveById(response.subId)
+	result = c.responses.RemoveById(response.subId)
 	if result != nil {
 		// we just log
 		fmt.Printf("Error HandleWrite %s", result)

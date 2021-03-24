@@ -28,7 +28,7 @@ type Client struct {
 	consumers        *Consumers
 }
 
-func (client *Client) connect(addr string) error {
+func (c *Client) connect(addr string) error {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return err
@@ -38,25 +38,25 @@ func (client *Client) connect(addr string) error {
 		port = "5551"
 	}
 
-	client.tuneState.requestedHeartbeat = 60
-	client.tuneState.requestedMaxFrameSize = 1048576
-	client.clientProperties.items = make(map[string]string)
+	c.tuneState.requestedHeartbeat = 60
+	c.tuneState.requestedMaxFrameSize = 1048576
+	c.clientProperties.items = make(map[string]string)
 	connection, err2 := net.Dial("tcp", net.JoinHostPort(host, port))
 	if err2 != nil {
 		return err2
 	}
-	client.socket = Socket{connection: connection, mutex: &sync.Mutex{},
+	c.socket = Socket{connection: connection, mutex: &sync.Mutex{},
 		writer: bufio.NewWriter(connection)}
-	client.socket.SetConnect(true)
+	c.socket.SetConnect(true)
 
-	go client.handleResponse()
-	err2 = client.peerProperties()
+	go c.handleResponse()
+	err2 = c.peerProperties()
 
 	if err2 != nil {
 		return err2
 	}
 	pwd, _ := u.User.Password()
-	err2 = client.authenticate(u.User.Username(), pwd)
+	err2 = c.authenticate(u.User.Username(), pwd)
 	if err2 != nil {
 		return err2
 	}
@@ -64,30 +64,30 @@ func (client *Client) connect(addr string) error {
 	if len(u.Path) > 1 {
 		vhost, _ = url.QueryUnescape(u.Path[1:])
 	}
-	err2 = client.open(vhost)
+	err2 = c.open(vhost)
 	if err2 != nil {
 		return err2
 	}
-	client.HeartBeat()
+	c.HeartBeat()
 
 	return nil
 }
 
-func (client *Client) peerProperties() error {
+func (c *Client) peerProperties() error {
 	clientPropertiesSize := 4 // size of the map, always there
 
-	client.clientProperties.items["connection_name"] = "rabbitmq-StreamCreator-locator"
-	client.clientProperties.items["product"] = "RabbitMQ Stream"
-	client.clientProperties.items["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
-	client.clientProperties.items["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
-	client.clientProperties.items["version"] = "0.1.0"
-	client.clientProperties.items["platform"] = "Golang"
-	for key, element := range client.clientProperties.items {
+	c.clientProperties.items["connection_name"] = "rabbitmq-StreamCreator-locator"
+	c.clientProperties.items["product"] = "RabbitMQ Stream"
+	c.clientProperties.items["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
+	c.clientProperties.items["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
+	c.clientProperties.items["version"] = "0.1.0"
+	c.clientProperties.items["platform"] = "Golang"
+	for key, element := range c.clientProperties.items {
 		clientPropertiesSize = clientPropertiesSize + 2 + len(key) + 2 + len(element)
 	}
 
 	length := 2 + 2 + 4 + clientPropertiesSize
-	resp := client.responses.New()
+	resp := c.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
@@ -95,19 +95,19 @@ func (client *Client) peerProperties() error {
 	WriteShort(b, CommandPeerProperties)
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
-	WriteInt(b, len(client.clientProperties.items))
+	WriteInt(b, len(c.clientProperties.items))
 
-	for key, element := range client.clientProperties.items {
+	for key, element := range c.clientProperties.items {
 		WriteString(b, key)
 		WriteString(b, element)
 	}
 
-	return client.HandleWrite(b.Bytes(), resp)
+	return c.HandleWrite(b.Bytes(), resp)
 }
 
-func (client *Client) authenticate(user string, password string) error {
+func (c *Client) authenticate(user string, password string) error {
 
-	saslMechanisms := client.getSaslMechanisms()
+	saslMechanisms := c.getSaslMechanisms()
 	saslMechanism := ""
 	for i := 0; i < len(saslMechanisms); i++ {
 		if saslMechanisms[i] == "PLAIN" {
@@ -116,21 +116,21 @@ func (client *Client) authenticate(user string, password string) error {
 	}
 	response := UnicodeNull + user + UnicodeNull + password
 	saslResponse := []byte(response)
-	return client.sendSaslAuthenticate(saslMechanism, saslResponse)
+	return c.sendSaslAuthenticate(saslMechanism, saslResponse)
 }
 
-func (client *Client) getSaslMechanisms() []string {
+func (c *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
-	resp := client.responses.New()
+	resp := c.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
-	err := client.socket.writeAndFlush(b.Bytes())
+	err := c.socket.writeAndFlush(b.Bytes())
 	data := <-resp.data
-	err = client.responses.RemoveById(correlationId)
+	err = c.responses.RemoveById(correlationId)
 	if err != nil {
 		return nil
 	}
@@ -138,10 +138,10 @@ func (client *Client) getSaslMechanisms() []string {
 
 }
 
-func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
+func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	resp := client.responses.New()
-	respTune := client.responses.NewWitName("tune")
+	resp := c.responses.New()
+	respTune := c.responses.NewWitName("tune")
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -151,21 +151,23 @@ func (client *Client) sendSaslAuthenticate(saslMechanism string, challengeRespon
 	WriteString(b, saslMechanism)
 	WriteInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
-	err := client.HandleWrite(b.Bytes(), resp)
-
+	err := c.HandleWrite(b.Bytes(), resp)
+	if err != nil {
+		return err
+	}
 	// double read for TUNE
 	tuneData := <-respTune.data
-	err = client.responses.RemoveByName("tune")
+	err = c.responses.RemoveByName("tune")
 	if err != nil {
 		return err
 	}
 
-	return client.socket.writeAndFlush(tuneData.([]byte))
+	return c.socket.writeAndFlush(tuneData.([]byte))
 }
 
-func (client *Client) open(virtualHost string) error {
+func (c *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
-	resp := client.responses.New()
+	resp := c.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -173,12 +175,12 @@ func (client *Client) open(virtualHost string) error {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteString(b, virtualHost)
-	return client.HandleWrite(b.Bytes(), resp)
+	return c.HandleWrite(b.Bytes(), resp)
 }
 
-func (client *Client) DeleteStream(stream string) error {
+func (c *Client) DeleteStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream)
-	resp := client.responses.New()
+	resp := c.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -187,12 +189,12 @@ func (client *Client) DeleteStream(stream string) error {
 	WriteInt(b, correlationId)
 	WriteString(b, stream)
 
-	return client.HandleWrite(b.Bytes(), resp)
+	return c.HandleWrite(b.Bytes(), resp)
 }
 
-func (client *Client) UnSubscribe(id uint8) error {
+func (c *Client) UnSubscribe(id uint8) error {
 	length := 2 + 2 + 4 + 1
-	resp := client.responses.New()
+	resp := c.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -200,9 +202,9 @@ func (client *Client) UnSubscribe(id uint8) error {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteByte(b, id)
-	err := client.HandleWrite(b.Bytes(), resp)
+	err := c.HandleWrite(b.Bytes(), resp)
 
-	consumer, err := client.consumers.GetById(id)
+	consumer, err := c.consumers.GetById(id)
 	if err != nil {
 		return err
 	}
@@ -210,47 +212,48 @@ func (client *Client) UnSubscribe(id uint8) error {
 	return nil
 }
 
-func (client *Client) HeartBeat() {
+func (c *Client) HeartBeat() {
 
 	ticker := time.NewTicker(40 * time.Second)
-	resp := client.responses.NewWitName("heartbeat")
+	resp := c.responses.NewWitName("heartbeat")
 	go func() {
 		for {
 			select {
 			case <-resp.code:
-				client.responses.RemoveByName("heartbeat")
+				c.responses.RemoveByName("heartbeat")
 				return
 			case t := <-ticker.C:
 				fmt.Printf("sendHeartbeat: %s \n", t)
-				client.sendHeartbeat()
+				c.sendHeartbeat()
 			}
 		}
 	}()
 }
 
-func (client *Client) sendHeartbeat() {
+func (c *Client) sendHeartbeat() {
 	length := 4 + 2 + 2
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, 4)
 	WriteShort(b, CommandHeartbeat)
 	WriteShort(b, Version1)
 
-	client.socket.writeAndFlush(b.Bytes())
+	c.socket.writeAndFlush(b.Bytes())
 }
 
-func (client *Client) Close() error {
-	client.socket.mutex.Lock()
-	defer client.socket.mutex.Unlock()
-	if client.socket.connected {
-		r, err := client.responses.GetByName("heartbeat")
+func (c *Client) Close() error {
+	c.socket.mutex.Lock()
+	defer c.socket.mutex.Unlock()
+	if c.socket.connected {
+		r, err := c.responses.GetByName("heartbeat")
 		if err != nil {
 			return err
 		}
 		r.code <- Code{id: CloseChannel}
-		err = client.socket.connection.Close()
-		client.socket.connected = false
+		err = c.socket.connection.Close()
+		c.socket.connected = false
 		return err
 	}
 	//}
 	return nil
 }
+

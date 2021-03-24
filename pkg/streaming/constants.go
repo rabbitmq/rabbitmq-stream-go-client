@@ -1,6 +1,9 @@
 package streaming
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 const (
 	CommandDeclarePublisher       = 1
@@ -56,5 +59,23 @@ const (
 
 	///
 	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
-
 )
+
+func LookErrorCode(errorCode uint16) string {
+	switch errorCode {
+	case ResponseCodeOk:
+		return "OK"
+	case ResponseCodeAuthenticationFailure:
+		return "Authentication Failure"
+	case ResponseCodeStreamDoesNotExist:
+		return "Stream does not exist"
+	case ResponseCodeStreamAlreadyExists:
+		return "Stream already exists"
+	default:
+		{
+			fmt.Printf("Error not handled %d", errorCode)
+			return "Error not handled"
+		}
+	}
+
+}
