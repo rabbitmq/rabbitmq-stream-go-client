@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+func CheckErr(err error) {
+	if err != nil {
+		fmt.Printf("Error operation: %s \n", err)
+	}
+}
 func main() {
 	fmt.Println("PerfTest")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
@@ -23,7 +28,7 @@ func main() {
 	///
 
 	client, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
-	streaming.CheckErr(err)
+	CheckErr(err)
 	fmt.Printf("Connected to %s \n", uris)
 
 	var producers []*streaming.Producer
@@ -31,10 +36,10 @@ func main() {
 	for i := 0; i < numberOfStreams; i++ {
 		streamName := fmt.Sprintf("golang-streaming-%d", i)
 		err = client.StreamCreator().Stream(streamName).Create()
-		streaming.CheckErr(err)
+		CheckErr(err)
 		for p := 0; p < numberOfProducers; p++ {
 			producer, err := client.ProducerCreator().Stream(streamName).Build()
-			streaming.CheckErr(err)
+			CheckErr(err)
 			producers = append(producers, producer)
 		}
 
@@ -47,7 +52,7 @@ func main() {
 
 				}).Build()
 
-			streaming.CheckErr(err)
+			CheckErr(err)
 			consumers = append(consumers, consumer)
 		}
 
@@ -67,7 +72,7 @@ func main() {
 		go func(prod *streaming.Producer, wg *sync.WaitGroup) {
 			for m := 0; m < numberOfMessages; m++ {
 				_, err = prod.BatchPublish(nil, arr) // batch send
-				streaming.CheckErr(err)
+				CheckErr(err)
 			}
 			wg.Done()
 		}(producer, &wg)
@@ -81,20 +86,20 @@ func main() {
 	_, _ = reader.ReadString('\n')
 	for _, producer := range producers {
 		err = producer.Close()
-		streaming.CheckErr(err)
+		CheckErr(err)
 	}
 	for _, consumer := range consumers {
 		err = consumer.UnSubscribe()
-		streaming.CheckErr(err)
+		CheckErr(err)
 	}
 
 	for i := 0; i < numberOfStreams; i++ {
 		streamName := fmt.Sprintf("golang-streaming-%d", i)
 		err = client.DeleteStream(streamName)
-		streaming.CheckErr(err)
+		CheckErr(err)
 	}
 
 	err = client.Close()
-	streaming.CheckErr(err)
+	CheckErr(err)
 	fmt.Println("Bye bye")
 }

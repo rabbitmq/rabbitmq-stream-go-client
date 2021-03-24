@@ -41,6 +41,15 @@ var _ = Describe("Streaming testClient", func() {
 			Expect(fmt.Sprintf("%s", err)).
 				To(ContainSubstring("Authentication Failure"))
 		})
+
+		It("Connection Fail Vhost", func() {
+			_, err := NewClientCreator().
+				Uri("rabbitmq-StreamCreator://guest:guest@localhost:5551/VHOSTNOEXIST").
+				Connect()
+			Expect(fmt.Sprintf("%s", err)).
+				To(ContainSubstring("VirtualHost access failure"))
+		})
+
 		It("Connection No Endpoint", func() {
 			_, err := NewClientCreator().
 				Uri("rabbitmq-StreamCreator://g:g@noendpoint:5551/%2f").

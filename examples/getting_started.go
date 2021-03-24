@@ -10,14 +10,17 @@ import (
 	"time"
 )
 
-
-
+func CheckErr(err error) {
+	if err != nil {
+		fmt.Printf("Error operation: %s \n", err)
+	}
+}
 func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
 	client, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
-	streaming.CheckErr(err)
+	CheckErr(err)
 
 	fmt.Println("Connected to localhost")
 	streamName := "OffsetTest"
@@ -25,20 +28,20 @@ func main() {
 
 	var count int32
 
-	streaming.CheckErr(err)
+	CheckErr(err)
 	consumer, err := client.ConsumerCreator().
 		Stream(streamName).
 		Name("my_consumer").
-		Offset(streaming.OffsetSpecification{}.Offset(30)).
+		//Offset(streaming.OffsetSpecification{}.Timestamp(time.Now().Unix())).
 		MessagesHandler(func(consumerId uint8, message *amqp.Message) {
 			atomic.AddInt32(&count, 1)
 			fmt.Printf("Golang Counter:%d\n", count)
 		}).Build()
-	streaming.CheckErr(err)
+	CheckErr(err)
 	// Get a new producer to publish the messages
 	producer, err := client.ProducerCreator().Stream(streamName).Build()
-	streaming.CheckErr(err)
-	numberOfMessages := 0
+	CheckErr(err)
+	numberOfMessages := 10
 	batchSize := 5
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
@@ -51,7 +54,7 @@ func main() {
 			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d_%d", z, f) )))
 		}
 		_, err = producer.BatchPublish(nil, arr) // batch send
-		streaming.CheckErr(err)
+		CheckErr(err)
 	}
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
@@ -61,10 +64,10 @@ func main() {
 	_, _ = reader.ReadString('\n')
 
 	err = consumer.UnSubscribe()
-	streaming.CheckErr(err)
+	CheckErr(err)
 	err = client.DeleteStream(streamName) // Remove the streaming queue and the data
-	streaming.CheckErr(err)
+	CheckErr(err)
 	err = client.Close()
-	streaming.CheckErr(err)
+	CheckErr(err)
 	fmt.Println("Bye bye")
 }
