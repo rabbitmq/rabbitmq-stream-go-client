@@ -7,8 +7,8 @@ import (
 
 type Consumer struct {
 	ID       uint8
-	client   *Client
 	response *Response
+	parameters *ConsumerCreator
 }
 
 type MessagesHandler func(consumerId uint8, message *amqp.Message)
@@ -21,8 +21,8 @@ type ConsumerCreator struct {
 	offsetSpecification OffsetSpecification
 }
 
-func (client *Client) ConsumerCreator() *ConsumerCreator {
-	return &ConsumerCreator{client: client, offsetSpecification: OffsetSpecification{}.First()}
+func (c *Client) ConsumerCreator() *ConsumerCreator {
+	return &ConsumerCreator{client: c, offsetSpecification: OffsetSpecification{}.First()}
 }
 
 func (c *ConsumerCreator) Name(consumerName string) *ConsumerCreator {
@@ -46,7 +46,7 @@ func (c *ConsumerCreator) Offset(offsetSpecification OffsetSpecification) *Consu
 }
 
 func (c *ConsumerCreator) Build() (*Consumer, error) {
-	consumer := c.client.consumers.New(c.client)
+	consumer := c.client.consumers.New(c)
 	length := 2 + 2 + 4 + 1 + 2 + len(c.streamName) + 2 + 2
 	//|| offsetSpecification.isTimestamp()
 	if c.offsetSpecification.isOffset() {
@@ -92,7 +92,7 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 
 }
 
-func (client *Client) credit(subscriptionId byte, credit int16) {
+func (c *Client) credit(subscriptionId byte, credit int16) {
 	//if (credit < 0 || credit > Short.MAX_VALUE) {
 	//throw new IllegalArgumentException("Credit value must be between 0 and " + Short.MAX_VALUE);
 	//}
@@ -103,11 +103,11 @@ func (client *Client) credit(subscriptionId byte, credit int16) {
 	WriteShort(b, Version1)
 	WriteByte(b, subscriptionId)
 	WriteShort(b, credit)
-	client.socket.writeAndFlush(b.Bytes())
+	c.socket.writeAndFlush(b.Bytes())
 }
 
 func (consumer *Consumer) UnSubscribe() error {
-	return consumer.client.UnSubscribe(consumer.ID)
+	return consumer.parameters.client.UnSubscribe(consumer.ID)
 }
 
 /*

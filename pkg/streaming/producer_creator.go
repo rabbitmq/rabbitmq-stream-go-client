@@ -7,18 +7,18 @@ import (
 )
 
 type Producer struct {
-	ID          uint8
-	LikedClient *Client
-	response    *Response
+	ID         uint8
+	response   *Response
+	parameters *ProducerCreator
 }
 
 type ProducerCreator struct {
-	client          *Client
-	streamName      string
+	client     *Client
+	streamName string
 }
 
-func (client *Client) ProducerCreator() *ProducerCreator {
-	return &ProducerCreator{client: client}
+func (c *Client) ProducerCreator() *ProducerCreator {
+	return &ProducerCreator{client: c}
 }
 
 func (c *ProducerCreator) Stream(streamName string) *ProducerCreator {
@@ -27,7 +27,7 @@ func (c *ProducerCreator) Stream(streamName string) *ProducerCreator {
 }
 
 func (c *ProducerCreator) Build() (*Producer, error) {
-	producer := c.client.producers.New(c.client)
+	producer := c.client.producers.New(c)
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(c.streamName)
 	resp := c.client.responses.New()
@@ -76,7 +76,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 		seq += 1
 	}
 
-	err := producer.LikedClient.socket.writeAndFlush(b.Bytes())
+	err := producer.parameters.client.socket.writeAndFlush(b.Bytes())
 	if err != nil {
 		return 0, err
 	}
@@ -109,12 +109,12 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 }
 
 func (producer *Producer) Close() error {
-	return producer.LikedClient.deletePublisher(producer.ID)
+	return producer.parameters.client.deletePublisher(producer.ID)
 }
 
-func (client *Client) deletePublisher(publisherId byte) error {
+func (c *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
-	resp := client.responses.New()
+	resp := c.responses.New()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -122,8 +122,8 @@ func (client *Client) deletePublisher(publisherId byte) error {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteByte(b, publisherId)
-	err := client.HandleWrite(b.Bytes(), resp)
-	err = client.producers.RemoveById(publisherId)
+	err := c.HandleWrite(b.Bytes(), resp)
+	err = c.producers.RemoveById(publisherId)
 	if err != nil {
 		return err
 	}

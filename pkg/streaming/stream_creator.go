@@ -66,6 +66,6 @@ func (s StreamCreator) Create() error {
 	return s.client.HandleWrite(b.Bytes(), resp)
 
 }
-func (client *Client) StreamCreator() *StreamCreator {
-	return &StreamCreator{client: client}
+func (c *Client) StreamCreator() *StreamCreator {
+	return &StreamCreator{client: c}
 }

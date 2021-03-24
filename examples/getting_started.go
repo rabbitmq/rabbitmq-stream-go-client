@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+
+
 func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
@@ -27,19 +29,17 @@ func main() {
 	consumer, err := client.ConsumerCreator().
 		Stream(streamName).
 		Name("my_consumer").
-		Offset(streaming.OffsetSpecification{}.Offset(1500)).
-		//Offset(streaming.OffsetSpecification{}.First()).
+		Offset(streaming.OffsetSpecification{}.Offset(30)).
 		MessagesHandler(func(consumerId uint8, message *amqp.Message) {
 			atomic.AddInt32(&count, 1)
-			//fmt.Printf("received %d, message %s total %d\n", consumerId, message.Data, count)
-			fmt.Printf("received %d\n", count)
+			fmt.Printf("Golang Counter:%d\n", count)
 		}).Build()
 	streaming.CheckErr(err)
 	// Get a new producer to publish the messages
 	producer, err := client.ProducerCreator().Stream(streamName).Build()
 	streaming.CheckErr(err)
 	numberOfMessages := 0
-	batchSize := 100
+	batchSize := 5
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
 	// message aggregation

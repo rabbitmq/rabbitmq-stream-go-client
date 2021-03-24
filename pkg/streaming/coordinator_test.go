@@ -9,7 +9,7 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
 		It("Add/Remove Producers ", func() {
-			p := testClient.producers.New(testClient)
+			p := testClient.producers.New(nil)
 			Expect(p.ID).To(Equal(uint8(0)))
 			same, err := testClient.producers.GetById(0)
 			Expect(err).NotTo(HaveOccurred())
@@ -30,7 +30,7 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete producers ", func() {
 			var producersId []uint8
 			for i := 0; i < 100; i++ {
-				p := testClient.producers.New(testClient)
+				p := testClient.producers.New(nil)
 				producersId = append(producersId, p.ID)
 			}
 			Expect(testClient.producers.Count()).To(Equal(100))
@@ -45,7 +45,7 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove consumers", func() {
 		It("Add/Remove consumers ", func() {
-			p := testClient.consumers.New(testClient)
+			p := testClient.consumers.New(nil)
 			Expect(p.ID).To(Equal(uint8(0)))
 			err := testClient.consumers.RemoveById(p.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -63,7 +63,7 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete consumers ", func() {
 			var consumersId []uint8
 			for i := 0; i < 100; i++ {
-				p := testClient.consumers.New(testClient)
+				p := testClient.consumers.New(nil)
 				consumersId = append(consumersId, p.ID)
 			}
 			Expect(testClient.consumers.Count()).To(Equal(100))

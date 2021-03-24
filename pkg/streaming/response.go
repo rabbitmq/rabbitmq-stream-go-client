@@ -18,14 +18,14 @@ type ReaderProtocol struct {
 	PublishingIdCount uint64
 }
 
-func (client *Client) handleResponse() {
-	buffer := bufio.NewReader(client.socket.connection)
-	for  {
+func (c *Client) handleResponse() {
+	buffer := bufio.NewReader(c.socket.connection)
+	for {
 		readerProtocol := &ReaderProtocol{}
 		frameLen, err := ReadUInt(buffer)
 		if err != nil {
 			fmt.Printf("Socket Error %s \n", err)
-			_ = client.Close()
+			_ = c.Close()
 			break
 		}
 		readerProtocol.FrameLen = frameLen
@@ -36,35 +36,35 @@ func (client *Client) handleResponse() {
 
 		case CommandPeerProperties:
 			{
-				client.handlePeerProperties(readerProtocol, buffer)
+				c.handlePeerProperties(readerProtocol, buffer)
 			}
 		case CommandSaslHandshake:
 			{
-				client.handleSaslHandshakeResponse(readerProtocol, buffer)
+				c.handleSaslHandshakeResponse(readerProtocol, buffer)
 			}
 		case CommandTune:
 			{
-				client.handleTune(buffer)
+				c.handleTune(buffer)
 			}
 		case CommandOpen, CommandDeclarePublisher,
 			CommandDeletePublisher, CommandDeleteStream,
 			CommandCreateStream, CommandSaslAuthenticate, CommandSubscribe:
 			{
-				client.handleGenericResponse(readerProtocol, buffer)
+				c.handleGenericResponse(readerProtocol, buffer)
 			}
 
 		case CommandPublishConfirm:
 			{
-				client.handleConfirm(readerProtocol, buffer)
+				c.handleConfirm(readerProtocol, buffer)
 			}
 		case CommandDeliver:
 			{
-				client.handleDeliver(buffer)
+				c.handleDeliver(buffer)
 
 			}
 		case CommandCredit:
 			{
-			client.CreditNotificationFrameHandler(readerProtocol, buffer)
+				c.CreditNotificationFrameHandler(readerProtocol, buffer)
 			}
 		case CommandHeartbeat:
 			{
@@ -81,17 +81,17 @@ func (client *Client) handleResponse() {
 
 }
 
-func (client *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bufio.Reader) interface{} {
-	streamingRes.CorrelationId,_ = ReadUInt(r)
+func (c *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bufio.Reader) interface{} {
+	streamingRes.CorrelationId, _ = ReadUInt(r)
 	streamingRes.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
-	mechanismsCount,_ := ReadUInt(r)
+	mechanismsCount, _ := ReadUInt(r)
 	var mechanisms []string
 	for i := 0; i < int(mechanismsCount); i++ {
 		mechanism := ReadString(r)
 		mechanisms = append(mechanisms, mechanism)
 	}
 
-	res, err := client.responses.GetById(streamingRes.CorrelationId)
+	res, err := c.responses.GetById(streamingRes.CorrelationId)
 	if err != nil {
 		// TODO handle response
 		return err
@@ -101,13 +101,13 @@ func (client *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, 
 	return mechanisms
 }
 
-func (client *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Reader) {
-	readProtocol.CorrelationId,_ = ReadUInt(r)
+func (c *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = ReadUInt(r)
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
 	if readProtocol.ResponseCode != 1 {
 		fmt.Printf("Errr ResponseCode: %d ", readProtocol.ResponseCode)
 	}
-	serverPropertiesCount,_ := ReadUInt(r)
+	serverPropertiesCount, _ := ReadUInt(r)
 	serverProperties := make(map[string]string)
 
 	for i := 0; i < int(serverPropertiesCount); i++ {
@@ -115,7 +115,7 @@ func (client *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufi
 		value := ReadString(r)
 		serverProperties[key] = value
 	}
-	res, err := client.responses.GetById(readProtocol.CorrelationId)
+	res, err := c.responses.GetById(readProtocol.CorrelationId)
 	if err != nil {
 		// TODO handle response
 		return
@@ -124,10 +124,10 @@ func (client *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufi
 
 }
 
-func (client *Client) handleTune(r *bufio.Reader) interface{} {
+func (c *Client) handleTune(r *bufio.Reader) interface{} {
 
-	serverMaxFrameSize,_ := ReadUInt(r)
-	serverHeartbeat,_ := ReadUInt(r)
+	serverMaxFrameSize, _ := ReadUInt(r)
+	serverHeartbeat, _ := ReadUInt(r)
 
 	maxFrameSize := serverMaxFrameSize
 	heartbeat := serverHeartbeat
@@ -139,7 +139,7 @@ func (client *Client) handleTune(r *bufio.Reader) interface{} {
 	WriteShort(b, Version1)
 	WriteUInt(b, maxFrameSize)
 	WriteUInt(b, heartbeat)
-	res, err := client.responses.GetByName("tune")
+	res, err := c.responses.GetByName("tune")
 	if err != nil {
 		// TODO handle response
 		return err
@@ -149,10 +149,10 @@ func (client *Client) handleTune(r *bufio.Reader) interface{} {
 
 }
 
-func (client *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {
-	readProtocol.CorrelationId,_ = ReadUInt(r)
+func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = ReadUInt(r)
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
-	res, err := client.responses.GetById(readProtocol.CorrelationId)
+	res, err := c.responses.GetById(readProtocol.CorrelationId)
 	if err != nil {
 		// TODO handle readProtocol
 		return
@@ -160,10 +160,10 @@ func (client *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *buf
 	res.code <- Code{id: readProtocol.ResponseCode}
 }
 
-func (client *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
+func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 	readProtocol.PublishID = ReadByte(r)
 	//readProtocol.PublishingIdCount = ReadIntFromReader(testClient.reader)
-	publishingIdCount,_ := ReadUInt(r)
+	publishingIdCount, _ := ReadUInt(r)
 	//var _publishingId int64
 	for publishingIdCount != 0 {
 		ReadInt64(r)
@@ -174,46 +174,62 @@ func (client *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reade
 
 }
 
-func (client *Client) handleDeliver(r *bufio.Reader) {
+func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	subscriptionId := ReadByte(r)
+	consumer, _ := c.consumers.GetById(subscriptionId)
+
 	_ = ReadByte(r)
 	_ = ReadByte(r)
 	_ = ReadUShort(r)
-	numRecords,_ := ReadUInt(r)
-	_ = ReadInt64(r)
-	_ = ReadInt64(r)
-	_ = ReadInt64(r)
-	_,_ = ReadUInt(r)
-	_,_ = ReadUInt(r)
-	_,_ = ReadUInt(r)
+	numRecords, _ := ReadUInt(r)
+	_ = ReadInt64(r) // timestamp
+	_ = ReadInt64(r) // epoch, unsigned long
+	offset := ReadInt64(r)
+	_, _ = ReadUInt(r)
+	_, _ = ReadUInt(r)
+	_, _ = ReadUInt(r)
 	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
 	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
-	client.credit(subscriptionId, 1)
+	fmt.Printf("%d numRecords %d \n", offset, numRecords)
+	c.credit(subscriptionId, 1)
+
+	var offsetLimit int64 = -1
+
+	if consumer.parameters.offsetSpecification.isOffset() {
+		offsetLimit = consumer.parameters.offsetSpecification.offset
+	}
+	//if
+
+	filter := offsetLimit != -1
+
 	//messages
 	for numRecords != 0 {
 		entryType := PeekByte(r)
 		if (entryType & 0x80) == 0 {
-			sizeMessage,_ := ReadUInt(r)
+			sizeMessage, _ := ReadUInt(r)
 
 			arrayMessage := ReadUint8Array(r, sizeMessage)
-			msg := amqp.Message{}
-			err := msg.UnmarshalBinary(arrayMessage)
-			if err != nil {
-				fmt.Printf("%s", err)
-				//}
+			if filter && (offset < offsetLimit) {
+			/// TODO set recordset as filtered
+			} else {
+				msg := amqp.Message{}
+				err := msg.UnmarshalBinary(arrayMessage)
+				if err != nil {
+					fmt.Printf("%s", err)
+				}
+				consumer.response.code <- Code{id: ResponseCodeOk}
+				consumer.response.data <- &msg
 			}
-			c, _ := client.consumers.GetById(subscriptionId)
-			c.response.code <- Code{id: ResponseCodeOk}
-			c.response.data <- &msg
 
 		}
 		numRecords--
+		offset++
 	}
 
 }
 
-func (client *Client) CreditNotificationFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+func (c *Client) CreditNotificationFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
 	subscriptionId := ReadByte(r)
 	fmt.Printf("CreditNotificationFrameHandler %d \n", subscriptionId)
