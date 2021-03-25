@@ -25,14 +25,14 @@ var _ = Describe("Streaming Producers", func() {
 
 	})
 
-	It("New/Close Publisher", func() {
+	It("NewProducer/Close Publisher", func() {
 		producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
 		Expect(err).NotTo(HaveOccurred())
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("New/Publish/UnSubscribe Publisher", func() {
+	It("NewProducer/Publish/UnSubscribe Publisher", func() {
 		producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -44,7 +44,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Multi-thread New/Publish/UnSubscribe", func() {
+	It("Multi-thread NewProducer/Publish/UnSubscribe", func() {
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
 			wg.Add(1)

@@ -9,12 +9,9 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
 		It("Add/Remove Producers ", func() {
-			p := testClient.producers.New(nil)
+			p := testClient.producers.NewProducer(nil)
 			Expect(p.ID).To(Equal(uint8(0)))
-			same, err := testClient.producers.GetById(0)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(p.ID).To(Equal(same.ID))
-			err = testClient.producers.RemoveById(p.ID)
+			err := testClient.producers.RemoveById(p.ID)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -23,14 +20,10 @@ var _ = Describe("Coordinator", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("producer not found get by id ", func() {
-			_, err := testClient.producers.GetById(200)
-			Expect(err).To(HaveOccurred())
-		})
 		It("massive insert/delete producers ", func() {
 			var producersId []uint8
 			for i := 0; i < 100; i++ {
-				p := testClient.producers.New(nil)
+				p := testClient.producers.NewProducer(nil)
 				producersId = append(producersId, p.ID)
 			}
 			Expect(testClient.producers.Count()).To(Equal(100))
@@ -45,7 +38,7 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove consumers", func() {
 		It("Add/Remove consumers ", func() {
-			p := testClient.consumers.New(nil)
+			p := testClient.consumers.NewProducer(nil)
 			Expect(p.ID).To(Equal(uint8(0)))
 			err := testClient.consumers.RemoveById(p.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -56,14 +49,14 @@ var _ = Describe("Coordinator", func() {
 			Expect(err).To(HaveOccurred())
 		})
 		It("consumer not found get by id ", func() {
-			_, err := testClient.consumers.GetById(200)
+			_, err := testClient.consumers.GetConsumerById(200)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("massive insert/delete consumers ", func() {
 			var consumersId []uint8
 			for i := 0; i < 100; i++ {
-				p := testClient.consumers.New(nil)
+				p := testClient.consumers.NewProducer(nil)
 				consumersId = append(consumersId, p.ID)
 			}
 			Expect(testClient.consumers.Count()).To(Equal(100))
@@ -77,24 +70,24 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Response", func() {
 		It("Add/Remove Response ", func() {
-			r := testClient.responses.New()
+			r := testClient.responses.NewResponse()
 			Expect(r.subId).ToNot(Equal(0))
-			err := testClient.responses.RemoveById(r.subId)
+			err := testClient.responses.RemoveResponseById(r.subId)
 			Expect(err).NotTo(HaveOccurred())
 		})
 		It("not found Response by id ", func() {
-			err := testClient.responses.RemoveById(200)
+			err := testClient.responses.RemoveResponseById(200)
 			Expect(err).To(HaveOccurred())
 		})
 		It("massive insert/delete Responses ", func() {
 			var responsesId []int
 			for i := 0; i < 100; i++ {
-				r := testClient.responses.New()
+				r := testClient.responses.NewResponse()
 				responsesId = append(responsesId, r.subId)
 			}
 
 			for _, pid := range responsesId {
-				err := testClient.responses.RemoveById(pid)
+				err := testClient.responses.RemoveResponseById(pid)
 				Expect(err).NotTo(HaveOccurred())
 			}
 		})

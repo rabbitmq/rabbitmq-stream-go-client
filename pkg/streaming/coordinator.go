@@ -1,24 +1,15 @@
 package streaming
 
 import (
+	"fmt"
 	"github.com/pkg/errors"
 	"strconv"
 	"sync"
 )
 
-type Producers struct {
-	items map[byte]*Producer
-	mutex *sync.Mutex
-}
-
-type Consumers struct {
-	items map[byte]*Consumer
-	mutex *sync.Mutex
-}
-
-type Responses struct {
+type Items struct {
 	counter int
-	items   map[string]*Response
+	items   map[interface{}]interface{}
 	mutex   *sync.Mutex
 }
 
@@ -33,50 +24,45 @@ type Response struct {
 	subId int
 }
 
-func NewProducers() *Producers {
-	return &Producers{mutex: &sync.Mutex{},
-		items: make(map[byte]*Producer)}
+func NewItems() *Items {
+	return &Items{mutex: &sync.Mutex{},
+		items: make(map[interface{}]interface{})}
 }
 
-func (c *Producers) New(parameters *ProducerCreator) *Producer {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	var lastId = uint8(len(c.items))
+func (items *Items) NewProducer(parameters *ProducerCreator) *Producer {
+	items.mutex.Lock()
+	defer items.mutex.Unlock()
+	var lastId = uint8(len(items.items))
 	var producer = &Producer{ID: lastId, response:
 	&Response{code: make(chan Code)}}
 	producer.parameters = parameters
-	c.items[lastId] = producer
+	items.items[lastId] = producer
 	return producer
 }
 
-func (c *Producers) GetById(id uint8) (*Producer, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if c.items[id] == nil {
-		return nil, errors.New("Producer #{id} not found ")
-	}
-	return c.items[id], nil
-}
+func (items *Items) RemoveResponseById(id interface{}) error {
+	return items.RemoveById(fmt.Sprintf("%d", id))
 
-func (c *Producers) RemoveById(id byte) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if c.items[id] == nil {
-		return errors.New("Producer #{id} not found ")
+}
+func (items *Items) RemoveById(id interface{}) error {
+	items.mutex.Lock()
+	defer items.mutex.Unlock()
+	if items.items[id] == nil {
+		return errors.New("item #{id} not found ")
 	}
-	delete(c.items, id)
+	delete(items.items, id)
 	return nil
 }
 
-func (c *Producers) Count() int {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	return len(c.items)
+func (items *Items) Count() int {
+	items.mutex.Lock()
+	defer items.mutex.Unlock()
+	return len(items.items)
 }
 
-func NewResponses() *Responses {
-	return &Responses{mutex: &sync.Mutex{},
-		items: make(map[string]*Response)}
+func NewResponses() *Items {
+	return &Items{mutex: &sync.Mutex{},
+		items: make(map[interface{}]interface{})}
 }
 
 func NewResponse() *Response {
@@ -86,108 +72,81 @@ func NewResponse() *Response {
 	return res
 }
 
-func (s *Responses) NewWitName(value string) *Response {
-	s.mutex.Lock()
-	s.counter++
+func (items *Items) NewResponseWitName(id string) *Response {
+	items.mutex.Lock()
+	items.counter++
 	res := NewResponse()
-	res.subId = s.counter
-	s.items[value] = res
-	s.mutex.Unlock()
+	res.subId = items.counter
+	items.items[id] = res
+	items.mutex.Unlock()
 	return res
 }
 
-func (s *Responses) New() *Response {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.counter++
+func (items *Items) NewResponse() *Response {
+	items.mutex.Lock()
+	defer items.mutex.Unlock()
+	items.counter++
 	res := NewResponse()
-	res.subId = s.counter
-	s.items[strconv.Itoa(s.counter)] = res
+	res.subId = items.counter
+	items.items[strconv.Itoa(items.counter)] = res
 	return res
 }
 
-func (s *Responses) GetById(id uint32) (*Response, error) {
-	sa := strconv.Itoa(int(id))
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.items[sa] == nil {
+func (items *Items) GetResponseByName(id string) (*Response, error) {
+	items.mutex.Lock()
+	defer items.mutex.Unlock()
+	if items.items[id] == nil {
 		return nil, errors.New("Response #{id} not found ")
 	}
-	return s.items[sa], nil
-}
-
-func (s *Responses) GetByName(id string) (*Response, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.items[id] == nil {
-		return nil, errors.New("Response #{id} not found ")
+	switch items.items[id].(type) {
+	case *Response:
+		return items.items[id].(*Response), nil
 	}
-	return s.items[id], nil
+
+	return nil, nil
 }
 
-func (s *Responses) RemoveById(id int) error {
-	sa := strconv.Itoa(id)
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.items[sa] == nil {
+func (items *Items) RemoveResponseByName(id string) error {
+	items.mutex.Lock()
+	defer items.mutex.Unlock()
+	if items.items[id] == nil {
 		return errors.New("Response #{id} not found ")
 	}
-	delete(s.items, sa)
+	delete(items.items, id)
 	return nil
 }
 
-func (s *Responses) RemoveByName(id string) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.items[id] == nil {
-		return errors.New("Response #{id} not found ")
-	}
-	delete(s.items, id)
-	return nil
-}
-
-func (s *Responses) Count() int {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return len(s.items)
-}
-
-func NewConsumers() *Consumers {
-	return &Consumers{mutex: &sync.Mutex{},
-		items: make(map[byte]*Consumer)}
-}
-
-func (c *Consumers) New(parameters *ConsumerCreator) *Consumer {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	var lastId = uint8(len(c.items))
+func (items *Items) NewConsumer(parameters *ConsumerCreator) *Consumer {
+	items.mutex.Lock()
+	defer items.mutex.Unlock()
+	var lastId = uint8(len(items.items))
 	var item = &Consumer{ID: lastId, parameters: parameters,
 		response: NewResponse()}
-	c.items[lastId] = item
+	items.items[lastId] = item
 	return item
 }
 
-func (c *Consumers) GetById(id uint8) (*Consumer, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if c.items[id] == nil {
-		return nil, errors.New("Consumer #{id} not found ")
+func (items *Items) GetConsumerById(id interface{}) (*Consumer, error) {
+	v, err := items.getById(id)
+	if err != nil {
+		return nil, err
 	}
-	return c.items[id], nil
+	return v.(*Consumer), err
 }
 
-func (c *Consumers) Count() int {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	return len(c.items)
+func (items *Items) GetResponseById(id uint32) (*Response, error) {
+	v, err := items.getById(fmt.Sprintf("%d", id))
+	if err != nil {
+		return nil, err
+	}
+	return v.(*Response), err
 }
 
-func (c *Consumers) RemoveById(id byte) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if c.items[id] == nil {
-		return errors.New("Consumer #{id} not found ")
+func (items *Items) getById(id interface{}) (interface{}, error) {
+	items.mutex.Lock()
+	defer items.mutex.Unlock()
+	if items.items[id] == nil {
+		return nil, errors.New("Item #{id} not found ")
 	}
-	delete(c.items, id)
-	return nil
+	return items.items[id], nil
 }

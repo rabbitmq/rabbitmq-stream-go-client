@@ -46,13 +46,13 @@ func (c *ConsumerCreator) Offset(offsetSpecification OffsetSpecification) *Consu
 }
 
 func (c *ConsumerCreator) Build() (*Consumer, error) {
-	consumer := c.client.consumers.New(c)
+	consumer := c.client.consumers.NewConsumer(c)
 	length := 2 + 2 + 4 + 1 + 2 + len(c.streamName) + 2 + 2
 	if c.offsetSpecification.isOffset() ||
 		c.offsetSpecification.isTimestamp() {
 		length += 8
 	}
-	resp := c.client.responses.New()
+	resp := c.client.responses.NewResponse()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 

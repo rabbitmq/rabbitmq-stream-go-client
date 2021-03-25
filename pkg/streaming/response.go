@@ -91,7 +91,7 @@ func (c *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bu
 		mechanisms = append(mechanisms, mechanism)
 	}
 
-	res, err := c.responses.GetById(streamingRes.CorrelationId)
+	res, err := c.responses.GetResponseById(streamingRes.CorrelationId)
 	if err != nil {
 		// TODO handle response
 		return err
@@ -115,7 +115,7 @@ func (c *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Rea
 		value := ReadString(r)
 		serverProperties[key] = value
 	}
-	res, err := c.responses.GetById(readProtocol.CorrelationId)
+	res, err := c.responses.GetResponseById(readProtocol.CorrelationId)
 	if err != nil {
 		// TODO handle response
 		return
@@ -139,7 +139,7 @@ func (c *Client) handleTune(r *bufio.Reader) interface{} {
 	WriteShort(b, Version1)
 	WriteUInt(b, maxFrameSize)
 	WriteUInt(b, heartbeat)
-	res, err := c.responses.GetByName("tune")
+	res, err := c.responses.GetResponseByName("tune")
 	if err != nil {
 		// TODO handle response
 		return err
@@ -152,7 +152,7 @@ func (c *Client) handleTune(r *bufio.Reader) interface{} {
 func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	readProtocol.CorrelationId, _ = ReadUInt(r)
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
-	res, err := c.responses.GetById(readProtocol.CorrelationId)
+	res, err := c.responses.GetResponseById(readProtocol.CorrelationId)
 	if err != nil {
 		// TODO handle readProtocol
 		return
@@ -177,7 +177,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	subscriptionId := ReadByte(r)
-	consumer, _ := c.consumers.GetById(subscriptionId)
+	consumer, _ := c.consumers.GetConsumerById(subscriptionId)
 
 	_ = ReadByte(r)
 	_ = ReadByte(r)
