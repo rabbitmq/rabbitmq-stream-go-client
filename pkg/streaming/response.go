@@ -104,9 +104,6 @@ func (c *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bu
 func (c *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	readProtocol.CorrelationId, _ = ReadUInt(r)
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
-	if readProtocol.ResponseCode != 1 {
-		fmt.Printf("Errr ResponseCode: %d ", readProtocol.ResponseCode)
-	}
 	serverPropertiesCount, _ := ReadUInt(r)
 	serverProperties := make(map[string]string)
 
@@ -211,7 +208,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 			arrayMessage := ReadUint8Array(r, sizeMessage)
 			if filter && (offset < offsetLimit) {
-			/// TODO set recordset as filtered
+				/// TODO set recordset as filtered
 			} else {
 				msg := amqp.Message{}
 				err := msg.UnmarshalBinary(arrayMessage)
@@ -225,6 +222,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		}
 		numRecords--
 		offset++
+		consumer.offset = offset
 	}
 
 }

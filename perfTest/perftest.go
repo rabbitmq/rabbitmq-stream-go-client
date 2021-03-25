@@ -48,7 +48,7 @@ func main() {
 			consumer, err := client.ConsumerCreator().
 				Stream(streamName).
 				Name("my_consumer").
-				MessagesHandler(func(consumerId uint8, message *amqp.Message) {
+				MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
 
 				}).Build()
 

@@ -3,7 +3,6 @@ package streaming
 import (
 	"fmt"
 	"github.com/google/uuid"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"time"

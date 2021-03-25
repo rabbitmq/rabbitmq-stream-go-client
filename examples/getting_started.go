@@ -31,17 +31,19 @@ func main() {
 	CheckErr(err)
 	consumer, err := client.ConsumerCreator().
 		Stream(streamName).
-		Name("my_consumer").
+		Name("my_consumera").
 		//Offset(streaming.OffsetSpecification{}.Timestamp(time.Now().Unix())).
-		MessagesHandler(func(consumerId uint8, message *amqp.Message) {
+		Offset(streaming.OffsetSpecification{}.Last()).
+		MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
 			atomic.AddInt32(&count, 1)
-			fmt.Printf("Golang Counter:%d\n", count)
+			fmt.Printf("Golang Counter:%d consumer id:%d\n", count, context.Consumer.ID)
+		_ = context.Consumer.Commit()
 		}).Build()
 	CheckErr(err)
 	// Get a new producer to publish the messages
 	producer, err := client.ProducerCreator().Stream(streamName).Build()
 	CheckErr(err)
-	numberOfMessages := 10
+	numberOfMessages := 100
 	batchSize := 5
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp

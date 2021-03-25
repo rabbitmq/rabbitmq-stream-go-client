@@ -189,25 +189,6 @@ func (c *Client) DeleteStream(stream string) error {
 	return c.HandleWrite(b.Bytes(), resp)
 }
 
-func (c *Client) UnSubscribe(id uint8) error {
-	length := 2 + 2 + 4 + 1
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandUnsubscribe)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
-	WriteByte(b, id)
-	err := c.HandleWrite(b.Bytes(), resp)
-
-	consumer, err := c.consumers.GetConsumerById(id)
-	if err != nil {
-		return err
-	}
-	consumer.response.code <- Code{id: CloseChannel}
-	return nil
-}
 
 func (c *Client) HeartBeat() {
 

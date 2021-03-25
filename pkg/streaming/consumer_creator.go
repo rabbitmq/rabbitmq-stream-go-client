@@ -8,10 +8,20 @@ import (
 type Consumer struct {
 	ID         uint8
 	response   *Response
+	offset     int64
 	parameters *ConsumerCreator
 }
 
-type MessagesHandler func(consumerId uint8, message *amqp.Message)
+type ConsumerContext struct {
+
+	//long offset();
+
+	//void commit();
+
+	Consumer *Consumer
+}
+
+type MessagesHandler func(Context ConsumerContext, message *amqp.Message)
 
 type ConsumerCreator struct {
 	client              *Client
@@ -84,7 +94,7 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 				}
 
 			case messages := <-consumer.response.data:
-				c.messagesHandler(consumer.ID, messages.(*amqp.Message))
+				c.messagesHandler(ConsumerContext{Consumer: consumer}, messages.(*amqp.Message))
 			}
 		}
 	}()
@@ -108,7 +118,45 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 }
 
 func (consumer *Consumer) UnSubscribe() error {
-	return consumer.parameters.client.UnSubscribe(consumer.ID)
+	length := 2 + 2 + 4 + 1
+	resp := consumer.parameters.client.responses.NewResponse()
+	correlationId := resp.subId
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandUnsubscribe)
+	WriteShort(b, Version1)
+	WriteInt(b, correlationId)
+	WriteByte(b, consumer.ID)
+	err := consumer.parameters.client.HandleWrite(b.Bytes(), resp)
+	if err != nil {
+		return err
+	}
+	consumer.response.code <- Code{id: CloseChannel}
+	return nil
+}
+
+func (consumer *Consumer) Commit() error {
+	//public void commitOffset(String reference, String stream, long offset) {
+	//	if (reference == null || reference.isEmpty() || reference.length() > 256) {
+	//		throw new IllegalArgumentException(
+	//			"Reference must a non-empty string of less than 256 characters");
+	//	}
+	//	if (stream == null || stream.isEmpty()) {
+	//		throw new IllegalArgumentException("Stream cannot be null or empty");
+	//	}
+	length := 2 + 2 + 4 + 2 + len(consumer.parameters.consumerName) + 2 +
+		len(consumer.parameters.streamName) + 8
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteInt(b, length)
+	WriteShort(b, CommandCommitOffset)
+	WriteShort(b, Version1)
+	WriteInt(b, 0) // correlation ID not used yet, may be used if commit offset has a confirm
+	WriteString(b, consumer.parameters.consumerName)
+	WriteString(b, consumer.parameters.streamName)
+
+	WriteLong(b, consumer.offset)
+	return consumer.parameters.client.socket.writeAndFlush(b.Bytes())
+
 }
 
 /*
