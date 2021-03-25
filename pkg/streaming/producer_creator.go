@@ -27,10 +27,10 @@ func (c *ProducerCreator) Stream(streamName string) *ProducerCreator {
 }
 
 func (c *ProducerCreator) Build() (*Producer, error) {
-	producer := c.client.producers.New(c)
+	producer := c.client.producers.NewProducer(c)
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(c.streamName)
-	resp := c.client.responses.New()
+	resp := c.client.responses.NewResponse()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -114,7 +114,7 @@ func (producer *Producer) Close() error {
 
 func (c *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
-	resp := c.responses.New()
+	resp := c.responses.NewResponse()
 	correlationId := resp.subId
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)

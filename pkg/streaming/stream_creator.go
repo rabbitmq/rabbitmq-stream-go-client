@@ -43,7 +43,7 @@ func (s StreamCreator) buildParameters() map[string]string {
 }
 
 func (s StreamCreator) Create() error {
-	resp := s.client.responses.New()
+	resp := s.client.responses.NewResponse()
 	length := 2 + 2 + 4 + 2 + len(s.streamName) + 4
 	correlationId := resp.subId
 	args := s.buildParameters()
