@@ -56,14 +56,14 @@ func (c *ConsumerCreator) Offset(offsetSpecification OffsetSpecification) *Consu
 }
 
 func (c *ConsumerCreator) Build() (*Consumer, error) {
-	consumer := c.client.consumers.NewConsumer(c)
+	consumer := c.client.coordinator.NewConsumer(c)
 	length := 2 + 2 + 4 + 1 + 2 + len(c.streamName) + 2 + 2
 	if c.offsetSpecification.isOffset() ||
 		c.offsetSpecification.isTimestamp() {
 		length += 8
 	}
-	resp := c.client.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.client.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)
@@ -89,7 +89,7 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 			select {
 			case code := <-consumer.response.code:
 				if code.id == CloseChannel {
-					_ = c.client.consumers.RemoveById(consumer.ID)
+					_ = c.client.coordinator.RemoveConsumerById(consumer.ID)
 					return
 				}
 
@@ -119,8 +119,8 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 
 func (consumer *Consumer) UnSubscribe() error {
 	length := 2 + 2 + 4 + 1
-	resp := consumer.parameters.client.responses.NewResponse()
-	correlationId := resp.subId
+	resp := consumer.parameters.client.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandUnsubscribe)

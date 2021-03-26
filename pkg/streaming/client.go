@@ -23,9 +23,7 @@ type Client struct {
 	socket           Socket
 	clientProperties ClientProperties
 	tuneState        TuneState
-	producers        *Items
-	responses        *Items
-	consumers        *Items
+	coordinator      *Coordinator
 }
 
 func (c *Client) connect(addr string) error {
@@ -84,8 +82,8 @@ func (c *Client) peerProperties() error {
 	}
 
 	length := 2 + 2 + 4 + clientPropertiesSize
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)
@@ -118,8 +116,8 @@ func (c *Client) authenticate(user string, password string) error {
 
 func (c *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
@@ -127,7 +125,7 @@ func (c *Client) getSaslMechanisms() []string {
 	WriteInt(b, correlationId)
 	err := c.socket.writeAndFlush(b.Bytes())
 	data := <-resp.data
-	err = c.responses.RemoveResponseById(correlationId)
+	err = c.coordinator.RemoveResponseById(correlationId)
 	if err != nil {
 		return nil
 	}
@@ -137,9 +135,9 @@ func (c *Client) getSaslMechanisms() []string {
 
 func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	resp := c.responses.NewResponse()
-	respTune := c.responses.NewResponseWitName("tune")
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	respTune := c.coordinator.NewResponseWitName("tune")
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslAuthenticate)
@@ -154,7 +152,7 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	}
 	// double read for TUNE
 	tuneData := <-respTune.data
-	err = c.responses.RemoveResponseByName("tune")
+	err = c.coordinator.RemoveResponseByName("tune")
 	if err != nil {
 		return err
 	}
@@ -164,8 +162,8 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 
 func (c *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandOpen)
@@ -177,8 +175,8 @@ func (c *Client) open(virtualHost string) error {
 
 func (c *Client) DeleteStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream)
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeleteStream)
@@ -189,16 +187,15 @@ func (c *Client) DeleteStream(stream string) error {
 	return c.HandleWrite(b.Bytes(), resp)
 }
 
-
 func (c *Client) HeartBeat() {
 
 	ticker := time.NewTicker(40 * time.Second)
-	resp := c.responses.NewResponseWitName("heartbeat")
+	resp := c.coordinator.NewResponseWitName("heartbeat")
 	go func() {
 		for {
 			select {
 			case <-resp.code:
-				c.responses.RemoveResponseByName("heartbeat")
+				c.coordinator.RemoveResponseByName("heartbeat")
 				return
 			case t := <-ticker.C:
 				fmt.Printf("sendHeartbeat: %s \n", t)
@@ -222,7 +219,7 @@ func (c *Client) Close() error {
 	c.socket.mutex.Lock()
 	defer c.socket.mutex.Unlock()
 	if c.socket.connected {
-		r, err := c.responses.GetResponseByName("heartbeat")
+		r, err := c.coordinator.GetResponseByName("heartbeat")
 		if err != nil {
 			return err
 		}
@@ -234,4 +231,3 @@ func (c *Client) Close() error {
 	//}
 	return nil
 }
-

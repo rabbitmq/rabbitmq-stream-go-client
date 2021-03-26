@@ -42,7 +42,7 @@ func (c *Client) HandleWrite(buffer []byte, response *Response) error {
 	resultCode := WaitCodeWithDefaultTimeOut(response)
 	/// we need to remove the response before evaluate the
 	// buffer errSocket
-	result = c.responses.RemoveResponseById(response.subId)
+	result = c.coordinator.RemoveResponseById(response.correlationid)
 	if result != nil {
 		// we just log
 		fmt.Printf("Error HandleWrite %s", result)

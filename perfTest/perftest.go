@@ -23,7 +23,7 @@ func main() {
 	batchSize := 100
 	numberOfProducers := 3
 	numberOfConsumers := 3
-	numberOfStreams := 3
+	numberOfStreams := 10
 	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
 	///
 

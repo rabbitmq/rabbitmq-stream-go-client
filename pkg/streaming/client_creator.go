@@ -7,9 +7,7 @@ type ClientCreator struct {
 
 func NewClientCreator() *ClientCreator {
 	client := &Client{
-		producers: NewItems(),
-		responses: NewResponses(),
-		consumers: NewItems(),
+		coordinator: NewCoordinator(),
 	}
 	return &ClientCreator{client: client}
 }
