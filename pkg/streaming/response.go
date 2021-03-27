@@ -48,11 +48,16 @@ func (c *Client) handleResponse() {
 			}
 		case CommandOpen, CommandDeclarePublisher,
 			CommandDeletePublisher, CommandDeleteStream,
-			CommandCreateStream, CommandSaslAuthenticate, CommandSubscribe:
+			CommandCreateStream, CommandSaslAuthenticate, CommandSubscribe,
+			CommandUnsubscribe:
 			{
 				c.handleGenericResponse(readerProtocol, buffer)
 			}
+		case CommandPublishError:
+			{
+				c.handlePublishError(readerProtocol, buffer)
 
+			}
 		case CommandPublishConfirm:
 			{
 				c.handleConfirm(readerProtocol, buffer)
@@ -62,6 +67,11 @@ func (c *Client) handleResponse() {
 				c.handleDeliver(buffer)
 
 			}
+		case CommandMetadataUpdate:
+			{
+
+				c.MetadataUpdateFrameHandler(buffer)
+			}
 		case CommandCredit:
 			{
 				c.CreditNotificationFrameHandler(readerProtocol, buffer)
@@ -69,6 +79,11 @@ func (c *Client) handleResponse() {
 		case CommandHeartbeat:
 			{
 				fmt.Printf("CommandHeartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+
+			}
+		case CommandQueryOffset:
+			{
+				c.QueryOffsetFrameHandler(readerProtocol, buffer)
 
 			}
 		default:
@@ -216,7 +231,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 					fmt.Printf("%s", err)
 				}
 				consumer.response.code <- Code{id: ResponseCodeOk}
-				consumer.response.data <- &msg
+				consumer.response.messages <- &msg
 			}
 
 		}
@@ -230,5 +245,49 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 func (c *Client) CreditNotificationFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
 	subscriptionId := ReadByte(r)
+	// TODO ASK WHAT TO DO HERE
 	fmt.Printf("CreditNotificationFrameHandler %d \n", subscriptionId)
+}
+
+func (c *Client) QueryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	c.handleGenericResponse(readProtocol, r)
+	offset := ReadInt64(r)
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	if err != nil {
+		// TODO handle readProtocol
+		return
+	}
+	res.data <- offset
+}
+
+func (c *Client) handlePublishError(protocol *ReaderProtocol, buffer *bufio.Reader) {
+
+	publisherId := ReadByte(buffer)
+	publishingErrorCount, _ := ReadUInt(buffer)
+	//client.metricsCollector.publishError(publishingErrorCount);
+	var publishingId int64
+	var code uint16
+	for publishingErrorCount != 0 {
+		publishingId = ReadInt64(buffer)
+		code = ReadUShort(buffer)
+		if c.PublishErrorListener != nil {
+			c.PublishErrorListener(publisherId, publishingId, code)
+		}
+		publishingErrorCount--
+	}
+
+}
+
+func (c *Client) MetadataUpdateFrameHandler(buffer *bufio.Reader) {
+
+	code := ReadUShort(buffer)
+	if code == ResponseCodeStreamNotAvailable {
+		stream := ReadString(buffer)
+		fmt.Printf("Stream %s is no longer available", stream)
+		// TODO ASK WHAT TO DO HERE
+		//client.metadataListener.handle(stream, code)
+	} else {
+		//TODO handle the error, see the java code
+		fmt.Printf("Unsupported metadata update code %d", code)
+	}
 }

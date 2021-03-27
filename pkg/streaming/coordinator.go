@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"fmt"
+	"github.com/Azure/go-amqp"
 	"github.com/pkg/errors"
 	"strconv"
 	"sync"
@@ -22,6 +23,7 @@ type Code struct {
 type Response struct {
 	code          chan Code
 	data          chan interface{}
+	messages      chan *amqp.Message
 	correlationid int
 }
 
@@ -33,138 +35,133 @@ func NewCoordinator() *Coordinator {
 }
 
 // producers
-func (items *Coordinator) NewProducer(parameters *ProducerCreator) *Producer {
-	items.mutex.Lock()
-	defer items.mutex.Unlock()
-	var lastId = uint8(len(items.producers))
+func (coordinator *Coordinator) NewProducer(parameters *ProducerCreator) *Producer {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	var lastId = uint8(len(coordinator.producers))
 	var producer = &Producer{ID: lastId,
 		parameters: parameters}
-	items.producers[lastId] = producer
+	coordinator.producers[lastId] = producer
 	return producer
 }
 
-func (items *Coordinator) RemoveConsumerById(id interface{}) error {
-	return items.removeById(id, items.consumers)
+func (coordinator *Coordinator) RemoveConsumerById(id interface{}) error {
+	return coordinator.removeById(id, coordinator.consumers)
 }
-func (items *Coordinator) RemoveProducerById(id interface{}) error {
-	return items.removeById(id, items.producers)
-}
-
-func (items *Coordinator) RemoveResponseById(id interface{}) error {
-	return items.removeById(fmt.Sprintf("%d", id), items.responses)
+func (coordinator *Coordinator) RemoveProducerById(id interface{}) error {
+	return coordinator.removeById(id, coordinator.producers)
 }
 
-
-func (items *Coordinator) ProducersCount() int {
-	return items.count(items.producers)
+func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {
+	return coordinator.removeById(fmt.Sprintf("%d", id), coordinator.responses)
 }
 
-
+func (coordinator *Coordinator) ProducersCount() int {
+	return coordinator.count(coordinator.producers)
+}
 
 /// response
 func NewResponse() *Response {
 	res := &Response{}
 	res.code = make(chan Code, 0)
 	res.data = make(chan interface{}, 0)
+	res.messages = make(chan *amqp.Message, 1000)
 	return res
 }
 
-func (items *Coordinator) NewResponseWitName(id string) *Response {
-	items.mutex.Lock()
-	items.counter++
+func (coordinator *Coordinator) NewResponseWitName(id string) *Response {
+	coordinator.mutex.Lock()
+	coordinator.counter++
 	res := NewResponse()
-	res.correlationid = items.counter
-	items.responses[id] = res
-	items.mutex.Unlock()
+	res.correlationid = coordinator.counter
+	coordinator.responses[id] = res
+	coordinator.mutex.Unlock()
 	return res
 }
 
-func (items *Coordinator) NewResponse() *Response {
-	items.mutex.Lock()
-	defer items.mutex.Unlock()
-	items.counter++
+func (coordinator *Coordinator) NewResponse() *Response {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	coordinator.counter++
 	res := NewResponse()
-	res.correlationid = items.counter
-	items.responses[strconv.Itoa(items.counter)] = res
+	res.correlationid = coordinator.counter
+	coordinator.responses[strconv.Itoa(coordinator.counter)] = res
 	return res
 }
 
-func (items *Coordinator) GetResponseByName(id string) (*Response, error) {
-	items.mutex.Lock()
-	defer items.mutex.Unlock()
-	if items.responses[id] == nil {
+func (coordinator *Coordinator) GetResponseByName(id string) (*Response, error) {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	if coordinator.responses[id] == nil {
 		return nil, errors.New("Response #{id} not found ")
 	}
-	switch items.responses[id].(type) {
+	switch coordinator.responses[id].(type) {
 	case *Response:
-		return items.responses[id].(*Response), nil
+		return coordinator.responses[id].(*Response), nil
 	}
 
 	return nil, nil
 }
 
-func (items *Coordinator) RemoveResponseByName(id string) error {
-	items.mutex.Lock()
-	defer items.mutex.Unlock()
-	if items.responses[id] == nil {
+func (coordinator *Coordinator) RemoveResponseByName(id string) error {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	if coordinator.responses[id] == nil {
 		return errors.New("Response #{id} not found ")
 	}
-	delete(items.responses, id)
+	delete(coordinator.responses, id)
 	return nil
 }
 
-func (items *Coordinator) ResponsesCount() int {
-	return items.count(items.responses)
+func (coordinator *Coordinator) ResponsesCount() int {
+	return coordinator.count(coordinator.responses)
 }
 
-
 /// Consumer functions
-func (items *Coordinator) NewConsumer(parameters *ConsumerCreator) *Consumer {
-	items.mutex.Lock()
-	defer items.mutex.Unlock()
-	var lastId = uint8(len(items.consumers))
+func (coordinator *Coordinator) NewConsumer(parameters *ConsumerCreator) *Consumer {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	var lastId = uint8(len(coordinator.consumers))
 	var item = &Consumer{ID: lastId, parameters: parameters,
 		response: NewResponse()}
-	items.consumers[lastId] = item
+	coordinator.consumers[lastId] = item
 	return item
 }
 
-func (items *Coordinator) GetConsumerById(id interface{}) (*Consumer, error) {
-	v, err := items.getById(id, items.consumers)
+func (coordinator *Coordinator) GetConsumerById(id interface{}) (*Consumer, error) {
+	v, err := coordinator.getById(id, coordinator.consumers)
 	if err != nil {
 		return nil, err
 	}
 	return v.(*Consumer), err
 }
 
-func (items *Coordinator) GetResponseById(id uint32) (*Response, error) {
-	v, err := items.getById(fmt.Sprintf("%d", id), items.responses)
+func (coordinator *Coordinator) GetResponseById(id uint32) (*Response, error) {
+	v, err := coordinator.getById(fmt.Sprintf("%d", id), coordinator.responses)
 	if err != nil {
 		return nil, err
 	}
 	return v.(*Response), err
 }
 
-func (items *Coordinator) ConsumersCount() int {
-	return items.count(items.consumers)
+func (coordinator *Coordinator) ConsumersCount() int {
+	return coordinator.count(coordinator.consumers)
 }
-
-
 
 // general functions
 
-func (items *Coordinator) getById(id interface{}, refmap map[interface{}]interface{}) (interface{}, error) {
-	items.mutex.Lock()
-	defer items.mutex.Unlock()
+func (coordinator *Coordinator) getById(id interface{}, refmap map[interface{}]interface{}) (interface{}, error) {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
 	if refmap[id] == nil {
 		return nil, errors.New("Item #{id} not found ")
 	}
 	return refmap[id], nil
 }
 
-func (items *Coordinator) removeById(id interface{}, refmap map[interface{}]interface{}) error {
-	items.mutex.Lock()
-	defer items.mutex.Unlock()
+func (coordinator *Coordinator) removeById(id interface{}, refmap map[interface{}]interface{}) error {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
 	if refmap[id] == nil {
 		return errors.New("item #{id} not found ")
 	}
@@ -172,8 +169,8 @@ func (items *Coordinator) removeById(id interface{}, refmap map[interface{}]inte
 	return nil
 }
 
-func (items *Coordinator) count(refmap map[interface{}]interface{}) int {
-	items.mutex.Lock()
-	defer items.mutex.Unlock()
+func (coordinator *Coordinator) count(refmap map[interface{}]interface{}) int {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
 	return len(refmap)
 }

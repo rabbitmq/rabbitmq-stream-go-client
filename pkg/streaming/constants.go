@@ -73,6 +73,8 @@ func LookErrorCode(errorCode uint16) string {
 		return "Stream already exists"
 	case ResponseCodeVirtualHostAccessFailure:
 		return "VirtualHost access failure"
+	case ResponseCodeSubscriptionIdDoesNotExist:
+		return "Code subscription id does not exist"
 	default:
 		{
 			fmt.Printf("Error not handled %d", errorCode)

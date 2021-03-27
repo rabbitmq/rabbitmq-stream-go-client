@@ -3,7 +3,6 @@ package streaming
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"net"
 	"net/url"
 	"sync"
@@ -19,11 +18,15 @@ type ClientProperties struct {
 	items map[string]string
 }
 
+type PublishErrorListener func(publisherId uint8, publishingId int64, code uint16)
+
+
 type Client struct {
-	socket           Socket
-	clientProperties ClientProperties
-	tuneState        TuneState
-	coordinator      *Coordinator
+	socket              Socket
+	clientProperties    ClientProperties
+	tuneState           TuneState
+	coordinator         *Coordinator
+	PublishErrorListener PublishErrorListener
 }
 
 func (c *Client) connect(addr string) error {
@@ -195,10 +198,10 @@ func (c *Client) HeartBeat() {
 		for {
 			select {
 			case <-resp.code:
-				c.coordinator.RemoveResponseByName("heartbeat")
+				_ = c.coordinator.RemoveResponseByName("heartbeat")
 				return
-			case t := <-ticker.C:
-				fmt.Printf("sendHeartbeat: %s \n", t)
+			case _ = <-ticker.C:
+				//fmt.Printf("sendHeartbeat: %s \n", t)
 				c.sendHeartbeat()
 			}
 		}
@@ -231,3 +234,4 @@ func (c *Client) Close() error {
 	//}
 	return nil
 }
+

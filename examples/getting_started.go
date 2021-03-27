@@ -16,6 +16,7 @@ func CheckErr(err error) {
 	}
 }
 func main() {
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
@@ -30,30 +31,39 @@ func main() {
 
 	CheckErr(err)
 	consumer, err := client.ConsumerCreator().
-		Stream(streamName).
+		Stream("aaaa").
 		Name("my_consumera").
 		//Offset(streaming.OffsetSpecification{}.Timestamp(time.Now().Unix())).
-		Offset(streaming.OffsetSpecification{}.Last()).
+		Offset(streaming.OffsetSpecification{}.First()).
 		MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
 			atomic.AddInt32(&count, 1)
-			fmt.Printf("Golang Counter:%d consumer id:%d\n", count, context.Consumer.ID)
-		_ = context.Consumer.Commit()
+			if count%1000 == 0 {
+				fmt.Printf("Golang Counter:%d consumer id:%d data:%s \n", count, context.Consumer.ID, message.Data)
+				context.Consumer.Commit()
+
+			}
+			//time.Sleep(1 * time.Millisecond)
+
 		}).Build()
 	CheckErr(err)
+	//_, _ = reader.ReadString('\n')
+	//consumer.QueryOffset()
 	// Get a new producer to publish the messages
 	producer, err := client.ProducerCreator().Stream(streamName).Build()
 	CheckErr(err)
-	numberOfMessages := 100
-	batchSize := 5
+	numberOfMessages := 110
+
+	batchSize := 100
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
 	// message aggregation
-
+	countM := 0
 	start := time.Now()
 	for z := 0; z < numberOfMessages; z++ {
 		var arr []*amqp.Message
 		for f := 0; f < batchSize; f++ {
-			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d_%d", z, f) )))
+			countM++
+			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d", countM) )))
 		}
 		_, err = producer.BatchPublish(nil, arr) // batch send
 		CheckErr(err)
@@ -61,7 +71,6 @@ func main() {
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
 
-	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 
