@@ -16,6 +16,7 @@ func (cc *ClientCreator) Uri(uri string) *ClientCreator {
 	cc.uri = uri
 	return cc
 }
+
 func (cc *ClientCreator) PublishErrorHandler(publishErrorListener PublishErrorListener) *ClientCreator {
 	cc.client.PublishErrorListener = publishErrorListener
 	return cc

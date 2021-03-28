@@ -59,6 +59,10 @@ const (
 
 	///
 	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
+
+
+	///
+	DefaultReadSocketBuffer = 4096
 )
 
 func LookErrorCode(errorCode uint16) string {

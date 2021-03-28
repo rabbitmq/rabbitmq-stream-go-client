@@ -216,6 +216,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	filter := offsetLimit != -1
 
 	//messages
+	var batchConsumingMessages []*amqp.Message
 	for numRecords != 0 {
 		entryType := PeekByte(r)
 		if (entryType & 0x80) == 0 {
@@ -225,13 +226,12 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			if filter && (offset < offsetLimit) {
 				/// TODO set recordset as filtered
 			} else {
-				msg := amqp.Message{}
+				msg := &amqp.Message{}
 				err := msg.UnmarshalBinary(arrayMessage)
 				if err != nil {
 					fmt.Printf("%s", err)
 				}
-				consumer.response.code <- Code{id: ResponseCodeOk}
-				consumer.response.messages <- &msg
+				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}
 
 		}
@@ -239,6 +239,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		offset++
 		consumer.offset = offset
 	}
+	//consumer.response.code <- Code{id: ResponseCodeOk}
+	consumer.response.messages <- batchConsumingMessages
 
 }
 

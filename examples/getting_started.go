@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/Azure/go-amqp"
+	"github.com/google/uuid"
 	"github.com/gsantomaggio/go-stream-client/pkg/streaming"
 	"os"
 	"sync/atomic"
@@ -25,22 +26,23 @@ func main() {
 
 	fmt.Println("Connected to localhost")
 	streamName := "OffsetTest"
-	err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create the streaming queue
+	err = client.StreamCreator().Stream(streamName).MaxLengthBytes(3221225472).Create() // Create the streaming queue
 
 	var count int32
 
 	CheckErr(err)
+	start := time.Now()
 	consumer, err := client.ConsumerCreator().
-		Stream("aaaa").
-		Name("my_consumera").
+		Stream(streamName).
+		Name(uuid.NewString()).
 		//Offset(streaming.OffsetSpecification{}.Timestamp(time.Now().Unix())).
 		Offset(streaming.OffsetSpecification{}.First()).
 		MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
-			atomic.AddInt32(&count, 1)
-			if count%1000 == 0 {
-				fmt.Printf("Golang Counter:%d consumer id:%d data:%s \n", count, context.Consumer.ID, message.Data)
-				context.Consumer.Commit()
 
+			if atomic.AddInt32(&count, 1) %500000 == 0 {
+				fmt.Printf("Golang Counter:%d consumer id:%d data:%s time:%s \n", count, context.Consumer.ID,
+					message.Data, time.Since(start))
+				context.Consumer.Commit()
 			}
 			//time.Sleep(1 * time.Millisecond)
 
@@ -49,16 +51,18 @@ func main() {
 	//_, _ = reader.ReadString('\n')
 	//consumer.QueryOffset()
 	// Get a new producer to publish the messages
-	producer, err := client.ProducerCreator().Stream(streamName).Build()
+	clientProducer, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
 	CheckErr(err)
-	numberOfMessages := 110
+	producer, err := clientProducer.ProducerCreator().Stream(streamName).Build()
+	CheckErr(err)
+	numberOfMessages := 100000000
 
 	batchSize := 100
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
 	// message aggregation
 	countM := 0
-	start := time.Now()
+	start = time.Now()
 	for z := 0; z < numberOfMessages; z++ {
 		var arr []*amqp.Message
 		for f := 0; f < batchSize; f++ {

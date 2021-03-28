@@ -116,7 +116,9 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 				}
 
 			case messages := <-consumer.response.messages:
-				c.messagesHandler(ConsumerContext{Consumer: consumer}, messages)
+				for _, message := range messages {
+					c.messagesHandler(ConsumerContext{Consumer: consumer}, message)
+				}
 			}
 		}
 	}()

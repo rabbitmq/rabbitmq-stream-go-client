@@ -20,12 +20,11 @@ type ClientProperties struct {
 
 type PublishErrorListener func(publisherId uint8, publishingId int64, code uint16)
 
-
 type Client struct {
-	socket              Socket
-	clientProperties    ClientProperties
-	tuneState           TuneState
-	coordinator         *Coordinator
+	socket               Socket
+	clientProperties     ClientProperties
+	tuneState            TuneState
+	coordinator          *Coordinator
 	PublishErrorListener PublishErrorListener
 }
 
@@ -39,10 +38,21 @@ func (c *Client) connect(addr string) error {
 	c.tuneState.requestedHeartbeat = 60
 	c.tuneState.requestedMaxFrameSize = 1048576
 	c.clientProperties.items = make(map[string]string)
-	connection, err2 := net.Dial("tcp", net.JoinHostPort(host, port))
+	resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
+
+	connection, err2 := net.DialTCP("tcp", nil, resolver)
 	if err2 != nil {
 		return err2
 	}
+	err2 = connection.SetReadBuffer(DefaultReadSocketBuffer)
+	if err2 != nil {
+		return err2
+	}
+	err2 = connection.SetWriteBuffer(DefaultReadSocketBuffer)
+	if err2 != nil {
+		return err2
+	}
+
 	c.socket = Socket{connection: connection, mutex: &sync.Mutex{},
 		writer: bufio.NewWriter(connection)}
 	c.socket.SetConnect(true)
@@ -234,4 +244,3 @@ func (c *Client) Close() error {
 	//}
 	return nil
 }
-

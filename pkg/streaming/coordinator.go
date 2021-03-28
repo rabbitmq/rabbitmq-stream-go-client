@@ -23,7 +23,7 @@ type Code struct {
 type Response struct {
 	code          chan Code
 	data          chan interface{}
-	messages      chan *amqp.Message
+	messages      chan []*amqp.Message
 	correlationid int
 }
 
@@ -65,7 +65,7 @@ func NewResponse() *Response {
 	res := &Response{}
 	res.code = make(chan Code, 0)
 	res.data = make(chan interface{}, 0)
-	res.messages = make(chan *amqp.Message, 1000)
+	res.messages = make(chan []*amqp.Message, 100)
 	return res
 }
 
