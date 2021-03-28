@@ -122,9 +122,7 @@ var _ = Describe("Streaming Consumers", func() {
 	})
 
 	It("Subscribe stream not found", func() {
-		localClient, err := NewClientCreator().Connect()
-		Expect(err).NotTo(HaveOccurred())
-		_, err = localClient.ConsumerCreator().
+		consumer, err := testClient.ConsumerCreator().
 			Stream("StreamNotExist").
 			Name("my_consumer").
 			MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
@@ -132,5 +130,12 @@ var _ = Describe("Streaming Consumers", func() {
 			}).Build()
 		Expect(fmt.Sprintf("%s", err)).
 			To(ContainSubstring("Stream does not exist"))
+		err = consumer.UnSubscribe()
+		Expect(fmt.Sprintf("%s", err)).
+			To(ContainSubstring("Code subscription id does not exist"))
+		//err = localClient.Close()
+
 	})
+
+
 })
