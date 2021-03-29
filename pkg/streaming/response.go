@@ -48,11 +48,16 @@ func (c *Client) handleResponse() {
 			}
 		case CommandOpen, CommandDeclarePublisher,
 			CommandDeletePublisher, CommandDeleteStream,
-			CommandCreateStream, CommandSaslAuthenticate, CommandSubscribe:
+			CommandCreateStream, CommandSaslAuthenticate, CommandSubscribe,
+			CommandUnsubscribe:
 			{
 				c.handleGenericResponse(readerProtocol, buffer)
 			}
+		case CommandPublishError:
+			{
+				c.handlePublishError(readerProtocol, buffer)
 
+			}
 		case CommandPublishConfirm:
 			{
 				c.handleConfirm(readerProtocol, buffer)
@@ -62,6 +67,11 @@ func (c *Client) handleResponse() {
 				c.handleDeliver(buffer)
 
 			}
+		case CommandMetadataUpdate:
+			{
+
+				c.MetadataUpdateFrameHandler(buffer)
+			}
 		case CommandCredit:
 			{
 				c.CreditNotificationFrameHandler(readerProtocol, buffer)
@@ -69,6 +79,11 @@ func (c *Client) handleResponse() {
 		case CommandHeartbeat:
 			{
 				fmt.Printf("CommandHeartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+
+			}
+		case CommandQueryOffset:
+			{
+				c.QueryOffsetFrameHandler(readerProtocol, buffer)
 
 			}
 		default:
@@ -91,7 +106,7 @@ func (c *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bu
 		mechanisms = append(mechanisms, mechanism)
 	}
 
-	res, err := c.responses.GetResponseById(streamingRes.CorrelationId)
+	res, err := c.coordinator.GetResponseById(streamingRes.CorrelationId)
 	if err != nil {
 		// TODO handle response
 		return err
@@ -104,9 +119,6 @@ func (c *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bu
 func (c *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	readProtocol.CorrelationId, _ = ReadUInt(r)
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
-	if readProtocol.ResponseCode != 1 {
-		fmt.Printf("Errr ResponseCode: %d ", readProtocol.ResponseCode)
-	}
 	serverPropertiesCount, _ := ReadUInt(r)
 	serverProperties := make(map[string]string)
 
@@ -115,7 +127,7 @@ func (c *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Rea
 		value := ReadString(r)
 		serverProperties[key] = value
 	}
-	res, err := c.responses.GetResponseById(readProtocol.CorrelationId)
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
 	if err != nil {
 		// TODO handle response
 		return
@@ -139,7 +151,7 @@ func (c *Client) handleTune(r *bufio.Reader) interface{} {
 	WriteShort(b, Version1)
 	WriteUInt(b, maxFrameSize)
 	WriteUInt(b, heartbeat)
-	res, err := c.responses.GetResponseByName("tune")
+	res, err := c.coordinator.GetResponseByName("tune")
 	if err != nil {
 		// TODO handle response
 		return err
@@ -152,7 +164,7 @@ func (c *Client) handleTune(r *bufio.Reader) interface{} {
 func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	readProtocol.CorrelationId, _ = ReadUInt(r)
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
-	res, err := c.responses.GetResponseById(readProtocol.CorrelationId)
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
 	if err != nil {
 		// TODO handle readProtocol
 		return
@@ -177,7 +189,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	subscriptionId := ReadByte(r)
-	consumer, _ := c.consumers.GetConsumerById(subscriptionId)
+	consumer, _ := c.coordinator.GetConsumerById(subscriptionId)
 
 	_ = ReadByte(r)
 	_ = ReadByte(r)
@@ -204,6 +216,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	filter := offsetLimit != -1
 
 	//messages
+	var batchConsumingMessages []*amqp.Message
 	for numRecords != 0 {
 		entryType := PeekByte(r)
 		if (entryType & 0x80) == 0 {
@@ -211,26 +224,74 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 			arrayMessage := ReadUint8Array(r, sizeMessage)
 			if filter && (offset < offsetLimit) {
-			/// TODO set recordset as filtered
+				/// TODO set recordset as filtered
 			} else {
-				msg := amqp.Message{}
+				msg := &amqp.Message{}
 				err := msg.UnmarshalBinary(arrayMessage)
 				if err != nil {
 					fmt.Printf("%s", err)
 				}
-				consumer.response.code <- Code{id: ResponseCodeOk}
-				consumer.response.data <- &msg
+				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}
 
 		}
 		numRecords--
 		offset++
+		consumer.setOffset(offset)
 	}
+
+
+	//consumer.response.code <- Code{id: ResponseCodeOk}
+	consumer.response.messages <- batchConsumingMessages
 
 }
 
 func (c *Client) CreditNotificationFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
 	subscriptionId := ReadByte(r)
+	// TODO ASK WHAT TO DO HERE
 	fmt.Printf("CreditNotificationFrameHandler %d \n", subscriptionId)
+}
+
+func (c *Client) QueryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	c.handleGenericResponse(readProtocol, r)
+	offset := ReadInt64(r)
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	if err != nil {
+		// TODO handle readProtocol
+		return
+	}
+	res.data <- offset
+}
+
+func (c *Client) handlePublishError(protocol *ReaderProtocol, buffer *bufio.Reader) {
+
+	publisherId := ReadByte(buffer)
+	publishingErrorCount, _ := ReadUInt(buffer)
+	//client.metricsCollector.publishError(publishingErrorCount);
+	var publishingId int64
+	var code uint16
+	for publishingErrorCount != 0 {
+		publishingId = ReadInt64(buffer)
+		code = ReadUShort(buffer)
+		if c.PublishErrorListener != nil {
+			c.PublishErrorListener(publisherId, publishingId, code)
+		}
+		publishingErrorCount--
+	}
+
+}
+
+func (c *Client) MetadataUpdateFrameHandler(buffer *bufio.Reader) {
+
+	code := ReadUShort(buffer)
+	if code == ResponseCodeStreamNotAvailable {
+		stream := ReadString(buffer)
+		fmt.Printf("Stream %s is no longer available", stream)
+		// TODO ASK WHAT TO DO HERE
+		//client.metadataListener.handle(stream, code)
+	} else {
+		//TODO handle the error, see the java code
+		fmt.Printf("Unsupported metadata update code %d", code)
+	}
 }

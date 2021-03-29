@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/Azure/go-amqp"
+	"github.com/google/uuid"
 	"github.com/gsantomaggio/go-stream-client/pkg/streaming"
 	"os"
 	"sync/atomic"
@@ -16,53 +17,77 @@ func CheckErr(err error) {
 	}
 }
 func main() {
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
-	client, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
+	client, err := streaming.NewClientCreator().Uri(uris).
+
+		Connect() // create Client Struct
 	CheckErr(err)
 
 	fmt.Println("Connected to localhost")
 	streamName := "OffsetTest"
-	err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create the streaming queue
+	err = client.StreamCreator().Stream(streamName).
+		MaxLengthBytes(3221225472).
+		Create() // Create the streaming queue
 
 	var count int32
 
 	CheckErr(err)
+	start := time.Now()
+
 	consumer, err := client.ConsumerCreator().
 		Stream(streamName).
-		Name("my_consumer").
-		//Offset(streaming.OffsetSpecification{}.Timestamp(time.Now().Unix())).
-		MessagesHandler(func(consumerId uint8, message *amqp.Message) {
-			atomic.AddInt32(&count, 1)
-			fmt.Printf("Golang Counter:%d\n", count)
+		Name(uuid.NewString()).
+		Offset(streaming.OffsetSpecification{}.First()).
+		MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
+
+			if atomic.AddInt32(&count, 1)%5000 == 0 {
+				fmt.Printf("Golang Counter:%d consumer id:%d data:%s time:%s \n", count, context.Consumer.ID,
+					message.Data, time.Since(start))
+				context.Consumer.Commit()
+			}
+			time.Sleep(1 * time.Millisecond)
+
 		}).Build()
 	CheckErr(err)
+
+	//_, _ = reader.ReadString('\n')
+	//consumer.QueryOffset()
 	// Get a new producer to publish the messages
-	producer, err := client.ProducerCreator().Stream(streamName).Build()
+	clientProducer, err := streaming.NewClientCreator().Uri(uris).
+		PublishErrorHandler(func(publisherId uint8, publishingId int64, code uint16) {
+			fmt.Printf("PublishErrorHandler publisherId %d, code: %s", publisherId, streaming.LookErrorCode(code))
+		}).
+		Connect() // create Client Struct
+	CheckErr(err)
+	producer, err := clientProducer.ProducerCreator().Stream(streamName).Build()
 	CheckErr(err)
 	numberOfMessages := 10
-	batchSize := 5
+
+	batchSize := 100
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
 	// message aggregation
-
-	start := time.Now()
+	countM := 0
+	start = time.Now()
 	for z := 0; z < numberOfMessages; z++ {
 		var arr []*amqp.Message
 		for f := 0; f < batchSize; f++ {
-			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d_%d", z, f) )))
+			countM++
+			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d", countM) )))
 		}
 		_, err = producer.BatchPublish(nil, arr) // batch send
-		CheckErr(err)
 	}
+
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
 
-	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
-
+	err =producer.Close()
+	CheckErr(err)
 	err = consumer.UnSubscribe()
 	CheckErr(err)
 	err = client.DeleteStream(streamName) // Remove the streaming queue and the data

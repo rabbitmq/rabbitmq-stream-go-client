@@ -3,12 +3,13 @@ package streaming
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"github.com/Azure/go-amqp"
 )
 
 type Producer struct {
 	ID         uint8
-	response   *Response
+	//response   *Response
 	parameters *ProducerCreator
 }
 
@@ -27,11 +28,14 @@ func (c *ProducerCreator) Stream(streamName string) *ProducerCreator {
 }
 
 func (c *ProducerCreator) Build() (*Producer, error) {
-	producer := c.client.producers.NewProducer(c)
+	producer, err := c.client.coordinator.NewProducer(c)
+	if err != nil {
+		return nil, err
+	}
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(c.streamName)
-	resp := c.client.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.client.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeclarePublisher)
@@ -114,19 +118,21 @@ func (producer *Producer) Close() error {
 
 func (c *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeletePublisher)
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteByte(b, publisherId)
-	err := c.HandleWrite(b.Bytes(), resp)
-	err = c.producers.RemoveById(publisherId)
+	errWrite := c.HandleWrite(b.Bytes(), resp)
+
+	err := c.coordinator.RemoveProducerById(publisherId)
 	if err != nil {
-		return err
+		//TODO LOGWARN
+		fmt.Printf("Error RemoveProducerById %d", publisherId)
 	}
 
-	return nil
+	return errWrite
 }

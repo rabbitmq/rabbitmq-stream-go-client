@@ -43,9 +43,9 @@ func (s StreamCreator) buildParameters() map[string]string {
 }
 
 func (s StreamCreator) Create() error {
-	resp := s.client.responses.NewResponse()
+	resp := s.client.coordinator.NewResponse()
 	length := 2 + 2 + 4 + 2 + len(s.streamName) + 4
-	correlationId := resp.subId
+	correlationId := resp.correlationid
 	args := s.buildParameters()
 	for key, element := range args {
 		length = length + 2 + len(key) + 2 + len(element)

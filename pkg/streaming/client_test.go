@@ -3,7 +3,6 @@ package streaming
 import (
 	"fmt"
 	"github.com/google/uuid"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"time"
@@ -21,9 +20,9 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	testClient.Close()
 	time.Sleep(500 * time.Millisecond)
-	Expect(testClient.producers.Count()).To(Equal(0))
-	Expect(testClient.responses.Count()).To(Equal(0))
-	Expect(testClient.consumers.Count()).To(Equal(0))
+	Expect(testClient.coordinator.ProducersCount()).To(Equal(0))
+	Expect(testClient.coordinator.ResponsesCount()).To(Equal(0))
+	Expect(testClient.coordinator.ConsumersCount()).To(Equal(0))
 })
 
 var _ = Describe("Streaming testClient", func() {

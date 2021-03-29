@@ -11,7 +11,7 @@ var _ = Describe("Utils", func() {
 
 	It("Timeout calls No Error", func() {
 		response := NewResponse()
-		response.subId = 9
+		response.correlationid = 9
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {
@@ -22,7 +22,6 @@ var _ = Describe("Utils", func() {
 		time.Sleep(200 * time.Millisecond)
 		response.code <- Code{
 			id:          ResponseCodeOk,
-			description: "TEST",
 		}
 
 		wg.Wait()
@@ -30,7 +29,7 @@ var _ = Describe("Utils", func() {
 
 	It("Timeout calls No Error", func() {
 		response := NewResponse()
-		response.subId = 9
+		response.correlationid = 9
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {

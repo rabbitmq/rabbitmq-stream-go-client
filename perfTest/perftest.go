@@ -23,7 +23,7 @@ func main() {
 	batchSize := 100
 	numberOfProducers := 3
 	numberOfConsumers := 3
-	numberOfStreams := 3
+	numberOfStreams := 10
 	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
 	///
 
@@ -48,7 +48,7 @@ func main() {
 			consumer, err := client.ConsumerCreator().
 				Stream(streamName).
 				Name("my_consumer").
-				MessagesHandler(func(consumerId uint8, message *amqp.Message) {
+				MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
 
 				}).Build()
 

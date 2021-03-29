@@ -59,6 +59,10 @@ const (
 
 	///
 	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
+
+
+	///
+	DefaultReadSocketBuffer = 4096
 )
 
 func LookErrorCode(errorCode uint16) string {
@@ -73,6 +77,10 @@ func LookErrorCode(errorCode uint16) string {
 		return "Stream already exists"
 	case ResponseCodeVirtualHostAccessFailure:
 		return "VirtualHost access failure"
+	case ResponseCodeSubscriptionIdDoesNotExist:
+		return "Code subscription id does not exist"
+	case ResponseCodePublisherDoesNotExist:
+		return "Code publisher does not exist"
 	default:
 		{
 			fmt.Printf("Error not handled %d", errorCode)

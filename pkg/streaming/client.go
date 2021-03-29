@@ -3,7 +3,6 @@ package streaming
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"net"
 	"net/url"
 	"sync"
@@ -19,13 +18,14 @@ type ClientProperties struct {
 	items map[string]string
 }
 
+type PublishErrorListener func(publisherId uint8, publishingId int64, code uint16)
+
 type Client struct {
-	socket           Socket
-	clientProperties ClientProperties
-	tuneState        TuneState
-	producers        *Items
-	responses        *Items
-	consumers        *Items
+	socket               Socket
+	clientProperties     ClientProperties
+	tuneState            TuneState
+	coordinator          *Coordinator
+	PublishErrorListener PublishErrorListener
 }
 
 func (c *Client) connect(addr string) error {
@@ -38,10 +38,21 @@ func (c *Client) connect(addr string) error {
 	c.tuneState.requestedHeartbeat = 60
 	c.tuneState.requestedMaxFrameSize = 1048576
 	c.clientProperties.items = make(map[string]string)
-	connection, err2 := net.Dial("tcp", net.JoinHostPort(host, port))
+	resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
+
+	connection, err2 := net.DialTCP("tcp", nil, resolver)
 	if err2 != nil {
 		return err2
 	}
+	err2 = connection.SetReadBuffer(DefaultReadSocketBuffer)
+	if err2 != nil {
+		return err2
+	}
+	err2 = connection.SetWriteBuffer(DefaultReadSocketBuffer)
+	if err2 != nil {
+		return err2
+	}
+
 	c.socket = Socket{connection: connection, mutex: &sync.Mutex{},
 		writer: bufio.NewWriter(connection)}
 	c.socket.SetConnect(true)
@@ -84,8 +95,8 @@ func (c *Client) peerProperties() error {
 	}
 
 	length := 2 + 2 + 4 + clientPropertiesSize
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	WriteInt(b, length)
@@ -118,8 +129,8 @@ func (c *Client) authenticate(user string, password string) error {
 
 func (c *Client) getSaslMechanisms() []string {
 	length := 2 + 2 + 4
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslHandshake)
@@ -127,7 +138,7 @@ func (c *Client) getSaslMechanisms() []string {
 	WriteInt(b, correlationId)
 	err := c.socket.writeAndFlush(b.Bytes())
 	data := <-resp.data
-	err = c.responses.RemoveResponseById(correlationId)
+	err = c.coordinator.RemoveResponseById(correlationId)
 	if err != nil {
 		return nil
 	}
@@ -137,9 +148,9 @@ func (c *Client) getSaslMechanisms() []string {
 
 func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	resp := c.responses.NewResponse()
-	respTune := c.responses.NewResponseWitName("tune")
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	respTune := c.coordinator.NewResponseWitName("tune")
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandSaslAuthenticate)
@@ -154,7 +165,7 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	}
 	// double read for TUNE
 	tuneData := <-respTune.data
-	err = c.responses.RemoveResponseByName("tune")
+	err = c.coordinator.RemoveResponseByName("tune")
 	if err != nil {
 		return err
 	}
@@ -164,8 +175,8 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 
 func (c *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandOpen)
@@ -177,8 +188,8 @@ func (c *Client) open(virtualHost string) error {
 
 func (c *Client) DeleteStream(stream string) error {
 	length := 2 + 2 + 4 + 2 + len(stream)
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandDeleteStream)
@@ -189,38 +200,18 @@ func (c *Client) DeleteStream(stream string) error {
 	return c.HandleWrite(b.Bytes(), resp)
 }
 
-func (c *Client) UnSubscribe(id uint8) error {
-	length := 2 + 2 + 4 + 1
-	resp := c.responses.NewResponse()
-	correlationId := resp.subId
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandUnsubscribe)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
-	WriteByte(b, id)
-	err := c.HandleWrite(b.Bytes(), resp)
-
-	consumer, err := c.consumers.GetConsumerById(id)
-	if err != nil {
-		return err
-	}
-	consumer.response.code <- Code{id: CloseChannel}
-	return nil
-}
-
 func (c *Client) HeartBeat() {
 
 	ticker := time.NewTicker(40 * time.Second)
-	resp := c.responses.NewResponseWitName("heartbeat")
+	resp := c.coordinator.NewResponseWitName("heartbeat")
 	go func() {
 		for {
 			select {
 			case <-resp.code:
-				c.responses.RemoveResponseByName("heartbeat")
+				_ = c.coordinator.RemoveResponseByName("heartbeat")
 				return
-			case t := <-ticker.C:
-				fmt.Printf("sendHeartbeat: %s \n", t)
+			case _ = <-ticker.C:
+				//fmt.Printf("sendHeartbeat: %s \n", t)
 				c.sendHeartbeat()
 			}
 		}
@@ -241,7 +232,7 @@ func (c *Client) Close() error {
 	c.socket.mutex.Lock()
 	defer c.socket.mutex.Unlock()
 	if c.socket.connected {
-		r, err := c.responses.GetResponseByName("heartbeat")
+		r, err := c.coordinator.GetResponseByName("heartbeat")
 		if err != nil {
 			return err
 		}
@@ -253,4 +244,3 @@ func (c *Client) Close() error {
 	//}
 	return nil
 }
-

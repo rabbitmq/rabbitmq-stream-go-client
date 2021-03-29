@@ -7,15 +7,18 @@ type ClientCreator struct {
 
 func NewClientCreator() *ClientCreator {
 	client := &Client{
-		producers: NewItems(),
-		responses: NewResponses(),
-		consumers: NewItems(),
+		coordinator: NewCoordinator(),
 	}
 	return &ClientCreator{client: client}
 }
 
 func (cc *ClientCreator) Uri(uri string) *ClientCreator {
 	cc.uri = uri
+	return cc
+}
+
+func (cc *ClientCreator) PublishErrorHandler(publishErrorListener PublishErrorListener) *ClientCreator {
+	cc.client.PublishErrorListener = publishErrorListener
 	return cc
 }
 
