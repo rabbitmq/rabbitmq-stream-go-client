@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/Azure/go-amqp"
 )
 
@@ -111,7 +112,7 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 			select {
 			case code := <-consumer.response.code:
 				if code.id == CloseChannel {
-					_ = c.client.coordinator.RemoveConsumerById(consumer.ID)
+
 					return
 				}
 
@@ -153,6 +154,10 @@ func (consumer *Consumer) UnSubscribe() error {
 	WriteByte(b, consumer.ID)
 	err := consumer.parameters.client.HandleWrite(b.Bytes(), resp)
 	consumer.response.code <- Code{id: CloseChannel}
+	errC := consumer.parameters.client.coordinator.RemoveConsumerById(consumer.ID)
+	if errC != nil {
+		fmt.Printf("Errror %s", errC)
+	}
 	return err
 }
 

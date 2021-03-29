@@ -103,7 +103,7 @@ var _ = Describe("Streaming Consumers", func() {
 			Offset(OffsetSpecification{}.Offset(30)).
 			MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&countOffset, 1)
-			_ = context.Consumer.Commit()
+				_ = context.Consumer.Commit()
 			}).Build()
 		time.Sleep(300 * time.Millisecond)
 		Expect(err).NotTo(HaveOccurred())
@@ -116,20 +116,17 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		countOffset = 0
 
-
-
-
-		consumerLastConsumed, err := testClient.ConsumerCreator().
+		consumerLastConsumed, errLast := testClient.ConsumerCreator().
 			Stream(testConsumerStream).
 			Name("my_consumer").
 			Offset(OffsetSpecification{}.LastConsumed()).
 			MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&countOffset, 1)
-				err = context.Consumer.Commit()
+				err := context.Consumer.Commit()
 				Expect(err).NotTo(HaveOccurred())
 			}).Build()
 		time.Sleep(300 * time.Millisecond)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(errLast).NotTo(HaveOccurred())
 		// from last consumed, we don't have other messages to consumer
 
 		Expect(atomic.LoadInt32(&countOffset)).To(Equal(int32(0)))
@@ -138,23 +135,22 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		countOffset = 0
-		consumerFirst, err := testClient.ConsumerCreator().
+		consumerFirst, errFirst := testClient.ConsumerCreator().
 			Stream(testConsumerStream).
 			Name("my_consumer").
 			Offset(OffsetSpecification{}.First()).
 			MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&countOffset, 1)
-				_ = context.Consumer.Commit()
+				err := context.Consumer.Commit()
+				Expect(err).NotTo(HaveOccurred())
 			}).Build()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(errFirst).NotTo(HaveOccurred())
 		time.Sleep(300 * time.Millisecond)
 		// from first, we have to read again all the messages
 		Expect(atomic.LoadInt32(&countOffset)).To(Equal(int32(50)))
 		time.Sleep(300 * time.Millisecond)
 		err = consumerFirst.UnSubscribe()
 		Expect(err).NotTo(HaveOccurred())
-
-
 
 		//err = consumerOffsetTime.UnSubscribe()
 		//Expect(err).NotTo(HaveOccurred())
@@ -177,6 +173,5 @@ var _ = Describe("Streaming Consumers", func() {
 			To(ContainSubstring("Code subscription id does not exist"))
 
 	})
-
 
 })
