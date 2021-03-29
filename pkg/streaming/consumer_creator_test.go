@@ -128,7 +128,6 @@ var _ = Describe("Streaming Consumers", func() {
 		time.Sleep(300 * time.Millisecond)
 		Expect(errLast).NotTo(HaveOccurred())
 		// from last consumed, we don't have other messages to consumer
-
 		Expect(atomic.LoadInt32(&countOffset)).To(Equal(int32(0)))
 
 		err = consumerLastConsumed.UnSubscribe()

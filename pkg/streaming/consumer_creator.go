@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Azure/go-amqp"
+	"sync"
 )
 
 type Consumer struct {
@@ -11,6 +12,19 @@ type Consumer struct {
 	response   *Response
 	offset     int64
 	parameters *ConsumerCreator
+	mutex      *sync.RWMutex
+}
+
+func (c *Consumer) setOffset(offset int64) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.offset = offset
+}
+
+func (c *Consumer) getOffset() int64 {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	return c.offset
 }
 
 type ConsumerContext struct {
@@ -180,7 +194,7 @@ func (consumer *Consumer) Commit() error {
 	WriteString(b, consumer.parameters.consumerName)
 	WriteString(b, consumer.parameters.streamName)
 
-	WriteLong(b, consumer.offset)
+	WriteLong(b, consumer.getOffset())
 	return consumer.parameters.client.socket.writeAndFlush(b.Bytes())
 
 }

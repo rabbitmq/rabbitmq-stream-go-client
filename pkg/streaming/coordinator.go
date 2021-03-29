@@ -112,6 +112,7 @@ func (coordinator *Coordinator) RemoveResponseByName(id string) error {
 	if coordinator.responses[id] == nil {
 		return errors.New("Response #{id} not found ")
 	}
+	coordinator.responses[id] = nil
 	delete(coordinator.responses, id)
 	return nil
 }
@@ -126,7 +127,7 @@ func (coordinator *Coordinator) NewConsumer(parameters *ConsumerCreator) *Consum
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
 	var item = &Consumer{ID: lastId, parameters: parameters,
-		response: NewResponse()}
+		response: NewResponse(), mutex: &sync.RWMutex{}}
 	coordinator.consumers[lastId] = item
 	return item
 }
@@ -168,6 +169,7 @@ func (coordinator *Coordinator) removeById(id interface{}, refmap map[interface{
 	if refmap[id] == nil {
 		return errors.New("item #{id} not found ")
 	}
+	refmap[id] = nil
 	delete(refmap, id)
 	return nil
 }

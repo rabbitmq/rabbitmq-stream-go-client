@@ -237,8 +237,10 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		}
 		numRecords--
 		offset++
-		consumer.offset = offset
+		consumer.setOffset(offset)
 	}
+
+
 	//consumer.response.code <- Code{id: ResponseCodeOk}
 	consumer.response.messages <- batchConsumingMessages
 
