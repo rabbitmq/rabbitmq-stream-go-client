@@ -35,20 +35,23 @@ func NewCoordinator() *Coordinator {
 }
 
 // producers
-func (coordinator *Coordinator) NewProducer(parameters *ProducerCreator) *Producer {
+func (coordinator *Coordinator) NewProducer(parameters *ProducerCreator) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	var lastId = uint8(len(coordinator.producers))
+	var lastId, err = coordinator.getNextFreeId(coordinator.producers)
+	if err != nil {
+		return nil, err
+	}
 	var producer = &Producer{ID: lastId,
 		parameters: parameters}
 	coordinator.producers[lastId] = producer
-	return producer
+	return producer, err
 }
 
 func (coordinator *Coordinator) RemoveConsumerById(id interface{}) error {
 	return coordinator.removeById(id, coordinator.consumers)
 }
-func (coordinator *Coordinator) RemoveProducerById(id interface{}) error {
+func (coordinator *Coordinator) RemoveProducerById(id uint8) error {
 	return coordinator.removeById(id, coordinator.producers)
 }
 
@@ -121,7 +124,7 @@ func (coordinator *Coordinator) ResponsesCount() int {
 func (coordinator *Coordinator) NewConsumer(parameters *ConsumerCreator) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	var lastId = uint8(len(coordinator.consumers))
+	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
 	var item = &Consumer{ID: lastId, parameters: parameters,
 		response: NewResponse()}
 	coordinator.consumers[lastId] = item
@@ -173,4 +176,21 @@ func (coordinator *Coordinator) count(refmap map[interface{}]interface{}) int {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	return len(refmap)
+}
+
+func (coordinator *Coordinator) getNextFreeId(refmap map[interface{}]interface{}) (byte, error) {
+	var maxValue int
+	maxValue = int(^uint8(0))
+	var result byte
+	for i := 0; i < maxValue; i++ {
+		if refmap[byte(i)] == nil {
+			return byte(i), nil
+		}
+		result++
+	}
+	if result >= ^uint8(0) {
+		return 0, errors.New("No more items available")
+		// TODO HANDLE THE ERROR
+	}
+	return result, nil
 }

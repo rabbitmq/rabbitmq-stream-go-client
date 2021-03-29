@@ -3,6 +3,7 @@ package streaming
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"github.com/Azure/go-amqp"
 )
 
@@ -27,7 +28,10 @@ func (c *ProducerCreator) Stream(streamName string) *ProducerCreator {
 }
 
 func (c *ProducerCreator) Build() (*Producer, error) {
-	producer := c.client.coordinator.NewProducer(c)
+	producer, err := c.client.coordinator.NewProducer(c)
+	if err != nil {
+		return nil, err
+	}
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(c.streamName)
 	resp := c.client.coordinator.NewResponse()
@@ -122,11 +126,13 @@ func (c *Client) deletePublisher(publisherId byte) error {
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
 	WriteByte(b, publisherId)
-	err := c.HandleWrite(b.Bytes(), resp)
-	err = c.coordinator.RemoveProducerById(publisherId)
+	errWrite := c.HandleWrite(b.Bytes(), resp)
+
+	err := c.coordinator.RemoveProducerById(publisherId)
 	if err != nil {
-		return err
+		//TODO LOGWARN
+		fmt.Printf("Error RemoveProducerById %d", publisherId)
 	}
 
-	return nil
+	return errWrite
 }

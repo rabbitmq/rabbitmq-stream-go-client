@@ -67,9 +67,13 @@ var _ = Describe("Streaming Producers", func() {
 	It("Not found NotExistingStream", func() {
 		localClient, err := NewClientCreator().Connect()
 		Expect(err).NotTo(HaveOccurred())
-		_, err = localClient.ProducerCreator().Stream("notExistingStream").Build()
+		producer, err := localClient.ProducerCreator().Stream("notExistingStream").Build()
 		Expect(fmt.Sprintf("%s", err)).
 			To(ContainSubstring("Stream does not exist"))
+		err = producer.Close()
+		Expect(fmt.Sprintf("%s", err)).
+			To(ContainSubstring("Code publisher does not exist"))
+
 
 	})
 

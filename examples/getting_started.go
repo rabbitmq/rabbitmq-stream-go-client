@@ -32,22 +32,30 @@ func main() {
 
 	CheckErr(err)
 	start := time.Now()
-	consumer, err := client.ConsumerCreator().
-		Stream(streamName).
-		Name(uuid.NewString()).
-		//Offset(streaming.OffsetSpecification{}.Timestamp(time.Now().Unix())).
-		Offset(streaming.OffsetSpecification{}.First()).
-		MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
 
-			if atomic.AddInt32(&count, 1) %500000 == 0 {
-				fmt.Printf("Golang Counter:%d consumer id:%d data:%s time:%s \n", count, context.Consumer.ID,
-					message.Data, time.Since(start))
-				context.Consumer.Commit()
-			}
-			//time.Sleep(1 * time.Millisecond)
+	for i := 0; i < 1; i++ {
 
-		}).Build()
-	CheckErr(err)
+		_, err := client.ConsumerCreator().
+			Stream(streamName).
+			Name(uuid.NewString()).
+			//Offset(streaming.OffsetSpecification{}.Timestamp(time.Now().Unix())).
+			Offset(streaming.OffsetSpecification{}.First()).
+			MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
+
+				if atomic.AddInt32(&count, 1)%50 == 0 {
+					fmt.Printf("Golang Counter:%d consumer id:%d data:%s time:%s \n", count, context.Consumer.ID,
+						message.Data, time.Since(start))
+					context.Consumer.Commit()
+				}
+				time.Sleep(1 * time.Millisecond)
+
+			}).Build()
+		CheckErr(err)
+
+	}
+
+
+
 	//_, _ = reader.ReadString('\n')
 	//consumer.QueryOffset()
 	// Get a new producer to publish the messages
@@ -55,7 +63,7 @@ func main() {
 	CheckErr(err)
 	producer, err := clientProducer.ProducerCreator().Stream(streamName).Build()
 	CheckErr(err)
-	numberOfMessages := 100000000
+	numberOfMessages := 100
 
 	batchSize := 100
 
@@ -78,7 +86,7 @@ func main() {
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 
-	err = consumer.UnSubscribe()
+	//err = consumer.UnSubscribe()
 	CheckErr(err)
 	err = client.DeleteStream(streamName) // Remove the streaming queue and the data
 	CheckErr(err)
