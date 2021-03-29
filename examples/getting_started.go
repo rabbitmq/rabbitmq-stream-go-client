@@ -21,49 +21,50 @@ func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
-	client, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
+	client, err := streaming.NewClientCreator().Uri(uris).
+
+		Connect() // create Client Struct
 	CheckErr(err)
 
 	fmt.Println("Connected to localhost")
 	streamName := "OffsetTest"
-	err = client.StreamCreator().Stream(streamName).MaxLengthBytes(3221225472).Create() // Create the streaming queue
+	err = client.StreamCreator().Stream(streamName).
+		MaxLengthBytes(3221225472).
+		Create() // Create the streaming queue
 
 	var count int32
 
 	CheckErr(err)
 	start := time.Now()
 
-	for i := 0; i < 1; i++ {
+	consumer, err := client.ConsumerCreator().
+		Stream(streamName).
+		Name(uuid.NewString()).
+		Offset(streaming.OffsetSpecification{}.First()).
+		MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
 
-		_, err := client.ConsumerCreator().
-			Stream(streamName).
-			Name(uuid.NewString()).
-			//Offset(streaming.OffsetSpecification{}.Timestamp(time.Now().Unix())).
-			Offset(streaming.OffsetSpecification{}.First()).
-			MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
+			if atomic.AddInt32(&count, 1)%5000 == 0 {
+				fmt.Printf("Golang Counter:%d consumer id:%d data:%s time:%s \n", count, context.Consumer.ID,
+					message.Data, time.Since(start))
+				context.Consumer.Commit()
+			}
+			time.Sleep(1 * time.Millisecond)
 
-				if atomic.AddInt32(&count, 1)%50 == 0 {
-					fmt.Printf("Golang Counter:%d consumer id:%d data:%s time:%s \n", count, context.Consumer.ID,
-						message.Data, time.Since(start))
-					context.Consumer.Commit()
-				}
-				time.Sleep(1 * time.Millisecond)
-
-			}).Build()
-		CheckErr(err)
-
-	}
-
-
+		}).Build()
+	CheckErr(err)
 
 	//_, _ = reader.ReadString('\n')
 	//consumer.QueryOffset()
 	// Get a new producer to publish the messages
-	clientProducer, err := streaming.NewClientCreator().Uri(uris).Connect() // create Client Struct
+	clientProducer, err := streaming.NewClientCreator().Uri(uris).
+		PublishErrorHandler(func(publisherId uint8, publishingId int64, code uint16) {
+			fmt.Printf("PublishErrorHandler publisherId %d, code: %s", publisherId, streaming.LookErrorCode(code))
+		}).
+		Connect() // create Client Struct
 	CheckErr(err)
 	producer, err := clientProducer.ProducerCreator().Stream(streamName).Build()
 	CheckErr(err)
-	numberOfMessages := 100
+	numberOfMessages := 10
 
 	batchSize := 100
 
@@ -78,15 +79,16 @@ func main() {
 			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d", countM) )))
 		}
 		_, err = producer.BatchPublish(nil, arr) // batch send
-		CheckErr(err)
 	}
+
 	elapsed := time.Since(start)
 	fmt.Printf("%d messages, published in: %s\n", numberOfMessages*batchSize, elapsed)
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
-
-	//err = consumer.UnSubscribe()
+	err =producer.Close()
+	CheckErr(err)
+	err = consumer.UnSubscribe()
 	CheckErr(err)
 	err = client.DeleteStream(streamName) // Remove the streaming queue and the data
 	CheckErr(err)

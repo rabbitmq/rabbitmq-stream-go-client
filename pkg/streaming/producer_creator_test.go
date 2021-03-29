@@ -65,16 +65,32 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("Not found NotExistingStream", func() {
-		localClient, err := NewClientCreator().Connect()
-		Expect(err).NotTo(HaveOccurred())
-		producer, err := localClient.ProducerCreator().Stream("notExistingStream").Build()
+		producer, err := testClient.ProducerCreator().Stream("notExistingStream").Build()
 		Expect(fmt.Sprintf("%s", err)).
 			To(ContainSubstring("Stream does not exist"))
 		err = producer.Close()
 		Expect(fmt.Sprintf("%s", err)).
 			To(ContainSubstring("Code publisher does not exist"))
-
-
 	})
+
+	//It("PublishError handler", func() {
+	//	producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
+	//	Expect(err).NotTo(HaveOccurred())
+	//	//countPublishError := int32(0)
+	//	testClient.PublishErrorListener = func(publisherId uint8, publishingId int64, code uint16) {
+	//		errString := LookErrorCode(code)
+	//		//atomic.AddInt32(&countPublishError, 1)
+	//		Expect(errString).
+	//			To(ContainSubstring("Code publisher does not exist"))
+	//	}
+	//	_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(10)) // batch send
+	//	producer.Close()
+	//	//_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(2)) // batch send
+	//	time.Sleep(700 * time.Millisecond)
+	//
+	//	testClient.PublishErrorListener = nil
+	//	//Expect(atomic.LoadInt32(&countPublishError)).To(Equal(int32(2)))
+	//
+	//})
 
 })
