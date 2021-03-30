@@ -14,6 +14,9 @@ type Consumer struct {
 	parameters *ConsumerCreator
 	mutex      *sync.RWMutex
 }
+func (c *Consumer) GetStream() string {
+	return c.parameters.streamName
+}
 
 func (c *Consumer) setOffset(offset int64) {
 	c.mutex.Lock()
