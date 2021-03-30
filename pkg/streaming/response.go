@@ -201,6 +201,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_, _ = ReadUInt(r)
 	_, _ = ReadUInt(r)
 	_, _ = ReadUInt(r)
+	_, _ = ReadUInt(r)
+
 	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
 	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
 	//fmt.Printf("%d numRecords %d \n", offset, numRecords)
