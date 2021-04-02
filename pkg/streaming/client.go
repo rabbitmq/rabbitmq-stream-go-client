@@ -202,7 +202,7 @@ func (c *Client) DeleteStream(stream string) error {
 
 func (c *Client) HeartBeat() {
 
-	ticker := time.NewTicker(40 * time.Second)
+	ticker := time.NewTicker(240 * time.Second)
 	resp := c.coordinator.NewResponseWitName("heartbeat")
 	go func() {
 		for {
