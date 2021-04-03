@@ -3,6 +3,7 @@ package streaming
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -29,7 +30,25 @@ func WaitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 		}
 		return nil
 	case <-time.After(timeout):
-		fmt.Printf("Timeout waiting Code, operation:%d \n", response.correlationid)
+		WARN("Timeout waiting Code, operation:%d \n", response.correlationid)
 		return errors.New(fmt.Sprintf("Timeout waiting Code, operation:%d \n", response.correlationid))
 	}
+}
+
+// logging
+
+func INFO(message string, v ...interface{}) {
+	log.Printf(fmt.Sprintf("[INFO] - %s", message), v...)
+}
+
+func ERROR(message string, v ...interface{}) {
+	log.Printf(fmt.Sprintf("[ERROR] - %s", message), v...)
+}
+
+func DEBUG(message string, v ...interface{}) {
+	log.Printf(fmt.Sprintf("[DEBUG] - %s", message), v...)
+}
+
+func WARN(message string, v ...interface{}) {
+	log.Printf(fmt.Sprintf("[WARN] - %s", message), v...)
 }

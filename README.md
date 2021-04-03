@@ -34,8 +34,8 @@ err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create()
 consumer, err := client.ConsumerCreator().
 		Stream(streamName).
 		Name("my_consumer").
-		MessagesHandler(func(consumerId uint8, message *amqp.Message) {
-			fmt.Printf("received %d, message %s \n", consumerId, message.Data)
+		MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
+			fmt.Printf("received %d, message %s \n", context.Consumer.ID, message.Data)
 		}).Build()
 ```
 
@@ -53,7 +53,8 @@ producer, err := client.ProducerCreator().Stream(streamName).Build()
  - DeclarePublisher
  - Close Publisher
  - Publish
- - Subscribe (basic version)
+ - Subscribe 
+ - Commit   
  - UnSubscribe
  - HeartBeat
  

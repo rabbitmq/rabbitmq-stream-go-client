@@ -42,14 +42,17 @@ func (c *Client) connect(addr string) error {
 
 	connection, err2 := net.DialTCP("tcp", nil, resolver)
 	if err2 != nil {
+		DEBUG("%s", err2)
 		return err2
 	}
 	err2 = connection.SetReadBuffer(DefaultReadSocketBuffer)
 	if err2 != nil {
+		DEBUG("%s", err2)
 		return err2
 	}
 	err2 = connection.SetWriteBuffer(DefaultReadSocketBuffer)
 	if err2 != nil {
+		DEBUG("%s", err2)
 		return err2
 	}
 
@@ -61,11 +64,13 @@ func (c *Client) connect(addr string) error {
 	err2 = c.peerProperties()
 
 	if err2 != nil {
+		DEBUG("%s", err2)
 		return err2
 	}
 	pwd, _ := u.User.Password()
 	err2 = c.authenticate(u.User.Username(), pwd)
 	if err2 != nil {
+		DEBUG("User:%s, %s", u.User.Username(), err2)
 		return err2
 	}
 	vhost := "/"
@@ -74,10 +79,13 @@ func (c *Client) connect(addr string) error {
 	}
 	err2 = c.open(vhost)
 	if err2 != nil {
+		DEBUG("%s", err2)
 		return err2
 	}
 	c.HeartBeat()
-
+	DEBUG("User %s, connected to: %s, vhost:%s", u.User.Username(),
+		net.JoinHostPort(host, port),
+		vhost)
 	return nil
 }
 
@@ -115,7 +123,10 @@ func (c *Client) peerProperties() error {
 
 func (c *Client) authenticate(user string, password string) error {
 
-	saslMechanisms := c.getSaslMechanisms()
+	saslMechanisms, err := c.getSaslMechanisms()
+	if err != nil {
+		return err
+	}
 	saslMechanism := ""
 	for i := 0; i < len(saslMechanisms); i++ {
 		if saslMechanisms[i] == "PLAIN" {
@@ -127,7 +138,7 @@ func (c *Client) authenticate(user string, password string) error {
 	return c.sendSaslAuthenticate(saslMechanism, saslResponse)
 }
 
-func (c *Client) getSaslMechanisms() []string {
+func (c *Client) getSaslMechanisms() ([]string, error) {
 	length := 2 + 2 + 4
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
@@ -140,9 +151,9 @@ func (c *Client) getSaslMechanisms() []string {
 	data := <-resp.data
 	err = c.coordinator.RemoveResponseById(correlationId)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return data.([]string)
+	return data.([]string), nil
 
 }
 
@@ -202,7 +213,7 @@ func (c *Client) DeleteStream(stream string) error {
 
 func (c *Client) HeartBeat() {
 
-	ticker := time.NewTicker(40 * time.Second)
+	ticker := time.NewTicker(240 * time.Second)
 	resp := c.coordinator.NewResponseWitName("heartbeat")
 	go func() {
 		for {
@@ -211,7 +222,6 @@ func (c *Client) HeartBeat() {
 				_ = c.coordinator.RemoveResponseByName("heartbeat")
 				return
 			case _ = <-ticker.C:
-				//fmt.Printf("sendHeartbeat: %s \n", t)
 				c.sendHeartbeat()
 			}
 		}
@@ -241,6 +251,5 @@ func (c *Client) Close() error {
 		c.socket.connected = false
 		return err
 	}
-	//}
 	return nil
 }

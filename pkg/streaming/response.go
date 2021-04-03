@@ -3,7 +3,6 @@ package streaming
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"github.com/Azure/go-amqp"
 )
 
@@ -24,7 +23,7 @@ func (c *Client) handleResponse() {
 		readerProtocol := &ReaderProtocol{}
 		frameLen, err := ReadUInt(buffer)
 		if err != nil {
-			fmt.Printf("Socket Error %s \n", err)
+			DEBUG("Socket: %s", err)
 			_ = c.Close()
 			break
 		}
@@ -78,7 +77,7 @@ func (c *Client) handleResponse() {
 			}
 		case CommandHeartbeat:
 			{
-				fmt.Printf("CommandHeartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+				DEBUG("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 
 			}
 		case CommandQueryOffset:
@@ -88,7 +87,7 @@ func (c *Client) handleResponse() {
 			}
 		default:
 			{
-				fmt.Printf("dont CommandID %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+				WARN("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 				break
 			}
 		}
@@ -231,7 +230,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				msg := &amqp.Message{}
 				err := msg.UnmarshalBinary(arrayMessage)
 				if err != nil {
-					fmt.Printf("%s", err)
+					ERROR("Error UnmarshalBinary: %s", err)
 				}
 				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}
@@ -252,7 +251,7 @@ func (c *Client) CreditNotificationFrameHandler(readProtocol *ReaderProtocol, r 
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
 	subscriptionId := ReadByte(r)
 	// TODO ASK WHAT TO DO HERE
-	fmt.Printf("CreditNotificationFrameHandler %d \n", subscriptionId)
+	DEBUG("CreditNotificationFrameHandler %d \n", subscriptionId)
 }
 
 func (c *Client) QueryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
@@ -289,11 +288,11 @@ func (c *Client) MetadataUpdateFrameHandler(buffer *bufio.Reader) {
 	code := ReadUShort(buffer)
 	if code == ResponseCodeStreamNotAvailable {
 		stream := ReadString(buffer)
-		fmt.Printf("Stream %s is no longer available", stream)
+		WARN("Stream %s is no longer available", stream)
 		// TODO ASK WHAT TO DO HERE
 		//client.metadataListener.handle(stream, code)
 	} else {
 		//TODO handle the error, see the java code
-		fmt.Printf("Unsupported metadata update code %d", code)
+		WARN("Unsupported metadata update code %d", code)
 	}
 }
