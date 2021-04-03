@@ -30,7 +30,7 @@ func WaitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 		}
 		return nil
 	case <-time.After(timeout):
-		fmt.Printf("Timeout waiting Code, operation:%d \n", response.correlationid)
+		WARN("Timeout waiting Code, operation:%d \n", response.correlationid)
 		return errors.New(fmt.Sprintf("Timeout waiting Code, operation:%d \n", response.correlationid))
 	}
 }
