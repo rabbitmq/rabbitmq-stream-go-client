@@ -78,9 +78,12 @@ func startProducers() error {
 						streaming.ERROR("Error publishing %s", err)
 						time.Sleep(1 * time.Second)
 					}
-					if count%500_000 == 0 {
-						elapsed := time.Since(start)
-						streaming.INFO("%d messages, published in: %s on the stream %s\n", count, elapsed, streamC)
+					elapsed := time.Since(start)
+					if elapsed > 5*time.Second {
+						messagesPerSecond := count / int64(elapsed.Seconds())
+						streaming.INFO("Published %d msg/s , stream %s\n", messagesPerSecond, streamC)
+						start = time.Now()
+						count = 0
 					}
 				}
 			}(producer, stream)
@@ -97,30 +100,29 @@ func startConsumers() error {
 			if err != nil {
 				return err
 			}
-			for subConsumer := 0; subConsumer < 2; subConsumer++ {
-				counters := make(map[uint8]int64)
-				var mutex sync.Mutex
-				start := time.Now()
-				_, err = client.ConsumerCreator().Stream(stream).
-					Offset(streaming.OffsetSpecification{}.Last()).
-					Name(uuid.New().String()).
-					MessagesHandler(func(Context streaming.ConsumerContext, message *amqp.Message) {
-						mutex.Lock()
-						defer mutex.Unlock()
-						counters[Context.Consumer.ID] = counters[Context.Consumer.ID] + 1
-						if counters[Context.Consumer.ID]%500_000 == 0 {
-							elapsed := time.Since(start)
-							streaming.INFO("%d messages, consumed in: %s on the stream %s", counters[Context.Consumer.ID], elapsed,
-								Context.Consumer.GetStream())
-							Context.Consumer.Commit()
-							time.Sleep(500 * time.Millisecond)
-						}
+			counters := make(map[uint8]int64)
+			var mutex sync.Mutex
+			start := time.Now()
+			_, err = client.ConsumerCreator().Stream(stream).
+				Offset(streaming.OffsetSpecification{}.Last()).
+				Name(uuid.New().String()).
+				MessagesHandler(func(Context streaming.ConsumerContext, message *amqp.Message) {
+					mutex.Lock()
+					defer mutex.Unlock()
+					counters[Context.Consumer.ID] = counters[Context.Consumer.ID] + 1
+					elapsed := time.Since(start)
+					if elapsed > 5*time.Second {
+						messagesPerSecond := counters[Context.Consumer.ID] / int64(elapsed.Seconds())
+						streaming.INFO("Consumed %d msg/s, stream %s\n", messagesPerSecond, Context.Consumer.GetStream())
+						start = time.Now()
+						counters[Context.Consumer.ID] = 0
+						Context.Consumer.Commit()
+					}
 
-					}).Build()
-				if err != nil {
-					streaming.ERROR("%s", err)
-					return err
-				}
+				}).Build()
+			if err != nil {
+				streaming.ERROR("%s", err)
+				return err
 			}
 
 		}

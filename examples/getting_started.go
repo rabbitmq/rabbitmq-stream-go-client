@@ -58,7 +58,7 @@ func main() {
 
 	//
 	numberOfSend := 10
-	batchSize := 100
+	batchSize := 10
 
 	// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
 	// message aggregation
