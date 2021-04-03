@@ -13,21 +13,21 @@ import (
 
 func CheckErr(err error) {
 	if err != nil {
-		fmt.Printf("Error during operation: %s \n", err)
+		streaming.ERROR("Error during operation: %s \n", err)
 	}
 	return
 }
 func main() {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Getting started with Streaming client for RabbitMQ")
-	fmt.Println("Connecting to RabbitMQ streaming ...")
+	streaming.INFO("Getting started with Streaming client for RabbitMQ")
+	streaming.INFO("Connecting to RabbitMQ streaming ...")
 	uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
 	client, err := streaming.NewClientCreator().
 		Uri(uris).
 		Connect() // Create Client
 	CheckErr(err)
 
-	fmt.Printf("Connected to: %s", uris)
+	streaming.INFO("Connected to: %s", uris)
 	streamName := uuid.New().String()
 	err = client.StreamCreator().Stream(streamName).
 		Create() // Create the streaming queue
@@ -38,7 +38,7 @@ func main() {
 		Stream(streamName).
 		Name(uuid.NewString()).
 		MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
-			fmt.Printf("Message number:%d consumer id:%d data:%s \n",
+			streaming.INFO("Message number:%d consumer id:%d data:%s \n",
 				atomic.AddInt32(&count, 1), context.Consumer.ID,
 				message.Data)
 			err := context.Consumer.Commit()
@@ -49,7 +49,7 @@ func main() {
 	// Get a new producer to publish the messages
 	clientProducer, err := streaming.NewClientCreator().Uri(uris).
 		PublishErrorHandler(func(publisherId uint8, publishingId int64, code uint16) {
-			fmt.Printf("Publish Error, publisherId %d, code: %s", publisherId, streaming.LookErrorCode(code))
+		streaming.ERROR("Publish Error, publisherId %d, code: %s", publisherId, streaming.LookErrorCode(code))
 		}).
 		Connect()
 	CheckErr(err)
@@ -74,7 +74,7 @@ func main() {
 	}
 
 	elapsed := time.Since(start)
-	fmt.Printf("%d messages, published in: %s\n", numberOfSend*batchSize, elapsed)
+	streaming.INFO("%d messages, published in: %s\n", numberOfSend*batchSize, elapsed)
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')

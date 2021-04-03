@@ -22,7 +22,7 @@ func newSilent() *cobra.Command {
 }
 
 func startSimul() error {
-	fmt.Printf("Silent Simulation, url: %s producers: %d consumers: %d streams :%s\n", rabbitmqBrokerUrl, producers, consumers, streams)
+	streaming.INFO("Silent Simulation, url: %s producers: %d consumers: %d streams :%s\n", rabbitmqBrokerUrl, producers, consumers, streams)
 	err := initStreams()
 	err = startProducers()
 	err = startConsumers()
@@ -30,11 +30,10 @@ func startSimul() error {
 }
 
 func initStreams() error {
-	if !pre_created {
-		fmt.Printf("-Init streams :%s\n", streams)
+	if !preDeclared {
+		streaming.INFO("Create streams :%s\n", streams)
 		client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
 		if err != nil {
-			fmt.Printf("ERROR :%s\n", err)
 			return err
 		}
 
@@ -42,30 +41,26 @@ func initStreams() error {
 
 			err = client.StreamCreator().Stream(stream).Create()
 			if err != nil {
-				fmt.Printf("ERROR :%s\n", err)
 				return err
 			}
 		}
-		fmt.Printf("End Init streams :%s\n", streams)
+		streaming.INFO("End Init streams :%s\n", streams)
 		return client.Close()
 	}
-	fmt.Printf("Pre Created streams :%s\n", streams)
+	streaming.INFO("Predeclared streams :%s\n", streams)
 	return nil
 }
 func startProducers() error {
-	fmt.Printf("-Init Producers :%d\n", producers)
+	streaming.INFO("Create producers :%d\n", producers)
 	for _, stream := range streams {
 		client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
 		if err != nil {
-			fmt.Printf("ERROR :%s\n", err)
 			return err
 		}
-		fmt.Printf("-Init Producers1  :%d\n", producers)
 		for i := 0; i < producers; i++ {
 
 			producer, err := client.ProducerCreator().Stream(stream).Build()
 			if err != nil {
-				fmt.Printf("ERROR :%s\n", err)
 				return err
 			}
 
@@ -80,12 +75,12 @@ func startProducers() error {
 					}
 					_, err = prod.BatchPublish(nil, arr)
 					if err != nil {
-						fmt.Printf("Error publishing ")
+						streaming.ERROR("Error publishing %s", err)
 						time.Sleep(1 * time.Second)
 					}
 					if count%500_000 == 0 {
 						elapsed := time.Since(start)
-						fmt.Printf("%d messages, published in: %s on the stream %s\n", count, elapsed, streamC)
+						streaming.INFO("%d messages, published in: %s on the stream %s\n", count, elapsed, streamC)
 					}
 				}
 			}(producer, stream)
@@ -95,7 +90,7 @@ func startProducers() error {
 }
 
 func startConsumers() error {
-	fmt.Printf("-Init Consumers  :%d\n", consumers)
+	streaming.INFO("Start Consumers  :%d\n", consumers)
 	for _, stream := range streams {
 		for i := 0; i < consumers; i++ {
 			client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
@@ -115,7 +110,7 @@ func startConsumers() error {
 						counters[Context.Consumer.ID] = counters[Context.Consumer.ID] + 1
 						if counters[Context.Consumer.ID]%500_000 == 0 {
 							elapsed := time.Since(start)
-							fmt.Printf("%d messages, consumed in: %s on the stream %s\n", counters[Context.Consumer.ID], elapsed,
+							streaming.INFO("%d messages, consumed in: %s on the stream %s", counters[Context.Consumer.ID], elapsed,
 								Context.Consumer.GetStream())
 							Context.Consumer.Commit()
 							time.Sleep(500 * time.Millisecond)
@@ -123,7 +118,7 @@ func startConsumers() error {
 
 					}).Build()
 				if err != nil {
-					fmt.Printf("ERROR :%s\n", err)
+					streaming.ERROR("%s", err)
 					return err
 				}
 			}
