@@ -8,6 +8,8 @@ endif
 VERSION?=latest
 LDFLAGS="-X main.Version=$(VERSION)"
 
+PERFTEST_FLAGS?= silent -p 1 -c 1
+
 all: vet
 
 vet: $(go_sources)
@@ -28,3 +30,5 @@ docker-build:
 docker-push: docker-build
 	docker push gsantomaggio/go-stream-client:$(VERSION)
 
+run-perTest: build-perfTest
+	go run perfTest/perftest.go $(PERFTEST_FLAGS)
