@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gsantomaggio/go-stream-client/pkg/streaming"
 	"github.com/spf13/cobra"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -15,17 +15,41 @@ func newSilent() *cobra.Command {
 		Use:   "silent",
 		Short: "Start a silent simulation",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return startSimul()
+			return startSimulation()
 		},
 	}
 	return silentCmd
 }
 
-func startSimul() error {
+var (
+	producerMessageCount int32
+	consumerMessageCount int32
+)
+
+func printStats() {
+
+	ticker := time.NewTicker(3 * time.Second)
+	go func() {
+		for {
+			select {
+			case _ = <-ticker.C:
+				PMessagesPerSecond := atomic.LoadInt32(&producerMessageCount) / 3
+				CMessagesPerSecond := atomic.LoadInt32(&consumerMessageCount) / 3
+				streaming.INFO("Published %d msg/s, Consumed %d msg/s", PMessagesPerSecond, CMessagesPerSecond)
+				atomic.AddInt32(&producerMessageCount, -atomic.LoadInt32(&producerMessageCount))
+				atomic.AddInt32(&consumerMessageCount, -atomic.LoadInt32(&consumerMessageCount))
+			}
+		}
+
+	}()
+}
+
+func startSimulation() error {
 	streaming.INFO("Silent Simulation, url: %s producers: %d consumers: %d streams :%s\n", rabbitmqBrokerUrl, producers, consumers, streams)
 	err := initStreams()
 	err = startProducers()
 	err = startConsumers()
+	printStats()
 	return err
 }
 
@@ -65,25 +89,16 @@ func startProducers() error {
 			}
 
 			go func(prod *streaming.Producer, streamC string) {
-				var count int64
-				start := time.Now()
 				for {
 					var arr []*amqp.Message
 					for z := 0; z < 100; z++ {
-						count++
-						arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("simul_message_stream%s, %d", streamC, count)  )))
+						atomic.AddInt32(&producerMessageCount, 1)
+						arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("simul_message_stream%s", streamC)  )))
 					}
 					_, err = prod.BatchPublish(nil, arr)
 					if err != nil {
 						streaming.ERROR("Error publishing %s", err)
 						time.Sleep(1 * time.Second)
-					}
-					elapsed := time.Since(start)
-					if elapsed > 5*time.Second {
-						messagesPerSecond := count / int64(elapsed.Seconds())
-						streaming.INFO("Published %d msg/s , stream %s\n", messagesPerSecond, streamC)
-						start = time.Now()
-						count = 0
 					}
 				}
 			}(producer, stream)
@@ -100,25 +115,13 @@ func startConsumers() error {
 			if err != nil {
 				return err
 			}
-			counters := make(map[uint8]int64)
-			var mutex sync.Mutex
-			start := time.Now()
 			_, err = client.ConsumerCreator().Stream(stream).
 				Offset(streaming.OffsetSpecification{}.Last()).
 				Name(uuid.New().String()).
 				MessagesHandler(func(Context streaming.ConsumerContext, message *amqp.Message) {
-					mutex.Lock()
-					defer mutex.Unlock()
-					counters[Context.Consumer.ID] = counters[Context.Consumer.ID] + 1
-					elapsed := time.Since(start)
-					if elapsed > 5*time.Second {
-						messagesPerSecond := counters[Context.Consumer.ID] / int64(elapsed.Seconds())
-						streaming.INFO("Consumed %d msg/s, stream %s\n", messagesPerSecond, Context.Consumer.GetStream())
-						start = time.Now()
-						counters[Context.Consumer.ID] = 0
+					if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
 						Context.Consumer.Commit()
 					}
-
 				}).Build()
 			if err != nil {
 				streaming.ERROR("%s", err)
