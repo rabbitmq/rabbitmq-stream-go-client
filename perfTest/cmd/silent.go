@@ -27,17 +27,19 @@ var (
 )
 
 func printStats() {
-
-	ticker := time.NewTicker(3 * time.Second)
+	start := time.Now()
+	ticker := time.NewTicker(2 * time.Second)
 	go func() {
 		for {
 			select {
 			case _ = <-ticker.C:
-				PMessagesPerSecond := atomic.LoadInt32(&producerMessageCount) / 3
-				CMessagesPerSecond := atomic.LoadInt32(&consumerMessageCount) / 3
+				v := int32(time.Now().Sub(start).Seconds())
+				PMessagesPerSecond := atomic.LoadInt32(&producerMessageCount) / v
+				CMessagesPerSecond := atomic.LoadInt32(&consumerMessageCount) / v
 				streaming.INFO("Published %d msg/s, Consumed %d msg/s", PMessagesPerSecond, CMessagesPerSecond)
-				atomic.AddInt32(&producerMessageCount, -atomic.LoadInt32(&producerMessageCount))
-				atomic.AddInt32(&consumerMessageCount, -atomic.LoadInt32(&consumerMessageCount))
+				atomic.SwapInt32(&producerMessageCount, 0)
+				atomic.SwapInt32(&consumerMessageCount, 0)
+				start = time.Now()
 			}
 		}
 
@@ -46,10 +48,11 @@ func printStats() {
 
 func startSimulation() error {
 	streaming.INFO("Silent Simulation, url: %s producers: %d consumers: %d streams :%s\n", rabbitmqBrokerUrl, producers, consumers, streams)
-	err := initStreams()
-	err = startProducers()
-	err = startConsumers()
 	printStats()
+	err := initStreams()
+	err = startConsumers()
+	err = startProducers()
+
 	return err
 }
 
@@ -87,21 +90,22 @@ func startProducers() error {
 			if err != nil {
 				return err
 			}
+			var arr []*amqp.Message
+			for z := 0; z < 100; z++ {
 
-			go func(prod *streaming.Producer, streamC string) {
-				for {
-					var arr []*amqp.Message
-					for z := 0; z < 100; z++ {
-						atomic.AddInt32(&producerMessageCount, 1)
-						arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("simul_%s", streamC)  )))
-					}
-					_, err = prod.BatchPublish(nil, arr)
-					if err != nil {
-						streaming.ERROR("Error publishing %s", err)
-						time.Sleep(1 * time.Second)
-					}
+				arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("simul_%s", stream)  )))
+			}
+
+			//go func(prod *streaming.Producer, streamC string) {
+			for {
+				atomic.AddInt32(&producerMessageCount, 100)
+				_, err = producer.BatchPublish(nil, arr)
+				if err != nil {
+					streaming.ERROR("Error publishing %s", err)
+					time.Sleep(1 * time.Second)
 				}
-			}(producer, stream)
+			}
+			//}(producer, stream)
 		}
 	}
 	return nil
@@ -120,7 +124,7 @@ func startConsumers() error {
 				Name(uuid.New().String()).
 				MessagesHandler(func(Context streaming.ConsumerContext, message *amqp.Message) {
 					if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
-						Context.Consumer.Commit()
+						_ = Context.Consumer.Commit()
 					}
 				}).Build()
 			if err != nil {

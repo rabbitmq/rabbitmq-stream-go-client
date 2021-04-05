@@ -14,20 +14,20 @@ type Consumer struct {
 	parameters *ConsumerCreator
 	mutex      *sync.RWMutex
 }
-func (c *Consumer) GetStream() string {
-	return c.parameters.streamName
+func (consumer *Consumer) GetStream() string {
+	return consumer.parameters.streamName
 }
 
-func (c *Consumer) setOffset(offset int64) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	c.offset = offset
+func (consumer *Consumer) setOffset(offset int64) {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	consumer.offset = offset
 }
 
-func (c *Consumer) getOffset() int64 {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	return c.offset
+func (consumer *Consumer) getOffset() int64 {
+	consumer.mutex.RLock()
+	defer consumer.mutex.RUnlock()
+	return consumer.offset
 }
 
 type ConsumerContext struct {
@@ -178,7 +178,7 @@ func (consumer *Consumer) UnSubscribe() error {
 	return err
 }
 
-func (consumer *Consumer) Commit() error {
+func (c *Consumer) Commit() error {
 	//public void commitOffset(String reference, String stream, long offset) {
 	//	if (reference == null || reference.isEmpty() || reference.length() > 256) {
 	//		throw new IllegalArgumentException(
@@ -187,18 +187,18 @@ func (consumer *Consumer) Commit() error {
 	//	if (stream == null || stream.isEmpty()) {
 	//		throw new IllegalArgumentException("Stream cannot be null or empty");
 	//	}
-	length := 2 + 2 + 4 + 2 + len(consumer.parameters.consumerName) + 2 +
-		len(consumer.parameters.streamName) + 8
+	length := 2 + 2 + 4 + 2 + len(c.parameters.consumerName) + 2 +
+		len(c.parameters.streamName) + 8
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandCommitOffset)
 	WriteShort(b, Version1)
 	WriteInt(b, 0) // correlation ID not used yet, may be used if commit offset has a confirm
-	WriteString(b, consumer.parameters.consumerName)
-	WriteString(b, consumer.parameters.streamName)
+	WriteString(b, c.parameters.consumerName)
+	WriteString(b, c.parameters.streamName)
 
-	WriteLong(b, consumer.getOffset())
-	return consumer.parameters.client.socket.writeAndFlush(b.Bytes())
+	WriteLong(b, c.getOffset())
+	return c.parameters.client.socket.writeAndFlush(b.Bytes())
 
 }
 

@@ -24,7 +24,7 @@ build: vet build-perfTest
 
 test: vet
 	go test -v  ./pkg/streaming -race -coverprofile=coverage.txt -covermode=atomic
-docker-build:
+docker-build: build
 	docker build -t gsantomaggio/go-stream-client:$(VERSION)  .
 
 docker-push: docker-build
