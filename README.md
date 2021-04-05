@@ -44,6 +44,12 @@ consumer, err := client.ConsumerCreator().
 producer, err := client.ProducerCreator().Stream(streamName).Build()
 ```
 
+### Build from source
+
+```shell
+make build
+```
+
 
 ### Methods Implemented:
 ---

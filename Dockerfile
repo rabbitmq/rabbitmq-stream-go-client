@@ -1,13 +1,28 @@
-FROM golang:1.16
+FROM golang:1.16 as builder
 ENV GOPATH=/go GOOS=linux CGO_ENABLED=0
 WORKDIR /go/src/github.com/Gsantomaggio/go-stream-client
 COPY go.mod go.sum VERSION ./
 COPY pkg pkg
 COPY perfTest perfTest
 
-RUN VERSION=$(cat VERSION) && go build -ldflags "-X main.Version=$VERSION" -o /bin/perTest perfTest/perftest.go
-RUN echo '#!/bin/bash'>  /bin/pperTest
-RUN echo 'perTest "$@"' >>  /bin/pperTest
-RUN chmod +x /bin/pperTest
-ENTRYPOINT ["pperTest"]
+RUN mkdir /stream_perf_test
+RUN VERSION=$(cat VERSION) && go build -ldflags "-X main.Version=$VERSION" -o /stream_perf_test/perTest perfTest/perftest.go
 
+FROM ubuntu:20.04
+
+RUN set -eux; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends \
+		locales
+
+
+
+#RUN apt-get install golang -y
+#RUN mkdir -p /stream_perf_test
+COPY --from=builder /stream_perf_test /bin/
+#
+RUN 	rm -rf /var/lib/apt/lists/*; \
+    	locale-gen en_US.UTF-8
+
+
+ENTRYPOINT ["perTest"]

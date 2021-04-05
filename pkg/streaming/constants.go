@@ -1,7 +1,6 @@
 package streaming
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -62,7 +61,7 @@ const (
 
 
 	///
-	DefaultReadSocketBuffer = 4096
+	DefaultReadSocketBuffer = 4096 * 2
 )
 
 func LookErrorCode(errorCode uint16) string {
@@ -83,7 +82,7 @@ func LookErrorCode(errorCode uint16) string {
 		return "Code publisher does not exist"
 	default:
 		{
-			fmt.Printf("Error not handled %d", errorCode)
+			WARN("Error not handled %d", errorCode)
 			return "Error not handled"
 		}
 	}

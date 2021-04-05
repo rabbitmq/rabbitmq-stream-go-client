@@ -16,3 +16,4 @@
 .idea
 coverage.txt
 bin/
+vet
