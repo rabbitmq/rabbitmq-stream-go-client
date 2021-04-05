@@ -18,6 +18,20 @@ A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-s
   ```
    go run examples/getting_started.go
   ```
+### Performance Test
+The performance tool is work in progress, you can use it with docker
+```
+docker run --network host -it gsantomaggio/go-stream-client silent 
+```
+
+or directly 
+```
+go run perfTest/perftest.go 
+```
+
+
+
+
 ### API
 
 ```golang
