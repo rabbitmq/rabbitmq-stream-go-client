@@ -33,10 +33,10 @@ func printStats() {
 		for {
 			select {
 			case _ = <-ticker.C:
-				v := int32(time.Now().Sub(start).Seconds())
-				PMessagesPerSecond := atomic.LoadInt32(&producerMessageCount) / v
-				CMessagesPerSecond := atomic.LoadInt32(&consumerMessageCount) / v
-				streaming.INFO("Published %d msg/s, Consumed %d msg/s", PMessagesPerSecond, CMessagesPerSecond)
+				v := time.Now().Sub(start).Seconds()
+				PMessagesPerSecond := float64(atomic.LoadInt32(&producerMessageCount)) / v
+				CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / v
+				streaming.INFO("Published %.2f msg/s, Consumed %.2f msg/s", PMessagesPerSecond, CMessagesPerSecond)
 				atomic.SwapInt32(&producerMessageCount, 0)
 				atomic.SwapInt32(&consumerMessageCount, 0)
 				start = time.Now()
@@ -96,16 +96,17 @@ func startProducers() error {
 				arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("simul_%s", stream)  )))
 			}
 
-			//go func(prod *streaming.Producer, streamC string) {
+			go func(prod *streaming.Producer, messages []*amqp.Message) {
 			for {
+				//time.Sleep(1 * time.Millisecond)
 				atomic.AddInt32(&producerMessageCount, 100)
-				_, err = producer.BatchPublish(nil, arr)
+				_, err = prod.BatchPublish(nil, arr)
 				if err != nil {
 					streaming.ERROR("Error publishing %s", err)
 					time.Sleep(1 * time.Second)
 				}
 			}
-			//}(producer, stream)
+			}(producer, arr)
 		}
 	}
 	return nil
