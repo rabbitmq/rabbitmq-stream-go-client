@@ -43,7 +43,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push
-        run: make docker-build
+        run: make docker-push
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
