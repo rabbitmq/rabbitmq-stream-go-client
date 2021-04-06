@@ -5,6 +5,12 @@
 
 A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 
+### Download
+---
+```
+go get -u github.com/gsantomaggio/go-stream-client@v0.1-alpha
+```
+
 ### How to test
 ---
 - Run RabbitMQ docker image with streaming:
@@ -19,6 +25,7 @@ A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-s
    go run examples/getting_started.go
   ```
 ### Performance Test
+---
 The performance tool is work in progress, you can use it with docker
 ```
 docker run --network host -it gsantomaggio/go-stream-client silent 
@@ -33,6 +40,7 @@ go run perfTest/perftest.go
 
 
 ### API
+---
 
 ```golang
 client, err := streaming.NewClientCreator().Uri(uris).Connect() // Create and Connect a client
@@ -59,6 +67,7 @@ producer, err := client.ProducerCreator().Stream(streamName).Build()
 ```
 
 ### Build from source
+---
 
 ```shell
 make build
