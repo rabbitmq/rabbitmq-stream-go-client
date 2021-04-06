@@ -48,10 +48,11 @@ func printStats() {
 
 func startSimulation() error {
 	streaming.INFO("Silent Simulation, url: %s producers: %d consumers: %d streams :%s\n", rabbitmqBrokerUrl, producers, consumers, streams)
-	printStats()
+
 	err := initStreams()
 	err = startConsumers()
 	err = startProducers()
+	printStats()
 
 	return err
 }
@@ -80,11 +81,11 @@ func initStreams() error {
 func startProducers() error {
 	streaming.INFO("Create producers :%d\n", producers)
 	for _, stream := range streams {
-		client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
-		if err != nil {
-			return err
-		}
 		for i := 0; i < producers; i++ {
+			client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
+			if err != nil {
+				return err
+			}
 
 			producer, err := client.ProducerCreator().Stream(stream).Build()
 			if err != nil {
@@ -97,15 +98,15 @@ func startProducers() error {
 			}
 
 			go func(prod *streaming.Producer, messages []*amqp.Message) {
-			for {
-				//time.Sleep(1 * time.Millisecond)
-				atomic.AddInt32(&producerMessageCount, 100)
-				_, err = prod.BatchPublish(nil, arr)
-				if err != nil {
-					streaming.ERROR("Error publishing %s", err)
-					time.Sleep(1 * time.Second)
+				for {
+					//time.Sleep(1 * time.Millisecond)
+					atomic.AddInt32(&producerMessageCount, 100)
+					_, err = prod.BatchPublish(nil, arr)
+					if err != nil {
+						streaming.ERROR("Error publishing %s", err)
+						time.Sleep(1 * time.Second)
+					}
 				}
-			}
 			}(producer, arr)
 		}
 	}
