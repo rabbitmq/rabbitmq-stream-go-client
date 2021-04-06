@@ -1,6 +1,7 @@
 package streaming
 
 import (
+	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -27,6 +28,17 @@ var _ = Describe("Converters", func() {
 		v, err = ByteCapacity{}.From("1GB")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(v).To(Equal(int64(1000 * 1000 * 1000)))
+	})
+
+	It("Converter from string error", func() {
+		_, err := ByteCapacity{}.From("10LL")
+		Expect(fmt.Sprintf("%s", err)).
+			To(ContainSubstring("Invalid unit size format"))
+
+		_, err = ByteCapacity{}.From("aGB")
+		Expect(fmt.Sprintf("%s", err)).
+			To(ContainSubstring("Invalid number format"))
+
 	})
 
 })

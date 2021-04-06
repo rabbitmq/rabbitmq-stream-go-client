@@ -44,7 +44,7 @@ func (byteCapacity ByteCapacity) From(value string) (int64, error) {
 
 	match, err := regexp.Compile("^((kb|mb|gb|tb))")
 	if err != nil {
-		return 0, errors.New("Invalid ByteCapacity format")
+		return 0, errors.New("Invalid unit size format")
 	}
 
 	foundUnitSize := strings.ToLower(value[len(value)-2:])
@@ -53,7 +53,7 @@ func (byteCapacity ByteCapacity) From(value string) (int64, error) {
 
 		size, err := strconv.Atoi(value[:len(value)-2])
 		if err != nil {
-			return 0, errors.New("Invalid ByteCapacity number format")
+			return 0, errors.New("Invalid number format")
 		}
 
 		switch foundUnitSize {
@@ -72,6 +72,6 @@ func (byteCapacity ByteCapacity) From(value string) (int64, error) {
 
 	}
 
-	return 0, errors.New("Invalid ByteCapacity format")
+	return 0, errors.New("Invalid unit size format")
 
 }
