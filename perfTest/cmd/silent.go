@@ -71,6 +71,7 @@ func initStreams() error {
 		client, err := streaming.NewClientCreator().
 			Uri(rabbitmqBrokerUrl).Connect()
 		if err != nil {
+			streaming.ERROR("Error init stream connection: %s", err)
 			return err
 		}
 
@@ -98,11 +99,13 @@ func startProducers() error {
 		for i := 0; i < producers; i++ {
 			client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
 			if err != nil {
+				streaming.ERROR("Error connection client producer: %s", err)
 				return err
 			}
 			connections = append(connections, client)
 			producer, err := client.ProducerCreator().Stream(stream).Build()
 			if err != nil {
+				streaming.ERROR("Error create producer: %s", err)
 				return err
 			}
 			var arr []*amqp.Message
@@ -134,6 +137,7 @@ func startConsumers() error {
 			client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
 
 			if err != nil {
+				streaming.ERROR("Error creating consumer connection: %s", err)
 				return err
 			}
 			connections = append(connections, client)
@@ -147,8 +151,8 @@ func startConsumers() error {
 					}
 				}).Build()
 			if err != nil {
-				streaming.ERROR("%s", err)
-				return err
+				streaming.ERROR("Error creating consumer: %s", err)
+				//return err
 			}
 
 		}
