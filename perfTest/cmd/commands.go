@@ -34,7 +34,7 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.PersistentFlags().IntVarP(&consumers, "consumers", "c", 1, "Number of Consumers")
 	baseCmd.PersistentFlags().BoolVarP(&preDeclared, "pre-declared", "d", false, "Pre created stream")
 	baseCmd.PersistentFlags().StringSliceVarP(&streams, "streams", "s", []string{uuid.New().String()}, "Stream names, create an UUID if not specified")
-	baseCmd.PersistentFlags().StringVarP(&maxLengthBytes, "max_length_bytes", "m", "", "Stream max length bytes, unlimited")
+	baseCmd.PersistentFlags().StringVarP(&maxLengthBytes, "max_length_bytes", "m", "", "Stream max length bytes, default is unlimited, ex: 10MB,50GB, etc..")
 	baseCmd.AddCommand(versionCmd)
 	baseCmd.AddCommand(newSilent())
 }

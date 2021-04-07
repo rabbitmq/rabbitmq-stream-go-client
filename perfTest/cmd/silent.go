@@ -70,9 +70,11 @@ func initStreams() error {
 
 			err = client.StreamCreator().
 				Stream(stream).
-				MaxLengthBytes(maxLengthBytes).
+				MaxLengthBytes(streaming.ByteCapacity{}.From(maxLengthBytes)).
 				Create()
 			if err != nil {
+				streaming.ERROR("Error creating stream: %s", err)
+				_ = client.Close()
 				return err
 			}
 		}
