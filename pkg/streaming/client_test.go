@@ -77,7 +77,6 @@ var _ = Describe("Streaming testClient", func() {
 				MaxLengthBytes(ByteCapacity{}.From("not_a_valid_value")).Create()
 			Expect(fmt.Sprintf("%s", err)).
 				To(ContainSubstring("Invalid unit size format"))
-
 		})
 
 

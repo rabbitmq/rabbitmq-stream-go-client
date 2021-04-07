@@ -28,6 +28,10 @@ var _ = Describe("Converters", func() {
 		v = ByteCapacity{}.From("1GB")
 		Expect(v.error).NotTo(HaveOccurred())
 		Expect(v.bytes).To(Equal(int64(1000 * 1000 * 1000)))
+
+		v = ByteCapacity{}.From("1tb")
+		Expect(v.error).NotTo(HaveOccurred())
+		Expect(v.bytes).To(Equal(int64(1000 * 1000 * 1000 * 1000)))
 	})
 
 	It("Converter from string error", func() {

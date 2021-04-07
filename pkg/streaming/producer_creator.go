@@ -3,7 +3,6 @@ package streaming
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"github.com/Azure/go-amqp"
 )
 
@@ -131,7 +130,7 @@ func (c *Client) deletePublisher(publisherId byte) error {
 	err := c.coordinator.RemoveProducerById(publisherId)
 	if err != nil {
 		//TODO LOGWARN
-		fmt.Printf("Error RemoveProducerById %d", publisherId)
+		WARN("Error RemoveProducerById %d", publisherId)
 	}
 
 	return errWrite
