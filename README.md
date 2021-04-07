@@ -48,7 +48,8 @@ client, err := streaming.NewClientCreator().Uri(uris).Connect() // Create and Co
 
 ```golang
 err = client.StreamCreator().Stream(streamName).Create() // Create streaming queue without parameters
-err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create streaming queue parameters
+err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create streaming queue with Max Age
+err = client.StreamCreator().Stream(streamName).MaxLengthBytes(streaming.ByteCapacity{}.B(5)).Create() // Create streaming queue 5 GB max lenght
 ```
 
 ```golang
