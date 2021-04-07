@@ -29,23 +29,25 @@ var (
 )
 
 func printStats() {
-	start := time.Now()
-	ticker := time.NewTicker(2 * time.Second)
-	go func() {
-		for {
-			select {
-			case _ = <-ticker.C:
-				v := time.Now().Sub(start).Seconds()
-				PMessagesPerSecond := float64(atomic.LoadInt32(&producerMessageCount)) / v
-				CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / v
-				streaming.INFO("Published %.2f msg/s, Consumed %.2f msg/s, Active Connections: %d", PMessagesPerSecond, CMessagesPerSecond, len(connections))
-				atomic.SwapInt32(&producerMessageCount, 0)
-				atomic.SwapInt32(&consumerMessageCount, 0)
-				start = time.Now()
+	if printStatsV {
+		start := time.Now()
+		ticker := time.NewTicker(2 * time.Second)
+		go func() {
+			for {
+				select {
+				case _ = <-ticker.C:
+					v := time.Now().Sub(start).Seconds()
+					PMessagesPerSecond := float64(atomic.LoadInt32(&producerMessageCount)) / v
+					CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / v
+					streaming.INFO("Published %.2f msg/s, Consumed %.2f msg/s, Active Connections: %d", PMessagesPerSecond, CMessagesPerSecond, len(connections))
+					atomic.SwapInt32(&producerMessageCount, 0)
+					atomic.SwapInt32(&consumerMessageCount, 0)
+					start = time.Now()
+				}
 			}
-		}
 
-	}()
+		}()
+	}
 }
 
 func startSimulation() error {
