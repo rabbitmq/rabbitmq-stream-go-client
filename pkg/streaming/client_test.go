@@ -64,12 +64,21 @@ var _ = Describe("Streaming testClient", func() {
 		It("Create Stream with parameter MaxLengthBytes", func() {
 			streamP := uuid.New().String()
 			err := testClient.StreamCreator().Stream(streamP).
-				MaxLengthBytes(100).Create()
+				MaxLengthBytes(ByteCapacity{}.MB(100)).Create()
 			Expect(err).NotTo(HaveOccurred())
 			err = testClient.DeleteStream(streamP)
 			Expect(err).NotTo(HaveOccurred())
 
 		})
+
+		It("Create Stream with parameter MaxLengthBytes Error", func() {
+			streamP := uuid.New().String()
+			err := testClient.StreamCreator().Stream(streamP).
+				MaxLengthBytes(ByteCapacity{}.From("not_a_valid_value")).Create()
+			Expect(fmt.Sprintf("%s", err)).
+				To(ContainSubstring("Invalid unit size format"))
+		})
+
 
 		It("Create Stream with parameter MaxAge", func() {
 			streamP := uuid.New().String()

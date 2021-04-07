@@ -3,15 +3,14 @@ package streaming
 import (
 	"bytes"
 	"fmt"
-	"strconv"
 	"time"
 )
 
 type StreamCreator struct {
-	streamName     string
-	maxAge         time.Duration
-	maxLengthBytes int
-	client         *Client
+	streamName         string
+	maxAge             time.Duration
+	maxLenByteCapacity *ByteCapacity
+	client             *Client
 }
 
 func (s StreamCreator) Stream(streamName string) StreamCreator {
@@ -24,29 +23,39 @@ func (s StreamCreator) MaxAge(maxAge time.Duration) StreamCreator {
 	return s
 }
 
-func (s StreamCreator) MaxLengthBytes(maxLength int) StreamCreator {
-	s.maxLengthBytes = maxLength
+func (s StreamCreator) MaxLengthBytes(maxLength *ByteCapacity) StreamCreator {
+	s.maxLenByteCapacity = maxLength
 	return s
 }
 
-func (s StreamCreator) buildParameters() map[string]string {
+func (s StreamCreator) buildParameters() (map[string]string, error) {
 	res := map[string]string{"queue-leader-locator": "least-leaders"}
 
-	if s.maxLengthBytes > 0 {
-		res["max-length-bytes"] = strconv.Itoa(s.maxLengthBytes)
+	if s.maxLenByteCapacity != nil {
+		if s.maxLenByteCapacity.error != nil {
+			return nil, s.maxLenByteCapacity.error
+		}
+
+		if s.maxLenByteCapacity.bytes > 0 {
+			res["max-length-bytes"] = fmt.Sprintf("%d", s.maxLenByteCapacity.bytes)
+		}
 	}
 
 	if s.maxAge > 0 {
 		res["max-age"] = fmt.Sprintf("%s", s.maxAge)
 	}
-	return res
+	return res, nil
 }
 
 func (s StreamCreator) Create() error {
 	resp := s.client.coordinator.NewResponse()
 	length := 2 + 2 + 4 + 2 + len(s.streamName) + 4
 	correlationId := resp.correlationid
-	args := s.buildParameters()
+	args, err := s.buildParameters()
+	if err!= nil {
+		_ = s.client.coordinator.RemoveResponseById(resp.correlationid)
+		return err
+	}
 	for key, element := range args {
 		length = length + 2 + len(key) + 2 + len(element)
 	}
@@ -62,7 +71,7 @@ func (s StreamCreator) Create() error {
 		WriteString(b, key)
 		WriteString(b, element)
 	}
-	
+
 	return s.client.HandleWrite(b.Bytes(), resp)
 
 }

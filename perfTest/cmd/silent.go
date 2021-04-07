@@ -60,15 +60,21 @@ func startSimulation() error {
 func initStreams() error {
 	if !preDeclared {
 		streaming.INFO("Create streams :%s\n", streams)
-		client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
+		client, err := streaming.NewClientCreator().
+			Uri(rabbitmqBrokerUrl).Connect()
 		if err != nil {
 			return err
 		}
 
 		for _, stream := range streams {
 
-			err = client.StreamCreator().Stream(stream).Create()
+			err = client.StreamCreator().
+				Stream(stream).
+				MaxLengthBytes(streaming.ByteCapacity{}.From(maxLengthBytes)).
+				Create()
 			if err != nil {
+				streaming.ERROR("Error creating stream: %s", err)
+				_ = client.Close()
 				return err
 			}
 		}

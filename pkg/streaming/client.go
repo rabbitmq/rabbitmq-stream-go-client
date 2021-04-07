@@ -96,7 +96,7 @@ func (c *Client) peerProperties() error {
 	c.clientProperties.items["product"] = "RabbitMQ Stream"
 	c.clientProperties.items["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
 	c.clientProperties.items["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
-	c.clientProperties.items["version"] = "0.1.0"
+	c.clientProperties.items["version"] = Version
 	c.clientProperties.items["platform"] = "Golang"
 	for key, element := range c.clientProperties.items {
 		clientPropertiesSize = clientPropertiesSize + 2 + len(key) + 2 + len(element)
