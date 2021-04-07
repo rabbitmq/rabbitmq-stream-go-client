@@ -25,6 +25,7 @@ func newSilent() *cobra.Command {
 var (
 	producerMessageCount int32
 	consumerMessageCount int32
+	connections          []*streaming.Client
 )
 
 func printStats() {
@@ -37,7 +38,7 @@ func printStats() {
 				v := time.Now().Sub(start).Seconds()
 				PMessagesPerSecond := float64(atomic.LoadInt32(&producerMessageCount)) / v
 				CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / v
-				streaming.INFO("Published %.2f msg/s, Consumed %.2f msg/s", PMessagesPerSecond, CMessagesPerSecond)
+				streaming.INFO("Published %.2f msg/s, Consumed %.2f msg/s, Active Connections: %d", PMessagesPerSecond, CMessagesPerSecond, len(connections))
 				atomic.SwapInt32(&producerMessageCount, 0)
 				atomic.SwapInt32(&consumerMessageCount, 0)
 				start = time.Now()
@@ -48,7 +49,7 @@ func printStats() {
 }
 
 func startSimulation() error {
-	streaming.INFO("Silent Simulation, url: %s producers: %d consumers: %d streams :%s\n", rabbitmqBrokerUrl, producers, consumers, streams)
+	streaming.INFO("Silent Simulation, url: %s producers: %d consumers: %d streams: %s\n", rabbitmqBrokerUrl, producers, consumers, streams)
 
 	err := initStreams()
 	err = startConsumers()
@@ -58,10 +59,10 @@ func startSimulation() error {
 	return err
 }
 
-func randomSleep()  {
+func randomSleep() {
 	rand.Seed(time.Now().UnixNano())
 	n := rand.Intn(10) // n will be between 0 and 10
-	time.Sleep(time.Duration(n)*time.Second)
+	time.Sleep(time.Duration(n) * time.Second)
 }
 
 func initStreams() error {
@@ -99,7 +100,7 @@ func startProducers() error {
 			if err != nil {
 				return err
 			}
-
+			connections = append(connections, client)
 			producer, err := client.ProducerCreator().Stream(stream).Build()
 			if err != nil {
 				return err
@@ -135,6 +136,7 @@ func startConsumers() error {
 			if err != nil {
 				return err
 			}
+			connections = append(connections, client)
 			randomSleep()
 			_, err = client.ConsumerCreator().Stream(stream).
 				Offset(streaming.OffsetSpecification{}.Last()).
