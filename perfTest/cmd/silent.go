@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gsantomaggio/go-stream-client/pkg/streaming"
 	"github.com/spf13/cobra"
+	"math/rand"
 	"sync/atomic"
 	"time"
 )
@@ -55,6 +56,12 @@ func startSimulation() error {
 	printStats()
 
 	return err
+}
+
+func randomSleep()  {
+	rand.Seed(time.Now().UnixNano())
+	n := rand.Intn(10) // n will be between 0 and 10
+	time.Sleep(time.Duration(n)*time.Second)
 }
 
 func initStreams() error {
@@ -124,9 +131,11 @@ func startConsumers() error {
 	for _, stream := range streams {
 		for i := 0; i < consumers; i++ {
 			client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
+
 			if err != nil {
 				return err
 			}
+			randomSleep()
 			_, err = client.ConsumerCreator().Stream(stream).
 				Offset(streaming.OffsetSpecification{}.Last()).
 				Name(uuid.New().String()).
