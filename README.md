@@ -8,7 +8,7 @@ A POC client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-s
 ### Download
 ---
 ```
-go get -u github.com/gsantomaggio/go-stream-client@v0.1-alpha
+go get -u github.com/gsantomaggio/go-stream-client@v0.2-alpha
 ```
 
 ### How to test
