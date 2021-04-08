@@ -31,8 +31,14 @@ func main() {
 	streamName := uuid.New().String()
 	err = client.StreamCreator().Stream(streamName).
 		Create() // Create the streaming queue
-
 	CheckErr(err)
+
+	err = client.StreamCreator().Stream(streamName).
+		MaxLengthBytes(streaming.ByteCapacity{}.MB(5)).
+		Create() // Create the streaming queue
+	CheckErr(err)
+
+
 	var count int32
 	consumer, err := client.ConsumerCreator().
 		Stream(streamName).

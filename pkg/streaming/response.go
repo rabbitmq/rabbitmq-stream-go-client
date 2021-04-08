@@ -77,7 +77,7 @@ func (c *Client) handleResponse() {
 			}
 		case CommandHeartbeat:
 			{
-				DEBUG("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+				//DEBUG("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 
 			}
 		case CommandQueryOffset:
