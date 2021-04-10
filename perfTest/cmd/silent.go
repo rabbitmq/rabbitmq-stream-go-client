@@ -149,10 +149,10 @@ func startConsumers() error {
 				Name(uuid.New().String()).
 				MessagesHandler(func(Context streaming.ConsumerContext, message *amqp.Message) {
 					if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
-						//err := Context.Consumer.Commit()
-						//if err != nil {
-						//	streaming.ERROR("Error Commit: %s", err)
-						//}
+						err := Context.Consumer.Commit()
+						if err != nil {
+							streaming.ERROR("Error Commit: %s", err)
+						}
 					}
 				}).Build()
 			if err != nil {

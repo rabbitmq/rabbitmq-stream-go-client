@@ -2,12 +2,13 @@ package main
 
 import (
 	"github.com/gsantomaggio/go-stream-client/perfTest/cmd"
-	"time"
+	"sync"
 )
 
+var wg sync.WaitGroup
 func main() {
-	cmd.Execute()
-	for true {
-		time.Sleep(1 * time.Second)
-	}
+
+	wg.Add(1)
+	go cmd.Execute()
+	wg.Wait()
 }
