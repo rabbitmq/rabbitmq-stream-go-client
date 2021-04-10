@@ -25,10 +25,10 @@ build: vet build-perfTest
 test: vet
 	go test -v  ./pkg/streaming -race -coverprofile=coverage.txt -covermode=atomic
 docker-build: build
-	docker build -t gsantomaggio/go-stream-client:$(VERSION)  .
+	docker build -t pivotalrabbitmq/go-stream-perf-test:$(VERSION)  .
 
 docker-push: docker-build
-	docker push gsantomaggio/go-stream-client:$(VERSION)
+	docker push pivotalrabbitmq/go-stream-perf-test:$(VERSION)
 
 run-perTest: build-perfTest
 	go run perfTest/perftest.go $(PERFTEST_FLAGS)

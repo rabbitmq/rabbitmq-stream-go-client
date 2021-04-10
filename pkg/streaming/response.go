@@ -235,6 +235,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}
 
+		} else {
+			WARN("entryType Not Handled %d", entryType)
 		}
 		numRecords--
 		offset++
