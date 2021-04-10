@@ -14,6 +14,7 @@ type Consumer struct {
 	parameters *ConsumerCreator
 	mutex      *sync.RWMutex
 }
+
 func (consumer *Consumer) GetStream() string {
 	return consumer.parameters.streamName
 }
@@ -132,6 +133,9 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 
 					return
 				}
+
+			case data := <-consumer.response.data:
+				consumer.setOffset(data.(int64))
 
 			case messages := <-consumer.response.messages:
 				for _, message := range messages {

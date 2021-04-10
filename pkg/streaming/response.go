@@ -210,7 +210,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	var offsetLimit int64 = -1
 
 	if consumer.parameters.offsetSpecification.isOffset() {
-		offsetLimit = consumer.parameters.offsetSpecification.offset
+		offsetLimit = consumer.getOffset()
 	}
 	//if
 
@@ -240,11 +240,11 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		}
 		numRecords--
 		offset++
-		consumer.setOffset(offset)
+		//consumer.setOffset(offset)
 	}
 
 
-	//consumer.response.code <- Code{id: ResponseCodeOk}
+	consumer.response.data <- offset
 	consumer.response.messages <- batchConsumingMessages
 
 }
