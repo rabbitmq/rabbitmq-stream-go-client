@@ -191,7 +191,11 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	consumer, _ := c.coordinator.GetConsumerById(subscriptionId)
 
 	_ = ReadByte(r)
-	_ = ReadByte(r)
+	chunkType := ReadByte(r)
+	if chunkType != 0 {
+		WARN("Invalid chunkType: %d ", chunkType)
+	}
+
 	_ = ReadUShort(r)
 	numRecords, _ := ReadUInt(r)
 	_ = ReadInt64(r) // timestamp
@@ -240,7 +244,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		}
 		numRecords--
 		offset++
-		//consumer.setOffset(offset)
 	}
 
 
