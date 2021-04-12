@@ -8,7 +8,7 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
 ### Download
 ---
 ```
-go get -u github.com/gsantomaggio/go-stream-client@v0.2-alpha
+go get -u github.com/gsantomaggio/rabbitmq-stream-go-client@v0.3-alpha
 ```
 
 ### How to test
@@ -28,7 +28,7 @@ go get -u github.com/gsantomaggio/go-stream-client@v0.2-alpha
 ---
 The performance tool is work in progress, you can use it with docker
 ```
-docker run --network host -it gsantomaggio/go-stream-client silent 
+docker run --network host -it pivotalrabbitmq/go-stream-perf-test silent 
 ```
 
 or directly 

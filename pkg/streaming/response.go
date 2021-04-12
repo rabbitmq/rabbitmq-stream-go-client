@@ -191,7 +191,11 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	consumer, _ := c.coordinator.GetConsumerById(subscriptionId)
 
 	_ = ReadByte(r)
-	_ = ReadByte(r)
+	chunkType := ReadByte(r)
+	if chunkType != 0 {
+		WARN("Invalid chunkType: %d ", chunkType)
+	}
+
 	_ = ReadUShort(r)
 	numRecords, _ := ReadUInt(r)
 	_ = ReadInt64(r) // timestamp
@@ -210,7 +214,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	var offsetLimit int64 = -1
 
 	if consumer.parameters.offsetSpecification.isOffset() {
-		offsetLimit = consumer.parameters.offsetSpecification.offset
+		offsetLimit = consumer.getOffset()
 	}
 	//if
 
@@ -235,14 +239,15 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}
 
+		} else {
+			WARN("entryType Not Handled %d", entryType)
 		}
 		numRecords--
 		offset++
-		consumer.setOffset(offset)
 	}
 
 
-	//consumer.response.code <- Code{id: ResponseCodeOk}
+	consumer.response.data <- offset
 	consumer.response.messages <- batchConsumingMessages
 
 }

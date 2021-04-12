@@ -51,7 +51,7 @@ func printStats() {
 }
 
 func startSimulation() error {
-	streaming.INFO("Silent Simulation, url: %s producers: %d consumers: %d streams: %s\n", rabbitmqBrokerUrl, producers, consumers, streams)
+	streaming.INFO("Silent (%s) Simulation, url: %s producers: %d consumers: %d streams: %s ", streaming.Version, rabbitmqBrokerUrl, producers, consumers, streams)
 
 	err := initStreams()
 	err = startConsumers()
@@ -149,7 +149,10 @@ func startConsumers() error {
 				Name(uuid.New().String()).
 				MessagesHandler(func(Context streaming.ConsumerContext, message *amqp.Message) {
 					if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
-						_ = Context.Consumer.Commit()
+						err := Context.Consumer.Commit()
+						if err != nil {
+							streaming.ERROR("Error Commit: %s", err)
+						}
 					}
 				}).Build()
 			if err != nil {
