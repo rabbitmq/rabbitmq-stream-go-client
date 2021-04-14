@@ -83,6 +83,8 @@ func LookErrorCode(errorCode uint16) string {
 		return "Code subscription id does not exist"
 	case ResponseCodePublisherDoesNotExist:
 		return "Code publisher does not exist"
+	case ResponseCodePreconditionFailed:
+		return "Code Precondition Failed"
 	default:
 		{
 			WARN("Error not handled %d", errorCode)
