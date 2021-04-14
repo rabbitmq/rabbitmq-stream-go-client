@@ -23,6 +23,8 @@ var (
 	streams           []string
 	maxLengthBytes    string
 	printStatsV       bool
+	rate              int
+	batchSize         int
 )
 
 func init() {
@@ -30,9 +32,11 @@ func init() {
 }
 
 func setupCli(baseCmd *cobra.Command) {
+	batchSize = 100
 	baseCmd.PersistentFlags().StringVarP(&rabbitmqBrokerUrl, "uris", "u", streaming.LocalhostUriConnection, "Broker URL")
 	baseCmd.PersistentFlags().IntVarP(&producers, "producers", "p", 1, "Number of Producers")
 	baseCmd.PersistentFlags().IntVarP(&consumers, "consumers", "c", 1, "Number of Consumers")
+	baseCmd.PersistentFlags().IntVarP(&rate, "rate", "r", 0, "Limit publish rate")
 	baseCmd.PersistentFlags().BoolVarP(&preDeclared, "pre-declared", "d", false, "Pre created stream")
 	baseCmd.PersistentFlags().BoolVarP(&printStatsV, "print-stats", "n", true, "Print stats")
 	baseCmd.PersistentFlags().StringSliceVarP(&streams, "streams", "s", []string{uuid.New().String()}, "Stream names, create an UUID if not specified")

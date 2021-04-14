@@ -111,14 +111,18 @@ func startProducers() error {
 				return err
 			}
 			var arr []*amqp.Message
-			for z := 0; z < 100; z++ {
+			for z := 0; z < batchSize; z++ {
 
 				arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("simul_%s", stream)  )))
 			}
 
 			go func(prod *streaming.Producer, messages []*amqp.Message) {
 				for {
-					//time.Sleep(1 * time.Millisecond)
+					if rate > 0 {
+						sleep := float64(batchSize) / float64(rate)
+						sleep = sleep * 1000
+						time.Sleep(time.Duration(sleep) * time.Millisecond)
+					}
 					atomic.AddInt32(&producerMessageCount, 100)
 					_, err = prod.BatchPublish(nil, arr)
 					if err != nil {
