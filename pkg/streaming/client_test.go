@@ -105,5 +105,19 @@ var _ = Describe("Streaming testClient", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("Create two times Stream precondition fail", func() {
+			err := testClient.StreamCreator().Stream(testStreamName).Create()
+			Expect(err).NotTo(HaveOccurred())
+			err = testClient.StreamCreator().Stream(testStreamName).
+				MaxLengthBytes(ByteCapacity{}.MB(100)).
+				Create()
+			Expect(err).To(HaveOccurred())
+			Expect(fmt.Sprintf("%s", err)).
+				To(ContainSubstring("Precondition Failed"))
+			err = testClient.DeleteStream(testStreamName)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+
 	})
 })
