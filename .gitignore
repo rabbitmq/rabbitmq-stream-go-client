@@ -17,3 +17,4 @@
 coverage.txt
 bin/
 vet
+.DS_Store
