@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/gsantomaggio/go-stream-client/perfTest/cmd"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/perfTest/cmd"
 	"sync"
 )
 

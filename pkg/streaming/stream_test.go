@@ -1,7 +1,7 @@
 package streaming
 
 import (
-	"github.com/Azure/go-amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"strconv"
 )
 

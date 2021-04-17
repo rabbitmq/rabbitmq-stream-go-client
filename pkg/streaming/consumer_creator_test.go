@@ -1,11 +1,12 @@
 package streaming
 
 import (
+	"context"
 	"fmt"
-	"github.com/Azure/go-amqp"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"sync/atomic"
 	"time"
 )
@@ -45,7 +46,7 @@ var _ = Describe("Streaming Consumers", func() {
 			Stream(testConsumerStream).Build()
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(5)) // batch send
+		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
 		Expect(err).NotTo(HaveOccurred())
 		var count int32
 
@@ -78,7 +79,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 		for i := 0; i < 5; i++ {
 			time.Sleep(500 * time.Millisecond)
-			_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(10)) // batch send
+			_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(10)) // batch send
 			Expect(err).NotTo(HaveOccurred())
 
 		}

@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/gsantomaggio/go-stream-client/pkg/streaming"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/streaming"
 	"github.com/spf13/cobra"
 	"os"
 )
