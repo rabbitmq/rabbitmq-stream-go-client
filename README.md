@@ -1,6 +1,6 @@
 # GO stream client for RabbitMQ streaming queues
 ---
-![Build](https://github.com/Gsantomaggio/go-stream-client/workflows/Build/badge.svg)
+![Build](https://github.com/rabbitmq/rabbitmq-stream-go-client/workflows/Build/badge.svg)
 [![codecov](https://codecov.io/gh/Gsantomaggio/go-stream-client/branch/main/graph/badge.svg?token=HZD4S71QIM)](https://codecov.io/gh/Gsantomaggio/go-stream-client)
 
 Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
@@ -8,7 +8,7 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
 ### Download
 ---
 ```
-go get -u github.com/gsantomaggio/rabbitmq-stream-go-client@v0.3-alpha
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.3-alpha
 ```
 
 ### How to test

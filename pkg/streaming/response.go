@@ -3,7 +3,7 @@ package streaming
 import (
 	"bufio"
 	"bytes"
-	"github.com/Azure/go-amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
 type ReaderProtocol struct {

@@ -1,6 +1,7 @@
 package streaming
 
 import (
+	"context"
 	"fmt"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
@@ -36,7 +37,7 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(5)) // batch send
+		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
 		Expect(err).NotTo(HaveOccurred())
 		// we can't close the subscribe until the publish is finished
 		time.Sleep(500 * time.Millisecond)
@@ -53,7 +54,7 @@ var _ = Describe("Streaming Producers", func() {
 				producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(5)) // batch send
+				_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
 				Expect(err).NotTo(HaveOccurred())
 				// we can't close the subscribe until the publish is finished
 				time.Sleep(500 * time.Millisecond)

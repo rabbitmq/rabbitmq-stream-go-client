@@ -39,7 +39,10 @@ func (c *Client) connect(addr string) error {
 	c.tuneState.requestedMaxFrameSize = 1048576
 	c.clientProperties.items = make(map[string]string)
 	resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
-
+	if err != nil {
+		DEBUG("%s", err)
+		return err
+	}
 	connection, err2 := net.DialTCP("tcp", nil, resolver)
 	if err2 != nil {
 		DEBUG("%s", err2)
@@ -147,11 +150,14 @@ func (c *Client) getSaslMechanisms() ([]string, error) {
 	WriteShort(b, CommandSaslHandshake)
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
-	err := c.socket.writeAndFlush(b.Bytes())
+	err_write := c.socket.writeAndFlush(b.Bytes())
 	data := <-resp.data
-	err = c.coordinator.RemoveResponseById(correlationId)
+	err := c.coordinator.RemoveResponseById(correlationId)
 	if err != nil {
 		return nil, err
+	}
+	if err_write != nil {
+		return nil, err_write
 	}
 	return data.([]string), nil
 
@@ -221,7 +227,7 @@ func (c *Client) HeartBeat() {
 			case <-resp.code:
 				_ = c.coordinator.RemoveResponseByName("heartbeat")
 				return
-			case _ = <-ticker.C:
+			case <-ticker.C:
 				c.sendHeartbeat()
 			}
 		}

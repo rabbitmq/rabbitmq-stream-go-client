@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/Azure/go-amqp"
 	"github.com/google/uuid"
-	"github.com/gsantomaggio/go-stream-client/pkg/streaming"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/streaming"
 	"os"
 	"sync/atomic"
 	"time"

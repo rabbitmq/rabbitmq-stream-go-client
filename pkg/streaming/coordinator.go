@@ -2,8 +2,8 @@ package streaming
 
 import (
 	"fmt"
-	"github.com/Azure/go-amqp"
 	"github.com/pkg/errors"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"strconv"
 	"sync"
 )
@@ -66,8 +66,8 @@ func (coordinator *Coordinator) ProducersCount() int {
 /// response
 func NewResponse() *Response {
 	res := &Response{}
-	res.code = make(chan Code, 0)
-	res.data = make(chan interface{}, 0)
+	res.code = make(chan Code)
+	res.data = make(chan interface{})
 	res.messages = make(chan []*amqp.Message, 100)
 	return res
 }
@@ -181,8 +181,7 @@ func (coordinator *Coordinator) count(refmap map[interface{}]interface{}) int {
 }
 
 func (coordinator *Coordinator) getNextFreeId(refmap map[interface{}]interface{}) (byte, error) {
-	var maxValue int
-	maxValue = int(^uint8(0))
+	maxValue := int(^uint8(0))
 	var result byte
 	for i := 0; i < maxValue; i++ {
 		if refmap[byte(i)] == nil {

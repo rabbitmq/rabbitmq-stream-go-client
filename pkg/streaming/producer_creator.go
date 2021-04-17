@@ -3,7 +3,7 @@ package streaming
 import (
 	"bytes"
 	"context"
-	"github.com/Azure/go-amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
 type Producer struct {
@@ -60,8 +60,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 	}
 
 	length := frameHeaderLength + msgLen
-	var publishId uint8
-	publishId = producer.ID
+	publishId := producer.ID
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandPublish)

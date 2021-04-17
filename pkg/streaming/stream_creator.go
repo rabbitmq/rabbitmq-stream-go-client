@@ -42,7 +42,7 @@ func (s StreamCreator) buildParameters() (map[string]string, error) {
 	}
 
 	if s.maxAge > 0 {
-		res["max-age"] = fmt.Sprintf("%s", s.maxAge)
+		res["max-age"] = s.maxAge.String()
 	}
 	return res, nil
 }
@@ -52,7 +52,7 @@ func (s StreamCreator) Create() error {
 	length := 2 + 2 + 4 + 2 + len(s.streamName) + 4
 	correlationId := resp.correlationid
 	args, err := s.buildParameters()
-	if err!= nil {
+	if err != nil {
 		_ = s.client.coordinator.RemoveResponseById(resp.correlationid)
 		return err
 	}

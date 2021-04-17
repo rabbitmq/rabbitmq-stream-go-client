@@ -3,7 +3,7 @@ package streaming
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/go-amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"sync"
 )
 
@@ -126,7 +126,7 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 	res := c.client.HandleWrite(b.Bytes(), resp)
 
 	go func() {
-		for true {
+		for  {
 			select {
 			case code := <-consumer.response.code:
 				if code.id == CloseChannel {
@@ -255,7 +255,6 @@ const (
 	typeTimestamp    = int16(5)
 	typeLastConsumed = int16(6)
 
-	unusedOffset = int64(-1)
 )
 
 type OffsetSpecification struct {
