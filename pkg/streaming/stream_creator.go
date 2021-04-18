@@ -48,6 +48,10 @@ func (s StreamCreator) buildParameters() (map[string]string, error) {
 }
 
 func (s StreamCreator) Create() error {
+	if s.streamName == "" {
+		return fmt.Errorf("stream name can't be empty")
+	}
+
 	resp := s.client.coordinator.NewResponse()
 	length := 2 + 2 + 4 + 2 + len(s.streamName) + 4
 	correlationId := resp.correlationid

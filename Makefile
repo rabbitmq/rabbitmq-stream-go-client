@@ -20,6 +20,7 @@ build-perfTest: vet
 	go build -ldflags=$(LDFLAGS) -o bin/perfTest perfTest/perftest.go
 
 build: vet build-perfTest
+	staticcheck pkg/streaming/*.go
 	go build -ldflags=$(LDFLAGS) -v ./...
 
 test: vet
