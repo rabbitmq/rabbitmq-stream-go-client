@@ -64,7 +64,7 @@ const (
 	DefaultReadSocketBuffer = 4096 * 2
 
 //
-	Version = "0.3-alpha"
+	Version = "0.4-alpha"
 )
 
 func LookErrorCode(errorCode uint16) string {

@@ -12,6 +12,9 @@ PERFTEST_FLAGS?= silent -p 1 -c 1
 
 all: vet
 
+check:
+	staticcheck pkg/streaming/*.go
+
 vet: $(go_sources)
 	go vet ./pkg/...
 	touch $@
@@ -20,7 +23,6 @@ build-perfTest: vet
 	go build -ldflags=$(LDFLAGS) -o bin/perfTest perfTest/perftest.go
 
 build: vet build-perfTest
-	staticcheck pkg/streaming/*.go
 	go build -ldflags=$(LDFLAGS) -v ./...
 
 test: vet

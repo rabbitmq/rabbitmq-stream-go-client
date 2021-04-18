@@ -88,6 +88,6 @@ make build
  - UnSubscribe
  - HeartBeat
  
- ### Work in Progress
+ ### Project status
  ---
- The POC is a work in progress, the code isn't too accurate
+ The client is a work in progress, the API(s) could change

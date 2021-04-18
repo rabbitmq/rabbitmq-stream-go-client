@@ -54,7 +54,7 @@ func (c *Client) handleResponse() {
 			}
 		case CommandPublishError:
 			{
-				c.handlePublishError(readerProtocol, buffer)
+				c.handlePublishError(buffer)
 
 			}
 		case CommandPublishConfirm:
@@ -216,7 +216,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	if consumer.parameters.offsetSpecification.isOffset() {
 		offsetLimit = consumer.getOffset()
 	}
-	//if
 
 	filter := offsetLimit != -1
 
@@ -234,7 +233,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				msg := &amqp.Message{}
 				err := msg.UnmarshalBinary(arrayMessage)
 				if err != nil {
-					ERROR("Error UnmarshalBinary: %s", err)
+					ERROR("error unmarshal messages: %s", err)
 				}
 				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}
@@ -246,7 +245,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		offset++
 	}
 
-
 	consumer.response.data <- offset
 	consumer.response.messages <- batchConsumingMessages
 
@@ -256,7 +254,7 @@ func (c *Client) CreditNotificationFrameHandler(readProtocol *ReaderProtocol, r 
 	readProtocol.ResponseCode = UShortExtractResponseCode(ReadUShort(r))
 	subscriptionId := ReadByte(r)
 	// TODO ASK WHAT TO DO HERE
-	DEBUG("CreditNotificationFrameHandler %d \n", subscriptionId)
+	DEBUG("CreditNotificationFrameHandler %d", subscriptionId)
 }
 
 func (c *Client) QueryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
@@ -270,7 +268,7 @@ func (c *Client) QueryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.
 	res.data <- offset
 }
 
-func (c *Client) handlePublishError(protocol *ReaderProtocol, buffer *bufio.Reader) {
+func (c *Client) handlePublishError(buffer *bufio.Reader) {
 
 	publisherId := ReadByte(buffer)
 	publishingErrorCount, _ := ReadUInt(buffer)
@@ -293,11 +291,11 @@ func (c *Client) MetadataUpdateFrameHandler(buffer *bufio.Reader) {
 	code := ReadUShort(buffer)
 	if code == ResponseCodeStreamNotAvailable {
 		stream := ReadString(buffer)
-		WARN("Stream %s is no longer available", stream)
+		WARN("stream %s is no longer available", stream)
 		// TODO ASK WHAT TO DO HERE
 		//client.metadataListener.handle(stream, code)
 	} else {
 		//TODO handle the error, see the java code
-		WARN("Unsupported metadata update code %d", code)
+		WARN("unsupported metadata update code %d", code)
 	}
 }
