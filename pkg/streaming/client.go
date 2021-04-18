@@ -150,14 +150,14 @@ func (c *Client) getSaslMechanisms() ([]string, error) {
 	WriteShort(b, CommandSaslHandshake)
 	WriteShort(b, Version1)
 	WriteInt(b, correlationId)
-	err_write := c.socket.writeAndFlush(b.Bytes())
+	errWrite := c.socket.writeAndFlush(b.Bytes())
 	data := <-resp.data
 	err := c.coordinator.RemoveResponseById(correlationId)
 	if err != nil {
 		return nil, err
 	}
-	if err_write != nil {
-		return nil, err_write
+	if errWrite != nil {
+		return nil, errWrite
 	}
 	return data.([]string), nil
 
@@ -224,8 +224,10 @@ func (c *Client) HeartBeat() {
 	go func() {
 		for {
 			select {
-			case <-resp.code:
-				_ = c.coordinator.RemoveResponseByName("heartbeat")
+			case code := <-resp.code:
+				if code.id == CloseChannel {
+					_ = c.coordinator.RemoveResponseByName("heartbeat")
+				}
 				return
 			case <-ticker.C:
 				c.sendHeartbeat()
@@ -241,7 +243,7 @@ func (c *Client) sendHeartbeat() {
 	WriteShort(b, CommandHeartbeat)
 	WriteShort(b, Version1)
 
-	c.socket.writeAndFlush(b.Bytes())
+	_ = c.socket.writeAndFlush(b.Bytes())
 }
 
 func (c *Client) Close() error {

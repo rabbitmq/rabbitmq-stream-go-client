@@ -79,7 +79,6 @@ var _ = Describe("Streaming testClient", func() {
 				To(ContainSubstring("Invalid unit size format"))
 		})
 
-
 		It("Create Stream with parameter MaxAge", func() {
 			streamP := uuid.New().String()
 			err := testClient.StreamCreator().Stream(streamP).
@@ -118,6 +117,12 @@ var _ = Describe("Streaming testClient", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("Create empty Stream  fail", func() {
+			err := testClient.StreamCreator().Stream("").Create()
+			Expect(err).To(HaveOccurred())
+			Expect(fmt.Sprintf("%s", err)).
+				To(ContainSubstring("stream name can't be empty"))
+		})
 
 	})
 })

@@ -25,7 +25,7 @@ func WaitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 	select {
 	case code := <-response.code:
 		if code.id != ResponseCodeOk {
-			return fmt.Errorf("wait time error: %s", LookErrorCode(code.id))
+			return fmt.Errorf("code error: %s", LookErrorCode(code.id))
 		}
 		return nil
 	case <-time.After(timeout):

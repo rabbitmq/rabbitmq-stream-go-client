@@ -12,6 +12,9 @@ PERFTEST_FLAGS?= silent -p 1 -c 1
 
 all: vet
 
+check:
+	staticcheck pkg/streaming/*.go
+
 vet: $(go_sources)
 	go vet ./pkg/...
 	touch $@

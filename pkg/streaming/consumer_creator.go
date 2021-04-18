@@ -32,11 +32,6 @@ func (consumer *Consumer) getOffset() int64 {
 }
 
 type ConsumerContext struct {
-
-	//long offset();
-
-	//void commit();
-
 	Consumer *Consumer
 }
 
@@ -126,7 +121,7 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 	res := c.client.HandleWrite(b.Bytes(), resp)
 
 	go func() {
-		for  {
+		for {
 			select {
 			case code := <-consumer.response.code:
 				if code.id == CloseChannel {
@@ -150,9 +145,6 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 }
 
 func (c *Client) credit(subscriptionId byte, credit int16) {
-	//if (credit < 0 || credit > Short.MAX_VALUE) {
-	//throw new IllegalArgumentException("Credit value must be between 0 and " + Short.MAX_VALUE);
-	//}
 	length := 2 + 2 + 1 + 2
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
@@ -160,7 +152,10 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 	WriteShort(b, Version1)
 	WriteByte(b, subscriptionId)
 	WriteShort(b, credit)
-	c.socket.writeAndFlush(b.Bytes())
+	err := c.socket.writeAndFlush(b.Bytes())
+	if err != nil {
+		WARN("credit error:%s", err)
+	}
 }
 
 func (consumer *Consumer) UnSubscribe() error {
@@ -177,48 +172,31 @@ func (consumer *Consumer) UnSubscribe() error {
 	consumer.response.code <- Code{id: CloseChannel}
 	errC := consumer.parameters.client.coordinator.RemoveConsumerById(consumer.ID)
 	if errC != nil {
-		fmt.Printf("Errror %s", errC)
+		WARN("Error during remove consumer id:%s", errC)
 	}
 	return err
 }
 
-func (c *Consumer) Commit() error {
-	//public void commitOffset(String reference, String stream, long offset) {
-	//	if (reference == null || reference.isEmpty() || reference.length() > 256) {
-	//		throw new IllegalArgumentException(
-	//			"Reference must a non-empty string of less than 256 characters");
-	//	}
-	//	if (stream == null || stream.isEmpty()) {
-	//		throw new IllegalArgumentException("Stream cannot be null or empty");
-	//	}
-	length := 2 + 2 + 4 + 2 + len(c.parameters.consumerName) + 2 +
-		len(c.parameters.streamName) + 8
+func (consumer *Consumer) Commit() error {
+	if consumer.parameters.streamName == "" {
+		return fmt.Errorf("stream name can't be empty")
+	}
+	length := 2 + 2 + 4 + 2 + len(consumer.parameters.consumerName) + 2 +
+		len(consumer.parameters.streamName) + 8
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	WriteInt(b, length)
 	WriteShort(b, CommandCommitOffset)
 	WriteShort(b, Version1)
 	WriteInt(b, 0) // correlation ID not used yet, may be used if commit offset has a confirm
-	WriteString(b, c.parameters.consumerName)
-	WriteString(b, c.parameters.streamName)
+	WriteString(b, consumer.parameters.consumerName)
+	WriteString(b, consumer.parameters.streamName)
 
-	WriteLong(b, c.getOffset())
-	return c.parameters.client.socket.writeAndFlush(b.Bytes())
+	WriteLong(b, consumer.getOffset())
+	return consumer.parameters.client.socket.writeAndFlush(b.Bytes())
 
 }
 
 func (consumer *Consumer) QueryOffset() (int64, error) {
-	//if reference == null || reference.isEmpty() || reference.length() > 256 {
-	//	throw
-	//	new
-	//	IllegalArgumentException(
-	//		"Reference must a non-empty string of less than 256 characters")
-	//}
-	//if stream == null || stream.isEmpty() {
-	//	throw
-	//	new
-	//	IllegalArgumentException("Stream cannot be null or empty")
-	//}
-
 	length := 2 + 2 + 4 + 2 + len(consumer.parameters.consumerName) + 2 + len(consumer.parameters.streamName)
 
 	resp := consumer.parameters.client.coordinator.NewResponse()
@@ -254,7 +232,6 @@ const (
 	typeOffset       = int16(4)
 	typeTimestamp    = int16(5)
 	typeLastConsumed = int16(6)
-
 )
 
 type OffsetSpecification struct {

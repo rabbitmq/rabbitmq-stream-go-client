@@ -13,7 +13,7 @@ import (
 
 func CheckErr(err error) {
 	if err != nil {
-		streaming.ERROR("Error during operation: %s \n", err)
+		streaming.ERROR("%s ", err)
 	}
 	return
 }
@@ -26,6 +26,9 @@ func main() {
 		Uri(uris).
 		Connect() // Create Client
 	CheckErr(err)
+	if err != nil {
+		return
+	}
 
 	streaming.INFO("Connected to: %s", uris)
 	streamName := uuid.New().String()

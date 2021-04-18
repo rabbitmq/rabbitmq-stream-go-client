@@ -7,7 +7,7 @@ import (
 )
 
 type Producer struct {
-	ID         uint8
+	ID uint8
 	//response   *Response
 	parameters *ProducerCreator
 }
@@ -49,9 +49,6 @@ func (c *ProducerCreator) Build() (*Producer, error) {
 }
 
 func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message) (int, error) {
-	//respChan := make(chan *WriteResponse, 1)
-
-	//go func(msgs []*amqp.Message) {
 	frameHeaderLength := 2 + 2 + 1 + 4
 	var msgLen int
 	for _, msg := range msgs {
@@ -82,31 +79,6 @@ func (producer *Producer) BatchPublish(ctx context.Context, msgs []*amqp.Message
 	if err != nil {
 		return 0, err
 	}
-	//<-subscribe.response.isDone
-
-	//select {
-	//case _ = <-subscribe.response.isDone:
-	//	return 0, nil
-	//case <-time.After(200 * time.Millisecond):
-	//	//fmt.Printf("timeout id:%d \n", subscribe.ID)
-	//}
-	//subscribe.LikedClient.handleResponse()
-	//respChan <- &WriteResponse{}
-	//}(msgs)
-
-	//select {
-	//
-	//case <-ctx.Done():
-	//	switch ctx.Err() {
-	//	case context.DeadlineExceeded:
-	//		return 0, errors.Wrap(ctx.Err(), "Time out during send")
-	//	case context.Canceled:
-	//		return 0, errors.Wrap(ctx.Err(), "Call cancelled")
-	//	}
-	//case ree := <-respChan:
-	//	return ree.Code, nil
-	//
-	//}
 	return 0, nil
 }
 
