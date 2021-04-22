@@ -27,8 +27,6 @@ func (b *buffer) skip(n int) {
 	b.i += n
 }
 
-
-
 func (b *buffer) readCheck(n int64) bool {
 	return int64(b.i)+n > int64(len(b.b))
 }

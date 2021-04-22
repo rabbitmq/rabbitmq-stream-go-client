@@ -60,8 +60,7 @@ func (byteCapacity ByteCapacity) From(value string) *ByteCapacity {
 
 		size, err := strconv.Atoi(value[:len(value)-2])
 		if err != nil {
-			return &ByteCapacity{bytes: 0, error:
-			errors.New(fmt.Sprintf("Capacity, Invalid number format: %s", value))}
+			return &ByteCapacity{bytes: 0, error: errors.New(fmt.Sprintf("Capacity, Invalid number format: %s", value))}
 		}
 
 		switch foundUnitSize {

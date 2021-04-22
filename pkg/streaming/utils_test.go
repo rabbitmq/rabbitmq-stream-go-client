@@ -21,7 +21,7 @@ var _ = Describe("Utils", func() {
 		}(response)
 		time.Sleep(200 * time.Millisecond)
 		response.code <- Code{
-			id:          ResponseCodeOk,
+			id: ResponseCodeOk,
 		}
 
 		wg.Wait()

@@ -23,7 +23,6 @@ func PeekByte(readerStream *bufio.Reader) uint8 {
 	return res[0]
 }
 
-
 func ReadInt64(readerStream io.Reader) int64 {
 	var res int64
 	_ = binary.Read(readerStream, binary.BigEndian, &res)

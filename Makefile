@@ -19,6 +19,9 @@ vet: $(go_sources)
 	go vet ./pkg/...
 	touch $@
 
+fmt:
+	go fmt ./...
+
 build-perfTest: vet
 	go build -ldflags=$(LDFLAGS) -o bin/perfTest perfTest/perftest.go
 

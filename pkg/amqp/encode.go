@@ -7,7 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-
 type marshaler interface {
 	marshal(*buffer) error
 }

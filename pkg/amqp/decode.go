@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 // unmarshaler is fulfilled by types that can unmarshal
 // themselves from AMQP data.
 type unmarshaler interface {

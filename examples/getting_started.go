@@ -76,7 +76,7 @@ func main() {
 		var arr []*amqp.Message
 		for f := 0; f < batchSize; f++ {
 			countM++
-			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d", countM) )))
+			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d", countM))))
 		}
 		_, err = producer.BatchPublish(nil, arr) // batch send
 	}

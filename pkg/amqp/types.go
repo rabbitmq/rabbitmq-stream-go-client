@@ -124,7 +124,6 @@ const (
 //     extended header (opt)
 //     body (opt)
 
-
 type deliveryState interface{} // TODO: http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-declared
 
 type unsettled map[string]deliveryState
@@ -184,8 +183,6 @@ func (f *filter) unmarshal(r *buffer) error {
 	*f = m
 	return nil
 }
-
-
 
 // ErrorCondition is one of the error conditions defined in the AMQP spec.
 type ErrorCondition string
@@ -290,7 +287,6 @@ func (e *Error) String() string {
 func (e *Error) Error() string {
 	return e.String()
 }
-
 
 // Message is an AMQP message.
 type Message struct {
@@ -422,7 +418,6 @@ func (m *Message) GetData() []byte {
 	}
 	return m.Data[0]
 }
-
 
 // Ignore notifies the amqp message pump that the message has been handled
 // without any disposition. It frees the amqp receiver to get the next message
@@ -1256,7 +1251,6 @@ func (m *SenderSettleMode) unmarshal(r *buffer) error {
 	*m = SenderSettleMode(n)
 	return err
 }
-
 
 // Receiver Settlement Modes
 const (

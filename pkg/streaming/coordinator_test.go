@@ -123,7 +123,7 @@ var _ = Describe("Coordinator", func() {
 			err = testClient.coordinator.RemoveResponseByName("it does not exist")
 			Expect(err).To(HaveOccurred())
 
-			_,err = testClient.coordinator.GetResponseById(255)
+			_, err = testClient.coordinator.GetResponseById(255)
 			Expect(err).To(HaveOccurred())
 
 		})
