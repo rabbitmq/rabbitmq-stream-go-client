@@ -33,5 +33,5 @@ docker-build: build
 docker-push: docker-build
 	docker push pivotalrabbitmq/go-stream-perf-test:$(VERSION)
 
-run-perTest: build-perfTest
+run-perfTest: build-perfTest
 	go run perfTest/perftest.go $(PERFTEST_FLAGS)

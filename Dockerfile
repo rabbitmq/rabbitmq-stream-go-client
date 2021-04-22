@@ -6,7 +6,7 @@ COPY pkg pkg
 COPY perfTest perfTest
 
 RUN mkdir /stream_perf_test
-RUN VERSION=$(cat VERSION) && go build -ldflags "-X main.Version=$VERSION" -o /stream_perf_test/perTest perfTest/perftest.go
+RUN VERSION=$(cat VERSION) && go build -ldflags "-X main.Version=$VERSION" -o /stream_perf_test/perfTest perfTest/perftest.go
 
 FROM ubuntu:20.04
 
@@ -25,4 +25,4 @@ RUN 	rm -rf /var/lib/apt/lists/*; \
     	locale-gen en_US.UTF-8
 
 
-ENTRYPOINT ["perTest"]
+ENTRYPOINT ["perfTest"]
