@@ -7,6 +7,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/streaming"
 	"github.com/spf13/cobra"
 	"math/rand"
+	"os"
 	"sync/atomic"
 	"time"
 )
@@ -54,8 +55,17 @@ func startSimulation() error {
 	streaming.INFO("Silent (%s) Simulation, url: %s producers: %d consumers: %d streams: %s ", streaming.Version, rabbitmqBrokerUrl, producers, consumers, streams)
 
 	err := initStreams()
+	if err != nil {
+		os.Exit(1)
+	}
 	err = startConsumers()
+	if err != nil {
+		os.Exit(1)
+	}
 	err = startProducers()
+	if err != nil {
+		os.Exit(1)
+	}
 	printStats()
 
 	return err
