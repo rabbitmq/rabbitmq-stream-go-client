@@ -38,9 +38,9 @@ func printStats() {
 				select {
 				case _ = <-ticker.C:
 					v := time.Now().Sub(start).Seconds()
-					PMessagesPerSecond := float64(atomic.LoadInt32(&producerMessageCount)) / v
-					CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / v
-					streaming.INFO("Published %.2f msg/s, Consumed %.2f msg/s, Active Connections: %d", PMessagesPerSecond, CMessagesPerSecond, len(connections))
+					PMessagesPerSecond := int64(float64(atomic.LoadInt32(&producerMessageCount)) / v)
+					CMessagesPerSecond := int64(float64(atomic.LoadInt32(&consumerMessageCount)) / v)
+					streaming.INFO("Published %8v msg/s   |   Consumed %8v msg/s   |   Connections %3v", PMessagesPerSecond, CMessagesPerSecond, len(connections))
 					atomic.SwapInt32(&producerMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
 					start = time.Now()
@@ -79,7 +79,7 @@ func randomSleep() {
 
 func initStreams() error {
 	if !preDeclared {
-		streaming.INFO("Create streams :%s\n", streams)
+		streaming.INFO("Declaring streams: %s", streams)
 		client, err := streaming.NewClientCreator().
 			Uri(rabbitmqBrokerUrl).Connect()
 		if err != nil {
@@ -94,7 +94,7 @@ func initStreams() error {
 				MaxLengthBytes(streaming.ByteCapacity{}.From(maxLengthBytes)).
 				Create()
 			if err != nil {
-				streaming.ERROR("Error creating stream: %s", err)
+				streaming.ERROR("Error declaring stream: %s", err)
 				_ = client.Close()
 				return err
 			}
@@ -102,11 +102,11 @@ func initStreams() error {
 		streaming.INFO("End Init streams :%s\n", streams)
 		return client.Close()
 	}
-	streaming.INFO("Predeclared streams :%s\n", streams)
+	streaming.INFO("Predeclared streams: %s\n", streams)
 	return nil
 }
 func startProducers() error {
-	streaming.INFO("Create producers :%d\n", producers)
+	streaming.INFO("Starting %d producers...", producers)
 	for _, stream := range streams {
 		for i := 0; i < producers; i++ {
 			client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
@@ -123,7 +123,7 @@ func startProducers() error {
 			var arr []*amqp.Message
 			for z := 0; z < batchSize; z++ {
 
-				arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("simul_%s", stream)  )))
+				arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("simul_%s", stream))))
 			}
 
 			go func(prod *streaming.Producer, messages []*amqp.Message) {
@@ -147,7 +147,7 @@ func startProducers() error {
 }
 
 func startConsumers() error {
-	streaming.INFO("Start Consumers  :%d\n", consumers)
+	streaming.INFO("Starting %d consumers...", consumers)
 	for _, stream := range streams {
 		for i := 0; i < consumers; i++ {
 			client, err := streaming.NewClientCreator().Uri(rabbitmqBrokerUrl).Connect()
