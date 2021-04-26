@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
@@ -15,7 +16,6 @@ func CheckErr(err error) {
 	if err != nil {
 		streaming.ERROR("%s ", err)
 	}
-	return
 }
 func main() {
 	reader := bufio.NewReader(os.Stdin)
@@ -78,7 +78,10 @@ func main() {
 			countM++
 			arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d", countM))))
 		}
-		_, err = producer.BatchPublish(nil, arr) // batch send
+		_, err = producer.BatchPublish(context.Background(), arr) // batch send
+		if err != nil {
+			streaming.ERROR("%s", err)
+		}
 	}
 
 	elapsed := time.Since(start)

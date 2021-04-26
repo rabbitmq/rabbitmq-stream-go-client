@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
@@ -58,13 +59,17 @@ func startSimulation() error {
 	if err != nil {
 		os.Exit(1)
 	}
-	err = startConsumers()
-	if err != nil {
-		os.Exit(1)
+	if consumers > 0 {
+		err = startConsumers()
+		if err != nil {
+			os.Exit(1)
+		}
 	}
-	err = startProducers()
-	if err != nil {
-		os.Exit(1)
+	if producers > 0 {
+		err = startProducers()
+		if err != nil {
+			os.Exit(1)
+		}
 	}
 	printStats()
 
@@ -134,7 +139,7 @@ func startProducers() error {
 						time.Sleep(time.Duration(sleep) * time.Millisecond)
 					}
 					atomic.AddInt32(&producerMessageCount, 100)
-					_, err = prod.BatchPublish(nil, arr)
+					_, err = prod.BatchPublish(context.Background(), arr)
 					if err != nil {
 						streaming.ERROR("Error publishing %s", err)
 						time.Sleep(1 * time.Second)

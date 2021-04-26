@@ -16,6 +16,7 @@
 .idea
 coverage.txt
 bin/
+examples/examples
 vet
 .DS_Store
 perfTest/

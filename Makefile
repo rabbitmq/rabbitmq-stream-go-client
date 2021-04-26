@@ -1,40 +1,42 @@
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
+GOBIN = $(shell go env GOPATH)/bin
 else
-GOBIN=$(shell go env GOBIN)
+GOBIN = $(shell go env GOBIN)
 endif
 
-VERSION?=latest
-LDFLAGS="-X main.Version=$(VERSION)"
+VERSION ?= latest
+LDFLAGS = "-X main.Version=$(VERSION)"
 
-PERFTEST_FLAGS?= silent -p 1 -c 1
+all: test build
 
-all: vet
-
-check:
-	staticcheck pkg/streaming/*.go
-
-vet: $(go_sources)
-	go vet ./pkg/...
-	touch $@
+vet:
+	go vet ./...
 
 fmt:
 	go fmt ./...
 
-build-perfTest: vet
-	go build -ldflags=$(LDFLAGS) -o bin/perfTest perfTest/perftest.go
+STATICCHECK ?= $(GOBIN)/staticcheck
+$(STATICCHECK):
+	go get honnef.co/go/tools/cmd/staticcheck
+check: $(STATICCHECK)
+	$(STATICCHECK) ./pkg/streaming
 
-build: vet build-perfTest
+test: vet fmt check
+	go test -v  ./pkg/streaming -race -coverprofile=coverage.txt -covermode=atomic
+
+build: vet fmt check
 	go build -ldflags=$(LDFLAGS) -v ./...
 
-test: vet
-	go test -v  ./pkg/streaming -race -coverprofile=coverage.txt -covermode=atomic
-docker-build: build
-	docker build -t pivotalrabbitmq/go-stream-perf-test:$(VERSION)  .
-
-docker-push: docker-build
-	docker push pivotalrabbitmq/go-stream-perf-test:$(VERSION)
-
-run-perfTest: build-perfTest
+PERFTEST_FLAGS ?= silent -p 1 -c 1
+perf-test-run: perf-test-build
 	go run perfTest/perftest.go $(PERFTEST_FLAGS)
+
+perf-test-build: vet fmt check
+	go build -ldflags=$(LDFLAGS) -o bin/perfTest perfTest/perftest.go
+
+perf-test-docker-build: perf-test-build
+	docker build -t pivotalrabbitmq/go-stream-perf-test:$(VERSION) .
+
+perf-test-docker-push: docker-build
+	docker push pivotalrabbitmq/go-stream-perf-test:$(VERSION)

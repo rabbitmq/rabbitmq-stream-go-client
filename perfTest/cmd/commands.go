@@ -10,7 +10,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:           "PerfTest",
-	Short:         fmt.Sprintf(`RabbitMQ Golang PerfTest for streaming queues `),
+	Short:         "RabbitMQ Golang PerfTest for streaming queues",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
