@@ -38,5 +38,5 @@ perf-test-build: vet fmt check
 perf-test-docker-build: perf-test-build
 	docker build -t pivotalrabbitmq/go-stream-perf-test:$(VERSION) .
 
-perf-test-docker-push: docker-build
+perf-test-docker-push: perf-test-docker-build
 	docker push pivotalrabbitmq/go-stream-perf-test:$(VERSION)
