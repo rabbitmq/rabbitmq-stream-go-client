@@ -38,12 +38,11 @@ jobs:
 
       - name: Publish
         run: |
+          set -x
           VERSION=latest
           export VERSION
-          echo "GITHUB_REF:$GITHUB_REF"
           if [[ ! $GITHUB_REF =~ "/tags/" ]]
           then
             VERSION=dev
           fi
-          echo $VERSION
           make perf-test-docker-push
