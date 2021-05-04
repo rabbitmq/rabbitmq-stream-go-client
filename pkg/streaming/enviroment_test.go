@@ -76,6 +76,7 @@ var _ = Describe("Environment test", func() {
 			go func(wg *sync.WaitGroup) {
 				producer, err := env.NewProducer(streamName, nil)
 				Expect(err).NotTo(HaveOccurred())
+				time.Sleep(10 * time.Millisecond)
 				err = producer.Close()
 				Expect(err).NotTo(HaveOccurred())
 				wg.Done()
