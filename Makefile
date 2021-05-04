@@ -12,7 +12,7 @@ all: test build
 
 
 vet: $(go_sources)
-	go vet ./pkg/...
+	go vet ./pkg/streaming
 
 fmt:
 	go fmt ./...
