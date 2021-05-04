@@ -85,6 +85,10 @@ func (c *Client) handleResponse() {
 				c.QueryOffsetFrameHandler(readerProtocol, buffer)
 
 			}
+		case CommandMetadata:
+			{
+				c.MetadataFrameHandler(readerProtocol, buffer)
+			}
 		default:
 			{
 				WARN("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
@@ -173,7 +177,7 @@ func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Re
 
 func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 	readProtocol.PublishID = ReadByte(r)
-	//readProtocol.PublishingIdCount = ReadIntFromReader(testClient.reader)
+	//readProtocol.PublishingIdCount = ReadIntFromReader(testEnviroment.reader)
 	publishingIdCount, _ := ReadUInt(r)
 	//var _publishingId int64
 	for publishingIdCount != 0 {
@@ -293,9 +297,50 @@ func (c *Client) MetadataUpdateFrameHandler(buffer *bufio.Reader) {
 		stream := ReadString(buffer)
 		WARN("stream %s is no longer available", stream)
 		// TODO ASK WHAT TO DO HERE
-		//client.metadataListener.handle(stream, code)
+
+		streamCh := make(chan string, 1)
+		streamCh <- stream
+		c.metadataListener(streamCh)
 	} else {
 		//TODO handle the error, see the java code
 		WARN("unsupported metadata update code %d", code)
 	}
+}
+
+func (c *Client) MetadataFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = ReadUInt(r)
+	readProtocol.ResponseCode = ResponseCodeOk
+	brokers := NewBrokers()
+	brokersCount, _ := ReadUInt(r)
+	for i := 0; i < int(brokersCount); i++ {
+		brokerReference := ReadShort(r)
+		host := ReadString(r)
+		port, _ := ReadUInt(r)
+		brokers.Add(brokerReference, host, port)
+	}
+
+	streamsMetadata := StreamsMetadata{}.New()
+	streamsCount, _ := ReadUInt(r)
+	for i := 0; i < int(streamsCount); i++ {
+		stream := ReadString(r)
+		responseCode := ReadUShort(r)
+		var leader *Broker
+		var replicas []*Broker
+		leaderReference := ReadShort(r)
+		leader = brokers.Get(leaderReference)
+		replicasCount, _ := ReadUInt(r)
+		for i := 0; i < int(replicasCount); i++ {
+			replicaReference := ReadShort(r)
+			replicas = append(replicas, brokers.Get(replicaReference))
+		}
+		streamsMetadata.Add(stream, responseCode, leader, replicas)
+	}
+
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	if err != nil {
+		// TODO handle readProtocol
+		return
+	}
+	res.code <- Code{id: readProtocol.ResponseCode}
+	res.data <- streamsMetadata
 }

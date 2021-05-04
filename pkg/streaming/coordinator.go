@@ -35,7 +35,7 @@ func NewCoordinator() *Coordinator {
 }
 
 // producers
-func (coordinator *Coordinator) NewProducer(parameters *ProducerCreator) (*Producer, error) {
+func (coordinator *Coordinator) NewProducer(parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, err = coordinator.getNextFreeId(coordinator.producers)

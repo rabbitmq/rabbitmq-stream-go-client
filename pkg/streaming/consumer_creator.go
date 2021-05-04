@@ -101,11 +101,8 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 	resp := c.client.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-
-	WriteInt(b, length)
-	WriteUShort(b, CommandSubscribe)
-	WriteUShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteProtocolHeader(b, length, CommandSubscribe,
+		correlationId)
 	WriteByte(b, consumer.ID)
 
 	WriteString(b, c.streamName)
@@ -147,9 +144,7 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 func (c *Client) credit(subscriptionId byte, credit int16) {
 	length := 2 + 2 + 1 + 2
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandCredit)
-	WriteShort(b, Version1)
+	WriteProtocolHeader(b, length, CommandCredit)
 	WriteByte(b, subscriptionId)
 	WriteShort(b, credit)
 	err := c.socket.writeAndFlush(b.Bytes())
@@ -163,10 +158,9 @@ func (consumer *Consumer) UnSubscribe() error {
 	resp := consumer.parameters.client.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandUnsubscribe)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteProtocolHeader(b, length, CommandUnsubscribe,
+		correlationId)
+
 	WriteByte(b, consumer.ID)
 	err := consumer.parameters.client.HandleWrite(b.Bytes(), resp)
 	consumer.response.code <- Code{id: CloseChannel}
@@ -184,10 +178,9 @@ func (consumer *Consumer) Commit() error {
 	length := 2 + 2 + 4 + 2 + len(consumer.parameters.consumerName) + 2 +
 		len(consumer.parameters.streamName) + 8
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandCommitOffset)
-	WriteShort(b, Version1)
-	WriteInt(b, 0) // correlation ID not used yet, may be used if commit offset has a confirm
+	WriteProtocolHeader(b, length, CommandCommitOffset,
+		0) // correlation ID not used yet, may be used if commit offset has a confirm
+
 	WriteString(b, consumer.parameters.consumerName)
 	WriteString(b, consumer.parameters.streamName)
 
@@ -202,10 +195,8 @@ func (consumer *Consumer) QueryOffset() (int64, error) {
 	resp := consumer.parameters.client.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandQueryOffset)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteProtocolHeader(b, length, CommandQueryOffset,
+		correlationId)
 
 	WriteString(b, consumer.parameters.consumerName)
 	WriteString(b, consumer.parameters.streamName)

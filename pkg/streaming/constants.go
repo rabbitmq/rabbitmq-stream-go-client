@@ -54,7 +54,7 @@ const (
 	/// responses out of protocol
 	CloseChannel = uint16(60)
 	///
-	DefaultSocketCallTimeout = 3 * time.Second
+	DefaultSocketCallTimeout = 4 * time.Second
 
 	///
 	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5551/%2f"

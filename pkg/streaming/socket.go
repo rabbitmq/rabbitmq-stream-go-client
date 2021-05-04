@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 )
 
 type Socket struct {
@@ -12,6 +13,29 @@ type Socket struct {
 	connected  bool
 	writer     *bufio.Writer
 	mutex      *sync.Mutex
+	closed     int32
+	destructor *sync.Once
+}
+
+func (sck *Socket) SetOpen() {
+	atomic.StoreInt32(&sck.closed, 0)
+}
+
+func (sck *Socket) isOpen() bool {
+	return atomic.LoadInt32(&sck.closed) == 0
+}
+func (sck *Socket) shutdown(err error) {
+	atomic.StoreInt32(&sck.closed, 1)
+
+	sck.destructor.Do(func() {
+		sck.mutex.Lock()
+		defer sck.mutex.Unlock()
+		err := sck.connection.Close()
+		if err != nil {
+			WARN("error during close socket: %s", err)
+		}
+	})
+
 }
 
 func (sck *Socket) SetConnect(value bool) {

@@ -15,26 +15,32 @@ var testProducerStream string
 var _ = Describe("Streaming Producers", func() {
 
 	BeforeEach(func() {
+		time.Sleep(200 * time.Millisecond)
+	})
+	AfterEach(func() {
+	})
+
+	BeforeEach(func() {
 		testProducerStream = uuid.New().String()
-		err := testClient.StreamCreator().Stream(testProducerStream).Create()
+		err := testEnviroment.DeclareStream(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 	})
 	AfterEach(func() {
-		err := testClient.DeleteStream(testProducerStream)
+		err := testEnviroment.DeleteStream(testProducerStream)
 		Expect(err).NotTo(HaveOccurred())
 
 	})
 
 	It("NewProducer/Close Publisher", func() {
-		producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
+		producer, err := testEnviroment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("NewProducer/Publish/UnSubscribe Publisher", func() {
-		producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
+		producer, err := testEnviroment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
@@ -45,13 +51,13 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Multi-thread NewProducer/Publish/UnSubscribe", func() {
+	It("Multi-thread NewProducer/Publish", func() {
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
 				defer wg.Done()
-				producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
+				producer, err := testEnviroment.NewProducer(testProducerStream, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
@@ -66,19 +72,16 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("Not found NotExistingStream", func() {
-		producer, err := testClient.ProducerCreator().Stream("notExistingStream").Build()
+		_, err := testEnviroment.NewProducer("notExistingStream", nil)
 		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("Stream does not exist"))
-		err = producer.Close()
-		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("Code publisher does not exist"))
+			To(ContainSubstring("leader error for stream"))
 	})
 
 	//It("PublishError handler", func() {
-	//	producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
+	//	producer, err := testEnviroment.ProducerOptions().Stream(testProducerStream).Build()
 	//	Expect(err).NotTo(HaveOccurred())
 	//	//countPublishError := int32(0)
-	//	testClient.PublishErrorListener = func(publisherId uint8, publishingId int64, code uint16) {
+	//	testEnviroment.PublishErrorListener = func(publisherId uint8, publishingId int64, code uint16) {
 	//		errString := LookErrorCode(code)
 	//		//atomic.AddInt32(&countPublishError, 1)
 	//		Expect(errString).
@@ -89,7 +92,7 @@ var _ = Describe("Streaming Producers", func() {
 	//	//_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(2)) // batch send
 	//	time.Sleep(700 * time.Millisecond)
 	//
-	//	testClient.PublishErrorListener = nil
+	//	testEnviroment.PublishErrorListener = nil
 	//	//Expect(atomic.LoadInt32(&countPublishError)).To(Equal(int32(2)))
 	//
 	//})

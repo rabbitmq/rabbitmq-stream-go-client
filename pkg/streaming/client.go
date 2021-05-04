@@ -1,8 +1,10 @@
 package streaming
 
+import "C"
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"net"
 	"net/url"
 	"sync"
@@ -19,17 +21,30 @@ type ClientProperties struct {
 }
 
 type PublishErrorListener func(publisherId uint8, publishingId int64, code uint16)
+type metadataListener func(ch <-chan string)
 
 type Client struct {
 	socket               Socket
+	destructor           *sync.Once
 	clientProperties     ClientProperties
 	tuneState            TuneState
 	coordinator          *Coordinator
 	PublishErrorListener PublishErrorListener
+	broker               Broker
+	metadataListener     metadataListener
 }
 
-func (c *Client) connect(addr string) error {
-	u, err := url.Parse(addr)
+func NewClient() *Client {
+	return &Client{
+		coordinator: NewCoordinator(),
+		broker:      NewBrokerDefault(),
+		destructor:  &sync.Once{},
+	}
+}
+
+func (c *Client) connect() error {
+	c.broker.GetUri()
+	u, err := url.Parse(c.broker.GetUri())
 	if err != nil {
 		return err
 	}
@@ -60,7 +75,9 @@ func (c *Client) connect(addr string) error {
 	}
 
 	c.socket = Socket{connection: connection, mutex: &sync.Mutex{},
-		writer: bufio.NewWriter(connection)}
+		writer:     bufio.NewWriter(connection),
+		destructor: &sync.Once{},
+	}
 	c.socket.SetConnect(true)
 
 	go c.handleResponse()
@@ -95,7 +112,7 @@ func (c *Client) connect(addr string) error {
 func (c *Client) peerProperties() error {
 	clientPropertiesSize := 4 // size of the map, always there
 
-	c.clientProperties.items["connection_name"] = "rabbitmq-StreamCreator-locator"
+	c.clientProperties.items["connection_name"] = "rabbitmq-StreamOptions-locator"
 	c.clientProperties.items["product"] = "RabbitMQ Stream"
 	c.clientProperties.items["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
 	c.clientProperties.items["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
@@ -109,11 +126,8 @@ func (c *Client) peerProperties() error {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-
-	WriteInt(b, length)
-	WriteShort(b, CommandPeerProperties)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteProtocolHeader(b, length, CommandPeerProperties,
+		correlationId)
 	WriteInt(b, len(c.clientProperties.items))
 
 	for key, element := range c.clientProperties.items {
@@ -146,10 +160,9 @@ func (c *Client) getSaslMechanisms() ([]string, error) {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandSaslHandshake)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteProtocolHeader(b, length, CommandSaslHandshake,
+		correlationId)
+
 	errWrite := c.socket.writeAndFlush(b.Bytes())
 	data := <-resp.data
 	err := c.coordinator.RemoveResponseById(correlationId)
@@ -169,10 +182,9 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	respTune := c.coordinator.NewResponseWitName("tune")
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandSaslAuthenticate)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteProtocolHeader(b, length, CommandSaslAuthenticate,
+		correlationId)
+
 	WriteString(b, saslMechanism)
 	WriteInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
@@ -195,10 +207,8 @@ func (c *Client) open(virtualHost string) error {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandOpen)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteProtocolHeader(b, length, CommandOpen,
+		correlationId)
 	WriteString(b, virtualHost)
 	return c.HandleWrite(b.Bytes(), resp)
 }
@@ -208,10 +218,9 @@ func (c *Client) DeleteStream(stream string) error {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, length)
-	WriteShort(b, CommandDeleteStream)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
+	WriteProtocolHeader(b, length, CommandDeleteStream,
+		correlationId)
+
 	WriteString(b, stream)
 
 	return c.HandleWrite(b.Bytes(), resp)
@@ -237,27 +246,129 @@ func (c *Client) HeartBeat() {
 }
 
 func (c *Client) sendHeartbeat() {
-	length := 4 + 2 + 2
+	length := 4
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteInt(b, 4)
-	WriteShort(b, CommandHeartbeat)
-	WriteShort(b, Version1)
-
+	WriteProtocolHeader(b, length, CommandHeartbeat)
 	_ = c.socket.writeAndFlush(b.Bytes())
 }
 
-func (c *Client) Close() error {
-	c.socket.mutex.Lock()
-	defer c.socket.mutex.Unlock()
-	if c.socket.connected {
+func (c *Client) closeHartBeat() {
+	c.destructor.Do(func() {
 		r, err := c.coordinator.GetResponseByName("heartbeat")
 		if err != nil {
-			return err
+			WARN("error removing heartbeat: %s", err)
+		} else {
+			r.code <- Code{id: CloseChannel}
 		}
-		r.code <- Code{id: CloseChannel}
-		err = c.socket.connection.Close()
-		c.socket.connected = false
+	})
+
+}
+
+func (c *Client) Close() error {
+	if c.socket.isOpen() {
+		c.closeHartBeat()
+	}
+	c.socket.shutdown(nil)
+	return nil
+}
+
+func (c *Client) DeclarePublisher(streamName string) (*Producer, error) {
+	producer, err := c.coordinator.NewProducer(&ProducerOptions{
+		client:     c,
+		streamName: streamName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	publisherReferenceSize := 0
+	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(streamName)
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteProtocolHeader(b, length, CommandDeclarePublisher,
+		correlationId)
+
+	WriteByte(b, producer.ID)
+	WriteShort(b, int16(publisherReferenceSize))
+	WriteString(b, streamName)
+	res := c.HandleWrite(b.Bytes(), resp)
+	return producer, res
+}
+
+func (c *Client) metaData(streams ...string) *StreamsMetadata {
+
+	length := 2 + 2 + 4 + 4 // API code, version, correlation ID, size of array
+	for _, stream := range streams {
+		length += 2
+		length += len(stream)
+
+	}
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	WriteProtocolHeader(b, length, CommandMetadata,
+		correlationId)
+
+	WriteInt(b, len(streams))
+	for _, stream := range streams {
+		WriteString(b, stream)
+	}
+
+	err := c.HandleWrite(b.Bytes(), resp)
+	if err != nil {
+		return nil
+	}
+
+	data := <-resp.data
+	return data.(*StreamsMetadata)
+}
+
+func (c *Client) BrokerLeader(stream string) (*Broker, error) {
+	streamsMetadata := c.metaData(stream)
+	if streamsMetadata == nil {
+		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
+	}
+
+	streamMetadata := streamsMetadata.Get(stream)
+	if streamMetadata.responseCode != ResponseCodeOk {
+		return nil, fmt.Errorf("leader error for stream: %s, error:%d", stream, streamMetadata.responseCode)
+	}
+	return streamMetadata.Leader, nil
+}
+
+func (c *Client) DeclareStream(streamName string, options *StreamOptions) error {
+	if streamName == "" {
+		return fmt.Errorf("stream name can't be empty")
+	}
+
+	resp := c.coordinator.NewResponse()
+	length := 2 + 2 + 4 + 2 + len(streamName) + 4
+	correlationId := resp.correlationid
+	if options == nil {
+		options = NewStreamOptions()
+	}
+
+	args, err := options.buildParameters()
+	if err != nil {
+		_ = c.coordinator.RemoveResponseById(resp.correlationid)
 		return err
 	}
-	return nil
+	for key, element := range args {
+		length = length + 2 + len(key) + 2 + len(element)
+	}
+	var b = bytes.NewBuffer(make([]byte, 0, length))
+	WriteInt(b, length)
+	WriteShort(b, CommandCreateStream)
+	WriteShort(b, Version1)
+	WriteInt(b, correlationId)
+	WriteString(b, streamName)
+	WriteInt(b, len(args))
+
+	for key, element := range args {
+		WriteString(b, key)
+		WriteString(b, element)
+	}
+
+	return c.HandleWrite(b.Bytes(), resp)
+
 }

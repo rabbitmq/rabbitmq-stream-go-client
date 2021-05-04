@@ -12,6 +12,12 @@ func ReadUShort(readerStream io.Reader) uint16 {
 	return res
 }
 
+func ReadShort(readerStream io.Reader) int16 {
+	var res int16
+	_ = binary.Read(readerStream, binary.BigEndian, &res)
+	return res
+}
+
 func ReadUInt(readerStream io.Reader) (uint32, error) {
 	var res uint32
 	err := binary.Read(readerStream, binary.BigEndian, &res)

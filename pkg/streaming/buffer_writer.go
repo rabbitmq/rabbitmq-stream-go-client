@@ -44,3 +44,17 @@ func WriteString(inputBuff *bytes.Buffer, value string) {
 	WriteUShort(inputBuff, uint16(len(value)))
 	inputBuff.Write([]byte(value))
 }
+
+// WriteProtocolHeader  protocol utils functions
+func WriteProtocolHeader(inputBuff *bytes.Buffer,
+	length int, command int16,
+	correlationId ...int) {
+
+	WriteInt(inputBuff, length)
+	WriteShort(inputBuff, command)
+	WriteShort(inputBuff, Version1)
+	if len(correlationId) > 0 {
+		WriteInt(inputBuff, correlationId[0])
+	}
+
+}
