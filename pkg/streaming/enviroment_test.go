@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"sync"
+	"time"
 )
 
 var _ = Describe("Environment test", func() {
@@ -56,6 +57,7 @@ var _ = Describe("Environment test", func() {
 
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.clientCoordinator["localhost:5551"].
 			clientsPerContext)).To(Equal(0))
 
@@ -114,10 +116,12 @@ var _ = Describe("Environment test", func() {
 		wg.Wait()
 		err = env.DeleteStream(streamNameWillBeDelete)
 		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
 		Expect(len(env.producers.getCoordinators()["localhost:5551"].
 			getClientsPerContext())).To(Equal(5))
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
+		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
 		Expect(len(env.producers.getCoordinators()["localhost:5551"].
 			getClientsPerContext())).To(Equal(0))
