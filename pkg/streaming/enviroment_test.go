@@ -26,17 +26,17 @@ var _ = Describe("Environment test", func() {
 			producers = append(producers, producer)
 		}
 
-		Expect(len(env.producers.clientCoordinator)).To(Equal(1))
-		Expect(len(env.producers.clientCoordinator["localhost:5551"].
-			clientsPerContext)).To(Equal(4))
+		Expect(len(env.producers.getCoordinators())).To(Equal(1))
+		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+			getClientsPerContext())).To(Equal(4))
 
 		for _, producer := range producers {
 			err = producer.Close()
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		Expect(len(env.producers.clientCoordinator["localhost:5551"].
-			clientsPerContext)).To(Equal(0))
+		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+			getClientsPerContext())).To(Equal(0))
 
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
@@ -58,8 +58,8 @@ var _ = Describe("Environment test", func() {
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
-		Expect(len(env.producers.clientCoordinator["localhost:5551"].
-			clientsPerContext)).To(Equal(0))
+		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+			getClientsPerContext())).To(Equal(0))
 
 	})
 
@@ -83,9 +83,9 @@ var _ = Describe("Environment test", func() {
 			}(wg)
 		}
 		wg.Wait()
-		Expect(len(env.producers.clientCoordinator)).To(Equal(1))
-		Expect(len(env.producers.clientCoordinator["localhost:5551"].
-			clientsPerContext)).To(Equal(0))
+		Expect(len(env.producers.getCoordinators())).To(Equal(1))
+		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+			getClientsPerContext())).To(Equal(0))
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
 	})
