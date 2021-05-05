@@ -134,14 +134,14 @@ var _ = Describe("Environment test", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
 				Uri("rabbitmq-StreamOptions://wrong_user:wrong_password@localhost:5551/%2f"))
 			Expect(fmt.Sprintf("%s", err)).
-				To(ContainSubstring("Authentication Failure"))
+				To(ContainSubstring("authentication failure"))
 		})
 
 		It("Connection Vhost not exist", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
 				Uri("rabbitmq-StreamOptions://guest:guest@localhost:5551/VHOSTNOEXIST"))
 			Expect(fmt.Sprintf("%s", err)).
-				To(ContainSubstring("VirtualHost access failure"))
+				To(ContainSubstring("virtualHost access failure"))
 		})
 
 		It("Connection No Endpoint", func() {

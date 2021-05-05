@@ -57,7 +57,7 @@ func main() {
 	// Get a new producer to publish the messages
 	clientProducer, err := streaming.NewClientCreator().Uri(uris).
 		PublishErrorHandler(func(publisherId uint8, publishingId int64, code uint16) {
-			streaming.ERROR("Publish Error, publisherId %d, code: %s", publisherId, streaming.LookErrorCode(code))
+			streaming.ERROR("Publish Error, publisherId %d, code: %s", publisherId, streaming.lookErrorCode(code))
 		}).
 		Connect()
 	CheckErr(err)

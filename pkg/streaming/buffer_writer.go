@@ -5,56 +5,56 @@ import (
 	"encoding/binary"
 )
 
-func WriteLong(inputBuff *bytes.Buffer, value int64) {
-	WriteULong(inputBuff, uint64(value))
+func writeLong(inputBuff *bytes.Buffer, value int64) {
+	writeULong(inputBuff, uint64(value))
 }
 
-func WriteULong(inputBuff *bytes.Buffer, value uint64) {
+func writeULong(inputBuff *bytes.Buffer, value uint64) {
 	var buff = make([]byte, 8)
 	binary.BigEndian.PutUint64(buff, value)
 	inputBuff.Write(buff)
 }
 
-func WriteShort(inputBuff *bytes.Buffer, value int16) {
-	WriteUShort(inputBuff, uint16(value))
+func writeShort(inputBuff *bytes.Buffer, value int16) {
+	writeUShort(inputBuff, uint16(value))
 }
 
-func WriteUShort(inputBuff *bytes.Buffer, value uint16) {
+func writeUShort(inputBuff *bytes.Buffer, value uint16) {
 	var buff = make([]byte, 2)
 	binary.BigEndian.PutUint16(buff, value)
 	inputBuff.Write(buff)
 }
 
-func WriteByte(inputBuff *bytes.Buffer, value byte) {
+func writeByte(inputBuff *bytes.Buffer, value byte) {
 	var buff = make([]byte, 1)
 	buff[0] = value
 	inputBuff.Write(buff)
 }
 
-func WriteInt(inputBuff *bytes.Buffer, value int) {
-	WriteUInt(inputBuff, uint32(value))
+func writeInt(inputBuff *bytes.Buffer, value int) {
+	writeUInt(inputBuff, uint32(value))
 }
-func WriteUInt(inputBuff *bytes.Buffer, value uint32) {
+func writeUInt(inputBuff *bytes.Buffer, value uint32) {
 	var buff = make([]byte, 4)
 	binary.BigEndian.PutUint32(buff, value)
 	inputBuff.Write(buff)
 }
 
-func WriteString(inputBuff *bytes.Buffer, value string) {
-	WriteUShort(inputBuff, uint16(len(value)))
+func writeString(inputBuff *bytes.Buffer, value string) {
+	writeUShort(inputBuff, uint16(len(value)))
 	inputBuff.Write([]byte(value))
 }
 
-// WriteProtocolHeader  protocol utils functions
-func WriteProtocolHeader(inputBuff *bytes.Buffer,
+// writeProtocolHeader  protocol utils functions
+func writeProtocolHeader(inputBuff *bytes.Buffer,
 	length int, command int16,
 	correlationId ...int) {
 
-	WriteInt(inputBuff, length)
-	WriteShort(inputBuff, command)
-	WriteShort(inputBuff, Version1)
+	writeInt(inputBuff, length)
+	writeShort(inputBuff, command)
+	writeShort(inputBuff, version1)
 	if len(correlationId) > 0 {
-		WriteInt(inputBuff, correlationId[0])
+		writeInt(inputBuff, correlationId[0])
 	}
 
 }

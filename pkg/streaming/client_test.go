@@ -76,7 +76,7 @@ var _ = Describe("Streaming testEnviroment", func() {
 		err = testEnviroment.DeclareStream(testStreamName, nil)
 		Expect(err).To(HaveOccurred())
 		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("Stream already exists"))
+			To(ContainSubstring("stream already exists"))
 		err = testEnviroment.DeleteStream(testStreamName)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -88,7 +88,7 @@ var _ = Describe("Streaming testEnviroment", func() {
 			MaxLengthBytes(ByteCapacity{}.MB(100)))
 		Expect(err).To(HaveOccurred())
 		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("Precondition Failed"))
+			To(ContainSubstring("precondition failed"))
 		err = testEnviroment.DeleteStream(testStreamName)
 		Expect(err).NotTo(HaveOccurred())
 	})

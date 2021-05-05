@@ -101,27 +101,27 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 	resp := c.client.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandSubscribe,
+	writeProtocolHeader(b, length, commandSubscribe,
 		correlationId)
-	WriteByte(b, consumer.ID)
+	writeByte(b, consumer.ID)
 
-	WriteString(b, c.streamName)
+	writeString(b, c.streamName)
 
-	WriteShort(b, c.offsetSpecification.typeOfs)
+	writeShort(b, c.offsetSpecification.typeOfs)
 
 	if c.offsetSpecification.isOffset() ||
 		c.offsetSpecification.isTimestamp() {
-		WriteLong(b, c.offsetSpecification.offset)
+		writeLong(b, c.offsetSpecification.offset)
 	}
-	WriteShort(b, 10)
+	writeShort(b, 10)
 
-	res := c.client.HandleWrite(b.Bytes(), resp)
+	res := c.client.handleWrite(b.Bytes(), resp)
 
 	go func() {
 		for {
 			select {
 			case code := <-consumer.response.code:
-				if code.id == CloseChannel {
+				if code.id == closeChannel {
 
 					return
 				}
@@ -144,9 +144,9 @@ func (c *ConsumerCreator) Build() (*Consumer, error) {
 func (c *Client) credit(subscriptionId byte, credit int16) {
 	length := 2 + 2 + 1 + 2
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandCredit)
-	WriteByte(b, subscriptionId)
-	WriteShort(b, credit)
+	writeProtocolHeader(b, length, commandCredit)
+	writeByte(b, subscriptionId)
+	writeShort(b, credit)
 	err := c.socket.writeAndFlush(b.Bytes())
 	if err != nil {
 		WARN("credit error:%s", err)
@@ -158,12 +158,12 @@ func (consumer *Consumer) UnSubscribe() error {
 	resp := consumer.parameters.client.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandUnsubscribe,
+	writeProtocolHeader(b, length, commandUnsubscribe,
 		correlationId)
 
-	WriteByte(b, consumer.ID)
-	err := consumer.parameters.client.HandleWrite(b.Bytes(), resp)
-	consumer.response.code <- Code{id: CloseChannel}
+	writeByte(b, consumer.ID)
+	err := consumer.parameters.client.handleWrite(b.Bytes(), resp)
+	consumer.response.code <- Code{id: closeChannel}
 	errC := consumer.parameters.client.coordinator.RemoveConsumerById(consumer.ID)
 	if errC != nil {
 		WARN("Error during remove consumer id:%s", errC)
@@ -178,13 +178,13 @@ func (consumer *Consumer) Commit() error {
 	length := 2 + 2 + 4 + 2 + len(consumer.parameters.consumerName) + 2 +
 		len(consumer.parameters.streamName) + 8
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandCommitOffset,
+	writeProtocolHeader(b, length, commandCommitOffset,
 		0) // correlation ID not used yet, may be used if commit offset has a confirm
 
-	WriteString(b, consumer.parameters.consumerName)
-	WriteString(b, consumer.parameters.streamName)
+	writeString(b, consumer.parameters.consumerName)
+	writeString(b, consumer.parameters.streamName)
 
-	WriteLong(b, consumer.getOffset())
+	writeLong(b, consumer.getOffset())
 	return consumer.parameters.client.socket.writeAndFlush(b.Bytes())
 
 }
@@ -195,12 +195,12 @@ func (consumer *Consumer) QueryOffset() (int64, error) {
 	resp := consumer.parameters.client.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandQueryOffset,
+	writeProtocolHeader(b, length, commandQueryOffset,
 		correlationId)
 
-	WriteString(b, consumer.parameters.consumerName)
-	WriteString(b, consumer.parameters.streamName)
-	err := consumer.parameters.client.HandleWriteWithResponse(b.Bytes(), resp, false)
+	writeString(b, consumer.parameters.consumerName)
+	writeString(b, consumer.parameters.streamName)
+	err := consumer.parameters.client.handleWriteWithResponse(b.Bytes(), resp, false)
 	if err != nil {
 		return 0, err
 

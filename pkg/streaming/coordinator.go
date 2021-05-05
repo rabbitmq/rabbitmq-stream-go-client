@@ -152,13 +152,21 @@ func (coordinator *Coordinator) ConsumersCount() int {
 	return coordinator.count(coordinator.consumers)
 }
 
+func (coordinator *Coordinator) GetProducerById(id interface{}) (*Producer, error) {
+	v, err := coordinator.getById(id, coordinator.producers)
+	if err != nil {
+		return nil, err
+	}
+	return v.(*Producer), err
+}
+
 // general functions
 
 func (coordinator *Coordinator) getById(id interface{}, refmap map[interface{}]interface{}) (interface{}, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	if refmap[id] == nil {
-		return nil, errors.New("Item #{id} not found ")
+		return nil, errors.New("item #{id} not found ")
 	}
 	return refmap[id], nil
 }

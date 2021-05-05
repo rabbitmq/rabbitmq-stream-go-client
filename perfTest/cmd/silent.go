@@ -53,7 +53,7 @@ func printStats() {
 }
 
 func startSimulation() error {
-	streaming.INFO("Silent (%s) Simulation, url: %s producers: %d consumers: %d streams: %s ", streaming.Version, rabbitmqBrokerUrl, producers, consumers, streams)
+	streaming.INFO("Silent (%s) Simulation, url: %s producers: %d consumers: %d streams: %s ", streaming.clientVersion, rabbitmqBrokerUrl, producers, consumers, streams)
 
 	err := initStreams()
 	if err != nil {

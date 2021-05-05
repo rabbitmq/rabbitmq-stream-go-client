@@ -20,11 +20,11 @@ type ClientProperties struct {
 	items map[string]string
 }
 
-type PublishErrorListener func(publisherId uint8, publishingId int64, code uint16)
+type PublishErrorListener func(publisherId uint8, publishingId int64, code uint16, errorMessage string)
 type metadataListener func(ch <-chan string)
 
 type Client struct {
-	socket               Socket
+	socket               socket
 	destructor           *sync.Once
 	clientProperties     ClientProperties
 	tuneState            TuneState
@@ -37,7 +37,7 @@ type Client struct {
 func NewClient() *Client {
 	return &Client{
 		coordinator: NewCoordinator(),
-		broker:      NewBrokerDefault(),
+		broker:      newBrokerDefault(),
 		destructor:  &sync.Once{},
 	}
 }
@@ -63,18 +63,18 @@ func (c *Client) connect() error {
 		DEBUG("%s", err2)
 		return err2
 	}
-	err2 = connection.SetReadBuffer(DefaultReadSocketBuffer)
+	err2 = connection.SetReadBuffer(defaultReadSocketBuffer)
 	if err2 != nil {
 		DEBUG("%s", err2)
 		return err2
 	}
-	err2 = connection.SetWriteBuffer(DefaultReadSocketBuffer)
+	err2 = connection.SetWriteBuffer(defaultReadSocketBuffer)
 	if err2 != nil {
 		DEBUG("%s", err2)
 		return err2
 	}
 
-	c.socket = Socket{connection: connection, mutex: &sync.Mutex{},
+	c.socket = socket{connection: connection, mutex: &sync.Mutex{},
 		writer:     bufio.NewWriter(connection),
 		destructor: &sync.Once{},
 	}
@@ -102,7 +102,7 @@ func (c *Client) connect() error {
 		DEBUG("%s", err2)
 		return err2
 	}
-	c.HeartBeat()
+	c.heartBeat()
 	DEBUG("User %s, connected to: %s, vhost:%s", u.User.Username(),
 		net.JoinHostPort(host, port),
 		vhost)
@@ -116,7 +116,7 @@ func (c *Client) peerProperties() error {
 	c.clientProperties.items["product"] = "RabbitMQ Stream"
 	c.clientProperties.items["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
 	c.clientProperties.items["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
-	c.clientProperties.items["version"] = Version
+	c.clientProperties.items["version"] = clientVersion
 	c.clientProperties.items["platform"] = "Golang"
 	for key, element := range c.clientProperties.items {
 		clientPropertiesSize = clientPropertiesSize + 2 + len(key) + 2 + len(element)
@@ -126,16 +126,16 @@ func (c *Client) peerProperties() error {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandPeerProperties,
+	writeProtocolHeader(b, length, commandPeerProperties,
 		correlationId)
-	WriteInt(b, len(c.clientProperties.items))
+	writeInt(b, len(c.clientProperties.items))
 
 	for key, element := range c.clientProperties.items {
-		WriteString(b, key)
-		WriteString(b, element)
+		writeString(b, key)
+		writeString(b, element)
 	}
 
-	return c.HandleWrite(b.Bytes(), resp)
+	return c.handleWrite(b.Bytes(), resp)
 }
 
 func (c *Client) authenticate(user string, password string) error {
@@ -150,7 +150,7 @@ func (c *Client) authenticate(user string, password string) error {
 			saslMechanism = "PLAIN"
 		}
 	}
-	response := UnicodeNull + user + UnicodeNull + password
+	response := unicodeNull + user + unicodeNull + password
 	saslResponse := []byte(response)
 	return c.sendSaslAuthenticate(saslMechanism, saslResponse)
 }
@@ -160,7 +160,7 @@ func (c *Client) getSaslMechanisms() ([]string, error) {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandSaslHandshake,
+	writeProtocolHeader(b, length, commandSaslHandshake,
 		correlationId)
 
 	errWrite := c.socket.writeAndFlush(b.Bytes())
@@ -182,13 +182,13 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	respTune := c.coordinator.NewResponseWitName("tune")
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandSaslAuthenticate,
+	writeProtocolHeader(b, length, commandSaslAuthenticate,
 		correlationId)
 
-	WriteString(b, saslMechanism)
-	WriteInt(b, len(challengeResponse))
+	writeString(b, saslMechanism)
+	writeInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
-	err := c.HandleWrite(b.Bytes(), resp)
+	err := c.handleWrite(b.Bytes(), resp)
 	if err != nil {
 		return err
 	}
@@ -207,10 +207,10 @@ func (c *Client) open(virtualHost string) error {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandOpen,
+	writeProtocolHeader(b, length, commandOpen,
 		correlationId)
-	WriteString(b, virtualHost)
-	return c.HandleWrite(b.Bytes(), resp)
+	writeString(b, virtualHost)
+	return c.handleWrite(b.Bytes(), resp)
 }
 
 func (c *Client) DeleteStream(stream string) error {
@@ -218,15 +218,15 @@ func (c *Client) DeleteStream(stream string) error {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandDeleteStream,
+	writeProtocolHeader(b, length, commandDeleteStream,
 		correlationId)
 
-	WriteString(b, stream)
+	writeString(b, stream)
 
-	return c.HandleWrite(b.Bytes(), resp)
+	return c.handleWrite(b.Bytes(), resp)
 }
 
-func (c *Client) HeartBeat() {
+func (c *Client) heartBeat() {
 
 	ticker := time.NewTicker(60 * time.Second)
 	resp := c.coordinator.NewResponseWitName("heartbeat")
@@ -234,7 +234,7 @@ func (c *Client) HeartBeat() {
 		for {
 			select {
 			case code := <-resp.code:
-				if code.id == CloseChannel {
+				if code.id == closeChannel {
 					_ = c.coordinator.RemoveResponseByName("heartbeat")
 				}
 				return
@@ -248,7 +248,7 @@ func (c *Client) HeartBeat() {
 func (c *Client) sendHeartbeat() {
 	length := 4
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandHeartbeat)
+	writeProtocolHeader(b, length, commandHeartbeat)
 	_ = c.socket.writeAndFlush(b.Bytes())
 }
 
@@ -258,7 +258,7 @@ func (c *Client) closeHartBeat() {
 		if err != nil {
 			WARN("error removing heartbeat: %s", err)
 		} else {
-			r.code <- Code{id: CloseChannel}
+			r.code <- Code{id: closeChannel}
 		}
 	})
 
@@ -285,13 +285,13 @@ func (c *Client) DeclarePublisher(streamName string) (*Producer, error) {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandDeclarePublisher,
+	writeProtocolHeader(b, length, commandDeclarePublisher,
 		correlationId)
 
-	WriteByte(b, producer.ID)
-	WriteShort(b, int16(publisherReferenceSize))
-	WriteString(b, streamName)
-	res := c.HandleWrite(b.Bytes(), resp)
+	writeByte(b, producer.ID)
+	writeShort(b, int16(publisherReferenceSize))
+	writeString(b, streamName)
+	res := c.handleWrite(b.Bytes(), resp)
 	return producer, res
 }
 
@@ -306,15 +306,15 @@ func (c *Client) metaData(streams ...string) *StreamsMetadata {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandMetadata,
+	writeProtocolHeader(b, length, commandMetadata,
 		correlationId)
 
-	WriteInt(b, len(streams))
+	writeInt(b, len(streams))
 	for _, stream := range streams {
-		WriteString(b, stream)
+		writeString(b, stream)
 	}
 
-	err := c.HandleWrite(b.Bytes(), resp)
+	err := c.handleWrite(b.Bytes(), resp)
 	if err != nil {
 		return nil
 	}
@@ -330,7 +330,7 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 	}
 
 	streamMetadata := streamsMetadata.Get(stream)
-	if streamMetadata.responseCode != ResponseCodeOk {
+	if streamMetadata.responseCode != responseCodeOk {
 		return nil, fmt.Errorf("leader error for stream: %s, error:%d", stream, streamMetadata.responseCode)
 	}
 	return streamMetadata.Leader, nil
@@ -357,18 +357,18 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 		length = length + 2 + len(key) + 2 + len(element)
 	}
 	var b = bytes.NewBuffer(make([]byte, 0, length))
-	WriteInt(b, length)
-	WriteShort(b, CommandCreateStream)
-	WriteShort(b, Version1)
-	WriteInt(b, correlationId)
-	WriteString(b, streamName)
-	WriteInt(b, len(args))
+	writeInt(b, length)
+	writeShort(b, commandCreateStream)
+	writeShort(b, version1)
+	writeInt(b, correlationId)
+	writeString(b, streamName)
+	writeInt(b, len(args))
 
 	for key, element := range args {
-		WriteString(b, key)
-		WriteString(b, element)
+		writeString(b, key)
+		writeString(b, element)
 	}
 
-	return c.HandleWrite(b.Bytes(), resp)
+	return c.handleWrite(b.Bytes(), resp)
 
 }

@@ -5,8 +5,9 @@ import (
 )
 
 type Environment struct {
-	clientLocator *Client
-	producers     *producers
+	clientLocator        *Client
+	producers            *producers
+	PublishErrorListener PublishErrorListener
 }
 
 func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
@@ -15,11 +16,14 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if options == nil {
 		options = NewEnvironmentOptions()
 	}
+
 	client.broker = options.LocatorBroker
 
 	return &Environment{
 		clientLocator: client,
-		producers:     newProducers(options.maxProducersPerClient),
+		producers: newProducers(options.maxProducersPerClient,
+			options.PublishErrorListener),
+		PublishErrorListener: options.PublishErrorListener,
 	}, client.connect()
 }
 
@@ -32,6 +36,9 @@ func (env *Environment) DeleteStream(streamName string) error {
 }
 
 func (env *Environment) NewProducer(streamName string, producerOptions *ProducerOptions) (*Producer, error) {
+	if producerOptions == nil {
+		producerOptions = NewProducerOptions()
+	}
 	return env.producers.NewProducer(env.clientLocator, streamName, producerOptions)
 }
 
@@ -43,12 +50,13 @@ func (env *Environment) Close() error {
 type EnvironmentOptions struct {
 	LocatorBroker         Broker
 	maxProducersPerClient int
+	PublishErrorListener  PublishErrorListener
 }
 
 func NewEnvironmentOptions() *EnvironmentOptions {
 	return &EnvironmentOptions{
 		maxProducersPerClient: 3,
-		LocatorBroker:         NewBrokerDefault(),
+		LocatorBroker:         newBrokerDefault(),
 	}
 }
 
@@ -80,6 +88,11 @@ func (envOptions *EnvironmentOptions) Host(host string) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) Port(port int) *EnvironmentOptions {
 	envOptions.LocatorBroker.Port = port
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) OnPublishError(publishErrorListener PublishErrorListener) *EnvironmentOptions {
+	envOptions.PublishErrorListener = publishErrorListener
 	return envOptions
 }
 
@@ -133,7 +146,7 @@ func (cc *producersCoordinator) maybeCleanProducers(streamName string) {
 
 }
 
-func (cc *producersCoordinator) newProducer(leader *Broker, streamName string) (*Producer, error) {
+func (cc *producersCoordinator) newProducer(leader *Broker, streamName string, listener PublishErrorListener) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
 	var clientResult *Client
@@ -147,6 +160,7 @@ func (cc *producersCoordinator) newProducer(leader *Broker, streamName string) (
 	if clientResult == nil {
 		clientResult = NewClient()
 		clientResult.broker = *leader
+		clientResult.PublishErrorListener = listener
 		clientResult.metadataListener = func(ch <-chan string) {
 			streamName := <-ch
 			cc.maybeCleanProducers(streamName)
@@ -185,16 +199,18 @@ func (cc *producersCoordinator) getClientsPerContext() map[int]*Client {
 }
 
 type producers struct {
-	mutex             *sync.Mutex
-	clientCoordinator map[string]*producersCoordinator
-	maxItemsForClient int
+	mutex                *sync.Mutex
+	clientCoordinator    map[string]*producersCoordinator
+	maxItemsForClient    int
+	PublishErrorListener PublishErrorListener
 }
 
-func newProducers(maxItemsForClient int) *producers {
+func newProducers(maxItemsForClient int, publishErrorListener PublishErrorListener) *producers {
 	producers := &producers{
-		mutex:             &sync.Mutex{},
-		clientCoordinator: map[string]*producersCoordinator{},
-		maxItemsForClient: maxItemsForClient,
+		mutex:                &sync.Mutex{},
+		clientCoordinator:    map[string]*producersCoordinator{},
+		maxItemsForClient:    maxItemsForClient,
+		PublishErrorListener: publishErrorListener,
 	}
 	return producers
 }
@@ -216,7 +232,7 @@ func (ps *producers) NewProducer(clientLocator *Client, streamName string, produ
 	}
 	leader.cloneFrom(clientLocator.broker)
 
-	producer, err := ps.clientCoordinator[leader.hostPort()].newProducer(leader, streamName)
+	producer, err := ps.clientCoordinator[leader.hostPort()].newProducer(leader, streamName, ps.PublishErrorListener)
 	if err != nil {
 		return nil, err
 	}
@@ -224,8 +240,9 @@ func (ps *producers) NewProducer(clientLocator *Client, streamName string, produ
 		for _, coordinator := range ps.clientCoordinator {
 			coordinator.maybeCleanClients()
 		}
-
 	}
+	producer.publishConfirm = producerOptions.publishConfirm
+
 	return producer, err
 }
 

@@ -15,13 +15,13 @@ var _ = Describe("Utils", func() {
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {
-			err := WaitCodeWithDefaultTimeOut(res)
+			err := waitCodeWithDefaultTimeOut(res)
 			Expect(err).ToNot(HaveOccurred())
 			wg.Done()
 		}(response)
 		time.Sleep(200 * time.Millisecond)
 		response.code <- Code{
-			id: ResponseCodeOk,
+			id: responseCodeOk,
 		}
 
 		wg.Wait()
@@ -33,7 +33,7 @@ var _ = Describe("Utils", func() {
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {
-			err := WaitCodeWithDefaultTimeOut(res)
+			err := waitCodeWithDefaultTimeOut(res)
 			Expect(err).To(HaveOccurred())
 			wg.Done()
 		}(response)

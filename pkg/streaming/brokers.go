@@ -14,7 +14,7 @@ type Broker struct {
 	Password string
 }
 
-func NewBrokerDefault() Broker {
+func newBrokerDefault() Broker {
 	return Broker{
 		Host:     "localhost",
 		Port:     5551,
@@ -51,7 +51,7 @@ type Brokers struct {
 	items *sync.Map
 }
 
-func NewBrokers() *Brokers {
+func newBrokers() *Brokers {
 	return &Brokers{items: &sync.Map{}}
 }
 

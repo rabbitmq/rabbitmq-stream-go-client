@@ -9,20 +9,32 @@ import (
 
 type onConsumerClosed func(ch <-chan uint8)
 
+type PublishConfirm func(ch <-chan []int64)
+
 type Producer struct {
-	ID uint8
-	//response   *Response
+	ID               uint8
 	parameters       *ProducerOptions
 	onConsumerClosed onConsumerClosed
+	publishConfirm   PublishConfirm
 }
 
 type ProducerOptions struct {
-	client     *Client
-	streamName string
+	client         *Client
+	streamName     string
+	publishConfirm PublishConfirm
+}
+
+func NewProducerOptions() *ProducerOptions {
+	return &ProducerOptions{}
 }
 
 func (c *ProducerOptions) Stream(streamName string) *ProducerOptions {
 	c.streamName = streamName
+	return c
+}
+
+func (c *ProducerOptions) OnPublishConfirm(publishConfirm PublishConfirm) *ProducerOptions {
+	c.publishConfirm = publishConfirm
 	return c
 }
 
@@ -37,16 +49,16 @@ func (producer *Producer) BatchPublish(ctx context.Context, messages []*amqp.Mes
 	length := frameHeaderLength + msgLen
 	publishId := producer.ID
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandPublish)
-	WriteByte(b, publishId)
-	WriteInt(b, len(messages)) //toExcluded - fromInclude
+	writeProtocolHeader(b, length, commandPublish)
+	writeByte(b, publishId)
+	writeInt(b, len(messages)) //toExcluded - fromInclude
 
 	var seq int64
 	seq = 0
 	for _, msg := range messages {
 		r, _ := msg.MarshalBinary()
-		WriteLong(b, seq)   // sequence
-		WriteInt(b, len(r)) // len
+		writeLong(b, seq)   // sequence
+		writeInt(b, len(r)) // len
 		b.Write(r)
 		seq += 1
 	}
@@ -85,11 +97,11 @@ func (c *Client) deletePublisher(publisherId byte) error {
 	resp := c.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	WriteProtocolHeader(b, length, CommandDeletePublisher,
+	writeProtocolHeader(b, length, commandDeletePublisher,
 		correlationId)
 
-	WriteByte(b, publisherId)
-	errWrite := c.HandleWrite(b.Bytes(), resp)
+	writeByte(b, publisherId)
+	errWrite := c.handleWrite(b.Bytes(), resp)
 
 	err := c.coordinator.RemoveProducerById(publisherId)
 	if err != nil {

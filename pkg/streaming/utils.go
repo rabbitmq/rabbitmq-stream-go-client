@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func UShortExtractResponseCode(code uint16) uint16 {
+func uShortExtractResponseCode(code uint16) uint16 {
 	return code & 0b0111_1111_1111_1111
 }
 
@@ -14,18 +14,18 @@ func UShortExtractResponseCode(code uint16) uint16 {
 //	return code & 0b0111_1111_1111_1111
 //}
 
-func UShortEncodeResponseCode(code uint16) uint16 {
+func uShortEncodeResponseCode(code uint16) uint16 {
 	return code | 0b1000_0000_0000_0000
 }
 
-func WaitCodeWithDefaultTimeOut(response *Response) error {
-	return WaitCodeWithTimeOut(response, DefaultSocketCallTimeout)
+func waitCodeWithDefaultTimeOut(response *Response) error {
+	return waitCodeWithTimeOut(response, defaultSocketCallTimeout)
 }
-func WaitCodeWithTimeOut(response *Response, timeout time.Duration) error {
+func waitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 	select {
 	case code := <-response.code:
-		if code.id != ResponseCodeOk {
-			return fmt.Errorf("code error: %s", LookErrorCode(code.id))
+		if code.id != responseCodeOk {
+			return fmt.Errorf("code error: %s", lookErrorCode(code.id))
 		}
 		return nil
 	case <-time.After(timeout):

@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 )
 
-type Socket struct {
+type socket struct {
 	connection net.Conn
 	connected  bool
 	writer     *bufio.Writer
@@ -17,14 +17,14 @@ type Socket struct {
 	destructor *sync.Once
 }
 
-func (sck *Socket) SetOpen() {
+func (sck *socket) SetOpen() {
 	atomic.StoreInt32(&sck.closed, 0)
 }
 
-func (sck *Socket) isOpen() bool {
+func (sck *socket) isOpen() bool {
 	return atomic.LoadInt32(&sck.closed) == 0
 }
-func (sck *Socket) shutdown(err error) {
+func (sck *socket) shutdown(err error) {
 	atomic.StoreInt32(&sck.closed, 1)
 
 	sck.destructor.Do(func() {
@@ -38,13 +38,13 @@ func (sck *Socket) shutdown(err error) {
 
 }
 
-func (sck *Socket) SetConnect(value bool) {
+func (sck *socket) SetConnect(value bool) {
 	sck.mutex.Lock()
 	defer sck.mutex.Unlock()
 	sck.connected = value
 }
 
-func (sck *Socket) writeAndFlush(buffer []byte) error {
+func (sck *socket) writeAndFlush(buffer []byte) error {
 	sck.mutex.Lock()
 	defer sck.mutex.Unlock()
 	_, err := sck.writer.Write(buffer)
@@ -59,13 +59,13 @@ func (sck *Socket) writeAndFlush(buffer []byte) error {
 	return nil
 }
 
-func (c *Client) HandleWrite(buffer []byte, response *Response) error {
-	return c.HandleWriteWithResponse(buffer, response, true)
+func (c *Client) handleWrite(buffer []byte, response *Response) error {
+	return c.handleWriteWithResponse(buffer, response, true)
 }
 
-func (c *Client) HandleWriteWithResponse(buffer []byte, response *Response, removeResponse bool) error {
+func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, removeResponse bool) error {
 	result := c.socket.writeAndFlush(buffer)
-	resultCode := WaitCodeWithDefaultTimeOut(response)
+	resultCode := waitCodeWithDefaultTimeOut(response)
 	/// we need to remove the response before evaluate the
 	// buffer errSocket
 	if removeResponse {
@@ -74,7 +74,7 @@ func (c *Client) HandleWriteWithResponse(buffer []byte, response *Response, remo
 
 	if result != nil {
 		// we just log
-		fmt.Printf("Error HandleWrite %s", result)
+		fmt.Printf("Error handleWrite %s", result)
 	}
 
 	return resultCode

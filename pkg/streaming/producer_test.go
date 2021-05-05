@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -77,12 +78,28 @@ var _ = Describe("Streaming Producers", func() {
 			To(ContainSubstring("leader error for stream"))
 	})
 
+	It("Publish Confirmation", func() {
+		var messagesCount int32 = 0
+		producer, err := testEnviroment.NewProducer(testProducerStream, NewProducerOptions().OnPublishConfirm(func(ch <-chan []int64) {
+			ids := <-ch
+			atomic.AddInt32(&messagesCount, int32(len(ids)))
+		}))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(107))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(100 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(107)))
+
+		err = producer.Close()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	//It("PublishError handler", func() {
 	//	producer, err := testEnviroment.ProducerOptions().Stream(testProducerStream).Build()
 	//	Expect(err).NotTo(HaveOccurred())
 	//	//countPublishError := int32(0)
 	//	testEnviroment.PublishErrorListener = func(publisherId uint8, publishingId int64, code uint16) {
-	//		errString := LookErrorCode(code)
+	//		errString := lookErrorCode(code)
 	//		//atomic.AddInt32(&countPublishError, 1)
 	//		Expect(errString).
 	//			To(ContainSubstring("Code publisher does not exist"))
