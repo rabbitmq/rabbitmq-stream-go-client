@@ -116,7 +116,7 @@ func startProducers() error {
 	for _, stream := range streams {
 		for i := 0; i < producers; i++ {
 			env, err := streaming.NewEnvironment(streaming.NewEnvironmentOptions().Uri(
-				rabbitmqBrokerUrl))
+				rabbitmqBrokerUrl).MaxProducersPerClient(producersPerClient) )
 			if err != nil {
 				streaming.ERROR("Error connection client producer: %s", err)
 				return err
@@ -161,8 +161,7 @@ func startConsumers() error {
 	for _, stream := range streams {
 		for i := 0; i < consumers; i++ {
 			env, err := streaming.NewEnvironment(streaming.NewEnvironmentOptions().Uri(
-				rabbitmqBrokerUrl))
-
+				rabbitmqBrokerUrl).MaxConsumersPerClient(consumersPerClient))
 			if err != nil {
 				streaming.ERROR("Error creating consumer connection: %s", err)
 				return err

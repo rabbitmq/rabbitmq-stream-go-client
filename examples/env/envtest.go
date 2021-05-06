@@ -18,6 +18,8 @@ func CreateArrayMessagesForTesting(numberOfMessages int) []*amqp.Message {
 	return arr
 }
 func main() {
+	_, _ = streaming.NewEnvironment(nil)
+
 	env, err := streaming.NewEnvironment(
 		streaming.NewEnvironmentOptions().
 			Uri("rabbitmq-streaming://test:test@localhost:5551/%2f").
