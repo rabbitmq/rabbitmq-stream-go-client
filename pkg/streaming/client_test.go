@@ -27,9 +27,10 @@ var _ = AfterSuite(func() {
 
 var _ = Describe("Streaming testEnviroment", func() {
 	BeforeEach(func() {
-
+		time.Sleep(200 * time.Millisecond)
 	})
 	AfterEach(func() {
+		time.Sleep(200 * time.Millisecond)
 	})
 
 	It("Create Stream", func() {
