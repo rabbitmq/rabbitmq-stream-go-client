@@ -81,8 +81,8 @@ func startSimulation() error {
 
 func randomSleep() {
 	rand.Seed(time.Now().UnixNano())
-	n := rand.Intn(3) // n will be between 0 and 10
-	time.Sleep(time.Duration(n) * time.Second)
+	n := rand.Intn(500) // n will be between 0 and 2
+	time.Sleep(time.Duration(n) * time.Millisecond)
 }
 
 func initStreams() error {
