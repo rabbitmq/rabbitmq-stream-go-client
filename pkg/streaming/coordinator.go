@@ -34,7 +34,7 @@ func NewCoordinator() *Coordinator {
 		responses: make(map[interface{}]interface{})}
 }
 
-// producers
+// producersEnvironment
 func (coordinator *Coordinator) NewProducer(parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
@@ -43,7 +43,7 @@ func (coordinator *Coordinator) NewProducer(parameters *ProducerOptions) (*Produ
 		return nil, err
 	}
 	var producer = &Producer{ID: lastId,
-		parameters: parameters}
+		options: parameters}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }
@@ -122,11 +122,11 @@ func (coordinator *Coordinator) ResponsesCount() int {
 }
 
 /// Consumer functions
-func (coordinator *Coordinator) NewConsumer(parameters *ConsumerCreator) *Consumer {
+func (coordinator *Coordinator) NewConsumer(parameters *ConsumerOptions) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
-	var item = &Consumer{ID: lastId, parameters: parameters,
+	var item = &Consumer{ID: lastId, options: parameters,
 		response: NewResponse(), mutex: &sync.RWMutex{}}
 	coordinator.consumers[lastId] = item
 	return item

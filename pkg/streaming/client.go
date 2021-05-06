@@ -116,7 +116,7 @@ func (c *Client) peerProperties() error {
 	c.clientProperties.items["product"] = "RabbitMQ Stream"
 	c.clientProperties.items["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
 	c.clientProperties.items["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
-	c.clientProperties.items["version"] = clientVersion
+	c.clientProperties.items["version"] = ClientVersion
 	c.clientProperties.items["platform"] = "Golang"
 	for key, element := range c.clientProperties.items {
 		clientPropertiesSize = clientPropertiesSize + 2 + len(key) + 2 + len(element)
@@ -371,4 +371,65 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 
 	return c.handleWrite(b.Bytes(), resp)
 
+}
+
+func (c *Client) DeclareSubscriber(streamName string, options *ConsumerOptions) (*Consumer, error) {
+	options.client = c
+	options.streamName = streamName
+	consumer := c.coordinator.NewConsumer(options)
+	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
+	if options.offsetSpecification.isOffset() ||
+		options.offsetSpecification.isTimestamp() {
+		length += 8
+	}
+
+	if options.offsetSpecification.isLastConsumed() {
+		lastOffset, err := consumer.QueryOffset()
+		if err != nil {
+			_ = c.coordinator.RemoveConsumerById(consumer.ID)
+			return nil, err
+		}
+		options.offsetSpecification.offset = lastOffset
+		// here we change the type since typeLastConsumed is not part of the protocol
+		options.offsetSpecification.typeOfs = typeOffset
+	}
+	resp := c.coordinator.NewResponse()
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandSubscribe,
+		correlationId)
+	writeByte(b, consumer.ID)
+
+	writeString(b, streamName)
+
+	writeShort(b, options.offsetSpecification.typeOfs)
+
+	if options.offsetSpecification.isOffset() ||
+		options.offsetSpecification.isTimestamp() {
+		writeLong(b, options.offsetSpecification.offset)
+	}
+	writeShort(b, 10)
+
+	res := c.handleWrite(b.Bytes(), resp)
+
+	go func() {
+		for {
+			select {
+			case code := <-consumer.response.code:
+				if code.id == closeChannel {
+
+					return
+				}
+
+			case data := <-consumer.response.data:
+				consumer.setOffset(data.(int64))
+
+			case messages := <-consumer.response.messages:
+				for _, message := range messages {
+					consumer.messagesHandler(ConsumerContext{Consumer: consumer}, message)
+				}
+			}
+		}
+	}()
+	return consumer, res
 }

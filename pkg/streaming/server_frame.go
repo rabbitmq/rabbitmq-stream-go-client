@@ -230,7 +230,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	var offsetLimit int64 = -1
 
-	if consumer.parameters.offsetSpecification.isOffset() {
+	if consumer.options.offsetSpecification.isOffset() {
 		offsetLimit = consumer.getOffset()
 	}
 

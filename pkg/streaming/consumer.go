@@ -8,15 +8,17 @@ import (
 )
 
 type Consumer struct {
-	ID         uint8
-	response   *Response
-	offset     int64
-	parameters *ConsumerCreator
-	mutex      *sync.RWMutex
+	ID              uint8
+	response        *Response
+	offset          int64
+	options         *ConsumerOptions
+	onClose         onClose
+	mutex           *sync.RWMutex
+	messagesHandler MessagesHandler
 }
 
 func (consumer *Consumer) GetStream() string {
-	return consumer.parameters.streamName
+	return consumer.options.streamName
 }
 
 func (consumer *Consumer) setOffset(offset int64) {
@@ -37,108 +39,41 @@ type ConsumerContext struct {
 
 type MessagesHandler func(Context ConsumerContext, message *amqp.Message)
 
-type ConsumerCreator struct {
+type ConsumerOptions struct {
 	client              *Client
 	consumerName        string
 	streamName          string
-	messagesHandler     MessagesHandler
 	autocommit          bool
 	offsetSpecification OffsetSpecification
 }
 
-func (c *Client) ConsumerCreator() *ConsumerCreator {
-	return &ConsumerCreator{client: c,
+func NewConsumerOptions() *ConsumerOptions {
+	return &ConsumerOptions{
 		offsetSpecification: OffsetSpecification{}.Last(),
 		autocommit:          true}
 }
 
-func (c *ConsumerCreator) Name(consumerName string) *ConsumerCreator {
+func (c *ConsumerOptions) Name(consumerName string) *ConsumerOptions {
 	c.consumerName = consumerName
 	return c
 }
 
-func (c *ConsumerCreator) Stream(streamName string) *ConsumerCreator {
+func (c *ConsumerOptions) Stream(streamName string) *ConsumerOptions {
 	c.streamName = streamName
 	return c
 }
 
-func (c *ConsumerCreator) MessagesHandler(handlerFunc MessagesHandler) *ConsumerCreator {
-	c.messagesHandler = handlerFunc
-	return c
-}
-
-//func (c *ConsumerCreator) AutoCommit() *ConsumerCreator {
+//func (c *ConsumerOptions) AutoCommit() *ConsumerOptions {
 //	c.autocommit = true
 //	return c
 //}
-func (c *ConsumerCreator) ManualCommit() *ConsumerCreator {
+func (c *ConsumerOptions) ManualCommit() *ConsumerOptions {
 	c.autocommit = false
 	return c
 }
-func (c *ConsumerCreator) Offset(offsetSpecification OffsetSpecification) *ConsumerCreator {
+func (c *ConsumerOptions) Offset(offsetSpecification OffsetSpecification) *ConsumerOptions {
 	c.offsetSpecification = offsetSpecification
 	return c
-}
-
-func (c *ConsumerCreator) Build() (*Consumer, error) {
-	consumer := c.client.coordinator.NewConsumer(c)
-	length := 2 + 2 + 4 + 1 + 2 + len(c.streamName) + 2 + 2
-	if c.offsetSpecification.isOffset() ||
-		c.offsetSpecification.isTimestamp() {
-		length += 8
-	}
-
-	if c.offsetSpecification.isLastConsumed() {
-		lastOffset, err := consumer.QueryOffset()
-		if err != nil {
-			_ = c.client.coordinator.RemoveConsumerById(consumer.ID)
-			return nil, err
-		}
-		c.offsetSpecification.offset = lastOffset
-		// here we change the type since typeLastConsumed is not part of the protocol
-		c.offsetSpecification.typeOfs = typeOffset
-	}
-	resp := c.client.coordinator.NewResponse()
-	correlationId := resp.correlationid
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandSubscribe,
-		correlationId)
-	writeByte(b, consumer.ID)
-
-	writeString(b, c.streamName)
-
-	writeShort(b, c.offsetSpecification.typeOfs)
-
-	if c.offsetSpecification.isOffset() ||
-		c.offsetSpecification.isTimestamp() {
-		writeLong(b, c.offsetSpecification.offset)
-	}
-	writeShort(b, 10)
-
-	res := c.client.handleWrite(b.Bytes(), resp)
-
-	go func() {
-		for {
-			select {
-			case code := <-consumer.response.code:
-				if code.id == closeChannel {
-
-					return
-				}
-
-			case data := <-consumer.response.data:
-				consumer.setOffset(data.(int64))
-
-			case messages := <-consumer.response.messages:
-				for _, message := range messages {
-					c.messagesHandler(ConsumerContext{Consumer: consumer}, message)
-				}
-			}
-		}
-	}()
-
-	return consumer, res
-
 }
 
 func (c *Client) credit(subscriptionId byte, credit int16) {
@@ -155,59 +90,71 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 
 func (consumer *Consumer) UnSubscribe() error {
 	length := 2 + 2 + 4 + 1
-	resp := consumer.parameters.client.coordinator.NewResponse()
+	resp := consumer.options.client.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandUnsubscribe,
 		correlationId)
 
 	writeByte(b, consumer.ID)
-	err := consumer.parameters.client.handleWrite(b.Bytes(), resp)
+	err := consumer.options.client.handleWrite(b.Bytes(), resp)
 	consumer.response.code <- Code{id: closeChannel}
-	errC := consumer.parameters.client.coordinator.RemoveConsumerById(consumer.ID)
+	errC := consumer.options.client.coordinator.RemoveConsumerById(consumer.ID)
 	if errC != nil {
 		WARN("Error during remove consumer id:%s", errC)
 	}
+
+	if consumer.options.client.coordinator.ConsumersCount() == 0 {
+		err := consumer.options.client.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	ch := make(chan uint8, 1)
+	ch <- consumer.ID
+	consumer.onClose(ch)
+	close(ch)
 	return err
 }
 
 func (consumer *Consumer) Commit() error {
-	if consumer.parameters.streamName == "" {
+	if consumer.options.streamName == "" {
 		return fmt.Errorf("stream name can't be empty")
 	}
-	length := 2 + 2 + 4 + 2 + len(consumer.parameters.consumerName) + 2 +
-		len(consumer.parameters.streamName) + 8
+	length := 2 + 2 + 4 + 2 + len(consumer.options.consumerName) + 2 +
+		len(consumer.options.streamName) + 8
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandCommitOffset,
 		0) // correlation ID not used yet, may be used if commit offset has a confirm
 
-	writeString(b, consumer.parameters.consumerName)
-	writeString(b, consumer.parameters.streamName)
+	writeString(b, consumer.options.consumerName)
+	writeString(b, consumer.options.streamName)
 
 	writeLong(b, consumer.getOffset())
-	return consumer.parameters.client.socket.writeAndFlush(b.Bytes())
+	return consumer.options.client.socket.writeAndFlush(b.Bytes())
 
 }
 
 func (consumer *Consumer) QueryOffset() (int64, error) {
-	length := 2 + 2 + 4 + 2 + len(consumer.parameters.consumerName) + 2 + len(consumer.parameters.streamName)
+	length := 2 + 2 + 4 + 2 + len(consumer.options.consumerName) + 2 + len(consumer.options.streamName)
 
-	resp := consumer.parameters.client.coordinator.NewResponse()
+	resp := consumer.options.client.coordinator.NewResponse()
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandQueryOffset,
 		correlationId)
 
-	writeString(b, consumer.parameters.consumerName)
-	writeString(b, consumer.parameters.streamName)
-	err := consumer.parameters.client.handleWriteWithResponse(b.Bytes(), resp, false)
+	writeString(b, consumer.options.consumerName)
+	writeString(b, consumer.options.streamName)
+	err := consumer.options.client.handleWriteWithResponse(b.Bytes(), resp, false)
 	if err != nil {
 		return 0, err
 
 	}
 
 	offset := <-resp.data
-	_ = consumer.parameters.client.coordinator.RemoveResponseById(resp.correlationid)
+	_ = consumer.options.client.coordinator.RemoveResponseById(resp.correlationid)
 
 	return offset.(int64), nil
 

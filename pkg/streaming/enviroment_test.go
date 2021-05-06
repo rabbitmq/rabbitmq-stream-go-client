@@ -150,5 +150,4 @@ var _ = Describe("Environment test", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
-
 })

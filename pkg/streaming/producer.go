@@ -7,15 +7,13 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
-type onConsumerClosed func(ch <-chan uint8)
-
 type PublishConfirm func(ch <-chan []int64)
 
 type Producer struct {
-	ID               uint8
-	parameters       *ProducerOptions
-	onConsumerClosed onConsumerClosed
-	publishConfirm   PublishConfirm
+	ID             uint8
+	options        *ProducerOptions
+	onClose        onClose
+	publishConfirm PublishConfirm
 }
 
 type ProducerOptions struct {
@@ -63,7 +61,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, messages []*amqp.Mes
 		seq += 1
 	}
 
-	err := producer.parameters.client.socket.writeAndFlush(b.Bytes())
+	err := producer.options.client.socket.writeAndFlush(b.Bytes())
 	if err != nil {
 		return 0, err
 	}
@@ -71,23 +69,24 @@ func (producer *Producer) BatchPublish(ctx context.Context, messages []*amqp.Mes
 }
 
 func (producer *Producer) Close() error {
-	if !producer.parameters.client.socket.isOpen() {
+	if !producer.options.client.socket.isOpen() {
 		return fmt.Errorf("connection already closed")
 	}
 
-	err := producer.parameters.client.deletePublisher(producer.ID)
+	err := producer.options.client.deletePublisher(producer.ID)
 	if err != nil {
 		return err
 	}
-	if producer.parameters.client.coordinator.ProducersCount() == 0 {
-		err := producer.parameters.client.Close()
+	if producer.options.client.coordinator.ProducersCount() == 0 {
+		err := producer.options.client.Close()
 		if err != nil {
 			return err
 		}
 	}
-	ch := make(chan uint8)
-	//ch <- producer.ID
-	producer.onConsumerClosed(ch)
+	ch := make(chan uint8, 1)
+	ch <- producer.ID
+	producer.onClose(ch)
+	close(ch)
 
 	return nil
 }
