@@ -81,7 +81,7 @@ func startSimulation() error {
 
 func randomSleep() {
 	rand.Seed(time.Now().UnixNano())
-	n := rand.Intn(5) // n will be between 0 and 10
+	n := rand.Intn(3) // n will be between 0 and 10
 	time.Sleep(time.Duration(n) * time.Second)
 }
 
@@ -116,11 +116,12 @@ func startProducers() error {
 		rabbitmqBrokerUrl).MaxProducersPerClient(producersPerClient))
 	streaming.INFO("Starting %d producers...", producers)
 	for _, stream := range streams {
-		for i := 0; i < producers; i++ {
+		for i := 1; i <= producers; i++ {
 			if err != nil {
 				streaming.ERROR("Error connection client producer: %s", err)
 				return err
 			}
+			streaming.INFO("Starting producer number: %d", i)
 			producer, err := env.NewProducer(stream, streaming.NewProducerOptions().OnPublishConfirm(func(ch <-chan []int64) {
 				ids := <-ch
 				atomic.AddInt32(&confirmedMessageCount, int32(len(ids)))
@@ -168,6 +169,7 @@ func startConsumers() error {
 				return err
 			}
 			randomSleep()
+			streaming.INFO("Starting consumer number: %d", i)
 			_, err = env.NewConsumer(stream, func(Context streaming.ConsumerContext, message *amqp.Message) {
 				if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
 					err := Context.Consumer.Commit()
