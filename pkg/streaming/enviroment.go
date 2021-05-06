@@ -1,6 +1,7 @@
 package streaming
 
 import (
+	"net/url"
 	"sync"
 )
 
@@ -18,6 +19,16 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	if options == nil {
 		options = NewEnvironmentOptions()
+	}
+
+	if options.LocatorBroker.Uri != "" {
+		u, err := url.Parse(options.LocatorBroker.Uri)
+		if err != nil {
+			return nil, err
+		}
+		options.LocatorBroker.User = u.User.Username()
+		options.LocatorBroker.Password, _ = u.User.Password()
+		//options.LocatorBroker.Vhost = u.Path
 	}
 
 	client.broker = options.LocatorBroker

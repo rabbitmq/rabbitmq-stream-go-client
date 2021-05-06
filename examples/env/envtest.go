@@ -20,6 +20,7 @@ func CreateArrayMessagesForTesting(numberOfMessages int) []*amqp.Message {
 func main() {
 	env, err := streaming.NewEnvironment(
 		streaming.NewEnvironmentOptions().
+			Uri("rabbitmq-streaming://test:test@localhost:5551/%2f").
 			OnPublishError(func(publisherId uint8,
 				publishingId int64,
 				code uint16,
@@ -35,7 +36,7 @@ func main() {
 
 	streamname := uuid.New().String()
 	err = env.DeclareStream(streamname, nil)
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 1; i++ {
 
 		producer, err := env.NewProducer(streamname,
 			streaming.NewProducerOptions().OnPublishConfirm(func(ch <-chan []int64) {
