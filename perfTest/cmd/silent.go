@@ -178,7 +178,7 @@ func startConsumers() error {
 					}
 				}
 			}, streaming.NewConsumerOptions().
-				Offset(streaming.OffsetSpecification{}.Last()).
+				Offset(streaming.OffsetSpecification{}.First()).
 				Name(uuid.New().String()))
 			if err != nil {
 				streaming.ERROR("Error creating consumer: %s", err)
