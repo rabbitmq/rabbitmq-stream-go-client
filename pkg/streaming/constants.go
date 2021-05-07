@@ -1,6 +1,7 @@
 package streaming
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -29,6 +30,9 @@ const (
 	commandClose                  = 22
 	commandHeartbeat              = 23
 
+	/// used only for tests
+	commandUnitTest = 99
+
 	version1    = 1
 	unicodeNull = "\u0000"
 
@@ -54,9 +58,9 @@ const (
 	/// responses out of protocol
 	closeChannel = uint16(60)
 	///
-	defaultSocketCallTimeout = 10 * time.Second
+	defaultSocketCallTimeout = 5 * time.Second
 
-	///
+	//
 	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
 
 	///
@@ -90,5 +94,34 @@ func lookErrorCode(errorCode uint16) string {
 			return "Error not handled"
 		}
 	}
+}
 
+func lookUpCommand(command uint16) string {
+	var constLookup = map[uint16]string{
+		commandPeerProperties:   `commandPeerProperties`,
+		commandSaslHandshake:    `commandSaslHandshake`,
+		commandSaslAuthenticate: `commandSaslAuthenticate`,
+		commandTune:             `commandTune`,
+		commandOpen:             `commandOpen`,
+		commandHeartbeat:        `commandHeartbeat`,
+		commandMetadataUpdate:   `CommandMetadataUpdate`,
+		commandMetadata:         `CommandMetadata`,
+		commandDeleteStream:     `CommandDeleteStream`,
+		commandCreateStream:     `CommandCreateStream`,
+		commandUnsubscribe:      `CommandUnsubscribe`,
+		commandQueryOffset:      `CommandQueryOffset`,
+		commandCredit:           `CommandCredit`,
+		commandDeliver:          `CommandDeliver`,
+		commandSubscribe:        `CommandSubscribe`,
+		commandDeletePublisher:  `CommandDeletePublisher`,
+		commandPublishError:     `CommandPublishError`,
+		commandPublishConfirm:   `CommandPublishConfirm`,
+		commandDeclarePublisher: `CommandDeclarePublisher`,
+		commandUnitTest:         `UnitTest`,
+	}
+	if constLookup[command] == "" {
+		return fmt.Sprintf("command not handled %d", command)
+	}
+
+	return constLookup[command]
 }

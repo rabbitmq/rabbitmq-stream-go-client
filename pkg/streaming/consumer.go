@@ -90,7 +90,7 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 
 func (consumer *Consumer) UnSubscribe() error {
 	length := 2 + 2 + 4 + 1
-	resp := consumer.options.client.coordinator.NewResponse()
+	resp := consumer.options.client.coordinator.NewResponse(commandUnsubscribe)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandUnsubscribe,
@@ -139,7 +139,7 @@ func (consumer *Consumer) Commit() error {
 func (consumer *Consumer) QueryOffset() (int64, error) {
 	length := 2 + 2 + 4 + 2 + len(consumer.options.consumerName) + 2 + len(consumer.options.streamName)
 
-	resp := consumer.options.client.coordinator.NewResponse()
+	resp := consumer.options.client.coordinator.NewResponse(commandQueryOffset)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandQueryOffset,

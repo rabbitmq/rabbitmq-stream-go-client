@@ -112,7 +112,7 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Response", func() {
 		It("Add/Remove Response ", func() {
-			r := client.coordinator.NewResponse()
+			r := client.coordinator.NewResponse(commandUnitTest)
 			Expect(r.correlationid).ToNot(Equal(0))
 			err := client.coordinator.RemoveResponseById(r.correlationid)
 			Expect(err).NotTo(HaveOccurred())
@@ -131,7 +131,7 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete Responses ", func() {
 			var responsesId []int
 			for i := 0; i < 100; i++ {
-				r := client.coordinator.NewResponse()
+				r := client.coordinator.NewResponse(commandUnitTest)
 				responsesId = append(responsesId, r.correlationid)
 			}
 

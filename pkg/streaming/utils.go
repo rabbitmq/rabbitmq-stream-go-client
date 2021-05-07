@@ -29,8 +29,8 @@ func waitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 		}
 		return nil
 	case <-time.After(timeout):
-		WARN("timeout waiting Code, operation:%d", response.correlationid)
-		return fmt.Errorf("timeout waiting Code, operation:%d ", response.correlationid)
+		WARN("timeout %d ms - waiting Code, operation: %s", defaultSocketCallTimeout, response.commandDescription)
+		return fmt.Errorf("timeout %d ms - waiting Code, operation: %s ", defaultSocketCallTimeout, response.commandDescription)
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 var _ = Describe("Utils", func() {
 
 	It("Timeout calls No Error", func() {
-		response := NewResponse()
+		response := newResponse(lookUpCommand(commandUnitTest))
 		response.correlationid = 9
 		var wg sync.WaitGroup
 		wg.Add(1)
@@ -28,7 +28,7 @@ var _ = Describe("Utils", func() {
 	})
 
 	It("Timeout calls No Error", func() {
-		response := NewResponse()
+		response := newResponse(lookUpCommand(commandUnitTest))
 		response.correlationid = 9
 		var wg sync.WaitGroup
 		wg.Add(1)

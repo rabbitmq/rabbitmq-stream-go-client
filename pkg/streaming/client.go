@@ -122,7 +122,7 @@ func (c *Client) peerProperties() error {
 	}
 
 	length := 2 + 2 + 4 + clientPropertiesSize
-	resp := c.coordinator.NewResponse()
+	resp := c.coordinator.NewResponse(commandPeerProperties)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandPeerProperties,
@@ -156,7 +156,7 @@ func (c *Client) authenticate(user string, password string) error {
 
 func (c *Client) getSaslMechanisms() ([]string, error) {
 	length := 2 + 2 + 4
-	resp := c.coordinator.NewResponse()
+	resp := c.coordinator.NewResponse(commandSaslHandshake)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandSaslHandshake,
@@ -177,7 +177,7 @@ func (c *Client) getSaslMechanisms() ([]string, error) {
 
 func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
-	resp := c.coordinator.NewResponse()
+	resp := c.coordinator.NewResponse(commandSaslAuthenticate)
 	respTune := c.coordinator.NewResponseWitName("tune")
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -203,7 +203,7 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 
 func (c *Client) open(virtualHost string) error {
 	length := 2 + 2 + 4 + 2 + len(virtualHost)
-	resp := c.coordinator.NewResponse()
+	resp := c.coordinator.NewResponse(commandOpen, virtualHost)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandOpen,
@@ -212,15 +212,15 @@ func (c *Client) open(virtualHost string) error {
 	return c.handleWrite(b.Bytes(), resp)
 }
 
-func (c *Client) DeleteStream(stream string) error {
-	length := 2 + 2 + 4 + 2 + len(stream)
-	resp := c.coordinator.NewResponse()
+func (c *Client) DeleteStream(streamName string) error {
+	length := 2 + 2 + 4 + 2 + len(streamName)
+	resp := c.coordinator.NewResponse(commandDeleteStream, streamName)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandDeleteStream,
 		correlationId)
 
-	writeString(b, stream)
+	writeString(b, streamName)
 
 	return c.handleWrite(b.Bytes(), resp)
 }
@@ -281,7 +281,7 @@ func (c *Client) DeclarePublisher(streamName string) (*Producer, error) {
 	}
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(streamName)
-	resp := c.coordinator.NewResponse()
+	resp := c.coordinator.NewResponse(commandDeclarePublisher, streamName)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandDeclarePublisher,
@@ -302,7 +302,7 @@ func (c *Client) metaData(streams ...string) *StreamsMetadata {
 		length += len(stream)
 
 	}
-	resp := c.coordinator.NewResponse()
+	resp := c.coordinator.NewResponse(commandMetadata)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandMetadata,
@@ -340,7 +340,7 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 		return fmt.Errorf("stream name can't be empty")
 	}
 
-	resp := c.coordinator.NewResponse()
+	resp := c.coordinator.NewResponse(commandCreateStream, streamName)
 	length := 2 + 2 + 4 + 2 + len(streamName) + 4
 	correlationId := resp.correlationid
 	if options == nil {
@@ -392,7 +392,7 @@ func (c *Client) DeclareSubscriber(streamName string, options *ConsumerOptions) 
 		// here we change the type since typeLastConsumed is not part of the protocol
 		options.offsetSpecification.typeOfs = typeOffset
 	}
-	resp := c.coordinator.NewResponse()
+	resp := c.coordinator.NewResponse(commandSubscribe, streamName)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandSubscribe,

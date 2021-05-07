@@ -21,10 +21,11 @@ type Code struct {
 }
 
 type Response struct {
-	code          chan Code
-	data          chan interface{}
-	messages      chan []*amqp.Message
-	correlationid int
+	code               chan Code
+	data               chan interface{}
+	messages           chan []*amqp.Message
+	commandDescription string
+	correlationid      int
 }
 
 func NewCoordinator() *Coordinator {
@@ -64,8 +65,9 @@ func (coordinator *Coordinator) ProducersCount() int {
 }
 
 /// response
-func NewResponse() *Response {
+func newResponse(commandDescription string) *Response {
 	res := &Response{}
+	res.commandDescription = commandDescription
 	res.code = make(chan Code)
 	res.data = make(chan interface{})
 	res.messages = make(chan []*amqp.Message, 100)
@@ -75,18 +77,23 @@ func NewResponse() *Response {
 func (coordinator *Coordinator) NewResponseWitName(id string) *Response {
 	coordinator.mutex.Lock()
 	coordinator.counter++
-	res := NewResponse()
+	res := newResponse(id)
 	res.correlationid = coordinator.counter
 	coordinator.responses[id] = res
 	coordinator.mutex.Unlock()
 	return res
 }
 
-func (coordinator *Coordinator) NewResponse() *Response {
+func (coordinator *Coordinator) NewResponse(commandId uint16, info ...string) *Response {
+	description := lookUpCommand(commandId)
+	if len(info) > 0 {
+		description = fmt.Sprintf("%s, - %s", description, info[0])
+	}
+
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	coordinator.counter++
-	res := NewResponse()
+	res := newResponse(description)
 	res.correlationid = coordinator.counter
 	coordinator.responses[strconv.Itoa(coordinator.counter)] = res
 	return res
@@ -127,7 +134,7 @@ func (coordinator *Coordinator) NewConsumer(parameters *ConsumerOptions) *Consum
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
 	var item = &Consumer{ID: lastId, options: parameters,
-		response: NewResponse(), mutex: &sync.RWMutex{}}
+		response: newResponse(lookUpCommand(commandSubscribe)), mutex: &sync.RWMutex{}}
 	coordinator.consumers[lastId] = item
 	return item
 }

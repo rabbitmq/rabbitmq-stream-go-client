@@ -93,7 +93,7 @@ func (producer *Producer) Close() error {
 
 func (c *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
-	resp := c.coordinator.NewResponse()
+	resp := c.coordinator.NewResponse(commandDeletePublisher)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandDeletePublisher,
