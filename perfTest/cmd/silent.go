@@ -165,8 +165,9 @@ func startConsumers() error {
 	for _, stream := range streams {
 		for i := 0; i < consumers; i++ {
 			if err != nil {
-				streaming.ERROR("Error creating consumer connection: %s", err)
-				return err
+				streaming.ERROR("Error creating consumer connection (stream: %s): %s", stream, err)
+				streaming.ERROR("ENV %+v", env)
+
 			}
 			randomSleep()
 			streaming.INFO("Starting consumer number: %d", i)
@@ -178,7 +179,7 @@ func startConsumers() error {
 					}
 				}
 			}, streaming.NewConsumerOptions().
-				Offset(streaming.OffsetSpecification{}.First()).
+				Offset(streaming.OffsetSpecification{}.Last()).
 				Name(uuid.New().String()))
 			if err != nil {
 				streaming.ERROR("Error creating consumer: %s", err)
