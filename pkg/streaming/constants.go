@@ -88,6 +88,8 @@ func lookErrorCode(errorCode uint16) string {
 		return "publisher does not exist"
 	case responseCodePreconditionFailed:
 		return "precondition failed"
+	case responseCodeFrameTooLarge:
+		return "frame too large"
 	default:
 		{
 			WARN("Error not handled %d", errorCode)

@@ -61,6 +61,11 @@ func (producer *Producer) BatchPublish(ctx context.Context, messages []*amqp.Mes
 		seq += 1
 	}
 
+	bufferToWrite := b.Bytes()
+	if len(bufferToWrite) > producer.options.client.tuneState.requestedMaxFrameSize {
+		return 0, fmt.Errorf("%s", lookErrorCode(responseCodeFrameTooLarge))
+	}
+
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
 	if err != nil {
 		return 0, err

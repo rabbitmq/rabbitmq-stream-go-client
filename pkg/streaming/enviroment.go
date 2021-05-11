@@ -271,12 +271,11 @@ func (cc *enviromentCoordinator) newConsumer(leader *Broker, streamName string, 
 		cc.clientsPerContext[cc.nextId] = clientResult
 	}
 
-	subscriber, err := clientResult.DeclareSubscriber(streamName, options)
+	subscriber, err := clientResult.DeclareSubscriber(streamName, messagesHandler, options)
 
 	if err != nil {
 		return nil, err
 	}
-	subscriber.messagesHandler = messagesHandler
 	return subscriber, nil
 }
 

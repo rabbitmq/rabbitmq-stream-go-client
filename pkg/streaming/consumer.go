@@ -27,7 +27,7 @@ func (consumer *Consumer) setOffset(offset int64) {
 	consumer.offset = offset
 }
 
-func (consumer *Consumer) getOffset() int64 {
+func (consumer *Consumer) GetOffset() int64 {
 	consumer.mutex.RLock()
 	defer consumer.mutex.RUnlock()
 	return consumer.offset
@@ -131,7 +131,7 @@ func (consumer *Consumer) Commit() error {
 	writeString(b, consumer.options.consumerName)
 	writeString(b, consumer.options.streamName)
 
-	writeLong(b, consumer.getOffset())
+	writeLong(b, consumer.GetOffset())
 	return consumer.options.client.socket.writeAndFlush(b.Bytes())
 
 }

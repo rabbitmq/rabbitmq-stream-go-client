@@ -264,6 +264,19 @@ func (c *Client) closeHartBeat() {
 }
 
 func (c *Client) Close() error {
+	for _, p := range c.coordinator.producers {
+		err := c.coordinator.RemoveProducerById(p.(*Producer).ID)
+		if err != nil {
+			WARN("error removing producer: %s", err)
+		}
+	}
+	for _, cs := range c.coordinator.consumers {
+		err := c.coordinator.RemoveProducerById(cs.(*Consumer).ID)
+		if err != nil {
+			WARN("error removing consumer: %s", err)
+		}
+	}
+
 	if c.socket.isOpen() {
 		c.closeHartBeat()
 	}
@@ -330,7 +343,7 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 
 	streamMetadata := streamsMetadata.Get(stream)
 	if streamMetadata.responseCode != responseCodeOk {
-		return nil, fmt.Errorf("leader error for stream: %s, error:%d", stream, streamMetadata.responseCode)
+		return nil, fmt.Errorf("leader error for stream: %s, error:%s", stream, lookErrorCode(streamMetadata.responseCode))
 	}
 	return streamMetadata.Leader, nil
 }
@@ -356,10 +369,8 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 		length = length + 2 + len(key) + 2 + len(element)
 	}
 	var b = bytes.NewBuffer(make([]byte, 0, length))
-	writeInt(b, length)
-	writeShort(b, commandCreateStream)
-	writeShort(b, version1)
-	writeInt(b, correlationId)
+	writeProtocolHeader(b, length, commandCreateStream,
+		correlationId)
 	writeString(b, streamName)
 	writeInt(b, len(args))
 
@@ -372,10 +383,10 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 
 }
 
-func (c *Client) DeclareSubscriber(streamName string, options *ConsumerOptions) (*Consumer, error) {
+func (c *Client) DeclareSubscriber(streamName string, messagesHandler MessagesHandler, options *ConsumerOptions) (*Consumer, error) {
 	options.client = c
 	options.streamName = streamName
-	consumer := c.coordinator.NewConsumer(options)
+	consumer := c.coordinator.NewConsumer(messagesHandler, options)
 	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
 	if options.offsetSpecification.isOffset() ||
 		options.offsetSpecification.isTimestamp() {

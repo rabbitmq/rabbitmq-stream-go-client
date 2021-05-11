@@ -89,6 +89,10 @@ func (c *Client) handleResponse() {
 			{
 				c.metadataFrameHandler(readerProtocol, buffer)
 			}
+		case commandClose:
+			{
+				c.closeFrameHandler(readerProtocol, buffer)
+			}
 		default:
 			{
 				WARN("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
@@ -231,7 +235,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	var offsetLimit int64 = -1
 
 	if consumer.options.offsetSpecification.isOffset() {
-		offsetLimit = consumer.getOffset()
+		offsetLimit = consumer.GetOffset()
 	}
 
 	filter := offsetLimit != -1
@@ -356,4 +360,24 @@ func (c *Client) metadataFrameHandler(readProtocol *ReaderProtocol, r *bufio.Rea
 	}
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- streamsMetadata
+}
+
+func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = readUInt(r)
+	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
+	closeReason := readString(r)
+	INFO("Received close from server, reason: {} {}", lookErrorCode(readProtocol.ResponseCode),
+		closeReason)
+
+	length := 2 + 2 + 4 + 2
+	var b = bytes.NewBuffer(make([]byte, 0, length))
+	writeProtocolHeader(b, length, commandClose,
+		int(readProtocol.CorrelationId))
+	writeUShort(b, responseCodeOk)
+
+	err := c.socket.writeAndFlush(b.Bytes())
+	if err != nil {
+		return
+	}
+
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/streaming"
 	"os"
@@ -36,10 +35,10 @@ func main() {
 		return
 	}
 
-	streamname := uuid.New().String()
+	//streamname := uuid.New().String()
+	streamname := "long_offset"
 	err = env.DeclareStream(streamname, nil)
 	for i := 0; i < 1; i++ {
-
 		producer, err := env.NewProducer(streamname,
 			streaming.NewProducerOptions().OnPublishConfirm(func(ch <-chan []int64) {
 				ids := <-ch
@@ -54,9 +53,9 @@ func main() {
 		//	producer.Close()
 		//}()
 		go func() {
-			for i := 0; i < 100; i++ {
+			for i := 0; i < 200; i++ {
 
-				_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(1000))
+				_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(1))
 				//producer.Close()
 				//time.Sleep(20 * time.Millisecond)
 				if err != nil {
@@ -67,7 +66,7 @@ func main() {
 
 			}
 		}()
-		producer.Close()
+		//producer.Close()
 	}
 	//err = env.DeleteStream(streamname)
 	//if err != nil {

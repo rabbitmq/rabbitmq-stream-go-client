@@ -129,12 +129,15 @@ func (coordinator *Coordinator) ResponsesCount() int {
 }
 
 /// Consumer functions
-func (coordinator *Coordinator) NewConsumer(parameters *ConsumerOptions) *Consumer {
+func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler, parameters *ConsumerOptions) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
 	var item = &Consumer{ID: lastId, options: parameters,
-		response: newResponse(lookUpCommand(commandSubscribe)), mutex: &sync.RWMutex{}}
+		response: newResponse(lookUpCommand(commandSubscribe)), mutex: &sync.RWMutex{},
+		messagesHandler: messagesHandler,
+	}
+
 	coordinator.consumers[lastId] = item
 	return item
 }

@@ -1,10 +1,12 @@
 package streaming
 
 import (
+	"context"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"sync/atomic"
 	"time"
 )
 
@@ -51,7 +53,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Multi Consumer per client", func() {
+	It("Multi Consumers per client", func() {
 		env, err := NewEnvironment(NewEnvironmentOptions().MaxConsumersPerClient(2))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
@@ -75,50 +77,76 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
-	//It("Subscribe and Unsubscribe", func() {
-	//	consumer, err := testEnviroment.ConsumerOptions().
-	//		Stream(testConsumerStream).
-	//		Name("my_consumer").
-	//		MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
-	//
-	//		}).Build()
-	//
-	//	Expect(err).NotTo(HaveOccurred())
-	//	err = consumer.UnSubscribe()
-	//	Expect(err).NotTo(HaveOccurred())
-	//
-	//})
-	//
-	//It("Subscribe Count MessagesHandler", func() {
-	//
-	//	producer, err := testEnviroment.ProducerCreator().
-	//		Stream(testConsumerStream).Build()
-	//	Expect(err).NotTo(HaveOccurred())
-	//
-	//	_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
-	//	Expect(err).NotTo(HaveOccurred())
-	//	var count int32
-	//
-	//	consumer, err := testEnviroment.ConsumerOptions().
-	//		Stream(testConsumerStream).
-	//		Name("my_consumer").
-	//		MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
-	//			atomic.AddInt32(&count, 1)
-	//
-	//		}).Build()
-	//	time.Sleep(500 * time.Millisecond)
-	//	Expect(err).NotTo(HaveOccurred())
-	//	// just wait a bit until sends the messages
-	//	time.Sleep(200 * time.Millisecond)
-	//
-	//	Expect(atomic.LoadInt32(&count)).To(Equal(int32(5)))
-	//
-	//	err = consumer.UnSubscribe()
-	//	Expect(err).NotTo(HaveOccurred())
-	//	err = producer.Close()
-	//	Expect(err).NotTo(HaveOccurred())
-	//
-	//})
+	It("Subscribe and Unsubscribe", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().MaxConsumersPerClient(2))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		err = env.DeclareStream(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		consumer, err := env.NewConsumer(streamName,
+			func(Context ConsumerContext, message *amqp.Message) {
+
+			}, nil)
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(10 * time.Millisecond)
+		err = consumer.UnSubscribe()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("Subscribe/Unsubscribe count messages", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().MaxConsumersPerClient(2))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		err = env.DeclareStream(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(107)) // batch send
+		Expect(err).NotTo(HaveOccurred())
+		// we can't close the subscribe until the publish is finished
+		time.Sleep(500 * time.Millisecond)
+		err = producer.Close()
+		Expect(err).NotTo(HaveOccurred())
+		var messagesCount int32 = 0
+		consumer, err := env.NewConsumer(streamName,
+			func(Context ConsumerContext, message *amqp.Message) {
+				atomic.AddInt32(&messagesCount, 1)
+			}, NewConsumerOptions().Offset(OffsetSpecification{}.First()))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(107)))
+		err = consumer.UnSubscribe()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("Subscribe/Unsubscribe count messages Offset", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().MaxConsumersPerClient(2))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		err = env.DeclareStream(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(100)) // batch send
+		Expect(err).NotTo(HaveOccurred())
+		// we can't close the subscribe until the publish is finished
+		time.Sleep(500 * time.Millisecond)
+		err = producer.Close()
+		Expect(err).NotTo(HaveOccurred())
+		var messagesCount int32 = 0
+		consumer, err := env.NewConsumer(streamName,
+			func(Context ConsumerContext, message *amqp.Message) {
+				atomic.AddInt32(&messagesCount, 1)
+			}, NewConsumerOptions().Offset(OffsetSpecification{}.Offset(50)))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(68)))
+		err = consumer.UnSubscribe()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	//
 	//It("Subscribe Count MessagesHandler Offset", func() {
 	//
