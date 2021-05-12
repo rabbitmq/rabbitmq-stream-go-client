@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"fmt"
@@ -209,7 +209,7 @@ func (coordinator *Coordinator) getNextFreeId(refmap map[interface{}]interface{}
 	}
 	if result >= ^uint8(0) {
 		return 0, errors.New("No more items available")
-		// TODO HANDLE THE ERROR
+		// TODO HANDLE THE error
 	}
 	return result, nil
 }

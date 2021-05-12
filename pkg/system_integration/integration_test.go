@@ -30,8 +30,8 @@ var _ = Describe("Integration tests", func() {
 	})
 
 	It("Connect to all the nodes", func() {
-		env, err := streaming.NewEnvironment(
-			streaming.NewEnvironmentOptions().Host("node0").UserName("test").Password("test"))
+		env, err := stream.NewEnvironment(
+			stream.NewEnvironmentOptions().Host("node0").UserName("test").Password("test"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(env).NotTo(BeNil())
 
@@ -46,7 +46,7 @@ var _ = Describe("Integration tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		var producers []*streaming.Producer
+		var producers []*stream.Producer
 		for _, stream := range streams {
 			producer1, err := env.NewProducer(stream, nil)
 			producers = append(producers, producer1)
@@ -82,7 +82,7 @@ var _ = Describe("Integration tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		producers = make([]*streaming.Producer, 0)
+		producers = make([]*stream.Producer, 0)
 		for _, stream := range streams {
 			producer1, err := env.NewProducer(stream, nil)
 			producers = append(producers, producer1)

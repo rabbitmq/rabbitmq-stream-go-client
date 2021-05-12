@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"bytes"
@@ -17,29 +17,28 @@ type Producer struct {
 }
 
 type ProducerOptions struct {
-	client         *Client
-	streamName     string
-	publishConfirm PublishConfirm
+	client                *Client
+	streamName            string
+	PublishConfirmHandler PublishConfirm
 }
 
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{}
 }
 
-func (c *ProducerOptions) Stream(streamName string) *ProducerOptions {
-	c.streamName = streamName
+func (c *ProducerOptions) SetPublishConfirmHandler(publishConfirmHandler PublishConfirm) *ProducerOptions {
+	c.PublishConfirmHandler = publishConfirmHandler
 	return c
 }
 
-func (c *ProducerOptions) OnPublishConfirm(publishConfirm PublishConfirm) *ProducerOptions {
-	c.publishConfirm = publishConfirm
-	return c
-}
+func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) (int, error) {
+	if len(batchMessages) > 1000 {
+		return 0, fmt.Errorf("%s", "too many batchMessages")
+	}
 
-func (producer *Producer) BatchPublish(ctx context.Context, messages []*amqp.Message) (int, error) {
 	frameHeaderLength := 2 + 2 + 1 + 4
 	var msgLen int
-	for _, msg := range messages {
+	for _, msg := range batchMessages {
 		r, _ := msg.MarshalBinary()
 		msgLen += len(r) + 8 + 4
 	}
@@ -49,11 +48,11 @@ func (producer *Producer) BatchPublish(ctx context.Context, messages []*amqp.Mes
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandPublish)
 	writeByte(b, publishId)
-	writeInt(b, len(messages)) //toExcluded - fromInclude
+	writeInt(b, len(batchMessages)) //toExcluded - fromInclude
 
 	var seq int64
 	seq = 0
-	for _, msg := range messages {
+	for _, msg := range batchMessages {
 		r, _ := msg.MarshalBinary()
 		writeLong(b, seq)   // sequence
 		writeInt(b, len(r)) // len
@@ -70,7 +69,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, messages []*amqp.Mes
 	if err != nil {
 		return 0, err
 	}
-	return 0, nil
+	return len(batchMessages), nil
 }
 
 func (producer *Producer) Close() error {
@@ -110,7 +109,7 @@ func (c *Client) deletePublisher(publisherId byte) error {
 	err := c.coordinator.RemoveProducerById(publisherId)
 	if err != nil {
 		//TODO LOGWARN
-		WARN("Error RemoveProducerById %d", publisherId)
+		logWarn("Error RemoveProducerById %d", publisherId)
 	}
 
 	return errWrite

@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	. "github.com/onsi/ginkgo"

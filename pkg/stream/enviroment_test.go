@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"fmt"
@@ -43,7 +43,7 @@ var _ = Describe("Environment test", func() {
 	})
 
 	It("Multi Producers per client", func() {
-		env, err := NewEnvironment(NewEnvironmentOptions().MaxProducersPerClient(2))
+		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(2))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
@@ -132,21 +132,21 @@ var _ = Describe("Environment test", func() {
 	Describe("Environment Authentication", func() {
 		It("Connection Authentication Failure", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				Uri("rabbitmq-StreamOptions://wrong_user:wrong_password@localhost:5551/%2f"))
+				SetUri("rabbitmq-StreamOptions://wrong_user:wrong_password@localhost:5551/%2f"))
 			Expect(fmt.Sprintf("%s", err)).
 				To(ContainSubstring("authentication failure"))
 		})
 
 		It("Connection Vhost not exist", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				Uri("rabbitmq-StreamOptions://guest:guest@localhost:5551/VHOSTNOEXIST"))
+				SetUri("rabbitmq-StreamOptions://guest:guest@localhost:5551/VHOSTNOEXIST"))
 			Expect(fmt.Sprintf("%s", err)).
 				To(ContainSubstring("virtualHost access failure"))
 		})
 
 		It("Connection No Endpoint", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				Uri("rabbitmq-StreamOptions://g:g@noendpoint:5551/%2f"))
+				SetUri("rabbitmq-StreamOptions://g:g@noendpoint:5551/%2f"))
 			Expect(err).To(HaveOccurred())
 		})
 	})

@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"fmt"
@@ -92,7 +92,7 @@ func lookErrorCode(errorCode uint16) string {
 		return "frame too large"
 	default:
 		{
-			WARN("Error not handled %d", errorCode)
+			logWarn("Error not handled %d", errorCode)
 			return "Error not handled"
 		}
 	}
@@ -120,6 +120,7 @@ func lookUpCommand(command uint16) string {
 		commandPublishConfirm:   `CommandPublishConfirm`,
 		commandDeclarePublisher: `CommandDeclarePublisher`,
 		commandUnitTest:         `UnitTest`,
+		commandClose:            `CommandClose`,
 	}
 	if constLookup[command] == "" {
 		return fmt.Sprintf("command not handled %d", command)

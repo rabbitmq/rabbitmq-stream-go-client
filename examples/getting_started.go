@@ -1,93 +1,95 @@
 package main
 
 import (
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/streaming"
+	"bufio"
+	"context"
+	"fmt"
+	"github.com/google/uuid"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+	"os"
+	"strconv"
+	"time"
 )
 
 func CheckErr(err error) {
 	if err != nil {
-		streaming.ERROR("%s ", err)
+		fmt.Printf("%s ", err)
+		os.Exit(1)
 	}
 }
+
+func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
+	var arr []*amqp.Message
+	for z := 0; z < bacthMessages; z++ {
+		arr = append(arr, amqp.NewMessage([]byte("hello_world_"+strconv.Itoa(z))))
+	}
+	return arr
+}
+
 func main() {
-	//reader := bufio.NewReader(os.Stdin)
-	//streaming.INFO("Getting started with Streaming client for RabbitMQ")
-	//streaming.INFO("Connecting to RabbitMQ streaming ...")
-	//uris := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
-	//client, err := streaming.NewClientCreator().
-	//	Uri(uris).
-	//	Connect() // Create Client
-	//CheckErr(err)
-	//if err != nil {
-	//	return
-	//}
+	reader := bufio.NewReader(os.Stdin)
+	// Set log level, not mandatory by default is INFO
+	stream.SetLevelInfo(stream.DEBUG)
+
+	fmt.Println("Getting started with Streaming client for RabbitMQ")
+	fmt.Println("Connecting to RabbitMQ streaming ...")
+	//uri := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
+	// The environment is a wrapper around the TCP client connections
+
+	env, err := stream.NewEnvironment(
+		stream.NewEnvironmentOptions().
+			SetHost("localhost").
+			SetPort(5551).
+			SetUser("guest").
+			SetPassword("guest"))
+	CheckErr(err)
+	// Create a stream, you can create streams without any option like:
+	// err = env.DeclareStream(streamName, nil)
+	// it is a best practise to define a size,  1GB for example:
+	streamName := uuid.New().String()
+	err = env.DeclareStream(streamName,
+		&stream.StreamOptions{
+			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
+		},
+	)
+
+	CheckErr(err)
+
+	//Define a producer to a stream, optional publish confirmation
+	producer, err := env.NewProducer(streamName,
+		stream.NewProducerOptions().SetPublishConfirmHandler(func(ch <-chan []int64) {
+			messagesIds := <-ch
+			fmt.Printf("Confirmed %d messages \n \n ", len(messagesIds))
+
+		}))
+	CheckErr(err)
+
+	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
+	for i := 0; i < 2; i++ {
+		_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(10))
+		CheckErr(err)
+	}
+
+	// this sleep is not mandatory, just to show the confirmed messages
+	time.Sleep(1 * time.Second)
+	err = producer.Close()
+	CheckErr(err)
+
+	// Define a consumer per stream, there are different offset options to define a consumer, default is
+	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.Message) {
 	//
-	//streaming.INFO("Connected to: %s", uris)
-	//streamName := uuid.New().String()
-	//err = client.StreamCreator().Stream(streamName).
-	//	Create() // Create the streaming queue
-	//CheckErr(err)
-	//
-	//err = client.StreamCreator().Stream(streamName).
-	//	MaxLengthBytes(streaming.ByteCapacity{}.MB(5)).
-	//	Create() // Create the streaming queue
-	//CheckErr(err)
-	//
-	//var count int32
-	//consumer, err := client.ConsumerCreator().
-	//	Stream(streamName).
-	//	Name(uuid.NewString()).
-	//	MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
-	//		streaming.INFO("Message number:%d consumer id:%d data:%s \n",
-	//			atomic.AddInt32(&count, 1), context.Consumer.ID,
-	//			message.Data)
-	//		err := context.Consumer.Commit()
-	//		CheckErr(err)
-	//	}).Build()
-	//CheckErr(err)
-	//
-	//// Get a new producer to publish the messages
-	//clientProducer, err := streaming.NewClientCreator().Uri(uris).
-	//	PublishErrorHandler(func(publisherId uint8, publishingId int64, code uint16) {
-	//		streaming.ERROR("Publish Error, publisherId %d, code: %s", publisherId, streaming.lookErrorCode(code))
-	//	}).
-	//	Connect()
-	//CheckErr(err)
-	//producer, err := clientProducer.ProducerCreator().Stream(streamName).Build()
-	//CheckErr(err)
-	//
-	////
-	//numberOfSend := 10
-	//batchSize := 10
-	//
-	//// Create AMQP 1.0 messages, see:https://github.com/Azure/go-amqp
-	//// message aggregation
-	//countM := 0
-	//start := time.Now()
-	//for z := 0; z < numberOfSend; z++ {
-	//	var arr []*amqp.Message
-	//	for f := 0; f < batchSize; f++ {
-	//		countM++
-	//		arr = append(arr, amqp.NewMessage([]byte(fmt.Sprintf("test_%d", countM))))
-	//	}
-	//	_, err = producer.BatchPublish(context.Background(), arr) // batch send
-	//	if err != nil {
-	//		streaming.ERROR("%s", err)
-	//	}
-	//}
-	//
-	//elapsed := time.Since(start)
-	//streaming.INFO("%d messages, published in: %s\n", numberOfSend*batchSize, elapsed)
-	//
-	//fmt.Println("Press any key to stop ")
-	//_, _ = reader.ReadString('\n')
-	//err = producer.Close()
-	//CheckErr(err)
-	//err = consumer.UnSubscribe()
-	//CheckErr(err)
-	//err = client.DeleteStream(streamName) // Remove the streaming queue and the data
-	//CheckErr(err)
-	//err = client.Close()
-	//CheckErr(err)
-	//fmt.Println("Bye bye")
+	//}, nil)
+	// if you need to track the offset you need a consumer name like:
+	consumer, err := env.NewConsumer(streamName, func(Context stream.ConsumerContext, message *amqp.Message) {
+		fmt.Printf("consumer id: %d, text: %s \n ", Context.Consumer.ID, message.Data)
+	}, stream.NewConsumerOptions().
+		SetConsumerName("my_consumer").                  // gives a name
+		SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
+	CheckErr(err)
+
+	fmt.Println("Press any key to stop ")
+	err = consumer.UnSubscribe()
+	CheckErr(err)
+	_, _ = reader.ReadString('\n')
 }

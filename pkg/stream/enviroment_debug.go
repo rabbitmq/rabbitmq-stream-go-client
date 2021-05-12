@@ -1,6 +1,6 @@
 //+build debug
 
-package streaming
+package stream
 
 import "sort"
 

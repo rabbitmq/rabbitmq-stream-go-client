@@ -28,7 +28,7 @@ var (
 	producerMessageCount  int32
 	consumerMessageCount  int32
 	confirmedMessageCount int32
-	connections           []*streaming.Client
+	connections           []*stream.Client
 )
 
 func printStats() {
@@ -43,7 +43,7 @@ func printStats() {
 					PMessagesPerSecond := int64(float64(atomic.LoadInt32(&producerMessageCount)) / v)
 					CMessagesPerSecond := int64(float64(atomic.LoadInt32(&consumerMessageCount)) / v)
 					ConfirmedMessagesPerSecond := int64(float64(atomic.LoadInt32(&confirmedMessageCount)) / v)
-					streaming.INFO("Published %8v msg/s   |   Confirmed %8v msg/s   |   Consumed %3v msg/s   |  %3v  |  %3v  |",
+					stream.INFO("Published %8v msg/s   |   Confirmed %8v msg/s   |   Consumed %3v msg/s   |  %3v  |  %3v  |",
 						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody())
 					atomic.SwapInt32(&producerMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
@@ -57,26 +57,32 @@ func printStats() {
 }
 
 func decodeBody() string {
-	if variableBody > 0 {
-		return fmt.Sprintf("Variable Body: %d" , variableBody)
+	if producers > 0 {
+		if variableBody > 0 {
+			return fmt.Sprintf("Variable Body: %d", variableBody)
+		}
+		return fmt.Sprintf("Fixed Body: %d", len("simul_message"))
+	} else {
+		return "ND"
 	}
-
-	return fmt.Sprintf("Fixed Body: %d" , len("simul_message"))
-
 }
 
 func decodeRate() string {
-	if rate > 0 {
-		return fmt.Sprintf("Fixed Rate: %d" , rate)
+	if producers > 0 {
+		if rate > 0 {
+			return fmt.Sprintf("Fixed Rate: %d", rate)
+		}
+		if variableRate > 0 {
+			return fmt.Sprintf("Variable Rate: %d", variableRate)
+		}
+		return "Full rate"
+	} else {
+		return "ND"
 	}
-	if variableRate > 0 {
-		return fmt.Sprintf("Variable Rate: %d" , variableRate)
-	}
-	return "Full rate"
 }
 
 func startSimulation() error {
-	streaming.INFO("Silent (%s) Simulation, url: %s producers: %d consumers: %d streams: %s ", streaming.ClientVersion, rabbitmqBrokerUrl, producers, consumers, streams)
+	stream.INFO("Silent (%s) Simulation, url: %s producers: %d consumers: %d streams: %s ", stream.ClientVersion, rabbitmqBrokerUrl, producers, consumers, streams)
 
 	err := initStreams()
 	if err != nil {
@@ -113,48 +119,48 @@ func randomSleep() {
 
 func initStreams() error {
 	if !preDeclared {
-		streaming.INFO("Declaring streams: %s", streams)
-		env, err := streaming.NewEnvironment(streaming.NewEnvironmentOptions().Uri(
+		stream.INFO("Declaring streams: %s", streams)
+		env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().Uri(
 			rabbitmqBrokerUrl))
 		if err != nil {
-			streaming.ERROR("Error init stream connection: %s", err)
+			stream.ERROR("Error init stream connection: %s", err)
 			return err
 		}
 
 		for _, stream := range streams {
 
-			err = env.DeclareStream(stream, streaming.NewStreamOptions().
-				MaxLengthBytes(streaming.ByteCapacity{}.From(maxLengthBytes)))
+			err = env.DeclareStream(stream, stream.NewStreamOptions().
+				MaxLengthBytes(stream.ByteCapacity{}.From(maxLengthBytes)))
 			if err != nil {
-				streaming.ERROR("Error declaring stream: %s", err)
+				stream.ERROR("Error declaring stream: %s", err)
 				_ = env.Close()
 				return err
 			}
 		}
-		streaming.INFO("End Init streams :%s\n", streams)
+		stream.INFO("End Init streams :%s\n", streams)
 		return env.Close()
 	}
-	streaming.INFO("Predeclared streams: %s\n", streams)
+	stream.INFO("Predeclared streams: %s\n", streams)
 	return nil
 }
 func startProducers() error {
-	env, err := streaming.NewEnvironment(streaming.NewEnvironmentOptions().Uri(
+	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().Uri(
 		rabbitmqBrokerUrl).MaxProducersPerClient(producersPerClient))
 	if err != nil {
-		streaming.ERROR("Error connection client producer: %s", err)
+		stream.ERROR("Error connection client producer: %s", err)
 		return err
 	}
-	streaming.INFO("Starting %d producers...", producers)
+	stream.INFO("Starting %d producers...", producers)
 	for _, stream := range streams {
 		for i := 1; i <= producers; i++ {
 
-			streaming.INFO("Starting producer number: %d", i)
-			producer, err := env.NewProducer(stream, streaming.NewProducerOptions().OnPublishConfirm(func(ch <-chan []int64) {
+			stream.INFO("Starting producer number: %d", i)
+			producer, err := env.NewProducer(stream, stream.NewProducerOptions().OnPublishConfirm(func(ch <-chan []int64) {
 				ids := <-ch
 				atomic.AddInt32(&confirmedMessageCount, int32(len(ids)))
 			}))
 			if err != nil {
-				streaming.ERROR("Error create producer: %s", err)
+				stream.ERROR("Error create producer: %s", err)
 				return err
 			}
 
@@ -174,7 +180,7 @@ func startProducers() error {
 				arr = append(arr, amqp.NewMessage([]byte(body)))
 			}
 
-			go func(prod *streaming.Producer, messages []*amqp.Message) {
+			go func(prod *stream.Producer, messages []*amqp.Message) {
 				for {
 					if rate > 0 {
 						sleep := float64(batchSize) / float64(rate)
@@ -197,7 +203,7 @@ func startProducers() error {
 					atomic.AddInt32(&producerMessageCount, 100)
 					_, err = prod.BatchPublish(context.Background(), arr)
 					if err != nil {
-						streaming.ERROR("Error publishing %s", err)
+						stream.ERROR("Error publishing %s", err)
 						time.Sleep(1 * time.Second)
 					}
 				}
@@ -208,31 +214,31 @@ func startProducers() error {
 }
 
 func startConsumers() error {
-	streaming.INFO("Starting %d consumers...", consumers)
-	env, err := streaming.NewEnvironment(streaming.NewEnvironmentOptions().Uri(
+	stream.INFO("Starting %d consumers...", consumers)
+	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().Uri(
 		rabbitmqBrokerUrl).MaxConsumersPerClient(consumersPerClient))
 	if err != nil {
-		streaming.ERROR("Error creating consumer connection: %s", err)
-		streaming.ERROR("ENV %+v", env)
+		stream.ERROR("Error creating consumer connection: %s", err)
+		stream.ERROR("ENV %+v", env)
 		return err
 	}
 
 	for _, stream := range streams {
 		for i := 0; i < consumers; i++ {
 			randomSleep()
-			streaming.INFO("Starting consumer number: %d", i)
-			_, err = env.NewConsumer(stream, func(Context streaming.ConsumerContext, message *amqp.Message) {
+			stream.INFO("Starting consumer number: %d", i)
+			_, err = env.NewConsumer(stream, func(Context stream.ConsumerContext, message *amqp.Message) {
 				if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
 					err := Context.Consumer.Commit()
 					if err != nil {
-						streaming.ERROR("Error Commit: %s", err)
+						stream.ERROR("Error Commit: %s", err)
 					}
 				}
-			}, streaming.NewConsumerOptions().
-				Offset(streaming.OffsetSpecification{}.First()).
+			}, stream.NewConsumerOptions().
+				Offset(stream.OffsetSpecification{}.First()).
 				Name(uuid.New().String()))
 			if err != nil {
-				streaming.ERROR("Error creating consumer: %s", err)
+				stream.ERROR("Error creating consumer: %s", err)
 				//return err
 			}
 

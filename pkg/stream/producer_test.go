@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"context"
@@ -23,25 +23,25 @@ var _ = Describe("Streaming Producers", func() {
 
 	BeforeEach(func() {
 		testProducerStream = uuid.New().String()
-		err := testEnviroment.DeclareStream(testProducerStream, nil)
+		err := testEnvironment.DeclareStream(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 	})
 	AfterEach(func() {
-		err := testEnviroment.DeleteStream(testProducerStream)
+		err := testEnvironment.DeleteStream(testProducerStream)
 		Expect(err).NotTo(HaveOccurred())
 
 	})
 
 	It("NewProducer/Close Publisher", func() {
-		producer, err := testEnviroment.NewProducer(testProducerStream, nil)
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("NewProducer/Publish/UnSubscribe Publisher", func() {
-		producer, err := testEnviroment.NewProducer(testProducerStream, nil)
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
@@ -58,7 +58,7 @@ var _ = Describe("Streaming Producers", func() {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
 				defer wg.Done()
-				producer, err := testEnviroment.NewProducer(testProducerStream, nil)
+				producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
@@ -73,14 +73,14 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("Not found NotExistingStream", func() {
-		_, err := testEnviroment.NewProducer("notExistingStream", nil)
+		_, err := testEnvironment.NewProducer("notExistingStream", nil)
 		Expect(fmt.Sprintf("%s", err)).
 			To(ContainSubstring("leader error for stream"))
 	})
 
 	It("Publish Confirmation", func() {
 		var messagesCount int32 = 0
-		producer, err := testEnviroment.NewProducer(testProducerStream, NewProducerOptions().OnPublishConfirm(func(ch <-chan []int64) {
+		producer, err := testEnvironment.NewProducer(testProducerStream, NewProducerOptions().SetPublishConfirmHandler(func(ch <-chan []int64) {
 			ids := <-ch
 			atomic.AddInt32(&messagesCount, int32(len(ids)))
 		}))
@@ -95,10 +95,10 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	//It("PublishError handler", func() {
-	//	producer, err := testEnviroment.ProducerOptions().Stream(testProducerStream).Build()
+	//	producer, err := testEnvironment.ProducerOptions().Stream(testProducerStream).Build()
 	//	Expect(err).NotTo(HaveOccurred())
 	//	//countPublishError := int32(0)
-	//	testEnviroment.PublishErrorListener = func(publisherId uint8, publishingId int64, code uint16) {
+	//	testEnvironment.PublishErrorListener = func(publisherId uint8, publishingId int64, code uint16) {
 	//		errString := lookErrorCode(code)
 	//		//atomic.AddInt32(&countPublishError, 1)
 	//		Expect(errString).
@@ -109,7 +109,7 @@ var _ = Describe("Streaming Producers", func() {
 	//	//_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(2)) // batch send
 	//	time.Sleep(700 * time.Millisecond)
 	//
-	//	testEnviroment.PublishErrorListener = nil
+	//	testEnvironment.PublishErrorListener = nil
 	//	//Expect(atomic.LoadInt32(&countPublishError)).To(Equal(int32(2)))
 	//
 	//})

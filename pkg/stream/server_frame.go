@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"bufio"
@@ -23,7 +23,7 @@ func (c *Client) handleResponse() {
 		readerProtocol := &ReaderProtocol{}
 		frameLen, err := readUInt(buffer)
 		if err != nil {
-			DEBUG("socket: %s", err)
+			logDebug("socket: %s", err)
 			_ = c.Close()
 			break
 		}
@@ -77,7 +77,7 @@ func (c *Client) handleResponse() {
 			}
 		case commandHeartbeat:
 			{
-				//DEBUG("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+				//logDebug("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 
 			}
 		case commandQueryOffset:
@@ -95,7 +95,7 @@ func (c *Client) handleResponse() {
 			}
 		default:
 			{
-				WARN("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+				logWarn("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 				break
 			}
 		}
@@ -182,7 +182,7 @@ func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Re
 func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 
 	readProtocol.PublishID = readByte(r)
-	//readProtocol.PublishingIdCount = ReadIntFromReader(testEnviroment.reader)
+	//readProtocol.PublishingIdCount = ReadIntFromReader(testEnvironment.reader)
 	publishingIdCount, _ := readUInt(r)
 	//var _publishingId int64
 	var ids []int64
@@ -193,7 +193,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 
 	producer, err := c.coordinator.GetProducerById(readProtocol.PublishID)
 	if err != nil {
-		WARN("%s", err)
+		logWarn("%s", err)
 		return nil
 	}
 	if producer.publishConfirm != nil {
@@ -214,7 +214,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_ = readByte(r)
 	chunkType := readByte(r)
 	if chunkType != 0 {
-		WARN("Invalid chunkType: %d ", chunkType)
+		logWarn("Invalid chunkType: %d ", chunkType)
 	}
 
 	_ = readUShort(r)
@@ -234,7 +234,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	var offsetLimit int64 = -1
 
-	if consumer.options.offsetSpecification.isOffset() {
+	if consumer.options.Offset.isOffset() {
 		offsetLimit = consumer.GetOffset()
 	}
 
@@ -254,13 +254,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				msg := &amqp.Message{}
 				err := msg.UnmarshalBinary(arrayMessage)
 				if err != nil {
-					ERROR("error unmarshal messages: %s", err)
+					logError("error unmarshal messages: %s", err)
 				}
 				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}
 
 		} else {
-			WARN("entryType Not Handled %d", entryType)
+			logWarn("entryType Not Handled %d", entryType)
 		}
 		numRecords--
 		offset++
@@ -273,9 +273,9 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 func (c *Client) creditNotificationFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
-	subscriptionId := readByte(r)
+	//subscriptionId := readByte(r)
+	_ = readByte(r)
 	// TODO ASK WHAT TO DO HERE
-	DEBUG("creditNotificationFrameHandler %d", subscriptionId)
 }
 
 func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
@@ -311,7 +311,7 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 	code := readUShort(buffer)
 	if code == responseCodeStreamNotAvailable {
 		stream := readString(buffer)
-		WARN("stream %s is no longer available", stream)
+		logWarn("stream %s is no longer available", stream)
 		// TODO ASK WHAT TO DO HERE
 
 		streamCh := make(chan string, 1)
@@ -320,7 +320,7 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 		close(streamCh)
 	} else {
 		//TODO handle the error, see the java code
-		WARN("unsupported metadata update code %d", code)
+		logWarn("unsupported metadata update code %d", code)
 	}
 }
 
@@ -366,12 +366,12 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader
 	readProtocol.CorrelationId, _ = readUInt(r)
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	closeReason := readString(r)
-	INFO("Received close from server, reason: {} {}", lookErrorCode(readProtocol.ResponseCode),
+	logInfo("Received close from server, reason: {} {}", lookErrorCode(readProtocol.ResponseCode),
 		closeReason)
 
 	length := 2 + 2 + 4 + 2
 	var b = bytes.NewBuffer(make([]byte, 0, length))
-	writeProtocolHeader(b, length, commandClose,
+	writeProtocolHeader(b, length, int16(uShortEncodeResponseCode(commandClose)),
 		int(readProtocol.CorrelationId))
 	writeUShort(b, responseCodeOk)
 

@@ -1,4 +1,4 @@
-package streaming_test
+package stream_test
 
 import (
 	"testing"

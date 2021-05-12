@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ var _ = Describe("Converters", func() {
 		Expect(v.bytes).To(Equal(int64(1000 * 1000 * 1000 * 1000)))
 	})
 
-	It("Converter from string error", func() {
+	It("Converter from string logError", func() {
 		v := ByteCapacity{}.From("10LL")
 		Expect(fmt.Sprintf("%s", v.error)).
 			To(ContainSubstring("Invalid unit size format"))

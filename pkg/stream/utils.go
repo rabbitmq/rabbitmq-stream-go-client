@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"fmt"
@@ -25,29 +25,40 @@ func waitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 	select {
 	case code := <-response.code:
 		if code.id != responseCodeOk {
-			return fmt.Errorf("code error: %s", lookErrorCode(code.id))
+			return fmt.Errorf("code logError: %s", lookErrorCode(code.id))
 		}
 		return nil
 	case <-time.After(timeout):
-		WARN("timeout %d ms - waiting Code, operation: %s", defaultSocketCallTimeout, response.commandDescription)
+		logWarn("timeout %d ms - waiting Code, operation: %s", defaultSocketCallTimeout, response.commandDescription)
 		return fmt.Errorf("timeout %d ms - waiting Code, operation: %s ", defaultSocketCallTimeout, response.commandDescription)
 	}
 }
 
-// logging
+var logLevel int8
 
-func INFO(message string, v ...interface{}) {
-	log.Printf(fmt.Sprintf("[INFO] - %s", message), v...)
+func SetLevelInfo(value int8) {
+	logLevel = value
 }
 
-func ERROR(message string, v ...interface{}) {
-	log.Printf(fmt.Sprintf("[ERROR] - %s", message), v...)
+const (
+	INFO  = 0
+	DEBUG = 1
+)
+
+func logInfo(message string, v ...interface{}) {
+	log.Printf(fmt.Sprintf("[info] - %s", message), v...)
 }
 
-func DEBUG(message string, v ...interface{}) {
-	log.Printf(fmt.Sprintf("[DEBUG] - %s", message), v...)
+func logError(message string, v ...interface{}) {
+	log.Printf(fmt.Sprintf("[error] - %s", message), v...)
 }
 
-func WARN(message string, v ...interface{}) {
-	log.Printf(fmt.Sprintf("[WARN] - %s", message), v...)
+func logDebug(message string, v ...interface{}) {
+	if logLevel > INFO {
+		log.Printf(fmt.Sprintf("[debug] - %s", message), v...)
+	}
+}
+
+func logWarn(message string, v ...interface{}) {
+	log.Printf(fmt.Sprintf("[warn] - %s", message), v...)
 }

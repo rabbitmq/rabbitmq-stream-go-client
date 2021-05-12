@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"bufio"
@@ -54,22 +54,22 @@ func (c *Client) connect() error {
 	c.clientProperties.items = make(map[string]string)
 	resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
 	if err != nil {
-		DEBUG("%s", err)
+		logDebug("%s", err)
 		return err
 	}
 	connection, err2 := net.DialTCP("tcp", nil, resolver)
 	if err2 != nil {
-		DEBUG("%s", err2)
+		logDebug("%s", err2)
 		return err2
 	}
 	err2 = connection.SetReadBuffer(defaultReadSocketBuffer)
 	if err2 != nil {
-		DEBUG("%s", err2)
+		logDebug("%s", err2)
 		return err2
 	}
 	err2 = connection.SetWriteBuffer(defaultReadSocketBuffer)
 	if err2 != nil {
-		DEBUG("%s", err2)
+		logDebug("%s", err2)
 		return err2
 	}
 
@@ -83,13 +83,13 @@ func (c *Client) connect() error {
 	err2 = c.peerProperties()
 
 	if err2 != nil {
-		DEBUG("%s", err2)
+		logDebug("%s", err2)
 		return err2
 	}
 	pwd, _ := u.User.Password()
 	err2 = c.authenticate(u.User.Username(), pwd)
 	if err2 != nil {
-		DEBUG("User:%s, %s", u.User.Username(), err2)
+		logDebug("User:%s, %s", u.User.Username(), err2)
 		return err2
 	}
 	vhost := "/"
@@ -98,11 +98,11 @@ func (c *Client) connect() error {
 	}
 	err2 = c.open(vhost)
 	if err2 != nil {
-		DEBUG("%s", err2)
+		logDebug("%s", err2)
 		return err2
 	}
 	c.heartBeat()
-	DEBUG("User %s, connected to: %s, vhost:%s", u.User.Username(),
+	logDebug("User %s, connected to: %s, vhost:%s", u.User.Username(),
 		net.JoinHostPort(host, port),
 		vhost)
 	return nil
@@ -255,7 +255,7 @@ func (c *Client) closeHartBeat() {
 	c.destructor.Do(func() {
 		r, err := c.coordinator.GetResponseByName("heartbeat")
 		if err != nil {
-			WARN("error removing heartbeat: %s", err)
+			logWarn("error removing heartbeat: %s", err)
 		} else {
 			r.code <- Code{id: closeChannel}
 		}
@@ -267,21 +267,33 @@ func (c *Client) Close() error {
 	for _, p := range c.coordinator.producers {
 		err := c.coordinator.RemoveProducerById(p.(*Producer).ID)
 		if err != nil {
-			WARN("error removing producer: %s", err)
+			logWarn("error removing producer: %s", err)
 		}
 	}
 	for _, cs := range c.coordinator.consumers {
 		err := c.coordinator.RemoveProducerById(cs.(*Consumer).ID)
 		if err != nil {
-			WARN("error removing consumer: %s", err)
+			logWarn("error removing consumer: %s", err)
 		}
 	}
-
+	var err error
 	if c.socket.isOpen() {
 		c.closeHartBeat()
+		res := c.coordinator.NewResponse(commandClose)
+		length := 2 + 2 + 4 + 2
+		var b = bytes.NewBuffer(make([]byte, 0, length))
+		writeProtocolHeader(b, length, int16(uShortEncodeResponseCode(commandClose)), res.correlationid)
+		writeUShort(b, responseCodeOk)
+
+		err = c.socket.writeAndFlush(b.Bytes())
+		if err != nil {
+			logWarn("error during send client close %s", err)
+		}
+		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
+
 	c.socket.shutdown(nil)
-	return nil
+	return err
 }
 
 func (c *Client) DeclarePublisher(streamName string) (*Producer, error) {
@@ -388,20 +400,20 @@ func (c *Client) DeclareSubscriber(streamName string, messagesHandler MessagesHa
 	options.streamName = streamName
 	consumer := c.coordinator.NewConsumer(messagesHandler, options)
 	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
-	if options.offsetSpecification.isOffset() ||
-		options.offsetSpecification.isTimestamp() {
+	if options.Offset.isOffset() ||
+		options.Offset.isTimestamp() {
 		length += 8
 	}
 
-	if options.offsetSpecification.isLastConsumed() {
+	if options.Offset.isLastConsumed() {
 		lastOffset, err := consumer.QueryOffset()
 		if err != nil {
 			_ = c.coordinator.RemoveConsumerById(consumer.ID)
 			return nil, err
 		}
-		options.offsetSpecification.offset = lastOffset
+		options.Offset.offset = lastOffset
 		// here we change the type since typeLastConsumed is not part of the protocol
-		options.offsetSpecification.typeOfs = typeOffset
+		options.Offset.typeOfs = typeOffset
 	}
 	resp := c.coordinator.NewResponse(commandSubscribe, streamName)
 	correlationId := resp.correlationid
@@ -412,11 +424,11 @@ func (c *Client) DeclareSubscriber(streamName string, messagesHandler MessagesHa
 
 	writeString(b, streamName)
 
-	writeShort(b, options.offsetSpecification.typeOfs)
+	writeShort(b, options.Offset.typeOfs)
 
-	if options.offsetSpecification.isOffset() ||
-		options.offsetSpecification.isTimestamp() {
-		writeLong(b, options.offsetSpecification.offset)
+	if options.Offset.isOffset() ||
+		options.Offset.isTimestamp() {
+		writeLong(b, options.Offset.offset)
 	}
 	writeShort(b, 10)
 

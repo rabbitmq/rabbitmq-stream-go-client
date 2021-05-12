@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"net/url"
@@ -20,24 +20,31 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if options == nil {
 		options = NewEnvironmentOptions()
 	}
+	if options.MaxConsumersPerClient == 0 {
+		options.MaxConsumersPerClient = 3
+	}
 
-	if options.LocatorBroker.Uri != "" {
-		u, err := url.Parse(options.LocatorBroker.Uri)
+	if options.MaxProducersPerClient == 0 {
+		options.MaxProducersPerClient = 3
+	}
+
+	if options.ConnectionParameters.Uri != "" {
+		u, err := url.Parse(options.ConnectionParameters.Uri)
 		if err != nil {
 			return nil, err
 		}
-		options.LocatorBroker.User = u.User.Username()
-		options.LocatorBroker.Password, _ = u.User.Password()
-		//options.LocatorBroker.Vhost = u.Path
+		options.ConnectionParameters.User = u.User.Username()
+		options.ConnectionParameters.Password, _ = u.User.Password()
+		//options.ConnectionParameters.Vhost = u.Path
 	}
 
-	client.broker = options.LocatorBroker
+	client.broker = options.ConnectionParameters
 
 	return &Environment{
 		clientLocator: client,
-		producers: newProducers(options.maxProducersPerClient,
+		producers: newProducers(options.MaxProducersPerClient,
 			options.PublishErrorListener),
-		consumers:            newConsumerEnvironment(options.maxConsumersPerClient),
+		consumers:            newConsumerEnvironment(options.MaxConsumersPerClient),
 		PublishErrorListener: options.PublishErrorListener,
 	}, client.connect()
 }
@@ -71,58 +78,59 @@ func (env *Environment) Close() error {
 }
 
 type EnvironmentOptions struct {
-	LocatorBroker         Broker
-	maxProducersPerClient int
-	maxConsumersPerClient int
+	ConnectionParameters  Broker
+	MaxProducersPerClient int
+	MaxConsumersPerClient int
 	PublishErrorListener  PublishErrorListener
 }
 
 func NewEnvironmentOptions() *EnvironmentOptions {
 	return &EnvironmentOptions{
-		maxProducersPerClient: 3,
-		maxConsumersPerClient: 3,
-		LocatorBroker:         newBrokerDefault(),
+		MaxProducersPerClient: 3,
+		MaxConsumersPerClient: 3,
+		ConnectionParameters:  newBrokerDefault(),
 	}
 }
 
-func (envOptions *EnvironmentOptions) MaxProducersPerClient(value int) *EnvironmentOptions {
-	envOptions.maxProducersPerClient = value
+func (envOptions *EnvironmentOptions) SetMaxProducersPerClient(maxProducersPerClient int) *EnvironmentOptions {
+	envOptions.MaxProducersPerClient = maxProducersPerClient
 	return envOptions
 
 }
 
-func (envOptions *EnvironmentOptions) MaxConsumersPerClient(value int) *EnvironmentOptions {
-	envOptions.maxConsumersPerClient = value
+func (envOptions *EnvironmentOptions) SetMaxConsumersPerClient(maxConsumersPerClient int) *EnvironmentOptions {
+	envOptions.MaxConsumersPerClient = maxConsumersPerClient
 	return envOptions
 
 }
 
-func (envOptions *EnvironmentOptions) Uri(uri string) *EnvironmentOptions {
-	envOptions.LocatorBroker.Uri = uri
+func (envOptions *EnvironmentOptions) SetUri(uri string) *EnvironmentOptions {
+	envOptions.ConnectionParameters.Uri = uri
 	return envOptions
 }
 
-func (envOptions *EnvironmentOptions) UserName(user string) *EnvironmentOptions {
-	envOptions.LocatorBroker.User = user
+func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
+	envOptions.ConnectionParameters.User = user
 	return envOptions
 }
 
-func (envOptions *EnvironmentOptions) Password(password string) *EnvironmentOptions {
-	envOptions.LocatorBroker.Password = password
+func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentOptions {
+	envOptions.ConnectionParameters.Password = password
 	return envOptions
 }
 
-func (envOptions *EnvironmentOptions) Host(host string) *EnvironmentOptions {
-	envOptions.LocatorBroker.Host = host
+func (envOptions *EnvironmentOptions) SetHost(host string) *EnvironmentOptions {
+	envOptions.ConnectionParameters.Host = host
 	return envOptions
 }
 
-func (envOptions *EnvironmentOptions) Port(port int) *EnvironmentOptions {
-	envOptions.LocatorBroker.Port = port
+func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
+	envOptions.ConnectionParameters.Port = port
 	return envOptions
 }
 
-func (envOptions *EnvironmentOptions) OnPublishError(publishErrorListener PublishErrorListener) *EnvironmentOptions {
+func (envOptions *EnvironmentOptions) SetPublishErrorListener(
+	publishErrorListener PublishErrorListener) *EnvironmentOptions {
 	envOptions.PublishErrorListener = publishErrorListener
 	return envOptions
 }
@@ -283,7 +291,7 @@ func (cc *enviromentCoordinator) close() error {
 	for _, client := range cc.clientsPerContext {
 		err := client.Close()
 		if err != nil {
-			WARN("Error during close the client, %s", err)
+			logWarn("Error during close the client, %s", err)
 		}
 	}
 	return nil
@@ -338,7 +346,7 @@ func (ps *producersEnvironment) NewProducer(clientLocator *Client, streamName st
 			coordinator.maybeCleanClients()
 		}
 	}
-	producer.publishConfirm = producerOptions.publishConfirm
+	producer.publishConfirm = producerOptions.PublishConfirmHandler
 
 	return producer, err
 }

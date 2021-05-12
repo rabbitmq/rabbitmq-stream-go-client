@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"bufio"
@@ -32,7 +32,7 @@ func (sck *socket) shutdown(err error) {
 		defer sck.mutex.Unlock()
 		err := sck.connection.Close()
 		if err != nil {
-			WARN("error during close socket: %s", err)
+			logWarn("error during close socket: %s", err)
 		}
 	})
 

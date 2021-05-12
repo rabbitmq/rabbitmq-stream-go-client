@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"fmt"
@@ -60,7 +60,7 @@ var _ = Describe("Coordinator", func() {
 				err := client.coordinator.RemoveProducerById(v)
 				Expect(err).NotTo(HaveOccurred())
 				err = client.coordinator.RemoveProducerById(v)
-				// raise an error not found
+				// raise an logError not found
 				Expect(err).To(HaveOccurred())
 
 				p, err := client.coordinator.NewProducer(nil)

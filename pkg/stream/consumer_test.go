@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"context"
@@ -54,7 +54,7 @@ var _ = Describe("Streaming Consumers", func() {
 	})
 
 	It("Multi Consumers per client", func() {
-		env, err := NewEnvironment(NewEnvironmentOptions().MaxConsumersPerClient(2))
+		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxConsumersPerClient(2))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
@@ -78,7 +78,7 @@ var _ = Describe("Streaming Consumers", func() {
 	})
 
 	It("Subscribe and Unsubscribe", func() {
-		env, err := NewEnvironment(NewEnvironmentOptions().MaxConsumersPerClient(2))
+		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxConsumersPerClient(2))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
@@ -94,7 +94,8 @@ var _ = Describe("Streaming Consumers", func() {
 	})
 
 	It("Subscribe/Unsubscribe count messages", func() {
-		env, err := NewEnvironment(NewEnvironmentOptions().MaxConsumersPerClient(2))
+		env, err := NewEnvironment(
+			NewEnvironmentOptions().SetMaxConsumersPerClient(2))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
@@ -112,16 +113,32 @@ var _ = Describe("Streaming Consumers", func() {
 		consumer, err := env.NewConsumer(streamName,
 			func(Context ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesCount, 1)
-			}, NewConsumerOptions().Offset(OffsetSpecification{}.First()))
+				_ = Context.Consumer.Commit()
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(107)))
 		err = consumer.UnSubscribe()
 		Expect(err).NotTo(HaveOccurred())
+
+		atomic.SwapInt32(&messagesCount, 0)
+		consumer, err = env.NewConsumer(streamName,
+			func(Context ConsumerContext, message *amqp.Message) {
+				atomic.AddInt32(&messagesCount, 1)
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.LastConsumed()).
+				SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(0)))
+		err = consumer.UnSubscribe()
+		Expect(err).NotTo(HaveOccurred())
+		err = env.Close()
+		Expect(err).NotTo(HaveOccurred())
+
 	})
 
-	It("Subscribe/Unsubscribe count messages Offset", func() {
-		env, err := NewEnvironment(NewEnvironmentOptions().MaxConsumersPerClient(2))
+	It("Subscribe/Unsubscribe count messages SetOffset", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxConsumersPerClient(2))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
@@ -139,7 +156,7 @@ var _ = Describe("Streaming Consumers", func() {
 		consumer, err := env.NewConsumer(streamName,
 			func(Context ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesCount, 1)
-			}, NewConsumerOptions().Offset(OffsetSpecification{}.Offset(50)))
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.Offset(50)))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(68)))
@@ -148,9 +165,9 @@ var _ = Describe("Streaming Consumers", func() {
 	})
 
 	//
-	//It("Subscribe Count MessagesHandler Offset", func() {
+	//It("Subscribe Count MessagesHandler SetOffset", func() {
 	//
-	//	producer, err := testEnviroment.ProducerCreator().
+	//	producer, err := testEnvironment.ProducerCreator().
 	//		Stream(testConsumerStream).Build()
 	//	Expect(err).NotTo(HaveOccurred())
 	//
@@ -161,10 +178,10 @@ var _ = Describe("Streaming Consumers", func() {
 	//
 	//	}
 	//	//var countOffsetTime int32
-	//	//consumerOffsetTime, err := testEnviroment.ConsumerOptions().
+	//	//consumerOffsetTime, err := testEnvironment.ConsumerOptions().
 	//	//	Stream(testConsumerStream).
-	//	//	Name("my_consumer").
-	//	//	Offset(OffsetSpecification{}.Timestamp(time.Now().Add(0*time.Second).Unix() * 1000)).
+	//	//	SetConsumerName("my_consumer").
+	//	//	SetOffset(Offset{}.Timestamp(time.Now().Add(0*time.Second).Unix() * 1000)).
 	//	//	MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
 	//	//		atomic.AddInt32(&countOffsetTime, 1)
 	//	//
@@ -175,10 +192,10 @@ var _ = Describe("Streaming Consumers", func() {
 	//	//Expect(atomic.LoadInt32(&countOffsetTime)).Should(BeNumerically(">", int32(20)))
 	//
 	//	var countOffset int32
-	//	consumerOffSet, err := testEnviroment.ConsumerOptions().
+	//	consumerOffSet, err := testEnvironment.ConsumerOptions().
 	//		Stream(testConsumerStream).
-	//		Name("my_consumer").
-	//		Offset(OffsetSpecification{}.Offset(30)).
+	//		SetConsumerName("my_consumer").
+	//		SetOffset(Offset{}.SetOffset(30)).
 	//		MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
 	//			atomic.AddInt32(&countOffset, 1)
 	//			_ = context.Consumer.Commit()
@@ -194,10 +211,10 @@ var _ = Describe("Streaming Consumers", func() {
 	//	Expect(err).NotTo(HaveOccurred())
 	//	countOffset = 0
 	//
-	//	consumerLastConsumed, errLast := testEnviroment.ConsumerOptions().
+	//	consumerLastConsumed, errLast := testEnvironment.ConsumerOptions().
 	//		Stream(testConsumerStream).
-	//		Name("my_consumer").
-	//		Offset(OffsetSpecification{}.LastConsumed()).
+	//		SetConsumerName("my_consumer").
+	//		SetOffset(Offset{}.LastConsumed()).
 	//		MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
 	//			atomic.AddInt32(&countOffset, 1)
 	//			err := context.Consumer.Commit()
@@ -212,10 +229,10 @@ var _ = Describe("Streaming Consumers", func() {
 	//	Expect(err).NotTo(HaveOccurred())
 	//
 	//	countOffset = 0
-	//	consumerFirst, errFirst := testEnviroment.ConsumerOptions().
+	//	consumerFirst, errFirst := testEnvironment.ConsumerOptions().
 	//		Stream(testConsumerStream).
-	//		Name("my_consumer").
-	//		Offset(OffsetSpecification{}.First()).
+	//		SetConsumerName("my_consumer").
+	//		SetOffset(Offset{}.First()).
 	//		MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
 	//			atomic.AddInt32(&countOffset, 1)
 	//			err := context.Consumer.Commit()
@@ -237,9 +254,9 @@ var _ = Describe("Streaming Consumers", func() {
 	//})
 	//
 	//It("Subscribe stream not found", func() {
-	//	consumer, err := testEnviroment.ConsumerOptions().
+	//	consumer, err := testEnvironment.ConsumerOptions().
 	//		Stream("StreamNotExist").
-	//		Name("my_consumer").
+	//		SetConsumerName("my_consumer").
 	//		MessagesHandler(func(context ConsumerContext, message *amqp.Message) {
 	//
 	//		}).Build()
