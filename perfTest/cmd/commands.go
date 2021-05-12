@@ -3,10 +3,18 @@ package cmd
 import (
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/streaming"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/spf13/cobra"
+	"log"
 	"os"
 )
+
+func logInfo(message string, v ...interface{}) {
+	log.Printf(fmt.Sprintf("[info] - %s", message), v...)
+}
+func logError(message string, v ...interface{}) {
+	log.Printf(fmt.Sprintf("[error] - %s", message), v...)
+}
 
 var rootCmd = &cobra.Command{
 	Use:           "PerfTest",
