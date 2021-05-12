@@ -49,7 +49,7 @@ env, err := stream.NewEnvironment(
             )
 ```
 or using Builders as:
-```
+```golang
 env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
