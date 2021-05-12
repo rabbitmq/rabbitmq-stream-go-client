@@ -8,64 +8,63 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
 ### Download
 ---
 ```
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.3-alpha
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.4-alpha
 ```
 
-### How to test
+### Getting started
 ---
 - Run RabbitMQ docker image with streaming:
    ```
    docker run -it --rm --name rabbitmq -p 5551:5551 -p 5672:5672 -p 15672:15672 \
    -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
    pivotalrabbitmq/rabbitmq-stream
- 
   ```
-- Run getting started example:
+- Run "getting started" example:
   ```
    go run examples/getting_started.go
   ```
-### Performance Test
----
-The performance tool is work in progress, you can use it with docker
-```
-docker run --network host -it pivotalrabbitmq/go-stream-perf-test silent 
-```
 
-or directly 
+### Performance test tool is an easy way to do some test:
 ```
-go run perfTest/perftest.go 
+go run perfTest/perftest.go silent
 ```
-
-
-
 
 ### API
 ---
 
+The API are generally composed by mandatory arguments and optional arguments
+the optional arguments can be set in the standard go way as:
 ```golang
-client, err := streaming.NewClientCreator().Uri(uris).Connect() // Create and Connect a client
+env, err := stream.NewEnvironment(
+            &stream.EnvironmentOptions{
+                    ConnectionParameters:  stream.Broker{
+                    Host:     "localhost",
+                    Port:     5551,
+                    User:     "guest",
+                    Password: "guest",
+                },
+                MaxProducersPerClient: 3,
+                MaxConsumersPerClient: 3,
+                },
+            )
+```
+or using Builders as:
+```
+env, err := stream.NewEnvironment(
+		stream.NewEnvironmentOptions().
+			SetHost("localhost").
+			SetPort(5551).
+			SetUser("guest").
+			SetPassword("guest"))
 ```
 
+`nil` is also a valid value, default values will be provided:
 ```golang
-err = client.StreamCreator().Stream(streamName).Create() // Create streaming queue without parameters
-err = client.StreamCreator().Stream(streamName).MaxAge(120 * time.Hour).Create() // Create streaming queue with Max Age
-err = client.StreamCreator().Stream(streamName).MaxLengthBytes(streaming.ByteCapacity{}.B(5)).Create() // Create streaming queue 5 GB max lenght
+env, err := stream.NewEnvironment(nil) 
 ```
 
-```golang
-/// Implement a consumer
-consumer, err := client.ConsumerCreator().
-		Stream(streamName).
-		Name("my_consumer").
-		MessagesHandler(func(context streaming.ConsumerContext, message *amqp.Message) {
-			fmt.Printf("received %d, message %s \n", context.Consumer.ID, message.Data)
-		}).Build()
-```
+The suggested way is to use builders.
 
-```golang
-/// get a producer
-producer, err := client.ProducerCreator().Stream(streamName).Build()
-```
 
 ### Build from source
 ---
@@ -74,20 +73,15 @@ producer, err := client.ProducerCreator().Stream(streamName).Build()
 make build
 ```
 
+You need a docker image running to execute the tests in this way:
+```
+ docker run -it --rm --name rabbitmq -p 5551:5551 \
+   -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
+   pivotalrabbitmq/rabbitmq-stream
+```
 
-### Methods Implemented:
----
- - Open(vhost)
- - CreateStream
- - DeleteStream
- - DeclarePublisher
- - Close Publisher
- - Publish
- - Subscribe 
- - Commit   
- - UnSubscribe
- - HeartBeat
- 
+
+
  ### Project status
  ---
  The client is a work in progress, the API(s) could change

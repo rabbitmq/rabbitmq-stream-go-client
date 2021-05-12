@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"

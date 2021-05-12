@@ -1,0 +1,42 @@
+version: "3"
+services:
+  rabbit_node_1:
+    environment:
+      - RABBITMQ_ERLANG_COOKIE='secret_cookie'
+    networks:
+      - back
+    hostname: rabbit_node_1
+    image: pivotalrabbitmq/rabbitmq-stream
+    ports:
+      - "15672:15672"
+      - "5551:5551"
+    tty: true
+    volumes:
+#      - rabbit1:/var/lib/rabbitmq
+      - ./conf/:/etc/rabbitmq/
+#    command:  bash -c "sleep 10; rabbitmq-server;"
+  rabbit_node_2:
+    environment:
+      - RABBITMQ_ERLANG_COOKIE='secret_cookie'
+    networks:
+      - back
+    hostname: rabbit_node_2
+    depends_on:
+      - rabbit_node_1
+    image: pivotalrabbitmq/rabbitmq-stream
+    ports:
+      - "15673:15672"
+      - "5552:5551"
+    tty: true
+    volumes:
+#      - rabbit2:/var/lib/rabbitmq
+      - ./conf/:/etc/rabbitmq/
+#    command:  bash -c "sleep 10; rabbitmq-server;"
+#volumes:
+#  rabbit1:
+#    driver: local
+#  rabbit2:
+#    driver: local
+
+networks:
+  back:

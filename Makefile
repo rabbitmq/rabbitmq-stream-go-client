@@ -10,8 +10,9 @@ LDFLAGS = "-X main.Version=$(VERSION)"
 
 all: test build
 
-vet:
-	go vet ./...
+
+vet: $(go_sources)
+	go vet ./pkg/stream
 
 fmt:
 	go fmt ./...
@@ -20,10 +21,13 @@ STATICCHECK ?= $(GOBIN)/staticcheck
 $(STATICCHECK):
 	go get honnef.co/go/tools/cmd/staticcheck
 check: $(STATICCHECK)
-	$(STATICCHECK) ./pkg/streaming
+	$(STATICCHECK) ./pkg/stream
 
 test: vet fmt check
-	go test -v  ./pkg/streaming -race -coverprofile=coverage.txt -covermode=atomic
+	go test -v  ./pkg/stream -race -coverprofile=coverage.txt -covermode=atomic
+
+integration-test: vet fmt check
+	go test -v  ./pkg/system_integration -race -coverprofile=coverage.txt -covermode=atomic -tags debug
 
 build: vet fmt check
 	go build -ldflags=$(LDFLAGS) -v ./...

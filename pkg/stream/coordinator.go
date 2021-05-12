@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"fmt"
@@ -21,10 +21,11 @@ type Code struct {
 }
 
 type Response struct {
-	code          chan Code
-	data          chan interface{}
-	messages      chan []*amqp.Message
-	correlationid int
+	code               chan Code
+	data               chan interface{}
+	messages           chan []*amqp.Message
+	commandDescription string
+	correlationid      int
 }
 
 func NewCoordinator() *Coordinator {
@@ -34,8 +35,8 @@ func NewCoordinator() *Coordinator {
 		responses: make(map[interface{}]interface{})}
 }
 
-// producers
-func (coordinator *Coordinator) NewProducer(parameters *ProducerCreator) (*Producer, error) {
+// producersEnvironment
+func (coordinator *Coordinator) NewProducer(parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, err = coordinator.getNextFreeId(coordinator.producers)
@@ -43,7 +44,7 @@ func (coordinator *Coordinator) NewProducer(parameters *ProducerCreator) (*Produ
 		return nil, err
 	}
 	var producer = &Producer{ID: lastId,
-		parameters: parameters}
+		options: parameters}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }
@@ -64,8 +65,9 @@ func (coordinator *Coordinator) ProducersCount() int {
 }
 
 /// response
-func NewResponse() *Response {
+func newResponse(commandDescription string) *Response {
 	res := &Response{}
+	res.commandDescription = commandDescription
 	res.code = make(chan Code)
 	res.data = make(chan interface{})
 	res.messages = make(chan []*amqp.Message, 100)
@@ -75,18 +77,23 @@ func NewResponse() *Response {
 func (coordinator *Coordinator) NewResponseWitName(id string) *Response {
 	coordinator.mutex.Lock()
 	coordinator.counter++
-	res := NewResponse()
+	res := newResponse(id)
 	res.correlationid = coordinator.counter
 	coordinator.responses[id] = res
 	coordinator.mutex.Unlock()
 	return res
 }
 
-func (coordinator *Coordinator) NewResponse() *Response {
+func (coordinator *Coordinator) NewResponse(commandId uint16, info ...string) *Response {
+	description := lookUpCommand(commandId)
+	if len(info) > 0 {
+		description = fmt.Sprintf("%s, - %s", description, info[0])
+	}
+
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	coordinator.counter++
-	res := NewResponse()
+	res := newResponse(description)
 	res.correlationid = coordinator.counter
 	coordinator.responses[strconv.Itoa(coordinator.counter)] = res
 	return res
@@ -122,12 +129,15 @@ func (coordinator *Coordinator) ResponsesCount() int {
 }
 
 /// Consumer functions
-func (coordinator *Coordinator) NewConsumer(parameters *ConsumerCreator) *Consumer {
+func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler, parameters *ConsumerOptions) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
-	var item = &Consumer{ID: lastId, parameters: parameters,
-		response: NewResponse(), mutex: &sync.RWMutex{}}
+	var item = &Consumer{ID: lastId, options: parameters,
+		response: newResponse(lookUpCommand(commandSubscribe)), mutex: &sync.RWMutex{},
+		messagesHandler: messagesHandler,
+	}
+
 	coordinator.consumers[lastId] = item
 	return item
 }
@@ -152,13 +162,21 @@ func (coordinator *Coordinator) ConsumersCount() int {
 	return coordinator.count(coordinator.consumers)
 }
 
+func (coordinator *Coordinator) GetProducerById(id interface{}) (*Producer, error) {
+	v, err := coordinator.getById(id, coordinator.producers)
+	if err != nil {
+		return nil, err
+	}
+	return v.(*Producer), err
+}
+
 // general functions
 
 func (coordinator *Coordinator) getById(id interface{}, refmap map[interface{}]interface{}) (interface{}, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	if refmap[id] == nil {
-		return nil, errors.New("Item #{id} not found ")
+		return nil, errors.New("item #{id} not found ")
 	}
 	return refmap[id], nil
 }
@@ -191,7 +209,7 @@ func (coordinator *Coordinator) getNextFreeId(refmap map[interface{}]interface{}
 	}
 	if result >= ^uint8(0) {
 		return 0, errors.New("No more items available")
-		// TODO HANDLE THE ERROR
+		// TODO HANDLE THE error
 	}
 	return result, nil
 }

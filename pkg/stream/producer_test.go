@@ -1,4 +1,4 @@
-package streaming
+package stream
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -15,26 +16,32 @@ var testProducerStream string
 var _ = Describe("Streaming Producers", func() {
 
 	BeforeEach(func() {
+		time.Sleep(200 * time.Millisecond)
+	})
+	AfterEach(func() {
+	})
+
+	BeforeEach(func() {
 		testProducerStream = uuid.New().String()
-		err := testClient.StreamCreator().Stream(testProducerStream).Create()
+		err := testEnvironment.DeclareStream(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 	})
 	AfterEach(func() {
-		err := testClient.DeleteStream(testProducerStream)
+		err := testEnvironment.DeleteStream(testProducerStream)
 		Expect(err).NotTo(HaveOccurred())
 
 	})
 
 	It("NewProducer/Close Publisher", func() {
-		producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("NewProducer/Publish/UnSubscribe Publisher", func() {
-		producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
@@ -45,13 +52,13 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Multi-thread NewProducer/Publish/UnSubscribe", func() {
+	It("Multi-thread NewProducer/Publish", func() {
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
 				defer wg.Done()
-				producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
+				producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
@@ -66,20 +73,33 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("Not found NotExistingStream", func() {
-		producer, err := testClient.ProducerCreator().Stream("notExistingStream").Build()
+		_, err := testEnvironment.NewProducer("notExistingStream", nil)
 		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("Stream does not exist"))
+			To(ContainSubstring("leader error for stream"))
+	})
+
+	It("Publish Confirmation", func() {
+		var messagesCount int32 = 0
+		producer, err := testEnvironment.NewProducer(testProducerStream, NewProducerOptions().SetPublishConfirmHandler(func(ch <-chan []int64) {
+			ids := <-ch
+			atomic.AddInt32(&messagesCount, int32(len(ids)))
+		}))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(107))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(100 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(107)))
+
 		err = producer.Close()
-		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("Code publisher does not exist"))
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	//It("PublishError handler", func() {
-	//	producer, err := testClient.ProducerCreator().Stream(testProducerStream).Build()
+	//	producer, err := testEnvironment.ProducerOptions().Stream(testProducerStream).Build()
 	//	Expect(err).NotTo(HaveOccurred())
 	//	//countPublishError := int32(0)
-	//	testClient.PublishErrorListener = func(publisherId uint8, publishingId int64, code uint16) {
-	//		errString := LookErrorCode(code)
+	//	testEnvironment.PublishErrorListener = func(publisherId uint8, publishingId int64, code uint16) {
+	//		errString := lookErrorCode(code)
 	//		//atomic.AddInt32(&countPublishError, 1)
 	//		Expect(errString).
 	//			To(ContainSubstring("Code publisher does not exist"))
@@ -89,7 +109,7 @@ var _ = Describe("Streaming Producers", func() {
 	//	//_, err = producer.BatchPublish(nil, CreateArrayMessagesForTesting(2)) // batch send
 	//	time.Sleep(700 * time.Millisecond)
 	//
-	//	testClient.PublishErrorListener = nil
+	//	testEnvironment.PublishErrorListener = nil
 	//	//Expect(atomic.LoadInt32(&countPublishError)).To(Equal(int32(2)))
 	//
 	//})
