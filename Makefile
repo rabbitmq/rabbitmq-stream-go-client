@@ -32,9 +32,9 @@ integration-test: vet fmt check
 build: vet fmt check
 	go build -ldflags=$(LDFLAGS) -v ./...
 
-PERFTEST_FLAGS ?= silent -p 1 -c 1
+PERFTEST_FLAGS ?= --producers 1 --consumers 1
 perf-test-run: perf-test-build
-	go run perfTest/perftest.go $(PERFTEST_FLAGS)
+	go run perfTest/perftest.go silent $(PERFTEST_FLAGS)
 
 perf-test-build: vet fmt check
 	go build -ldflags=$(LDFLAGS) -o bin/perfTest perfTest/perftest.go
