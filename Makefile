@@ -47,7 +47,7 @@ perf-test-docker-build: perf-test-build
 perf-test-docker-push: perf-test-docker-build
 	docker push pivotalrabbitmq/go-stream-perf-test:$(VERSION)
 
-rabbitmq-broker:
+rabbitmq-server:
 	docker run -it --rm --name rabbitmq-stream-go-client-test \
 		-p 5551:5551 -p 5672:5672 -p 15672:15672 \
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
