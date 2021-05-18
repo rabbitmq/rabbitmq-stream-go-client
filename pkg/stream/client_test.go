@@ -69,6 +69,32 @@ var _ = Describe("Streaming testEnvironment", func() {
 			To(ContainSubstring("Invalid unit size format"))
 	})
 
+	It("Create Stream with parameter SetMaxSegmentSizeBytes", func() {
+		streamP := uuid.New().String()
+
+		err := testEnvironment.DeclareStream(streamP,
+			&StreamOptions{
+				MaxSegmentSizeBytes: ByteCapacity{}.MB(100),
+			},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		err = testEnvironment.DeleteStream(streamP)
+		Expect(err).NotTo(HaveOccurred())
+
+	})
+
+	It("Create Stream with parameter SetMaxSegmentSizeBytes Error", func() {
+		streamP := uuid.New().String()
+
+		err := testEnvironment.DeclareStream(streamP,
+			&StreamOptions{
+				MaxSegmentSizeBytes: ByteCapacity{}.From("not_a_valid_value"),
+			})
+
+		Expect(fmt.Sprintf("%s", err)).
+			To(ContainSubstring("Invalid unit size format"))
+	})
+
 	It("Create Stream with parameter SetMaxAge", func() {
 		streamP := uuid.New().String()
 		err := testEnvironment.DeclareStream(streamP,

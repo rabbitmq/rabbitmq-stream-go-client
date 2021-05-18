@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/spf13/cobra"
 	"log"
@@ -24,20 +23,21 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	rabbitmqBrokerUrl  string
-	producers          int
-	consumers          int
-	producersPerClient int
-	consumersPerClient int
-	preDeclared        bool
-	streams            []string
-	maxLengthBytes     string
-	printStatsV        bool
-	rate               int
-	variableRate       int
-	variableBody       int
-	batchSize          int
-	exitOnError        bool
+	rabbitmqBrokerUrl   string
+	publishers          int
+	consumers           int
+	publishersPerClient int
+	consumersPerClient  int
+	preDeclared         bool
+	streams             []string
+	maxLengthBytes      string
+	maxSegmentSizeBytes string
+	printStatsV         bool
+	rate                int
+	variableRate        int
+	variableBody        int
+	batchSize           int
+	exitOnError         bool
 )
 
 func init() {
@@ -46,19 +46,20 @@ func init() {
 
 func setupCli(baseCmd *cobra.Command) {
 	batchSize = 100
-	baseCmd.PersistentFlags().StringVarP(&rabbitmqBrokerUrl, "uris", "u", stream.LocalhostUriConnection, "Broker URL")
-	baseCmd.PersistentFlags().IntVarP(&producers, "producers", "p", 1, "Number of Producers")
-	baseCmd.PersistentFlags().IntVarP(&consumers, "consumers", "c", 1, "Number of Consumers")
-	baseCmd.PersistentFlags().IntVarP(&producersPerClient, "producers-per-client", "k", 13, "producers Per Client")
-	baseCmd.PersistentFlags().IntVarP(&consumersPerClient, "consumers-per-client", "j", 15, "consumers Per Client")
-	baseCmd.PersistentFlags().IntVarP(&rate, "rate", "r", 0, "Limit publish rate")
-	baseCmd.PersistentFlags().IntVarP(&variableRate, "variable-rate", "v", 0, "Variable rate to value")
-	baseCmd.PersistentFlags().IntVarP(&variableBody, "variable-body", "b", 0, "Variable body size")
-	baseCmd.PersistentFlags().BoolVarP(&preDeclared, "pre-declared", "d", false, "Pre created stream")
-	baseCmd.PersistentFlags().BoolVarP(&exitOnError, "exit-on-error", "x", true, "Close the app in case of error")
-	baseCmd.PersistentFlags().BoolVarP(&printStatsV, "print-stats", "n", true, "Print stats")
-	baseCmd.PersistentFlags().StringSliceVarP(&streams, "streams", "s", []string{uuid.New().String()}, "Stream names, create an UUID if not specified")
-	baseCmd.PersistentFlags().StringVarP(&maxLengthBytes, "max_length_bytes", "m", "", "Stream max length bytes, default is unlimited, ex: 10MB,50GB, etc..")
+	baseCmd.PersistentFlags().StringVarP(&rabbitmqBrokerUrl, "uris", "", stream.LocalhostUriConnection, "Broker URL")
+	baseCmd.PersistentFlags().IntVarP(&publishers, "publishers", "", 1, "Number of Publishers")
+	baseCmd.PersistentFlags().IntVarP(&consumers, "consumers", "", 1, "Number of Consumers")
+	baseCmd.PersistentFlags().IntVarP(&publishersPerClient, "publishers-per-client", "", 10, "Publishers Per Client")
+	baseCmd.PersistentFlags().IntVarP(&consumersPerClient, "consumers-per-client", "", 10, "Consumers Per Client")
+	baseCmd.PersistentFlags().IntVarP(&rate, "rate", "", 0, "Limit publish rate")
+	baseCmd.PersistentFlags().IntVarP(&variableRate, "variable-rate", "", 0, "Variable rate to value")
+	baseCmd.PersistentFlags().IntVarP(&variableBody, "variable-body", "", 0, "Variable body size")
+	baseCmd.PersistentFlags().BoolVarP(&preDeclared, "pre-declared", "", false, "Pre created stream")
+	baseCmd.PersistentFlags().BoolVarP(&exitOnError, "exit-on-error", "", true, "Close the app in case of error")
+	baseCmd.PersistentFlags().BoolVarP(&printStatsV, "print-stats", "", true, "Print stats")
+	baseCmd.PersistentFlags().StringSliceVarP(&streams, "streams", "", []string{"perf-test-go"}, "Stream names")
+	baseCmd.PersistentFlags().StringVarP(&maxLengthBytes, "max-length-bytes", "", "1GB", "Stream max length bytes, e.g. 10MB, 50GB, etc.")
+	baseCmd.PersistentFlags().StringVarP(&maxSegmentSizeBytes, "max-segment-size-bytes", "", "500MB", "Stream segment size bytes, e.g. 10MB, 1GB, etc.")
 	baseCmd.AddCommand(versionCmd)
 	baseCmd.AddCommand(newSilent())
 }

@@ -6,8 +6,9 @@ import (
 )
 
 type StreamOptions struct {
-	MaxAge         time.Duration
-	MaxLengthBytes *ByteCapacity
+	MaxAge              time.Duration
+	MaxLengthBytes      *ByteCapacity
+	MaxSegmentSizeBytes *ByteCapacity
 }
 
 func (s *StreamOptions) SetMaxAge(maxAge time.Duration) *StreamOptions {
@@ -17,6 +18,11 @@ func (s *StreamOptions) SetMaxAge(maxAge time.Duration) *StreamOptions {
 
 func (s *StreamOptions) SetMaxLengthBytes(maxLength *ByteCapacity) *StreamOptions {
 	s.MaxLengthBytes = maxLength
+	return s
+}
+
+func (s *StreamOptions) SetMaxSegmentSizeBytes(segmentSize *ByteCapacity) *StreamOptions {
+	s.MaxSegmentSizeBytes = segmentSize
 	return s
 }
 
@@ -30,6 +36,16 @@ func (s StreamOptions) buildParameters() (map[string]string, error) {
 
 		if s.MaxLengthBytes.bytes > 0 {
 			res["max-length-bytes"] = fmt.Sprintf("%d", s.MaxLengthBytes.bytes)
+		}
+	}
+
+	if s.MaxSegmentSizeBytes != nil {
+		if s.MaxSegmentSizeBytes.error != nil {
+			return nil, s.MaxSegmentSizeBytes.error
+		}
+
+		if s.MaxSegmentSizeBytes.bytes > 0 {
+			res["max-segment-size"] = fmt.Sprintf("%d", s.MaxSegmentSizeBytes.bytes)
 		}
 	}
 
