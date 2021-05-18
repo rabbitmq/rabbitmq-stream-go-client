@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/spf13/cobra"
@@ -27,7 +28,8 @@ var (
 	publisherMessageCount int32
 	consumerMessageCount  int32
 	confirmedMessageCount int32
-	connections           []*stream.Client
+	//connections           []*stream.Client
+	simulEnvironment stream.Environment
 )
 
 func printStats() {
@@ -81,9 +83,22 @@ func decodeRate() string {
 }
 
 func startSimulation() error {
+<<<<<<< HEAD
 	logInfo("Silent (%s) Simulation, url: %s publishers: %d consumers: %d streams: %s ", stream.ClientVersion, rabbitmqBrokerUrl, publishers, consumers, streams)
 
 	err := initStreams()
+=======
+	logInfo("Silent (%s) Simulation, url: %s producers: %d consumers: %d streams: %s ", stream.ClientVersion, rabbitmqBrokerUrl, producers, consumers, streams)
+	var err error
+	simulEnvironment, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
+		rabbitmqBrokerUrl).SetMaxProducersPerClient(producersPerClient).SetMaxConsumersPerClient(consumersPerClient))
+	if err != nil {
+		if exitOnError {
+			os.Exit(1)
+		}
+	}
+	err = initStreams()
+>>>>>>> 7a1d563 (gas tests)
 	if err != nil {
 		if exitOnError {
 			os.Exit(1)
@@ -216,20 +231,35 @@ func startPublishers() error {
 	return nil
 }
 
+func consumerCloseHandler(closeEvents <-chan stream.Event) {
+	event := <-closeEvents
+	fmt.Printf("close %s", event)
+}
+
+func startConsumer(consumerName string, streamName string) error {
+	_, err := simulEnvironment.NewConsumer(context.TODO(), streamName, func(Context stream.ConsumerContext, message *amqp.Message) {
+		if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
+			err := Context.Consumer.Commit()
+			if err != nil {
+				logError("Error Commit: %s", err)
+			}
+		}
+	}, consumerCloseHandler,
+		stream.NewConsumerOptions().
+		//SetOffset(stream.OffsetSpecification{}.First()).
+		SetConsumerName(uuid.New().String()))
+
+}
+
 func startConsumers() error {
 	logInfo("Starting %d consumers...", consumers)
-	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
-		rabbitmqBrokerUrl).SetMaxConsumersPerClient(consumersPerClient))
-	if err != nil {
-		logError("Error creating consumer connection: %s", err)
-		logError("ENV %+v", env)
-		return err
-	}
+
 
 	for _, streamName := range streams {
 		for i := 0; i < consumers; i++ {
 			randomSleep()
 			logInfo("Starting consumer number: %d", i)
+<<<<<<< HEAD
 			_, err = env.NewConsumer(
 				streamName,
 				func(Context stream.ConsumerContext, message *amqp.Message) {
@@ -241,9 +271,21 @@ func startConsumers() error {
 					}
 				},
 				stream.NewConsumerOptions().SetConsumerName(fmt.Sprintf("%s-%d", streamName, i)))
+=======
+			_, err := simulEnvironment.NewConsumer(context.TODO(), streamName, func(Context stream.ConsumerContext, message *amqp.Message) {
+				if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
+					err := Context.Consumer.Commit()
+					if err != nil {
+						logError("Error Commit: %s", err)
+					}
+				}
+			}, consumerCloseHandler, stream.NewConsumerOptions().
+				SetOffset(stream.OffsetSpecification{}.First()).
+				SetConsumerName(uuid.New().String()))
+>>>>>>> 7a1d563 (gas tests)
 			if err != nil {
 				logError("Error creating consumer: %s", err)
-				//return err
+				return err
 			}
 
 		}

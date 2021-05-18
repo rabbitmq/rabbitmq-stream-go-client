@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var client = NewClient()
+var client = newClient("test-client")
 var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
@@ -98,12 +98,17 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete consumers ", func() {
 			var consumersId []uint8
 			for i := 0; i < 100; i++ {
-				p := client.coordinator.NewConsumer(nil, nil)
+				p := client.coordinator.NewConsumer(nil, nil, nil)
 				consumersId = append(consumersId, p.ID)
 			}
 			Expect(client.coordinator.ConsumersCount()).To(Equal(100))
 			for _, pid := range consumersId {
-				err := client.coordinator.RemoveConsumerById(pid)
+				err := client.coordinator.RemoveConsumerById(pid, Event{
+					command:    0,
+					streamName: "UNIT_TESTS",
+					name:       "",
+					err:        nil,
+				})
 				Expect(err).NotTo(HaveOccurred())
 			}
 			Expect(client.coordinator.ConsumersCount()).To(Equal(0))

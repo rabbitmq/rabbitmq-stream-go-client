@@ -3,6 +3,7 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -33,12 +34,15 @@ type Client struct {
 	metadataListener     metadataListener
 }
 
-func NewClient() *Client {
-	return &Client{
-		coordinator: NewCoordinator(),
-		broker:      newBrokerDefault(),
-		destructor:  &sync.Once{},
+func newClient(connectionName string) *Client {
+	c := &Client{
+		coordinator:      NewCoordinator(),
+		broker:           newBrokerDefault(),
+		destructor:       &sync.Once{},
+		clientProperties: ClientProperties{items: make(map[string]string)},
 	}
+	c.setConnectionName(connectionName)
+	return c
 }
 
 func (c *Client) connect() error {
@@ -51,7 +55,6 @@ func (c *Client) connect() error {
 
 	c.tuneState.requestedHeartbeat = 60
 	c.tuneState.requestedMaxFrameSize = 1048576
-	c.clientProperties.items = make(map[string]string)
 	resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		logDebug("%s", err)
@@ -77,7 +80,7 @@ func (c *Client) connect() error {
 		writer:     bufio.NewWriter(connection),
 		destructor: &sync.Once{},
 	}
-	c.socket.SetConnect(true)
+	c.socket.setOpen()
 
 	go c.handleResponse()
 	err2 = c.peerProperties()
@@ -108,10 +111,13 @@ func (c *Client) connect() error {
 	return nil
 }
 
+func (c *Client) setConnectionName(connectionName string) {
+	c.clientProperties.items["connection_name"] = connectionName
+}
+
 func (c *Client) peerProperties() error {
 	clientPropertiesSize := 4 // size of the map, always there
 
-	c.clientProperties.items["connection_name"] = "rabbitmq-StreamOptions-locator"
 	c.clientProperties.items["product"] = "RabbitMQ Stream"
 	c.clientProperties.items["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
 	c.clientProperties.items["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
@@ -271,7 +277,12 @@ func (c *Client) Close() error {
 		}
 	}
 	for _, cs := range c.coordinator.consumers {
-		err := c.coordinator.RemoveProducerById(cs.(*Consumer).ID)
+		err := c.coordinator.RemoveConsumerById(cs.(*Consumer).ID, Event{
+			command:    0,
+			streamName: "TEST",
+			name:       "",
+			err:        nil,
+		})
 		if err != nil {
 			logWarn("error removing consumer: %s", err)
 		}
@@ -395,10 +406,13 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 
 }
 
-func (c *Client) DeclareSubscriber(streamName string, messagesHandler MessagesHandler, options *ConsumerOptions) (*Consumer, error) {
+func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
+	messagesHandler MessagesHandler,
+	closeHandler CloseHandler,
+	options *ConsumerOptions) (*Consumer, error) {
 	options.client = c
 	options.streamName = streamName
-	consumer := c.coordinator.NewConsumer(messagesHandler, options)
+	consumer := c.coordinator.NewConsumer(messagesHandler, closeHandler, options)
 	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
 	if options.Offset.isOffset() ||
 		options.Offset.isTimestamp() {
@@ -408,7 +422,12 @@ func (c *Client) DeclareSubscriber(streamName string, messagesHandler MessagesHa
 	if options.Offset.isLastConsumed() {
 		lastOffset, err := consumer.QueryOffset()
 		if err != nil {
-			_ = c.coordinator.RemoveConsumerById(consumer.ID)
+			_ = c.coordinator.RemoveConsumerById(consumer.ID, Event{
+				command:    0,
+				streamName: "TEST_OFFSET",
+				name:       "",
+				err:        nil,
+			})
 			return nil, err
 		}
 		options.Offset.offset = lastOffset
@@ -432,14 +451,14 @@ func (c *Client) DeclareSubscriber(streamName string, messagesHandler MessagesHa
 	}
 	writeShort(b, 10)
 
-	res := c.handleWrite(b.Bytes(), resp)
+	err := c.handleWrite(b.Bytes(), resp)
 
 	go func() {
 		for {
 			select {
 			case code := <-consumer.response.code:
 				if code.id == closeChannel {
-
+					<-ctx.Done()
 					return
 				}
 
@@ -448,10 +467,10 @@ func (c *Client) DeclareSubscriber(streamName string, messagesHandler MessagesHa
 
 			case messages := <-consumer.response.messages:
 				for _, message := range messages {
-					consumer.messagesHandler(ConsumerContext{Consumer: consumer}, message)
+					consumer.MessagesHandler(ConsumerContext{Consumer: consumer}, message)
 				}
 			}
 		}
 	}()
-	return consumer, res
+	return consumer, err
 }

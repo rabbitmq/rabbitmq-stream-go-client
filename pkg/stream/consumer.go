@@ -14,10 +14,11 @@ type Consumer struct {
 	options         *ConsumerOptions
 	onClose         onClose
 	mutex           *sync.RWMutex
-	messagesHandler MessagesHandler
+	MessagesHandler MessagesHandler
+	CloseHandler    CloseHandler
 }
 
-func (consumer *Consumer) GetStream() string {
+func (consumer *Consumer) GetStreamName() string {
 	return consumer.options.streamName
 }
 
@@ -37,7 +38,7 @@ type ConsumerContext struct {
 	Consumer *Consumer
 }
 
-type MessagesHandler func(Context ConsumerContext, message *amqp.Message)
+type MessagesHandler func(consumerContext ConsumerContext, message *amqp.Message)
 
 type ConsumerOptions struct {
 	client       *Client
@@ -94,7 +95,12 @@ func (consumer *Consumer) UnSubscribe() error {
 	writeByte(b, consumer.ID)
 	err := consumer.options.client.handleWrite(b.Bytes(), resp)
 	consumer.response.code <- Code{id: closeChannel}
-	errC := consumer.options.client.coordinator.RemoveConsumerById(consumer.ID)
+	errC := consumer.options.client.coordinator.RemoveConsumerById(consumer.ID, Event{
+		command:    0,
+		streamName: "TEST_UNSUBSCRIBE",
+		name:       "",
+		err:        nil,
+	})
 	if errC != nil {
 		logWarn("Error during remove consumer id:%s", errC)
 	}

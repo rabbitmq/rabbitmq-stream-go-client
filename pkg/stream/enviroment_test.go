@@ -120,7 +120,7 @@ var _ = Describe("Environment test", func() {
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
 		Expect(len(env.producers.getCoordinators()["localhost:5551"].
-			getClientsPerContext())).To(Equal(5))
+			getClientsPerContext())).To(Equal(4))
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))

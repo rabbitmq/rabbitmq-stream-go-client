@@ -33,7 +33,7 @@ func (c *ProducerOptions) SetPublishConfirmHandler(publishConfirmHandler Publish
 
 func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) (int, error) {
 	if len(batchMessages) > 1000 {
-		return 0, fmt.Errorf("%s", "too many batchMessages")
+		return 0, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
 	}
 
 	frameHeaderLength := 2 + 2 + 1 + 4

@@ -56,7 +56,6 @@ func main() {
 
 	CheckErr(err)
 
-	//Define a producer to a stream, optional publish confirmation
 	producer, err := env.NewProducer(streamName,
 		stream.NewProducerOptions().SetPublishConfirmHandler(func(ch <-chan []int64) {
 			messagesIds := <-ch
@@ -66,32 +65,27 @@ func main() {
 	CheckErr(err)
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
-	for i := 0; i < 2; i++ {
-		_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(10))
-		CheckErr(err)
+	go func() {
+		for i := 0; i < 100; i++ {
+			_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(10))
+			CheckErr(err)
+			time.Sleep(1 * time.Second)
+		}
+	}()
+
+	messagesHandler := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		fmt.Printf("consumer id: %d, text: %s time:%s\n ", consumerContext.Consumer.ID, message.Data, time.Now().String())
 	}
 
-	// this sleep is not mandatory, just to show the confirmed messages
-	time.Sleep(1 * time.Second)
-	err = producer.Close()
-	CheckErr(err)
-
-	// Define a consumer per stream, there are different offset options to define a consumer, default is
-	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.Message) {
-	//
-	//}, nil)
-	// if you need to track the offset you need a consumer name like:
-	consumer, err := env.NewConsumer(context.TODO(), streamName, func(Context stream.ConsumerContext, message *amqp.Message) {
-		fmt.Printf("consumer id: %d, text: %s \n ", Context.Consumer.ID, message.Data)
-	}, stream.NewConsumerOptions().
-		SetConsumerName("my_consumer").                  // gives a name
-		SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
+	consumer, err := env.NewConsumer(context.Background(), "streamNamea", messagesHandler,
+		stream.NewConsumerOptions().
+			SetConsumerName("my_consumer").                  // gives a name
+			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	err = consumer.UnSubscribe()
 	CheckErr(err)
-	err = env.Close()
-	CheckErr(err)
+
 }

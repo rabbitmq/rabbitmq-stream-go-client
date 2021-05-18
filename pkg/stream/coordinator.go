@@ -49,7 +49,22 @@ func (coordinator *Coordinator) NewProducer(parameters *ProducerOptions) (*Produ
 	return producer, err
 }
 
-func (coordinator *Coordinator) RemoveConsumerById(id interface{}) error {
+func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event) error {
+	consumer, err := coordinator.GetConsumerById(id)
+	if err != nil {
+		return err
+	}
+
+	if consumer.CloseHandler != nil {
+		closeEvents := make(chan Event, 1)
+		closeEvents <- Event{
+			command:    0,
+			streamName: "test",
+			name:       "test",
+			err:        nil,
+		}
+		consumer.CloseHandler(closeEvents)
+	}
 	return coordinator.removeById(id, coordinator.consumers)
 }
 func (coordinator *Coordinator) RemoveProducerById(id uint8) error {
@@ -129,13 +144,15 @@ func (coordinator *Coordinator) ResponsesCount() int {
 }
 
 /// Consumer functions
-func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler, parameters *ConsumerOptions) *Consumer {
+func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
+	closeHandler CloseHandler, parameters *ConsumerOptions) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
 	var item = &Consumer{ID: lastId, options: parameters,
 		response: newResponse(lookUpCommand(commandSubscribe)), mutex: &sync.RWMutex{},
-		messagesHandler: messagesHandler,
+		CloseHandler:    closeHandler,
+		MessagesHandler: messagesHandler,
 	}
 
 	coordinator.consumers[lastId] = item
@@ -185,7 +202,7 @@ func (coordinator *Coordinator) removeById(id interface{}, refmap map[interface{
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	if refmap[id] == nil {
-		return errors.New("item #{id} not found ")
+		return fmt.Errorf("remove failed, id %d not found", id)
 	}
 	refmap[id] = nil
 	delete(refmap, id)
