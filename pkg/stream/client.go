@@ -20,18 +20,14 @@ type ClientProperties struct {
 	items map[string]string
 }
 
-type PublishErrorListener func(publisherId uint8, publishingId int64, code uint16, errorMessage string)
-type metadataListener func(ch <-chan string)
-
 type Client struct {
-	socket               socket
-	destructor           *sync.Once
-	clientProperties     ClientProperties
-	tuneState            TuneState
-	coordinator          *Coordinator
-	PublishErrorListener PublishErrorListener
-	broker               Broker
-	metadataListener     metadataListener
+	socket           socket
+	destructor       *sync.Once
+	clientProperties ClientProperties
+	tuneState        TuneState
+	coordinator      *Coordinator
+	broker           Broker
+	metadataListener metadataListener
 }
 
 func newClient(connectionName string) *Client {
@@ -46,68 +42,70 @@ func newClient(connectionName string) *Client {
 }
 
 func (c *Client) connect() error {
-	c.broker.GetUri()
-	u, err := url.Parse(c.broker.GetUri())
-	if err != nil {
-		return err
-	}
-	host, port := u.Hostname(), u.Port()
+	if !c.socket.isOpen() {
+		c.broker.GetUri()
+		u, err := url.Parse(c.broker.GetUri())
+		if err != nil {
+			return err
+		}
+		host, port := u.Hostname(), u.Port()
 
-	c.tuneState.requestedHeartbeat = 60
-	c.tuneState.requestedMaxFrameSize = 1048576
-	resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
-	if err != nil {
-		logDebug("%s", err)
-		return err
-	}
-	connection, err2 := net.DialTCP("tcp", nil, resolver)
-	if err2 != nil {
-		logDebug("%s", err2)
-		return err2
-	}
-	err2 = connection.SetReadBuffer(defaultReadSocketBuffer)
-	if err2 != nil {
-		logDebug("%s", err2)
-		return err2
-	}
-	err2 = connection.SetWriteBuffer(defaultReadSocketBuffer)
-	if err2 != nil {
-		logDebug("%s", err2)
-		return err2
-	}
+		c.tuneState.requestedHeartbeat = 60
+		c.tuneState.requestedMaxFrameSize = 1048576
+		resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
+		if err != nil {
+			logDebug("%s", err)
+			return err
+		}
+		connection, err2 := net.DialTCP("tcp", nil, resolver)
+		if err2 != nil {
+			logDebug("%s", err2)
+			return err2
+		}
+		err2 = connection.SetReadBuffer(defaultReadSocketBuffer)
+		if err2 != nil {
+			logDebug("%s", err2)
+			return err2
+		}
+		err2 = connection.SetWriteBuffer(defaultReadSocketBuffer)
+		if err2 != nil {
+			logDebug("%s", err2)
+			return err2
+		}
 
-	c.socket = socket{connection: connection, mutex: &sync.Mutex{},
-		writer:     bufio.NewWriter(connection),
-		destructor: &sync.Once{},
-	}
-	c.socket.setOpen()
+		c.socket = socket{connection: connection, mutex: &sync.Mutex{},
+			writer:     bufio.NewWriter(connection),
+			destructor: &sync.Once{},
+		}
+		c.socket.setOpen()
 
-	go c.handleResponse()
-	err2 = c.peerProperties()
+		go c.handleResponse()
+		err2 = c.peerProperties()
 
-	if err2 != nil {
-		logDebug("%s", err2)
-		return err2
+		if err2 != nil {
+			logDebug("%s", err2)
+			return err2
+		}
+		pwd, _ := u.User.Password()
+		err2 = c.authenticate(u.User.Username(), pwd)
+		if err2 != nil {
+			logDebug("User:%s, %s", u.User.Username(), err2)
+			return err2
+		}
+		vhost := "/"
+		if len(u.Path) > 1 {
+			vhost, _ = url.QueryUnescape(u.Path[1:])
+		}
+		err2 = c.open(vhost)
+		if err2 != nil {
+			logDebug("%s", err2)
+			return err2
+		}
+		c.heartBeat()
+		logDebug("User %s, connected to: %s, vhost:%s", u.User.Username(),
+			net.JoinHostPort(host, port),
+			vhost)
 	}
-	pwd, _ := u.User.Password()
-	err2 = c.authenticate(u.User.Username(), pwd)
-	if err2 != nil {
-		logDebug("User:%s, %s", u.User.Username(), err2)
-		return err2
-	}
-	vhost := "/"
-	if len(u.Path) > 1 {
-		vhost, _ = url.QueryUnescape(u.Path[1:])
-	}
-	err2 = c.open(vhost)
-	if err2 != nil {
-		logDebug("%s", err2)
-		return err2
-	}
-	c.heartBeat()
-	logDebug("User %s, connected to: %s, vhost:%s", u.User.Username(),
-		net.JoinHostPort(host, port),
-		vhost)
 	return nil
 }
 
@@ -278,10 +276,11 @@ func (c *Client) Close() error {
 	}
 	for _, cs := range c.coordinator.consumers {
 		err := c.coordinator.RemoveConsumerById(cs.(*Consumer).ID, Event{
-			command:    0,
-			streamName: "TEST",
-			name:       "",
-			err:        nil,
+			Command:    CommandClose,
+			StreamName: cs.(*Consumer).GetStreamName(),
+			Name:       cs.(*Consumer).GetConsumerName(),
+			Reason:     "socket client closed",
+			Err:        nil,
 		})
 		if err != nil {
 			logWarn("error removing consumer: %s", err)
@@ -290,10 +289,10 @@ func (c *Client) Close() error {
 	var err error
 	if c.socket.isOpen() {
 		c.closeHartBeat()
-		res := c.coordinator.NewResponse(commandClose)
+		res := c.coordinator.NewResponse(CommandClose)
 		length := 2 + 2 + 4 + 2
 		var b = bytes.NewBuffer(make([]byte, 0, length))
-		writeProtocolHeader(b, length, int16(uShortEncodeResponseCode(commandClose)), res.correlationid)
+		writeProtocolHeader(b, length, int16(uShortEncodeResponseCode(CommandClose)), res.correlationid)
 		writeUShort(b, responseCodeOk)
 
 		err = c.socket.writeAndFlush(b.Bytes())
@@ -307,10 +306,12 @@ func (c *Client) Close() error {
 	return err
 }
 
-func (c *Client) DeclarePublisher(streamName string) (*Producer, error) {
-	producer, err := c.coordinator.NewProducer(&ProducerOptions{
+func (c *Client) DeclarePublisher(streamName string, channelConfirmListener PublishConfirmListener,
+	channelErrorListener PublishErrorListener, options *ProducerOptions) (*Producer, error) {
+	producer, err := c.coordinator.NewProducer(channelConfirmListener, channelErrorListener, &ProducerOptions{
 		client:     c,
 		streamName: streamName,
+		Name:       options.Name,
 	})
 	if err != nil {
 		return nil, err
@@ -373,7 +374,7 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 
 func (c *Client) DeclareStream(streamName string, options *StreamOptions) error {
 	if streamName == "" {
-		return fmt.Errorf("stream name can't be empty")
+		return fmt.Errorf("stream Name can't be empty")
 	}
 
 	resp := c.coordinator.NewResponse(commandCreateStream, streamName)
@@ -408,7 +409,7 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 
 func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 	messagesHandler MessagesHandler,
-	closeHandler CloseHandler,
+	closeHandler CloseListener,
 	options *ConsumerOptions) (*Consumer, error) {
 	options.client = c
 	options.streamName = streamName
@@ -423,10 +424,11 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 		lastOffset, err := consumer.QueryOffset()
 		if err != nil {
 			_ = c.coordinator.RemoveConsumerById(consumer.ID, Event{
-				command:    0,
-				streamName: "TEST_OFFSET",
-				name:       "",
-				err:        nil,
+				Command:    CommandQueryOffset,
+				StreamName: streamName,
+				Name:       consumer.GetConsumerName(),
+				Reason:     "error QueryOffset",
+				Err:        err,
 			})
 			return nil, err
 		}

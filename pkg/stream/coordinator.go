@@ -36,7 +36,9 @@ func NewCoordinator() *Coordinator {
 }
 
 // producersEnvironment
-func (coordinator *Coordinator) NewProducer(parameters *ProducerOptions) (*Producer, error) {
+func (coordinator *Coordinator) NewProducer(channelConfirmListener PublishConfirmListener,
+	channelErrorListener PublishErrorListener,
+	parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, err = coordinator.getNextFreeId(coordinator.producers)
@@ -44,7 +46,9 @@ func (coordinator *Coordinator) NewProducer(parameters *ProducerOptions) (*Produ
 		return nil, err
 	}
 	var producer = &Producer{ID: lastId,
-		options: parameters}
+		options:              parameters,
+		publishConfirm:       channelConfirmListener,
+		publishErrorListener: channelErrorListener}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }
@@ -54,16 +58,9 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 	if err != nil {
 		return err
 	}
-
 	if consumer.CloseHandler != nil {
-		closeEvents := make(chan Event, 1)
-		closeEvents <- Event{
-			command:    0,
-			streamName: "test",
-			name:       "test",
-			err:        nil,
-		}
-		consumer.CloseHandler(closeEvents)
+		//consumer.CloseListener = make(chan Event, 1)
+		consumer.CloseHandler <- reason
 	}
 	return coordinator.removeById(id, coordinator.consumers)
 }
@@ -145,7 +142,7 @@ func (coordinator *Coordinator) ResponsesCount() int {
 
 /// Consumer functions
 func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
-	closeHandler CloseHandler, parameters *ConsumerOptions) *Consumer {
+	closeHandler CloseListener, parameters *ConsumerOptions) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)

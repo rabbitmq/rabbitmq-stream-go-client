@@ -137,7 +137,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 		err := testEnvironment.DeclareStream("", nil)
 		Expect(err).To(HaveOccurred())
 		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("stream name can't be empty"))
+			To(ContainSubstring("stream Name can't be empty"))
 	})
 
 })

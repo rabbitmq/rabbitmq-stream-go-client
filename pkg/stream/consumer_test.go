@@ -116,7 +116,7 @@ var _ = Describe("Streaming Consumers", func() {
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		producer, err := env.NewProducer(streamName, nil)
+		producer, err := env.NewProducer(streamName, nil, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(107)) // batch send
@@ -148,9 +148,66 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(0)))
 		err = consumer.UnSubscribe()
 		Expect(err).NotTo(HaveOccurred())
+		err = env.DeleteStream(streamName)
+		Expect(err).NotTo(HaveOccurred())
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
 
+	})
+	It("Consumer close handler unSubscribe", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		err = env.DeclareStream(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		chConsumerClose := make(chan Event)
+		var commandIdRecv int32
+		go func(ch chan Event) {
+			event := <-ch
+			atomic.AddInt32(&commandIdRecv, int32(event.Command))
+		}(chConsumerClose)
+
+		consumer, err := env.NewConsumer(context.TODO(), streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			}, chConsumerClose, nil)
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(100 * time.Millisecond)
+		err = consumer.UnSubscribe()
+		time.Sleep(500 * time.Millisecond)
+		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandUnsubscribe)))
+		Expect(err).NotTo(HaveOccurred())
+		err = env.DeleteStream(streamName)
+		Expect(err).NotTo(HaveOccurred())
+		err = env.Close()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("Consumer close handler meta data", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		err = env.DeclareStream(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		chConsumerClose := make(chan Event)
+		var commandIdRecv int32
+		go func(ch chan Event) {
+			event := <-ch
+			atomic.AddInt32(&commandIdRecv, int32(event.Command))
+		}(chConsumerClose)
+
+		_, err = env.NewConsumer(context.TODO(), streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			}, chConsumerClose, nil)
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(100 * time.Millisecond)
+		Expect(err).NotTo(HaveOccurred())
+		err = env.DeleteStream(streamName)
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(200 * time.Millisecond)
+		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandMetadataUpdate)))
+
+		err = env.Close()
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("Subscribe/Unsubscribe count messages SetOffset", func() {
@@ -160,7 +217,7 @@ var _ = Describe("Streaming Consumers", func() {
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		producer, err := env.NewProducer(streamName, nil)
+		producer, err := env.NewProducer(streamName, nil, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(100)) // batch send

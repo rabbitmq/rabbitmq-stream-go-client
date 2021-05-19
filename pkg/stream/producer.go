@@ -7,28 +7,27 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
-type PublishConfirm func(ch <-chan []int64)
-
 type Producer struct {
-	ID             uint8
-	options        *ProducerOptions
-	onClose        onClose
-	publishConfirm PublishConfirm
+	ID                   uint8
+	options              *ProducerOptions
+	onClose              onInternalClose
+	publishConfirm       PublishConfirmListener
+	publishErrorListener PublishErrorListener
 }
 
 type ProducerOptions struct {
-	client                *Client
-	streamName            string
-	PublishConfirmHandler PublishConfirm
+	client     *Client
+	streamName string
+	Name       string
+}
+
+func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
+	po.Name = name
+	return po
 }
 
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{}
-}
-
-func (c *ProducerOptions) SetPublishConfirmHandler(publishConfirmHandler PublishConfirm) *ProducerOptions {
-	c.PublishConfirmHandler = publishConfirmHandler
-	return c
 }
 
 func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) (int, error) {

@@ -56,13 +56,14 @@ func main() {
 
 	CheckErr(err)
 
-	//Define a producer to a stream, optional publish confirmation
-	producer, err := env.NewProducer(streamName,
-		stream.NewProducerOptions().SetPublishConfirmHandler(func(ch <-chan []int64) {
-			messagesIds := <-ch
-			fmt.Printf("Confirmed %d messages \n \n ", len(messagesIds))
+	//optional publish confirmation channel
+	chPublishConfirm := make(chan []int64, 1)
+	go func(ch chan []int64) {
+		messagesIds := <-ch
+		fmt.Printf("Confirmed %d messages \n \n ", len(messagesIds))
+	}(chPublishConfirm)
 
-		}))
+	producer, err := env.NewProducer(streamName, chPublishConfirm, nil, nil)
 	CheckErr(err)
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
@@ -81,16 +82,34 @@ func main() {
 	//
 	//}, nil)
 	// if you need to track the offset you need a consumer name like:
-	consumer, err := env.NewConsumer(context.TODO(), streamName, func(Context stream.ConsumerContext, message *amqp.Message) {
-		fmt.Printf("consumer id: %d, text: %s \n ", Context.Consumer.ID, message.Data)
-	}, stream.NewConsumerOptions().
-		SetConsumerName("my_consumer").                  // gives a name
-		SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
+	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		fmt.Printf("consumer id: %d, text: %s \n ", consumerContext.Consumer.ID, message.Data)
+		err := consumerContext.Consumer.Commit()
+		if err != nil {
+			fmt.Printf("Error during commit")
+		}
+	}
+
+	// channelClose receives all the closing events, here you can handle the
+	// client reconnection or just log
+	channelClose := make(chan stream.Event, 1)
+	go func() {
+		event := <-channelClose
+		fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", event.Name, event.StreamName, event.Reason)
+	}()
+
+	consumer, err := env.NewConsumer(context.TODO(), streamName,
+		handleMessages,
+		channelClose,
+		stream.NewConsumerOptions().
+			SetConsumerName("my_consumer").                  // set a consumer name
+			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	err = consumer.UnSubscribe()
+	time.Sleep(200 * time.Millisecond)
 	CheckErr(err)
 	err = env.Close()
 	CheckErr(err)

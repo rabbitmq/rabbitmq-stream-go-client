@@ -12,14 +12,18 @@ type Consumer struct {
 	response        *Response
 	offset          int64
 	options         *ConsumerOptions
-	onClose         onClose
+	onClose         onInternalClose
 	mutex           *sync.RWMutex
 	MessagesHandler MessagesHandler
-	CloseHandler    CloseHandler
+	CloseHandler    CloseListener
 }
 
 func (consumer *Consumer) GetStreamName() string {
 	return consumer.options.streamName
+}
+
+func (consumer *Consumer) GetConsumerName() string {
+	return consumer.options.ConsumerName
 }
 
 func (consumer *Consumer) setOffset(offset int64) {
@@ -86,21 +90,23 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 
 func (consumer *Consumer) UnSubscribe() error {
 	length := 2 + 2 + 4 + 1
-	resp := consumer.options.client.coordinator.NewResponse(commandUnsubscribe)
+	resp := consumer.options.client.coordinator.NewResponse(CommandUnsubscribe)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandUnsubscribe,
+	writeProtocolHeader(b, length, CommandUnsubscribe,
 		correlationId)
 
 	writeByte(b, consumer.ID)
 	err := consumer.options.client.handleWrite(b.Bytes(), resp)
 	consumer.response.code <- Code{id: closeChannel}
 	errC := consumer.options.client.coordinator.RemoveConsumerById(consumer.ID, Event{
-		command:    0,
-		streamName: "TEST_UNSUBSCRIBE",
-		name:       "",
-		err:        nil,
+		Command:    CommandUnsubscribe,
+		StreamName: consumer.GetStreamName(),
+		Name:       consumer.GetConsumerName(),
+		Reason:     "unSubscribe",
+		Err:        nil,
 	})
+
 	if errC != nil {
 		logWarn("Error during remove consumer id:%s", errC)
 	}
@@ -121,7 +127,7 @@ func (consumer *Consumer) UnSubscribe() error {
 
 func (consumer *Consumer) Commit() error {
 	if consumer.options.streamName == "" {
-		return fmt.Errorf("stream name can't be empty")
+		return fmt.Errorf("stream Name can't be empty")
 	}
 	length := 2 + 2 + 4 + 2 + len(consumer.options.ConsumerName) + 2 +
 		len(consumer.options.streamName) + 8
@@ -140,10 +146,10 @@ func (consumer *Consumer) Commit() error {
 func (consumer *Consumer) QueryOffset() (int64, error) {
 	length := 2 + 2 + 4 + 2 + len(consumer.options.ConsumerName) + 2 + len(consumer.options.streamName)
 
-	resp := consumer.options.client.coordinator.NewResponse(commandQueryOffset)
+	resp := consumer.options.client.coordinator.NewResponse(CommandQueryOffset)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandQueryOffset,
+	writeProtocolHeader(b, length, CommandQueryOffset,
 		correlationId)
 
 	writeString(b, consumer.options.ConsumerName)

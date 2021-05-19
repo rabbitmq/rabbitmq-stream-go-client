@@ -56,12 +56,7 @@ func main() {
 
 	CheckErr(err)
 
-	producer, err := env.NewProducer(streamName,
-		stream.NewProducerOptions().SetPublishConfirmHandler(func(ch <-chan []int64) {
-			messagesIds := <-ch
-			fmt.Printf("Confirmed %d messages \n \n ", len(messagesIds))
-
-		}))
+	producer, err := env.NewProducer(streamName, nil, nil, nil)
 	CheckErr(err)
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
@@ -77,7 +72,7 @@ func main() {
 		fmt.Printf("consumer id: %d, text: %s time:%s\n ", consumerContext.Consumer.ID, message.Data, time.Now().String())
 	}
 
-	consumer, err := env.NewConsumer(context.Background(), "streamNamea", messagesHandler,
+	consumer, err := env.NewConsumer(context.Background(), "streamNamea", messagesHandler, nil,
 		stream.NewConsumerOptions().
 			SetConsumerName("my_consumer").                  // gives a name
 			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning

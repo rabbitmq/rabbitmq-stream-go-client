@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/spf13/cobra"
@@ -28,8 +27,10 @@ var (
 	publisherMessageCount int32
 	consumerMessageCount  int32
 	confirmedMessageCount int32
+	consumersCloseCount   int32
+	publishErrors         int32
 	//connections           []*stream.Client
-	simulEnvironment stream.Environment
+	simulEnvironment *stream.Environment
 )
 
 func printStats() {
@@ -44,8 +45,8 @@ func printStats() {
 					PMessagesPerSecond := int64(float64(atomic.LoadInt32(&publisherMessageCount)) / v)
 					CMessagesPerSecond := int64(float64(atomic.LoadInt32(&consumerMessageCount)) / v)
 					ConfirmedMessagesPerSecond := int64(float64(atomic.LoadInt32(&confirmedMessageCount)) / v)
-					logInfo("Published %8v msg/s   |   Confirmed %8v msg/s   |   Consumed %3v msg/s   |  %3v  |  %3v  |",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody())
+					logInfo("Published %8v msg/s   |   Confirmed %8v msg/s   |   Consumed %3v msg/s   |  %3v  |  %3v  |  Cons. closed %3v  | Pub errors %3v  |",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), consumersCloseCount, publishErrors)
 					atomic.SwapInt32(&publisherMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
 					atomic.SwapInt32(&confirmedMessageCount, 0)
@@ -83,22 +84,17 @@ func decodeRate() string {
 }
 
 func startSimulation() error {
-<<<<<<< HEAD
 	logInfo("Silent (%s) Simulation, url: %s publishers: %d consumers: %d streams: %s ", stream.ClientVersion, rabbitmqBrokerUrl, publishers, consumers, streams)
 
 	err := initStreams()
-=======
-	logInfo("Silent (%s) Simulation, url: %s producers: %d consumers: %d streams: %s ", stream.ClientVersion, rabbitmqBrokerUrl, producers, consumers, streams)
-	var err error
-	simulEnvironment, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
-		rabbitmqBrokerUrl).SetMaxProducersPerClient(producersPerClient).SetMaxConsumersPerClient(consumersPerClient))
 	if err != nil {
 		if exitOnError {
 			os.Exit(1)
 		}
 	}
-	err = initStreams()
->>>>>>> 7a1d563 (gas tests)
+
+	simulEnvironment, err = stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
+		rabbitmqBrokerUrl).SetMaxProducersPerClient(publishersPerClient).SetMaxConsumersPerClient(consumersPerClient))
 	if err != nil {
 		if exitOnError {
 			os.Exit(1)
@@ -168,15 +164,31 @@ func startPublishers() error {
 		return err
 	}
 	logInfo("Starting %d publishers...", publishers)
+
+	chPublishConfirm := make(chan []int64, 1)
+	go func(ch chan []int64) {
+		for {
+			ids := <-ch
+			atomic.AddInt32(&confirmedMessageCount, int32(len(ids)))
+		}
+	}(chPublishConfirm)
+
+	chPublishError := make(chan stream.PublishError, 1)
+	go func(ch chan stream.PublishError) {
+		for {
+			pError := <-ch
+			logError("publish %s error", pError.Name)
+			atomic.AddInt32(&publishErrors, 1)
+
+		}
+	}(chPublishError)
+
 	for _, streamName := range streams {
 		for i := 1; i <= publishers; i++ {
-
 			logInfo("Starting publisher number: %d", i)
-			publisher, err := env.NewProducer(streamName,
-				stream.NewProducerOptions().SetPublishConfirmHandler(func(ch <-chan []int64) {
-					ids := <-ch
-					atomic.AddInt32(&confirmedMessageCount, int32(len(ids)))
-				}))
+			publisher, err := env.NewProducer(streamName, chPublishConfirm, chPublishError,
+				stream.NewProducerOptions().SetProducerName(fmt.Sprintf("pub-%s-%d", streamName, i)))
+
 			if err != nil {
 				logError("Error create publisher: %s", err)
 				return err
@@ -231,58 +243,46 @@ func startPublishers() error {
 	return nil
 }
 
-func consumerCloseHandler(closeEvents <-chan stream.Event) {
-	event := <-closeEvents
-	fmt.Printf("close %s", event)
-}
-
 func startConsumer(consumerName string, streamName string) error {
-	_, err := simulEnvironment.NewConsumer(context.TODO(), streamName, func(Context stream.ConsumerContext, message *amqp.Message) {
+
+	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
-			err := Context.Consumer.Commit()
+			err := consumerContext.Consumer.Commit()
 			if err != nil {
 				logError("Error Commit: %s", err)
 			}
 		}
-	}, consumerCloseHandler,
-		stream.NewConsumerOptions().
-		//SetOffset(stream.OffsetSpecification{}.First()).
-		SetConsumerName(uuid.New().String()))
+	}
 
+	chConsumerClose := make(chan stream.Event, 0)
+	go func() {
+		event := <-chConsumerClose
+		logInfo("Consumer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
+		atomic.AddInt32(&consumersCloseCount, 1)
+		time.Sleep(200 * time.Millisecond)
+		err := startConsumer(event.Name, event.StreamName)
+		if err != nil {
+			logError("Error starting consumer: %s", err)
+		}
+	}()
+
+	_, err := simulEnvironment.NewConsumer(context.TODO(),
+		streamName,
+		handleMessages,
+		chConsumerClose,
+		stream.NewConsumerOptions().
+			SetConsumerName(consumerName))
+	return err
 }
 
 func startConsumers() error {
 	logInfo("Starting %d consumers...", consumers)
 
-
 	for _, streamName := range streams {
 		for i := 0; i < consumers; i++ {
 			randomSleep()
 			logInfo("Starting consumer number: %d", i)
-<<<<<<< HEAD
-			_, err = env.NewConsumer(
-				streamName,
-				func(Context stream.ConsumerContext, message *amqp.Message) {
-					if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
-						err := Context.Consumer.Commit()
-						if err != nil {
-							logError("Error Commit: %s", err)
-						}
-					}
-				},
-				stream.NewConsumerOptions().SetConsumerName(fmt.Sprintf("%s-%d", streamName, i)))
-=======
-			_, err := simulEnvironment.NewConsumer(context.TODO(), streamName, func(Context stream.ConsumerContext, message *amqp.Message) {
-				if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
-					err := Context.Consumer.Commit()
-					if err != nil {
-						logError("Error Commit: %s", err)
-					}
-				}
-			}, consumerCloseHandler, stream.NewConsumerOptions().
-				SetOffset(stream.OffsetSpecification{}.First()).
-				SetConsumerName(uuid.New().String()))
->>>>>>> 7a1d563 (gas tests)
+			err := startConsumer(fmt.Sprintf("%s-%d", streamName, i), streamName)
 			if err != nil {
 				logError("Error creating consumer: %s", err)
 				return err
