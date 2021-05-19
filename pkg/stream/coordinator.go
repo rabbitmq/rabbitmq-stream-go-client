@@ -37,7 +37,6 @@ func NewCoordinator() *Coordinator {
 
 // producersEnvironment
 func (coordinator *Coordinator) NewProducer(channelConfirmListener PublishConfirmListener,
-	channelErrorListener PublishErrorListener,
 	parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
@@ -46,9 +45,8 @@ func (coordinator *Coordinator) NewProducer(channelConfirmListener PublishConfir
 		return nil, err
 	}
 	var producer = &Producer{ID: lastId,
-		options:              parameters,
-		publishConfirm:       channelConfirmListener,
-		publishErrorListener: channelErrorListener}
+		options:        parameters,
+		publishConfirm: channelConfirmListener}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }

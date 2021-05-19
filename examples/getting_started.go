@@ -34,8 +34,6 @@ func main() {
 
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
-	//uri := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
-	// The environment is a wrapper around the TCP client connections
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
@@ -63,7 +61,7 @@ func main() {
 		fmt.Printf("Confirmed %d messages \n \n ", len(messagesIds))
 	}(chPublishConfirm)
 
-	producer, err := env.NewProducer(streamName, chPublishConfirm, nil, nil)
+	producer, err := env.NewProducer(streamName, chPublishConfirm, nil)
 	CheckErr(err)
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send

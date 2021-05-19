@@ -7,10 +7,9 @@ import (
 )
 
 type Environment struct {
-	producers            *producersEnvironment
-	consumers            *consumersEnvironment
-	PublishErrorListener PublishErrorListener
-	options              *EnvironmentOptions
+	producers *producersEnvironment
+	consumers *consumersEnvironment
+	options   *EnvironmentOptions
 }
 
 func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
@@ -45,7 +44,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	return &Environment{
 		options:   options,
-		producers: newProducers(options.MaxProducersPerClient),
+		producers: newProducers(options.MaxProducersPerClient, options.publishErrorListener),
 		consumers: newConsumerEnvironment(options.MaxConsumersPerClient),
 	}, client.connect()
 }
@@ -83,7 +82,7 @@ func (env *Environment) DeleteStream(streamName string) error {
 	return client.DeleteStream(streamName)
 }
 
-func (env *Environment) NewProducer(streamName string, channelConfirmListener PublishConfirmListener, channelPublishErrorListener PublishErrorListener, producerOptions *ProducerOptions) (*Producer, error) {
+func (env *Environment) NewProducer(streamName string, channelConfirmListener PublishConfirmListener, producerOptions *ProducerOptions) (*Producer, error) {
 	client, err := env.newClientLocator()
 	defer func(client *Client) {
 		err := client.Close()
@@ -97,7 +96,7 @@ func (env *Environment) NewProducer(streamName string, channelConfirmListener Pu
 	if producerOptions == nil {
 		producerOptions = NewProducerOptions()
 	}
-	return env.producers.NewProducer(client, streamName, channelConfirmListener, channelPublishErrorListener, producerOptions)
+	return env.producers.newProducer(client, streamName, channelConfirmListener, producerOptions)
 }
 
 func (env *Environment) NewConsumer(ctx context.Context, streamName string,
@@ -129,7 +128,7 @@ type EnvironmentOptions struct {
 	ConnectionParameters  Broker
 	MaxProducersPerClient int
 	MaxConsumersPerClient int
-	PublishErrorListener  PublishErrorListener
+	publishErrorListener  PublishErrorListener
 }
 
 func NewEnvironmentOptions() *EnvironmentOptions {
@@ -179,7 +178,7 @@ func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetPublishErrorListener(
 	publishErrorListener PublishErrorListener) *EnvironmentOptions {
-	envOptions.PublishErrorListener = publishErrorListener
+	envOptions.publishErrorListener = publishErrorListener
 	return envOptions
 }
 
@@ -272,8 +271,9 @@ func (cc *enviromentCoordinator) maybeCleanConsumers(streamName string) {
 }
 
 func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
+	channelPublishErrListener PublishErrorListener,
 	channelConfirmListener PublishConfirmListener,
-	channelErrorListener PublishErrorListener, options *ProducerOptions) (*Producer, error) {
+	options *ProducerOptions) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
 	var clientResult *Client
@@ -291,15 +291,18 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 			streamName := <-ch
 			cc.maybeCleanProducers(streamName)
 		}
-		err := clientResult.connect()
-		if err != nil {
-			return nil, err
-		}
+		clientResult.publishErrorListener = channelPublishErrListener
+
 		cc.nextId++
 		cc.clientsPerContext[cc.nextId] = clientResult
 	}
 
-	publisher, err := clientResult.DeclarePublisher(streamName, channelConfirmListener, channelErrorListener, options)
+	err := clientResult.connect()
+	if err != nil {
+		return nil, err
+	}
+
+	publisher, err := clientResult.DeclarePublisher(streamName, channelConfirmListener, options)
 
 	if err != nil {
 		return nil, err
@@ -367,20 +370,21 @@ type producersEnvironment struct {
 	mutex                *sync.Mutex
 	producersCoordinator map[string]*enviromentCoordinator
 	maxItemsForClient    int
+	publishErrorListener PublishErrorListener
 }
 
-func newProducers(maxItemsForClient int) *producersEnvironment {
+func newProducers(maxItemsForClient int, publishErrorListener PublishErrorListener) *producersEnvironment {
 	producers := &producersEnvironment{
 		mutex:                &sync.Mutex{},
 		producersCoordinator: map[string]*enviromentCoordinator{},
 		maxItemsForClient:    maxItemsForClient,
+		publishErrorListener: publishErrorListener,
 	}
 	return producers
 }
 
-func (ps *producersEnvironment) NewProducer(clientLocator *Client, streamName string,
+func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName string,
 	channelConfirmListener PublishConfirmListener,
-	channelPublishError PublishErrorListener,
 	options *ProducerOptions) (*Producer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
@@ -399,8 +403,8 @@ func (ps *producersEnvironment) NewProducer(clientLocator *Client, streamName st
 	leader.cloneFrom(clientLocator.broker)
 
 	producer, err := ps.producersCoordinator[leader.hostPort()].newProducer(leader, streamName,
+		ps.publishErrorListener,
 		channelConfirmListener,
-		channelPublishError,
 		options)
 	if err != nil {
 		return nil, err

@@ -116,7 +116,7 @@ var _ = Describe("Streaming Consumers", func() {
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		producer, err := env.NewProducer(streamName, nil, nil, nil)
+		producer, err := env.NewProducer(streamName, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(107)) // batch send
@@ -217,7 +217,7 @@ var _ = Describe("Streaming Consumers", func() {
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		producer, err := env.NewProducer(streamName, nil, nil, nil)
+		producer, err := env.NewProducer(streamName, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(100)) // batch send

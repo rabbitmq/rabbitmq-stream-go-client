@@ -289,11 +289,6 @@ func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.
 func (c *Client) handlePublishError(buffer *bufio.Reader) {
 
 	publisherId := readByte(buffer)
-	producer, err := c.coordinator.GetProducerById(publisherId)
-	if err != nil {
-		logWarn("handlePublishError: producer not found %s", err)
-	}
-
 	publishingErrorCount, _ := readUInt(buffer)
 	var publishingId int64
 	var code uint16
@@ -301,8 +296,8 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		publishingId = readInt64(buffer)
 		code = readUShort(buffer)
 
-		if producer == nil && producer.publishErrorListener != nil {
-			producer.publishErrorListener <- PublishError{
+		if c.publishErrorListener != nil {
+			c.publishErrorListener <- PublishError{
 				PublisherId:  publisherId,
 				PublishingId: publishingId,
 				Code:         code,
