@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/streaming"
 	"strconv"
 	"time"
 )
@@ -32,7 +31,7 @@ var _ = Describe("Integration tests", func() {
 
 	It("Connect to all the nodes", func() {
 		env, err := stream.NewEnvironment(
-			stream.NewEnvironmentOptions().Host("node0").UserName("test").Password("test"))
+			stream.NewEnvironmentOptions().SetHost("node0").SetUser("test").SetPassword("test"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(env).NotTo(BeNil())
 
@@ -49,7 +48,7 @@ var _ = Describe("Integration tests", func() {
 
 		var producers []*stream.Producer
 		for _, stream := range streams {
-			producer1, err := env.NewProducer(stream, nil)
+			producer1, err := env.NewProducer(stream, nil,nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
 			_, err = producer1.BatchPublish(nil, CreateArrayMessagesForTesting(1000))
@@ -85,7 +84,7 @@ var _ = Describe("Integration tests", func() {
 
 		producers = make([]*stream.Producer, 0)
 		for _, stream := range streams {
-			producer1, err := env.NewProducer(stream, nil)
+			producer1, err := env.NewProducer(stream, nil,nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
 			_, err = producer1.BatchPublish(nil, CreateArrayMessagesForTesting(1000))
