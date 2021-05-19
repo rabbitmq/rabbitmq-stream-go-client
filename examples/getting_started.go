@@ -38,7 +38,7 @@ func main() {
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
-			SetPort(5551).
+			SetPort(5552).
 			SetUser("guest").
 			SetPassword("guest"))
 	CheckErr(err)

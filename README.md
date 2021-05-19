@@ -15,7 +15,7 @@ go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.4-alpha
 ---
 - Run RabbitMQ docker image with streaming:
    ```
-   docker run -it --rm --name rabbitmq -p 5551:5551 -p 5672:5672 -p 15672:15672 \
+   docker run -it --rm --name rabbitmq -p 5552:5552 -p 5672:5672 -p 15672:15672 \
    -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
    pivotalrabbitmq/rabbitmq-stream
   ```
@@ -53,7 +53,7 @@ or using Builders as:
 env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
-			SetPort(5551).
+			SetPort(5552).
 			SetUser("guest").
 			SetPassword("guest"))
 ```
@@ -75,7 +75,7 @@ make build
 
 You need a docker image running to execute the tests in this way:
 ```
- docker run -it --rm --name rabbitmq -p 5551:5551 \
+ docker run -it --rm --name rabbitmq -p 5552:5552 \
    -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
    pivotalrabbitmq/rabbitmq-stream
 ```

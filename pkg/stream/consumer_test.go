@@ -39,7 +39,7 @@ var _ = Describe("Streaming Consumers", func() {
 		}
 
 		Expect(len(env.consumers.getCoordinators())).To(Equal(1))
-		Expect(len(env.consumers.getCoordinators()["localhost:5551"].
+		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(4))
 
 		for _, consumer := range consumers {
@@ -47,7 +47,7 @@ var _ = Describe("Streaming Consumers", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		Expect(len(env.consumers.getCoordinators()["localhost:5551"].
+		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
 
 		err = env.DeleteStream(streamName)
@@ -73,7 +73,7 @@ var _ = Describe("Streaming Consumers", func() {
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
-		Expect(len(env.consumers.getCoordinators()["localhost:5551"].
+		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
 
 	})

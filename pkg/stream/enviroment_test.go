@@ -27,7 +27,7 @@ var _ = Describe("Environment test", func() {
 		}
 
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(4))
 
 		for _, producer := range producers {
@@ -35,7 +35,7 @@ var _ = Describe("Environment test", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
 
 		err = env.DeleteStream(streamName)
@@ -58,7 +58,7 @@ var _ = Describe("Environment test", func() {
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
-		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
 
 	})
@@ -84,7 +84,7 @@ var _ = Describe("Environment test", func() {
 		}
 		wg.Wait()
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
@@ -119,12 +119,12 @@ var _ = Describe("Environment test", func() {
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(4))
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		Expect(len(env.producers.getCoordinators()["localhost:5551"].
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -132,21 +132,21 @@ var _ = Describe("Environment test", func() {
 	Describe("Environment Authentication", func() {
 		It("Connection Authentication Failure", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				SetUri("rabbitmq-StreamOptions://wrong_user:wrong_password@localhost:5551/%2f"))
+				SetUri("rabbitmq-StreamOptions://wrong_user:wrong_password@localhost:5552/%2f"))
 			Expect(fmt.Sprintf("%s", err)).
 				To(ContainSubstring("authentication failure"))
 		})
 
 		It("Connection Vhost not exist", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				SetUri("rabbitmq-StreamOptions://guest:guest@localhost:5551/VHOSTNOEXIST"))
+				SetUri("rabbitmq-StreamOptions://guest:guest@localhost:5552/VHOSTNOEXIST"))
 			Expect(fmt.Sprintf("%s", err)).
 				To(ContainSubstring("virtualHost access failure"))
 		})
 
 		It("Connection No Endpoint", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				SetUri("rabbitmq-StreamOptions://g:g@noendpoint:5551/%2f"))
+				SetUri("rabbitmq-StreamOptions://g:g@noendpoint:5552/%2f"))
 			Expect(err).To(HaveOccurred())
 		})
 	})

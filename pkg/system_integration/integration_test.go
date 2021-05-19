@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/streaming"
 	"strconv"
 	"time"
@@ -56,7 +57,7 @@ var _ = Describe("Integration tests", func() {
 		}
 
 		Expect(len(env.ClientCoordinator())).To(Equal(3))
-		Expect(env.Nodes()).To(Equal([]string{"node0:5551", "node1:5551", "node2:5551"}))
+		Expect(env.Nodes()).To(Equal([]string{"node0:5552", "node1:5552", "node2:5552"}))
 
 		Expect(len(env.ClientCoordinator())).To(Equal(3))
 		for _, stream := range streams {
