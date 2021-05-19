@@ -20,7 +20,7 @@ var _ = Describe("Environment test", func() {
 		var producers []*Producer
 
 		for i := 0; i < 10; i++ {
-			producer, err := env.NewProducer(streamName, nil)
+			producer, err := env.NewProducer(streamName, nil, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(producer.ID).To(Equal(uint8(i % 3)))
 			producers = append(producers, producer)
@@ -50,7 +50,7 @@ var _ = Describe("Environment test", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		for i := 0; i < 10; i++ {
-			producer, err := env.NewProducer(streamName, nil)
+			producer, err := env.NewProducer(streamName, nil, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(producer.ID).To(Equal(uint8(i % 2)))
 		}
@@ -74,7 +74,7 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
-				producer, err := env.NewProducer(streamName, nil)
+				producer, err := env.NewProducer(streamName, nil, nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 				err = producer.Close()
@@ -106,9 +106,9 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func() {
-				_, errProd := env.NewProducer(streamNameWillBeDelete, nil)
+				_, errProd := env.NewProducer(streamNameWillBeDelete, nil, nil, nil)
 				Expect(errProd).NotTo(HaveOccurred())
-				_, errProd = env.NewProducer(streamNameWillBeDeleteAfter, nil)
+				_, errProd = env.NewProducer(streamNameWillBeDeleteAfter, nil, nil, nil)
 				Expect(errProd).NotTo(HaveOccurred())
 				wg.Done()
 			}()
@@ -120,7 +120,7 @@ var _ = Describe("Environment test", func() {
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
 		Expect(len(env.producers.getCoordinators()["localhost:5551"].
-			getClientsPerContext())).To(Equal(5))
+			getClientsPerContext())).To(Equal(4))
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))

@@ -10,22 +10,24 @@ import (
 
 type socket struct {
 	connection net.Conn
-	connected  bool
 	writer     *bufio.Writer
 	mutex      *sync.Mutex
 	closed     int32
 	destructor *sync.Once
 }
 
-func (sck *socket) SetOpen() {
-	atomic.StoreInt32(&sck.closed, 0)
+func (sck *socket) setOpen() {
+	atomic.StoreInt32(&sck.closed, 1)
 }
 
 func (sck *socket) isOpen() bool {
-	return atomic.LoadInt32(&sck.closed) == 0
+	return atomic.LoadInt32(&sck.closed) == 1
 }
 func (sck *socket) shutdown(err error) {
-	atomic.StoreInt32(&sck.closed, 1)
+	if !sck.isOpen() {
+		return
+	}
+	atomic.StoreInt32(&sck.closed, 0)
 
 	sck.destructor.Do(func() {
 		sck.mutex.Lock()
@@ -38,11 +40,11 @@ func (sck *socket) shutdown(err error) {
 
 }
 
-func (sck *socket) SetConnect(value bool) {
-	sck.mutex.Lock()
-	defer sck.mutex.Unlock()
-	sck.connected = value
-}
+//func (sck *socket) SetConnect(value bool) {
+//	sck.mutex.Lock()
+//	defer sck.mutex.Unlock()
+//	sck.connected = value
+//}
 
 func (sck *socket) writeAndFlush(buffer []byte) error {
 	sck.mutex.Lock()

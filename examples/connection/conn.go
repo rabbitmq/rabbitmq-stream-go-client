@@ -56,61 +56,31 @@ func main() {
 
 	CheckErr(err)
 
-	//optional publish confirmation channel
-	chPublishConfirm := make(chan []int64, 1)
-	go func(ch chan []int64) {
-		messagesIds := <-ch
-		fmt.Printf("Confirmed %d messages \n \n ", len(messagesIds))
-	}(chPublishConfirm)
-
-	producer, err := env.NewProducer(streamName, chPublishConfirm, nil, nil)
+	producer, err := env.NewProducer(streamName, nil, nil, nil)
 	CheckErr(err)
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
-	for i := 0; i < 2; i++ {
-		_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(10))
-		CheckErr(err)
-	}
-
-	// this sleep is not mandatory, just to show the confirmed messages
-	time.Sleep(1 * time.Second)
-	err = producer.Close()
-	CheckErr(err)
-
-	// Define a consumer per stream, there are different offset options to define a consumer, default is
-	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.Message) {
-	//
-	//}, nil)
-	// if you need to track the offset you need a consumer name like:
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		fmt.Printf("consumer id: %d, text: %s \n ", consumerContext.Consumer.ID, message.Data)
-		err := consumerContext.Consumer.Commit()
-		if err != nil {
-			fmt.Printf("Error during commit")
-		}
-	}
-
-	// channelClose receives all the closing events, here you can handle the
-	// client reconnection or just log
-	channelClose := make(chan stream.Event, 1)
 	go func() {
-		event := <-channelClose
-		fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", event.Name, event.StreamName, event.Reason)
+		for i := 0; i < 100; i++ {
+			_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(10))
+			CheckErr(err)
+			time.Sleep(1 * time.Second)
+		}
 	}()
 
-	consumer, err := env.NewConsumer(context.TODO(), streamName,
-		handleMessages,
-		channelClose,
+	messagesHandler := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		fmt.Printf("consumer id: %d, text: %s time:%s\n ", consumerContext.Consumer.ID, message.Data, time.Now().String())
+	}
+
+	consumer, err := env.NewConsumer(context.Background(), "streamNamea", messagesHandler, nil,
 		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer").                  // set a consumer name
+			SetConsumerName("my_consumer").                  // gives a name
 			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	err = consumer.UnSubscribe()
-	time.Sleep(200 * time.Millisecond)
 	CheckErr(err)
-	err = env.Close()
-	CheckErr(err)
+
 }

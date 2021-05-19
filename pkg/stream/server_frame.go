@@ -48,7 +48,7 @@ func (c *Client) handleResponse() {
 		case commandOpen, commandDeclarePublisher,
 			commandDeletePublisher, commandDeleteStream,
 			commandCreateStream, commandSaslAuthenticate, commandSubscribe,
-			commandUnsubscribe:
+			CommandUnsubscribe:
 			{
 				c.handleGenericResponse(readerProtocol, buffer)
 			}
@@ -66,7 +66,7 @@ func (c *Client) handleResponse() {
 				c.handleDeliver(buffer)
 
 			}
-		case commandMetadataUpdate:
+		case CommandMetadataUpdate:
 			{
 
 				c.metadataUpdateFrameHandler(buffer)
@@ -80,7 +80,7 @@ func (c *Client) handleResponse() {
 				//logDebug("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 
 			}
-		case commandQueryOffset:
+		case CommandQueryOffset:
 			{
 				c.queryOffsetFrameHandler(readerProtocol, buffer)
 
@@ -89,7 +89,7 @@ func (c *Client) handleResponse() {
 			{
 				c.metadataFrameHandler(readerProtocol, buffer)
 			}
-		case commandClose:
+		case CommandClose:
 			{
 				c.closeFrameHandler(readerProtocol, buffer)
 			}
@@ -197,10 +197,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		return nil
 	}
 	if producer.publishConfirm != nil {
-		ch := make(chan []int64, 1)
-		ch <- ids
-		producer.publishConfirm(ch)
-		close(ch)
+		producer.publishConfirm <- ids
 	}
 	return 0
 
@@ -292,14 +289,25 @@ func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.
 func (c *Client) handlePublishError(buffer *bufio.Reader) {
 
 	publisherId := readByte(buffer)
+	producer, err := c.coordinator.GetProducerById(publisherId)
+	if err != nil {
+		logWarn("handlePublishError: producer not found %s", err)
+	}
+
 	publishingErrorCount, _ := readUInt(buffer)
 	var publishingId int64
 	var code uint16
 	for publishingErrorCount != 0 {
 		publishingId = readInt64(buffer)
 		code = readUShort(buffer)
-		if c.PublishErrorListener != nil {
-			c.PublishErrorListener(publisherId, publishingId, code, lookErrorCode(code))
+
+		if producer == nil && producer.publishErrorListener != nil {
+			producer.publishErrorListener <- PublishError{
+				PublisherId:  publisherId,
+				PublishingId: publishingId,
+				Code:         code,
+				ErrorMessage: lookErrorCode(code),
+			}
 		}
 		publishingErrorCount--
 	}
@@ -371,7 +379,7 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader
 
 	length := 2 + 2 + 4 + 2
 	var b = bytes.NewBuffer(make([]byte, 0, length))
-	writeProtocolHeader(b, length, int16(uShortEncodeResponseCode(commandClose)),
+	writeProtocolHeader(b, length, int16(uShortEncodeResponseCode(CommandClose)),
 		int(readProtocol.CorrelationId))
 	writeUShort(b, responseCodeOk)
 

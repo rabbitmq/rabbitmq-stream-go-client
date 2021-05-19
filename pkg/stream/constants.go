@@ -16,18 +16,18 @@ const (
 	commandDeliver                = 8
 	commandCredit                 = 9
 	commandCommitOffset           = 10
-	commandQueryOffset            = 11
-	commandUnsubscribe            = 12
+	CommandQueryOffset            = 11
+	CommandUnsubscribe            = 12
 	commandCreateStream           = 13
 	commandDeleteStream           = 14
 	commandMetadata               = 15
-	commandMetadataUpdate         = 16
+	CommandMetadataUpdate         = 16
 	commandPeerProperties         = 17
 	commandSaslHandshake          = 18
 	commandSaslAuthenticate       = 19
 	commandTune                   = 20
 	commandOpen                   = 21
-	commandClose                  = 22
+	CommandClose                  = 22
 	commandHeartbeat              = 23
 
 	/// used only for tests
@@ -58,7 +58,7 @@ const (
 	/// responses out of protocol
 	closeChannel = uint16(60)
 	///
-	defaultSocketCallTimeout = 5 * time.Second
+	defaultSocketCallTimeout = 10 * time.Second
 
 	//
 	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
@@ -106,12 +106,12 @@ func lookUpCommand(command uint16) string {
 		commandTune:             `commandTune`,
 		commandOpen:             `commandOpen`,
 		commandHeartbeat:        `commandHeartbeat`,
-		commandMetadataUpdate:   `CommandMetadataUpdate`,
+		CommandMetadataUpdate:   `CommandMetadataUpdate`,
 		commandMetadata:         `CommandMetadata`,
 		commandDeleteStream:     `CommandDeleteStream`,
 		commandCreateStream:     `CommandCreateStream`,
-		commandUnsubscribe:      `CommandUnsubscribe`,
-		commandQueryOffset:      `CommandQueryOffset`,
+		CommandUnsubscribe:      `CommandUnsubscribe`,
+		CommandQueryOffset:      `CommandQueryOffset`,
 		commandCredit:           `CommandCredit`,
 		commandDeliver:          `CommandDeliver`,
 		commandSubscribe:        `CommandSubscribe`,
@@ -120,10 +120,10 @@ func lookUpCommand(command uint16) string {
 		commandPublishConfirm:   `CommandPublishConfirm`,
 		commandDeclarePublisher: `CommandDeclarePublisher`,
 		commandUnitTest:         `UnitTest`,
-		commandClose:            `CommandClose`,
+		CommandClose:            `CommandClose`,
 	}
 	if constLookup[command] == "" {
-		return fmt.Sprintf("command not handled %d", command)
+		return fmt.Sprintf("Command not handled %d", command)
 	}
 
 	return constLookup[command]
