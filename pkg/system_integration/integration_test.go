@@ -48,7 +48,7 @@ var _ = Describe("Integration tests", func() {
 
 		var producers []*stream.Producer
 		for _, stream := range streams {
-			producer1, err := env.NewProducer(stream, nil,nil)
+			producer1, err := env.NewProducer(stream, nil, nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
 			_, err = producer1.BatchPublish(nil, CreateArrayMessagesForTesting(1000))
@@ -84,7 +84,7 @@ var _ = Describe("Integration tests", func() {
 
 		producers = make([]*stream.Producer, 0)
 		for _, stream := range streams {
-			producer1, err := env.NewProducer(stream, nil,nil)
+			producer1, err := env.NewProducer(stream, nil, nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
 			_, err = producer1.BatchPublish(nil, CreateArrayMessagesForTesting(1000))

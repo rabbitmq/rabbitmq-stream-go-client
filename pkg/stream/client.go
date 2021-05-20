@@ -292,8 +292,10 @@ func (c *Client) Close() error {
 		c.closeHartBeat()
 		res := c.coordinator.NewResponse(CommandClose)
 		length := 2 + 2 + 4 + 2
-		var b = bytes.NewBuffer(make([]byte, 0, length))
-		writeProtocolHeader(b, length, int16(uShortEncodeResponseCode(CommandClose)), res.correlationid)
+		var b = bytes.NewBuffer(make([]byte, 0, length+4))
+		writeInt(b, length)
+		writeUShort(b, uShortEncodeResponseCode(CommandClose))
+		writeShort(b, version1)
 		writeUShort(b, responseCodeOk)
 
 		err = c.socket.writeAndFlush(b.Bytes())
