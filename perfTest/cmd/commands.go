@@ -59,7 +59,7 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.PersistentFlags().BoolVarP(&printStatsV, "print-stats", "", true, "Print stats")
 	baseCmd.PersistentFlags().StringSliceVarP(&streams, "streams", "", []string{"perf-test-go"}, "Stream names")
 	baseCmd.PersistentFlags().StringVarP(&maxLengthBytes, "max-length-bytes", "", "1GB", "Stream max length bytes, e.g. 10MB, 50GB, etc.")
-	baseCmd.PersistentFlags().StringVarP(&maxSegmentSizeBytes, "max-segment-size-bytes", "", "500MB", "Stream segment size bytes, e.g. 10MB, 1GB, etc.")
+	baseCmd.PersistentFlags().StringVarP(&maxSegmentSizeBytes, "stream-max-segment-size-bytes", "", "500MB", "Stream segment size bytes, e.g. 10MB, 1GB, etc.")
 	baseCmd.AddCommand(versionCmd)
 	baseCmd.AddCommand(newSilent())
 }
