@@ -33,15 +33,15 @@ var _ = Describe("Streaming Producers", func() {
 
 	})
 
-	It("NewProducer/Close Publisher", func() {
-		producer, err := testEnvironment.NewProducer(testProducerStream, nil, nil, nil)
+	It("newProducer/Close Publisher", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("NewProducer/Publish/UnSubscribe Publisher", func() {
-		producer, err := testEnvironment.NewProducer(testProducerStream, nil, nil, nil)
+	It("newProducer/Publish/UnSubscribe Publisher", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
@@ -52,13 +52,13 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Multi-thread NewProducer/Publish", func() {
+	It("Multi-thread newProducer/Publish", func() {
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
 				defer wg.Done()
-				producer, err := testEnvironment.NewProducer(testProducerStream, nil, nil, nil)
+				producer, err := testEnvironment.NewProducer(testProducerStream, nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
@@ -73,7 +73,7 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("Not found NotExistingStream", func() {
-		_, err := testEnvironment.NewProducer("notExistingStream", nil, nil, nil)
+		_, err := testEnvironment.NewProducer("notExistingStream", nil, nil)
 		Expect(fmt.Sprintf("%s", err)).
 			To(ContainSubstring("leader error for stream"))
 	})
@@ -86,7 +86,7 @@ var _ = Describe("Streaming Producers", func() {
 			atomic.AddInt32(&messagesCount, int32(len(ids)))
 		}(chConfirm)
 
-		producer, err := testEnvironment.NewProducer(testProducerStream, chConfirm, nil, nil)
+		producer, err := testEnvironment.NewProducer(testProducerStream, chConfirm, nil)
 		Expect(err).NotTo(HaveOccurred())
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(14))
 		Expect(err).NotTo(HaveOccurred())

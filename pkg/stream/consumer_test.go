@@ -39,7 +39,7 @@ var _ = Describe("Streaming Consumers", func() {
 		}
 
 		Expect(len(env.consumers.getCoordinators())).To(Equal(1))
-		Expect(len(env.consumers.getCoordinators()["localhost:5551"].
+		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(4))
 
 		for _, consumer := range consumers {
@@ -47,7 +47,7 @@ var _ = Describe("Streaming Consumers", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		Expect(len(env.consumers.getCoordinators()["localhost:5551"].
+		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
 
 		err = env.DeleteStream(streamName)
@@ -73,7 +73,7 @@ var _ = Describe("Streaming Consumers", func() {
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
-		Expect(len(env.consumers.getCoordinators()["localhost:5551"].
+		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
 
 	})
@@ -116,7 +116,7 @@ var _ = Describe("Streaming Consumers", func() {
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		producer, err := env.NewProducer(streamName, nil, nil, nil)
+		producer, err := env.NewProducer(streamName, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(107)) // batch send
@@ -210,31 +210,31 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Subscribe/Unsubscribe count messages SetOffset", func() {
-		env, err := NewEnvironment(NewEnvironmentOptions().
-			SetMaxConsumersPerClient(2))
-		Expect(err).NotTo(HaveOccurred())
-		streamName := uuid.New().String()
-		err = env.DeclareStream(streamName, nil)
-		Expect(err).NotTo(HaveOccurred())
-		producer, err := env.NewProducer(streamName, nil, nil, nil)
-		Expect(err).NotTo(HaveOccurred())
-
-		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(100)) // batch send
-		Expect(err).NotTo(HaveOccurred())
-		// we can't close the subscribe until the publish is finished
-		time.Sleep(500 * time.Millisecond)
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
-		var messagesCount int32 = 0
-		consumer, err := env.NewConsumer(context.TODO(), streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
-				atomic.AddInt32(&messagesCount, 1)
-			}, nil, NewConsumerOptions().SetOffset(OffsetSpecification{}.Offset(50)))
-		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(500 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(68)))
-		err = consumer.UnSubscribe()
-		Expect(err).NotTo(HaveOccurred())
-	})
+	//It("Subscribe/Unsubscribe count messages SetOffset", func() {
+	//	env, err := NewEnvironment(NewEnvironmentOptions().
+	//		SetMaxConsumersPerClient(2))
+	//	Expect(err).NotTo(HaveOccurred())
+	//	streamName := uuid.New().String()
+	//	err = env.DeclareStream(streamName, nil)
+	//	Expect(err).NotTo(HaveOccurred())
+	//	producer, err := env.NewProducer(streamName, nil, nil)
+	//	Expect(err).NotTo(HaveOccurred())
+	//
+	//	_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(100)) // batch send
+	//	Expect(err).NotTo(HaveOccurred())
+	//	// we can't close the subscribe until the publish is finished
+	//	time.Sleep(500 * time.Millisecond)
+	//	err = producer.Close()
+	//	Expect(err).NotTo(HaveOccurred())
+	//	var messagesCount int32 = 0
+	//	consumer, err := env.NewConsumer(context.TODO(), streamName,
+	//		func(consumerContext ConsumerContext, message *amqp.Message) {
+	//			atomic.AddInt32(&messagesCount, 1)
+	//		}, nil, NewConsumerOptions().SetOffset(OffsetSpecification{}.Offset(50)))
+	//	Expect(err).NotTo(HaveOccurred())
+	//	time.Sleep(500 * time.Millisecond)
+	//	Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(68)))
+	//	err = consumer.UnSubscribe()
+	//	Expect(err).NotTo(HaveOccurred())
+	//})
 })

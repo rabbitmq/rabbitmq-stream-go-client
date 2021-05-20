@@ -21,13 +21,14 @@ type ClientProperties struct {
 }
 
 type Client struct {
-	socket           socket
-	destructor       *sync.Once
-	clientProperties ClientProperties
-	tuneState        TuneState
-	coordinator      *Coordinator
-	broker           Broker
-	metadataListener metadataListener
+	socket               socket
+	destructor           *sync.Once
+	clientProperties     ClientProperties
+	tuneState            TuneState
+	coordinator          *Coordinator
+	broker               Broker
+	metadataListener     metadataListener
+	publishErrorListener PublishErrorListener
 }
 
 func newClient(connectionName string) *Client {
@@ -291,8 +292,10 @@ func (c *Client) Close() error {
 		c.closeHartBeat()
 		res := c.coordinator.NewResponse(CommandClose)
 		length := 2 + 2 + 4 + 2
-		var b = bytes.NewBuffer(make([]byte, 0, length))
-		writeProtocolHeader(b, length, int16(uShortEncodeResponseCode(CommandClose)), res.correlationid)
+		var b = bytes.NewBuffer(make([]byte, 0, length+4))
+		writeInt(b, length)
+		writeUShort(b, uShortEncodeResponseCode(CommandClose))
+		writeShort(b, version1)
 		writeUShort(b, responseCodeOk)
 
 		err = c.socket.writeAndFlush(b.Bytes())
@@ -306,9 +309,8 @@ func (c *Client) Close() error {
 	return err
 }
 
-func (c *Client) DeclarePublisher(streamName string, channelConfirmListener PublishConfirmListener,
-	channelErrorListener PublishErrorListener, options *ProducerOptions) (*Producer, error) {
-	producer, err := c.coordinator.NewProducer(channelConfirmListener, channelErrorListener, &ProducerOptions{
+func (c *Client) DeclarePublisher(streamName string, channelConfirmListener PublishConfirmListener, options *ProducerOptions) (*Producer, error) {
+	producer, err := c.coordinator.NewProducer(channelConfirmListener, &ProducerOptions{
 		client:     c,
 		streamName: streamName,
 		Name:       options.Name,

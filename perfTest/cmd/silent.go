@@ -45,8 +45,8 @@ func printStats() {
 					PMessagesPerSecond := int64(float64(atomic.LoadInt32(&publisherMessageCount)) / v)
 					CMessagesPerSecond := int64(float64(atomic.LoadInt32(&consumerMessageCount)) / v)
 					ConfirmedMessagesPerSecond := int64(float64(atomic.LoadInt32(&confirmedMessageCount)) / v)
-					logInfo("Published %8v msg/s   |   Confirmed %8v msg/s   |   Consumed %3v msg/s   |  %3v  |  %3v  |  Cons. closed %3v  | Pub errors %3v  |",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), consumersCloseCount, publishErrors)
+					logInfo("Published %8v msg/s   |   Confirmed %8v msg/s   |   Consumed %3v msg/s   |  Cons. closed %3v  |   Pub errors %3v  |   %3v  |  %3v  |",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, consumersCloseCount, publishErrors, decodeRate(), decodeBody())
 					atomic.SwapInt32(&publisherMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
 					atomic.SwapInt32(&confirmedMessageCount, 0)
@@ -87,38 +87,43 @@ func startSimulation() error {
 	logInfo("Silent (%s) Simulation, url: %s publishers: %d consumers: %d streams: %s ", stream.ClientVersion, rabbitmqBrokerUrl, publishers, consumers, streams)
 
 	err := initStreams()
-	if err != nil {
-		if exitOnError {
-			os.Exit(1)
-		}
-	}
+	checkErr(err)
 
-	simulEnvironment, err = stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
-		rabbitmqBrokerUrl).SetMaxProducersPerClient(publishersPerClient).SetMaxConsumersPerClient(consumersPerClient))
-	if err != nil {
-		if exitOnError {
-			os.Exit(1)
+	chPublishError := make(chan stream.PublishError, 1)
+	go func(ch chan stream.PublishError) {
+		for {
+			pError := <-ch
+			logError("publish %s error", pError.Name)
+			atomic.AddInt32(&publishErrors, 1)
+
 		}
-	}
+	}(chPublishError)
+
+	simulEnvironment, err = stream.NewEnvironment(stream.NewEnvironmentOptions().
+		SetUri(rabbitmqBrokerUrl).
+		SetMaxProducersPerClient(publishersPerClient).
+		SetMaxConsumersPerClient(consumersPerClient).
+		SetPublishErrorListener(chPublishError))
+	checkErr(err)
 	if consumers > 0 {
 		err = startConsumers()
-		if err != nil {
-			if exitOnError {
-				os.Exit(1)
-			}
-		}
+		checkErr(err)
 	}
 	if publishers > 0 {
 		err = startPublishers()
-		if err != nil {
-			if exitOnError {
-				os.Exit(1)
-			}
-		}
+		checkErr(err)
 	}
 	printStats()
 
 	return err
+}
+
+func checkErr(err error) {
+	if err != nil {
+		if exitOnError {
+			os.Exit(1)
+		}
+	}
 }
 
 func randomSleep() {
@@ -173,20 +178,10 @@ func startPublishers() error {
 		}
 	}(chPublishConfirm)
 
-	chPublishError := make(chan stream.PublishError, 1)
-	go func(ch chan stream.PublishError) {
-		for {
-			pError := <-ch
-			logError("publish %s error", pError.Name)
-			atomic.AddInt32(&publishErrors, 1)
-
-		}
-	}(chPublishError)
-
 	for _, streamName := range streams {
 		for i := 1; i <= publishers; i++ {
 			logInfo("Starting publisher number: %d", i)
-			publisher, err := env.NewProducer(streamName, chPublishConfirm, chPublishError,
+			publisher, err := env.NewProducer(streamName, chPublishConfirm,
 				stream.NewProducerOptions().SetProducerName(fmt.Sprintf("pub-%s-%d", streamName, i)))
 
 			if err != nil {
@@ -236,6 +231,8 @@ func startPublishers() error {
 						logError("Error publishing %s", err)
 						time.Sleep(1 * time.Second)
 					}
+					checkErr(err)
+
 				}
 			}(publisher, arr)
 		}
@@ -258,12 +255,16 @@ func startConsumer(consumerName string, streamName string) error {
 	go func() {
 		event := <-chConsumerClose
 		logInfo("Consumer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
+		if exitOnError {
+			os.Exit(1)
+		}
 		atomic.AddInt32(&consumersCloseCount, 1)
 		time.Sleep(200 * time.Millisecond)
 		err := startConsumer(event.Name, event.StreamName)
 		if err != nil {
 			logError("Error starting consumer: %s", err)
 		}
+		checkErr(err)
 	}()
 
 	_, err := simulEnvironment.NewConsumer(context.TODO(),
@@ -287,6 +288,7 @@ func startConsumers() error {
 				logError("Error creating consumer: %s", err)
 				return err
 			}
+			checkErr(err)
 
 		}
 	}

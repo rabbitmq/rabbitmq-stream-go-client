@@ -9,7 +9,7 @@ services:
     image: pivotalrabbitmq/rabbitmq-stream
     ports:
       - "15672:15672"
-      - "5551:5551"
+      - "5552:5552"
     tty: true
     volumes:
 #      - rabbit1:/var/lib/rabbitmq
@@ -26,7 +26,7 @@ services:
     image: pivotalrabbitmq/rabbitmq-stream
     ports:
       - "15673:15672"
-      - "5552:5551"
+      - "5554:5552"
     tty: true
     volumes:
 #      - rabbit2:/var/lib/rabbitmq

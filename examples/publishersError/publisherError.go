@@ -9,7 +9,6 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
-	"time"
 )
 
 func CheckErr(err error) {
@@ -30,19 +29,28 @@ func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 	// Set log level, not mandatory by default is INFO
-	stream.SetLevelInfo(stream.DEBUG)
+	//stream.SetLevelInfo(stream.DEBUG)
 
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
-	//uri := "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
-	// The environment is a wrapper around the TCP client connections
 
+	chPublishError := make(chan stream.PublishError, 10)
+	go func(ch chan stream.PublishError) {
+
+		for {
+			pError := <-ch
+			fmt.Printf("Error during publish message id:%d,  error: %s \n", pError.PublishingId, pError.ErrorMessage)
+		}
+
+	}(chPublishError)
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
-			SetPort(5551).
+			SetPort(5552).
 			SetUser("guest").
-			SetPassword("guest"))
+			SetPassword("guest").
+			SetPublishErrorListener(chPublishError).
+			SetMaxConsumersPerClient(1))
 	CheckErr(err)
 	// Create a stream, you can create streams without any option like:
 	// err = env.DeclareStream(streamName, nil)
@@ -56,31 +64,25 @@ func main() {
 
 	CheckErr(err)
 
-	producer, err := env.NewProducer(streamName, nil, nil, nil)
+	producer, err := env.NewProducer(streamName, nil, nil)
 	CheckErr(err)
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
 	go func() {
 		for i := 0; i < 100; i++ {
-			_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(10))
+			_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(2))
 			CheckErr(err)
-			time.Sleep(1 * time.Second)
+			_, err = producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(2))
+			CheckErr(err)
+			//time.Sleep(100 * time.Millisecond)
 		}
 	}()
 
-	messagesHandler := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		fmt.Printf("consumer id: %d, text: %s time:%s\n ", consumerContext.Consumer.ID, message.Data, time.Now().String())
-	}
-
-	consumer, err := env.NewConsumer(context.Background(), "streamNamea", messagesHandler, nil,
-		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer").                  // gives a name
-			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
+	err = producer.Close()
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
-	err = consumer.UnSubscribe()
 	CheckErr(err)
 
 }

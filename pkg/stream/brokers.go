@@ -17,7 +17,7 @@ type Broker struct {
 func newBrokerDefault() Broker {
 	return Broker{
 		Host:     "localhost",
-		Port:     5551,
+		Port:     5552,
 		User:     "guest",
 		Password: "guest",
 		Vhost:    "/",

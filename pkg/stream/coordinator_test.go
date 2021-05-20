@@ -11,7 +11,7 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
 		It("Add/Remove Producers ", func() {
-			p, err := client.coordinator.NewProducer(nil, nil, nil)
+			p, err := client.coordinator.NewProducer(nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.ID).To(Equal(uint8(0)))
 			err = client.coordinator.RemoveProducerById(p.ID)
@@ -26,7 +26,7 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete coordinator ", func() {
 			var producersId []uint8
 			for i := 0; i < 100; i++ {
-				p, err := client.coordinator.NewProducer(nil, nil, nil)
+				p, err := client.coordinator.NewProducer(nil, nil)
 				producersId = append(producersId, p.ID)
 				Expect(err).NotTo(HaveOccurred())
 			}
@@ -42,7 +42,7 @@ var _ = Describe("Coordinator", func() {
 			var producersId []uint8
 			for i := 0; i < 500; i++ {
 
-				p, err := client.coordinator.NewProducer(nil, nil, nil)
+				p, err := client.coordinator.NewProducer(nil, nil)
 				if i >= int(^uint8(0)) {
 					Expect(fmt.Sprintf("%s", err)).
 						To(ContainSubstring("No more items available"))
@@ -63,7 +63,7 @@ var _ = Describe("Coordinator", func() {
 				// raise an logError not found
 				Expect(err).To(HaveOccurred())
 
-				p, err := client.coordinator.NewProducer(nil, nil, nil)
+				p, err := client.coordinator.NewProducer(nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p.ID).To(Equal(v))
 			}
@@ -79,7 +79,7 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove consumers", func() {
 		It("Add/Remove consumers ", func() {
-			p, err := client.coordinator.NewProducer(nil, nil, nil)
+			p, err := client.coordinator.NewProducer(nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.ID).To(Equal(uint8(0)))
 			err = client.coordinator.RemoveProducerById(p.ID)

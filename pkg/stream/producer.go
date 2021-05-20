@@ -8,11 +8,10 @@ import (
 )
 
 type Producer struct {
-	ID                   uint8
-	options              *ProducerOptions
-	onClose              onInternalClose
-	publishConfirm       PublishConfirmListener
-	publishErrorListener PublishErrorListener
+	ID             uint8
+	options        *ProducerOptions
+	onClose        onInternalClose
+	publishConfirm PublishConfirmListener
 }
 
 type ProducerOptions struct {

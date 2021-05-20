@@ -61,13 +61,13 @@ const (
 	defaultSocketCallTimeout = 10 * time.Second
 
 	//
-	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5551/%2f"
+	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5552/%2f"
 
 	///
 	defaultReadSocketBuffer = 4096 * 2
 
 	//
-	ClientVersion = "0.4-alpha"
+	ClientVersion = "0.5-alpha"
 )
 
 func lookErrorCode(errorCode uint16) string {
