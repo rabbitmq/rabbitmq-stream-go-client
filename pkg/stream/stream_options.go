@@ -45,7 +45,7 @@ func (s StreamOptions) buildParameters() (map[string]string, error) {
 		}
 
 		if s.MaxSegmentSizeBytes.bytes > 0 {
-			res["max-segment-size"] = fmt.Sprintf("%d", s.MaxSegmentSizeBytes.bytes)
+			res["stream-max-segment-size-bytes"] = fmt.Sprintf("%d", s.MaxSegmentSizeBytes.bytes)
 		}
 	}
 
