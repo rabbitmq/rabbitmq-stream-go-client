@@ -45,9 +45,9 @@ func init() {
 }
 
 func setupCli(baseCmd *cobra.Command) {
-	batchSize = 100
 	baseCmd.PersistentFlags().StringVarP(&rabbitmqBrokerUrl, "uris", "", stream.LocalhostUriConnection, "Broker URL")
 	baseCmd.PersistentFlags().IntVarP(&publishers, "publishers", "", 1, "Number of Publishers")
+	baseCmd.PersistentFlags().IntVarP(&batchSize, "batch-size", "", 100, "Batch Size, from 1 to 200")
 	baseCmd.PersistentFlags().IntVarP(&consumers, "consumers", "", 1, "Number of Consumers")
 	baseCmd.PersistentFlags().IntVarP(&publishersPerClient, "publishers-per-client", "", 3, "Publishers Per Client")
 	baseCmd.PersistentFlags().IntVarP(&consumersPerClient, "consumers-per-client", "", 3, "Consumers Per Client")
