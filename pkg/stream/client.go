@@ -219,9 +219,11 @@ func (c *Client) open(virtualHost string) error {
 		return err
 	}
 
-	<-resp.data
+	advHostPort := <-resp.data
+	for k, v := range advHostPort.(ClientProperties).items {
+		c.clientProperties.items[k] = v
+	}
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
-	//logInfo("data %s", data)
 	return nil
 
 }
@@ -378,7 +380,7 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 
 	streamMetadata := streamsMetadata.Get(stream)
 	if streamMetadata.responseCode != responseCodeOk {
-		return nil, fmt.Errorf("leader error for stream: %s, error:%s", stream, lookErrorCode(streamMetadata.responseCode))
+		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 	return streamMetadata.Leader, nil
 }

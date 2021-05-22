@@ -138,33 +138,31 @@ func randomSleep() {
 }
 
 func initStreams() error {
-	if !preDeclared {
-		logInfo("Declaring streams: %s", streams)
-		env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
-			rabbitmqBrokerUrl))
+	logInfo("Declaring streams: %s", streams)
+	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
+		rabbitmqBrokerUrl))
+	if err != nil {
+		logError("Error init stream connection: %s", err)
+		return err
+	}
+
+	for _, streamName := range streams {
+
+		err = env.DeclareStream(
+			streamName,
+			stream.NewStreamOptions().
+				SetMaxLengthBytes(stream.ByteCapacity{}.From(maxLengthBytes)).
+				SetMaxSegmentSizeBytes(stream.ByteCapacity{}.From(maxSegmentSizeBytes)))
 		if err != nil {
-			logError("Error init stream connection: %s", err)
-			return err
-		}
-
-		for _, streamName := range streams {
-
-			err = env.DeclareStream(
-				streamName,
-				stream.NewStreamOptions().
-					SetMaxLengthBytes(stream.ByteCapacity{}.From(maxLengthBytes)).
-					SetMaxSegmentSizeBytes(stream.ByteCapacity{}.From(maxSegmentSizeBytes)))
-			if err != nil {
-				logError("Error declaring stream: %s", err)
+			if err == stream.PreconditionFailed {
+				logError("The stream: %s already exist with different parameters", streamName)
 				_ = env.Close()
 				return err
 			}
 		}
-		logInfo("End Init streams :%s\n", streams)
-		return env.Close()
 	}
-	logInfo("Predeclared streams: %s\n", streams)
-	return nil
+	logInfo("End Init streams :%s\n", streams)
+	return env.Close()
 }
 func startPublishers() error {
 	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(

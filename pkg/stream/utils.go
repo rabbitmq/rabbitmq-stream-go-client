@@ -25,11 +25,11 @@ func waitCodeWithTimeOut(response *Response, timeout time.Duration) error {
 	select {
 	case code := <-response.code:
 		if code.id != responseCodeOk {
-			return fmt.Errorf("code logError: %s", lookErrorCode(code.id))
+			return lookErrorCode(code.id)
 		}
 		return nil
 	case <-time.After(timeout):
-		logWarn("timeout %d ms - waiting Code, operation: %s", defaultSocketCallTimeout, response.commandDescription)
+		logError("timeout %d ms - waiting Code, operation: %s", defaultSocketCallTimeout, response.commandDescription)
 		return fmt.Errorf("timeout %d ms - waiting Code, operation: %s ", defaultSocketCallTimeout, response.commandDescription)
 	}
 }

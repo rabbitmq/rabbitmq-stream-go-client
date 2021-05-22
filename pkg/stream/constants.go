@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"time"
 )
 
@@ -70,30 +71,39 @@ const (
 	ClientVersion = "0.5-alpha"
 )
 
-func lookErrorCode(errorCode uint16) string {
+var PreconditionFailed = errors.New("Precondition Failed")
+var AuthenticationFailure = errors.New("Authentication Failure")
+var StreamDoesNotExist = errors.New("Stream Does Not Exist")
+var StreamAlreadyExists = errors.New("Stream Already Exists")
+var VirtualHostAccessFailure = errors.New("Virtual Host Access Failure")
+var SubscriptionIdDoesNotExist = errors.New("Subscription Id Does Not Exist")
+var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
+var FrameTooLarge = errors.New("Frame Too Large")
+
+func lookErrorCode(errorCode uint16) error {
 	switch errorCode {
 	case responseCodeOk:
-		return "OK"
+		return nil
 	case responseCodeAuthenticationFailure:
-		return "authentication failure"
+		return AuthenticationFailure
 	case responseCodeStreamDoesNotExist:
-		return "stream does not exist"
+		return StreamDoesNotExist
 	case responseCodeStreamAlreadyExists:
-		return "stream already exists"
+		return StreamAlreadyExists
 	case responseCodeVirtualHostAccessFailure:
-		return "virtualHost access failure"
+		return VirtualHostAccessFailure
 	case responseCodeSubscriptionIdDoesNotExist:
-		return "subscription id does not exist"
+		return SubscriptionIdDoesNotExist
 	case responseCodePublisherDoesNotExist:
-		return "publisher does not exist"
+		return PublisherDoesNotExist
 	case responseCodePreconditionFailed:
-		return "precondition failed"
+		return PreconditionFailed
 	case responseCodeFrameTooLarge:
-		return "frame too large"
+		return FrameTooLarge
 	default:
 		{
 			logWarn("Error not handled %d", errorCode)
-			return "Error not handled"
+			return errors.New("Generic Error")
 		}
 	}
 }

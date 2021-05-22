@@ -2,7 +2,6 @@ package stream
 
 import (
 	"context"
-	"fmt"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -74,8 +73,8 @@ var _ = Describe("Streaming Producers", func() {
 
 	It("Not found NotExistingStream", func() {
 		_, err := testEnvironment.NewProducer("notExistingStream", nil, nil)
-		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("leader error for stream"))
+		Expect(err).
+			To(Equal(StreamDoesNotExist))
 	})
 
 	It("Publish Confirmation", func() {

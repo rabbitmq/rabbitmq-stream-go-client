@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"fmt"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -133,15 +132,14 @@ var _ = Describe("Environment test", func() {
 		It("Connection Authentication Failure", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
 				SetUri("rabbitmq-StreamOptions://wrong_user:wrong_password@localhost:5552/%2f"))
-			Expect(fmt.Sprintf("%s", err)).
-				To(ContainSubstring("authentication failure"))
+			Expect(err).
+				To(Equal(AuthenticationFailure))
 		})
 
 		It("Connection Vhost not exist", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
 				SetUri("rabbitmq-StreamOptions://guest:guest@localhost:5552/VHOSTNOEXIST"))
-			Expect(fmt.Sprintf("%s", err)).
-				To(ContainSubstring("virtualHost access failure"))
+			Expect(err).To(Equal(VirtualHostAccessFailure))
 		})
 
 		It("Connection No Endpoint", func() {

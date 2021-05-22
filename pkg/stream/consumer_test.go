@@ -2,10 +2,10 @@ package stream
 
 import (
 	"context"
-	"fmt"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"sync/atomic"
 	"time"
@@ -103,8 +103,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 			}, nil, nil)
 
-		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("stream does not exist"))
+		Expect(errors.Cause(err)).To(Equal(StreamDoesNotExist))
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
