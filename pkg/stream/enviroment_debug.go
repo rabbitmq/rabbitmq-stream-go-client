@@ -46,3 +46,13 @@ func (env *Environment) ClientsPerStream(streamName string) []*Client {
 	}
 	return result
 }
+
+func (env *Environment) Coordinators() []*Coordinator {
+	var result []*Coordinator
+	for _, p := range env.producers.producersCoordinator {
+		for _, client := range p.getClientsPerContext() {
+			result = append(result, client.coordinator)
+		}
+	}
+	return result
+}

@@ -145,7 +145,7 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
 	var item = &Consumer{ID: lastId, options: parameters,
-		response: newResponse(lookUpCommand(commandSubscribe)), mutex: &sync.RWMutex{},
+		response: newResponse(lookUpCommand(commandSubscribe)), mutex: &sync.Mutex{},
 		CloseHandler:    closeHandler,
 		MessagesHandler: messagesHandler,
 	}

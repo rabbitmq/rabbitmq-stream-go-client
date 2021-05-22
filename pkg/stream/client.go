@@ -214,7 +214,16 @@ func (c *Client) open(virtualHost string) error {
 	writeProtocolHeader(b, length, commandOpen,
 		correlationId)
 	writeString(b, virtualHost)
-	return c.handleWrite(b.Bytes(), resp)
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	if err != nil {
+		return err
+	}
+
+	<-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	//logInfo("data %s", data)
+	return nil
+
 }
 
 func (c *Client) DeleteStream(streamName string) error {
@@ -438,6 +447,12 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 		// here we change the type since typeLastConsumed is not part of the protocol
 		options.Offset.typeOfs = typeOffset
 	}
+
+	// copy the option offset to the consumer offset
+	// the option.offset won't change ( in case we need to retrive the original configuration)
+	// consumer.current offset will be moved when reading
+	consumer.setCurrentOffset(options.Offset.offset)
+
 	resp := c.coordinator.NewResponse(commandSubscribe, streamName)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -467,7 +482,7 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 				}
 
 			case data := <-consumer.response.data:
-				consumer.setOffset(data.(int64))
+				consumer.setCurrentOffset(data.(int64))
 
 			case messages := <-consumer.response.messages:
 				for _, message := range messages {

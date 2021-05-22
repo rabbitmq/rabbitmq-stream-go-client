@@ -10,12 +10,14 @@ import (
 type Consumer struct {
 	ID              uint8
 	response        *Response
-	offset          int64
 	options         *ConsumerOptions
 	onClose         onInternalClose
-	mutex           *sync.RWMutex
+	mutex           *sync.Mutex
 	MessagesHandler MessagesHandler
-	CloseHandler    CloseListener
+	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
+	// and won't change. currentOffset is the status of the offset
+	currentOffset int64
+	CloseHandler  CloseListener
 }
 
 func (consumer *Consumer) GetStreamName() string {
@@ -26,16 +28,17 @@ func (consumer *Consumer) GetConsumerName() string {
 	return consumer.options.ConsumerName
 }
 
-func (consumer *Consumer) setOffset(offset int64) {
+func (consumer *Consumer) setCurrentOffset(offset int64) {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
-	consumer.offset = offset
+	consumer.currentOffset = offset
 }
 
 func (consumer *Consumer) GetOffset() int64 {
-	consumer.mutex.RLock()
-	defer consumer.mutex.RUnlock()
-	return consumer.offset
+	consumer.mutex.Lock()
+	res := consumer.currentOffset
+	consumer.mutex.Unlock()
+	return res
 }
 
 type ConsumerContext struct {

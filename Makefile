@@ -23,7 +23,7 @@ check: $(STATICCHECK)
 	$(STATICCHECK) ./pkg/stream
 
 test: vet fmt check
-	go test -v  ./pkg/stream -race -coverprofile=coverage.txt -covermode=atomic
+	go test -v  ./pkg/stream -race -coverprofile=coverage.txt -covermode=atomic -tags debug
 
 integration-test: vet fmt check
 	go test -v  ./pkg/system_integration -race -coverprofile=coverage.txt -covermode=atomic -tags debug
