@@ -102,7 +102,7 @@ var _ = Describe("Environment test", func() {
 
 		wg := &sync.WaitGroup{}
 
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func() {
 				_, errProd := env.NewProducer(streamNameWillBeDelete, nil, nil)
@@ -114,12 +114,13 @@ var _ = Describe("Environment test", func() {
 
 		}
 		wg.Wait()
+		time.Sleep(500 * time.Millisecond)
 		err = env.DeleteStream(streamNameWillBeDelete)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
 		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(4))
+			getClientsPerContext())).To(Equal(3))
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
