@@ -53,7 +53,6 @@ func main() {
 	)
 
 	CheckErr(err)
-
 	//optional publish confirmation channel
 	chPublishConfirm := make(chan []int64, 1)
 	go func(ch chan []int64) {
@@ -81,10 +80,10 @@ func main() {
 	//}, nil)
 	// if you need to track the offset you need a consumer name like:
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		fmt.Printf("consumer id: %d, text: %s \n ", consumerContext.Consumer.ID, message.Data)
+		fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetConsumerName(), message.Data)
 		err := consumerContext.Consumer.Commit()
 		if err != nil {
-			fmt.Printf("Error during commit")
+			fmt.Printf("Error during commit: %s", err)
 		}
 	}
 
@@ -96,7 +95,8 @@ func main() {
 		fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", event.Name, event.StreamName, event.Reason)
 	}()
 
-	consumer, err := env.NewConsumer(context.TODO(), streamName,
+	consumer, err := env.NewConsumer(context.TODO(),
+		streamName,
 		handleMessages,
 		channelClose,
 		stream.NewConsumerOptions().
@@ -106,7 +106,7 @@ func main() {
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
-	err = consumer.UnSubscribe()
+	err = consumer.Close()
 	time.Sleep(200 * time.Millisecond)
 	CheckErr(err)
 	err = env.Close()

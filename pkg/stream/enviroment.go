@@ -99,6 +99,22 @@ func (env *Environment) NewProducer(streamName string, channelConfirmListener Pu
 	return env.producers.newProducer(client, streamName, channelConfirmListener, producerOptions)
 }
 
+func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
+	client, err := env.newClientLocator()
+	defer func(client *Client) {
+		err := client.Close()
+		if err != nil {
+			return
+		}
+	}(client)
+	if err != nil {
+		return nil, err
+	}
+	streamsMetadata := client.metaData(streamName)
+	streamMetadata := streamsMetadata.Get(streamName)
+	return streamMetadata, nil
+}
+
 func (env *Environment) NewConsumer(ctx context.Context, streamName string,
 	messagesHandler MessagesHandler,
 	closeHandler CloseListener, options *ConsumerOptions) (*Consumer, error) {

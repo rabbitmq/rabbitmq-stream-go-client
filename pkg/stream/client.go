@@ -139,7 +139,7 @@ func (c *Client) peerProperties() error {
 		writeString(b, element)
 	}
 
-	return c.handleWrite(b.Bytes(), resp)
+	return c.handleWrite(b.Bytes(), resp).Err
 }
 
 func (c *Client) authenticate(user string, password string) error {
@@ -193,14 +193,14 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	writeInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
 	err := c.handleWrite(b.Bytes(), resp)
-	if err != nil {
-		return err
+	if err.Err != nil {
+		return err.Err
 	}
 	// double read for TUNE
 	tuneData := <-respTune.data
-	err = c.coordinator.RemoveResponseByName("tune")
-	if err != nil {
-		return err
+	errR := c.coordinator.RemoveResponseByName("tune")
+	if errR != nil {
+		return errR
 	}
 
 	return c.socket.writeAndFlush(tuneData.([]byte))
@@ -214,7 +214,18 @@ func (c *Client) open(virtualHost string) error {
 	writeProtocolHeader(b, length, commandOpen,
 		correlationId)
 	writeString(b, virtualHost)
-	return c.handleWrite(b.Bytes(), resp)
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	if err.Err != nil {
+		return err.Err
+	}
+
+	advHostPort := <-resp.data
+	for k, v := range advHostPort.(ClientProperties).items {
+		c.clientProperties.items[k] = v
+	}
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	return nil
+
 }
 
 func (c *Client) DeleteStream(streamName string) error {
@@ -227,7 +238,7 @@ func (c *Client) DeleteStream(streamName string) error {
 
 	writeString(b, streamName)
 
-	return c.handleWrite(b.Bytes(), resp)
+	return c.handleWrite(b.Bytes(), resp).Err
 }
 
 func (c *Client) heartBeat() {
@@ -330,7 +341,7 @@ func (c *Client) DeclarePublisher(streamName string, channelConfirmListener Publ
 	writeShort(b, int16(publisherReferenceSize))
 	writeString(b, streamName)
 	res := c.handleWrite(b.Bytes(), resp)
-	return producer, res
+	return producer, res.Err
 }
 
 func (c *Client) metaData(streams ...string) *StreamsMetadata {
@@ -353,7 +364,7 @@ func (c *Client) metaData(streams ...string) *StreamsMetadata {
 	}
 
 	err := c.handleWrite(b.Bytes(), resp)
-	if err != nil {
+	if err.Err != nil {
 		return nil
 	}
 
@@ -369,7 +380,7 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 
 	streamMetadata := streamsMetadata.Get(stream)
 	if streamMetadata.responseCode != responseCodeOk {
-		return nil, fmt.Errorf("leader error for stream: %s, error:%s", stream, lookErrorCode(streamMetadata.responseCode))
+		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 	return streamMetadata.Leader, nil
 }
@@ -405,7 +416,7 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 		writeString(b, element)
 	}
 
-	return c.handleWrite(b.Bytes(), resp)
+	return c.handleWrite(b.Bytes(), resp).Err
 
 }
 
@@ -438,6 +449,12 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 		// here we change the type since typeLastConsumed is not part of the protocol
 		options.Offset.typeOfs = typeOffset
 	}
+
+	// copy the option offset to the consumer offset
+	// the option.offset won't change ( in case we need to retrive the original configuration)
+	// consumer.current offset will be moved when reading
+	consumer.setCurrentOffset(options.Offset.offset)
+
 	resp := c.coordinator.NewResponse(commandSubscribe, streamName)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -467,7 +484,7 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 				}
 
 			case data := <-consumer.response.data:
-				consumer.setOffset(data.(int64))
+				consumer.setCurrentOffset(data.(int64))
 
 			case messages := <-consumer.response.messages:
 				for _, message := range messages {
@@ -476,5 +493,5 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 			}
 		}
 	}()
-	return consumer, err
+	return consumer, err.Err
 }

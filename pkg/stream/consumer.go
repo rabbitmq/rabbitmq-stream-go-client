@@ -10,12 +10,14 @@ import (
 type Consumer struct {
 	ID              uint8
 	response        *Response
-	offset          int64
 	options         *ConsumerOptions
 	onClose         onInternalClose
-	mutex           *sync.RWMutex
+	mutex           *sync.Mutex
 	MessagesHandler MessagesHandler
-	CloseHandler    CloseListener
+	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
+	// and won't change. currentOffset is the status of the offset
+	currentOffset int64
+	CloseHandler  CloseListener
 }
 
 func (consumer *Consumer) GetStreamName() string {
@@ -26,16 +28,17 @@ func (consumer *Consumer) GetConsumerName() string {
 	return consumer.options.ConsumerName
 }
 
-func (consumer *Consumer) setOffset(offset int64) {
+func (consumer *Consumer) setCurrentOffset(offset int64) {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
-	consumer.offset = offset
+	consumer.currentOffset = offset
 }
 
 func (consumer *Consumer) GetOffset() int64 {
-	consumer.mutex.RLock()
-	defer consumer.mutex.RUnlock()
-	return consumer.offset
+	consumer.mutex.Lock()
+	res := consumer.currentOffset
+	consumer.mutex.Unlock()
+	return res
 }
 
 type ConsumerContext struct {
@@ -88,7 +91,12 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 	}
 }
 
-func (consumer *Consumer) UnSubscribe() error {
+func (consumer *Consumer) Close() error {
+	_, errGet := consumer.options.client.coordinator.GetConsumerById(consumer.ID)
+	if errGet != nil {
+		return nil
+	}
+
 	length := 2 + 2 + 4 + 1
 	resp := consumer.options.client.coordinator.NewResponse(CommandUnsubscribe)
 	correlationId := resp.correlationid
@@ -98,6 +106,9 @@ func (consumer *Consumer) UnSubscribe() error {
 
 	writeByte(b, consumer.ID)
 	err := consumer.options.client.handleWrite(b.Bytes(), resp)
+	if err.Err != nil && err.isTimeout {
+		return err.Err
+	}
 	consumer.response.code <- Code{id: closeChannel}
 	errC := consumer.options.client.coordinator.RemoveConsumerById(consumer.ID, Event{
 		Command:    CommandUnsubscribe,
@@ -122,7 +133,7 @@ func (consumer *Consumer) UnSubscribe() error {
 	ch <- consumer.ID
 	consumer.onClose(ch)
 	close(ch)
-	return err
+	return err.Err
 }
 
 func (consumer *Consumer) Commit() error {
@@ -155,8 +166,8 @@ func (consumer *Consumer) QueryOffset() (int64, error) {
 	writeString(b, consumer.options.ConsumerName)
 	writeString(b, consumer.options.streamName)
 	err := consumer.options.client.handleWriteWithResponse(b.Bytes(), resp, false)
-	if err != nil {
-		return 0, err
+	if err.Err != nil {
+		return 0, err.Err
 
 	}
 

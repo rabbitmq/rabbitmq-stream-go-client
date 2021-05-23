@@ -45,12 +45,16 @@ func (c *Client) handleResponse() {
 			{
 				c.handleTune(buffer)
 			}
-		case commandOpen, commandDeclarePublisher,
+		case commandDeclarePublisher,
 			commandDeletePublisher, commandDeleteStream,
 			commandCreateStream, commandSaslAuthenticate, commandSubscribe,
 			CommandUnsubscribe:
 			{
 				c.handleGenericResponse(readerProtocol, buffer)
+			}
+		case commandOpen:
+			{
+				c.commandOpen(readerProtocol, buffer)
 			}
 		case commandPublishError:
 			{
@@ -179,6 +183,27 @@ func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Re
 	res.code <- Code{id: readProtocol.ResponseCode}
 }
 
+func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = readUInt(r)
+	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
+	clientProperties := ClientProperties{
+		items: map[string]string{},
+	}
+	connectionPropertiesCount, _ := readUInt(r)
+	for i := 0; i < int(connectionPropertiesCount); i++ {
+		clientProperties.items[readString(r)] = readString(r)
+	}
+
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	if err != nil {
+		// TODO handle readProtocol
+		return
+	}
+	res.code <- Code{id: readProtocol.ResponseCode}
+	res.data <- clientProperties
+
+}
+
 func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 
 	readProtocol.PublishID = readByte(r)
@@ -301,7 +326,7 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 				PublisherId:  publisherId,
 				PublishingId: publishingId,
 				Code:         code,
-				ErrorMessage: lookErrorCode(code),
+				Err:          lookErrorCode(code),
 			}
 		}
 		publishingErrorCount--

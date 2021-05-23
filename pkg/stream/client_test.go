@@ -23,7 +23,7 @@ var _ = AfterSuite(func() {
 	err := testEnvironment.Close()
 	Expect(err).NotTo(HaveOccurred())
 	time.Sleep(500 * time.Millisecond)
-	//Expect(testEnvironment.clientLocator.coordinator.ProducersCount()).To(Equal(0))
+	//Expect(testEnvironment.Coordinators()[0].ProducersCount()).To(Equal(0))
 	//Expect(testEnvironment.clientLocator.coordinator.ResponsesCount()).To(Equal(0))
 	//Expect(testEnvironment.clientLocator.coordinator.ConsumersCount()).To(Equal(0))
 })
@@ -112,8 +112,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 		Expect(err).NotTo(HaveOccurred())
 		err = testEnvironment.DeclareStream(testStreamName, nil)
 		Expect(err).To(HaveOccurred())
-		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("stream already exists"))
+		Expect(err).To(Equal(StreamAlreadyExists))
 		err = testEnvironment.DeleteStream(testStreamName)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -127,8 +126,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 				MaxLengthBytes: ByteCapacity{}.MB(100),
 			})
 		Expect(err).To(HaveOccurred())
-		Expect(fmt.Sprintf("%s", err)).
-			To(ContainSubstring("precondition failed"))
+		Expect(err).To(Equal(PreconditionFailed))
 		err = testEnvironment.DeleteStream(testStreamName)
 		Expect(err).NotTo(HaveOccurred())
 	})

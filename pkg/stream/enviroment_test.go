@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"fmt"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -103,7 +102,7 @@ var _ = Describe("Environment test", func() {
 
 		wg := &sync.WaitGroup{}
 
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func() {
 				_, errProd := env.NewProducer(streamNameWillBeDelete, nil, nil)
@@ -115,12 +114,13 @@ var _ = Describe("Environment test", func() {
 
 		}
 		wg.Wait()
+		time.Sleep(500 * time.Millisecond)
 		err = env.DeleteStream(streamNameWillBeDelete)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
 		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(4))
+			getClientsPerContext())).To(Equal(3))
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
@@ -133,15 +133,14 @@ var _ = Describe("Environment test", func() {
 		It("Connection Authentication Failure", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
 				SetUri("rabbitmq-StreamOptions://wrong_user:wrong_password@localhost:5552/%2f"))
-			Expect(fmt.Sprintf("%s", err)).
-				To(ContainSubstring("authentication failure"))
+			Expect(err).
+				To(Equal(AuthenticationFailure))
 		})
 
 		It("Connection Vhost not exist", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
 				SetUri("rabbitmq-StreamOptions://guest:guest@localhost:5552/VHOSTNOEXIST"))
-			Expect(fmt.Sprintf("%s", err)).
-				To(ContainSubstring("virtualHost access failure"))
+			Expect(err).To(Equal(VirtualHostAccessFailure))
 		})
 
 		It("Connection No Endpoint", func() {

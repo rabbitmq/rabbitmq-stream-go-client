@@ -61,11 +61,11 @@ func (sck *socket) writeAndFlush(buffer []byte) error {
 	return nil
 }
 
-func (c *Client) handleWrite(buffer []byte, response *Response) error {
+func (c *Client) handleWrite(buffer []byte, response *Response) responseError {
 	return c.handleWriteWithResponse(buffer, response, true)
 }
 
-func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, removeResponse bool) error {
+func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, removeResponse bool) responseError {
 	result := c.socket.writeAndFlush(buffer)
 	resultCode := waitCodeWithDefaultTimeOut(response)
 	/// we need to remove the response before evaluate the
