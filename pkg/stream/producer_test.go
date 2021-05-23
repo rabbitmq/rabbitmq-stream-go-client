@@ -39,7 +39,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("newProducer/Publish/UnSubscribe Publisher", func() {
+	It("newProducer/Publish/Close Publisher", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 

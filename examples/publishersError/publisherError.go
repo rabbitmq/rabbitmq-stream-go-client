@@ -39,7 +39,7 @@ func main() {
 
 		for {
 			pError := <-ch
-			fmt.Printf("Error during publish message id:%d,  error: %s \n", pError.PublishingId, pError.ErrorMessage)
+			fmt.Printf("Error during publish message id:%d,  error: %s \n", pError.PublishingId, pError.Err)
 		}
 
 	}(chPublishError)

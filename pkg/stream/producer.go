@@ -110,5 +110,5 @@ func (c *Client) deletePublisher(publisherId byte) error {
 		logWarn("Error RemoveProducerById %d", publisherId)
 	}
 
-	return errWrite
+	return errWrite.Err
 }

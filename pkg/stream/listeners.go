@@ -13,7 +13,7 @@ type PublishError struct {
 	Name         string
 	PublishingId int64
 	Code         uint16
-	Error        error
+	Err          error
 }
 
 type onInternalClose func(ch <-chan uint8)

@@ -82,7 +82,7 @@ func main() {
 	_, _ = reader.ReadString('\n')
 	err = producer.Close()
 	CheckErr(err)
-	err = consumer.UnSubscribe()
+	err = consumer.Close()
 	CheckErr(err)
 	err = env.DeleteStream(streamName)
 	CheckErr(err)

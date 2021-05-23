@@ -43,7 +43,7 @@ var _ = Describe("Streaming Consumers", func() {
 			getClientsPerContext())).To(Equal(4))
 
 		for _, consumer := range consumers {
-			err = consumer.UnSubscribe()
+			err = consumer.Close()
 			Expect(err).NotTo(HaveOccurred())
 		}
 
@@ -91,7 +91,7 @@ var _ = Describe("Streaming Consumers", func() {
 			}, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(10 * time.Millisecond)
-		err = consumer.UnSubscribe()
+		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -133,7 +133,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(107)))
-		err = consumer.UnSubscribe()
+		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
 
 		atomic.SwapInt32(&messagesCount, 0)
@@ -145,7 +145,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(0)))
-		err = consumer.UnSubscribe()
+		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
@@ -171,7 +171,7 @@ var _ = Describe("Streaming Consumers", func() {
 			}, chConsumerClose, nil)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(100 * time.Millisecond)
-		err = consumer.UnSubscribe()
+		err = consumer.Close()
 		time.Sleep(500 * time.Millisecond)
 		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandUnsubscribe)))
 		Expect(err).NotTo(HaveOccurred())
@@ -233,7 +233,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(50)))
-		err = consumer.UnSubscribe()
+		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

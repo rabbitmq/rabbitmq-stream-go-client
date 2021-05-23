@@ -326,7 +326,7 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 				PublisherId:  publisherId,
 				PublishingId: publishingId,
 				Code:         code,
-				Error:        lookErrorCode(code),
+				Err:          lookErrorCode(code),
 			}
 		}
 		publishingErrorCount--

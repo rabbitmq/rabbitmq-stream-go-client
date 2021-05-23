@@ -16,7 +16,7 @@ var _ = Describe("Utils", func() {
 		wg.Add(1)
 		go func(res *Response) {
 			err := waitCodeWithDefaultTimeOut(res)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(err.Err).ToNot(HaveOccurred())
 			wg.Done()
 		}(response)
 		time.Sleep(200 * time.Millisecond)
@@ -34,7 +34,7 @@ var _ = Describe("Utils", func() {
 		wg.Add(1)
 		go func(res *Response) {
 			err := waitCodeWithDefaultTimeOut(res)
-			Expect(err).To(HaveOccurred())
+			Expect(err.Err).To(HaveOccurred())
 			wg.Done()
 		}(response)
 

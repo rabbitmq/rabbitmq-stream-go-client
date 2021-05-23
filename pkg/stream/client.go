@@ -139,7 +139,7 @@ func (c *Client) peerProperties() error {
 		writeString(b, element)
 	}
 
-	return c.handleWrite(b.Bytes(), resp)
+	return c.handleWrite(b.Bytes(), resp).Err
 }
 
 func (c *Client) authenticate(user string, password string) error {
@@ -193,14 +193,14 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	writeInt(b, len(challengeResponse))
 	b.Write(challengeResponse)
 	err := c.handleWrite(b.Bytes(), resp)
-	if err != nil {
-		return err
+	if err.Err != nil {
+		return err.Err
 	}
 	// double read for TUNE
 	tuneData := <-respTune.data
-	err = c.coordinator.RemoveResponseByName("tune")
-	if err != nil {
-		return err
+	errR := c.coordinator.RemoveResponseByName("tune")
+	if errR != nil {
+		return errR
 	}
 
 	return c.socket.writeAndFlush(tuneData.([]byte))
@@ -215,8 +215,8 @@ func (c *Client) open(virtualHost string) error {
 		correlationId)
 	writeString(b, virtualHost)
 	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
-	if err != nil {
-		return err
+	if err.Err != nil {
+		return err.Err
 	}
 
 	advHostPort := <-resp.data
@@ -238,7 +238,7 @@ func (c *Client) DeleteStream(streamName string) error {
 
 	writeString(b, streamName)
 
-	return c.handleWrite(b.Bytes(), resp)
+	return c.handleWrite(b.Bytes(), resp).Err
 }
 
 func (c *Client) heartBeat() {
@@ -341,7 +341,7 @@ func (c *Client) DeclarePublisher(streamName string, channelConfirmListener Publ
 	writeShort(b, int16(publisherReferenceSize))
 	writeString(b, streamName)
 	res := c.handleWrite(b.Bytes(), resp)
-	return producer, res
+	return producer, res.Err
 }
 
 func (c *Client) metaData(streams ...string) *StreamsMetadata {
@@ -364,7 +364,7 @@ func (c *Client) metaData(streams ...string) *StreamsMetadata {
 	}
 
 	err := c.handleWrite(b.Bytes(), resp)
-	if err != nil {
+	if err.Err != nil {
 		return nil
 	}
 
@@ -416,7 +416,7 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 		writeString(b, element)
 	}
 
-	return c.handleWrite(b.Bytes(), resp)
+	return c.handleWrite(b.Bytes(), resp).Err
 
 }
 
@@ -493,5 +493,5 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 			}
 		}
 	}()
-	return consumer, err
+	return consumer, err.Err
 }
