@@ -79,6 +79,7 @@ var VirtualHostAccessFailure = errors.New("Virtual Host Access Failure")
 var SubscriptionIdDoesNotExist = errors.New("Subscription Id Does Not Exist")
 var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
 var FrameTooLarge = errors.New("Frame Too Large")
+var CodeAccessRefused = errors.New("Resources Access Refused")
 
 func lookErrorCode(errorCode uint16) error {
 	switch errorCode {
@@ -100,6 +101,8 @@ func lookErrorCode(errorCode uint16) error {
 		return PreconditionFailed
 	case responseCodeFrameTooLarge:
 		return FrameTooLarge
+	case responseCodeAccessRefused:
+		return CodeAccessRefused
 	default:
 		{
 			logWarn("Error not handled %d", errorCode)
