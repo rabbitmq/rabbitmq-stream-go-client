@@ -44,7 +44,7 @@ func (byteCapacity ByteCapacity) TB(value int64) *ByteCapacity {
 }
 
 func (byteCapacity ByteCapacity) From(value string) *ByteCapacity {
-	if value == "" {
+	if value == "" || value == "0" {
 		return &ByteCapacity{bytes: 0, error: nil}
 	}
 

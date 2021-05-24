@@ -151,6 +151,7 @@ func initStreams() error {
 		err = env.DeclareStream(
 			streamName,
 			stream.NewStreamOptions().
+				SetMaxAge(time.Duration(maxAge)*time.Hour).
 				SetMaxLengthBytes(stream.ByteCapacity{}.From(maxLengthBytes)).
 				SetMaxSegmentSizeBytes(stream.ByteCapacity{}.From(maxSegmentSizeBytes)))
 		if err != nil {

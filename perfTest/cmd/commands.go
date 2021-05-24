@@ -30,6 +30,7 @@ var (
 	consumersPerClient  int
 	streams             []string
 	maxLengthBytes      string
+	maxAge              int
 	maxSegmentSizeBytes string
 	printStatsV         bool
 	rate                int
@@ -56,7 +57,8 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.PersistentFlags().BoolVarP(&exitOnError, "exit-on-error", "", true, "Close the app in case of error")
 	baseCmd.PersistentFlags().BoolVarP(&printStatsV, "print-stats", "", true, "Print stats")
 	baseCmd.PersistentFlags().StringSliceVarP(&streams, "streams", "", []string{"perf-test-go"}, "Stream names")
-	baseCmd.PersistentFlags().StringVarP(&maxLengthBytes, "max-length-bytes", "", "1GB", "Stream max length bytes, e.g. 10MB, 50GB, etc.")
+	baseCmd.PersistentFlags().StringVarP(&maxLengthBytes, "max-length-bytes", "", "0", "Stream max length bytes, e.g. 10MB, 50GB, etc.")
+	baseCmd.PersistentFlags().IntVarP(&maxAge, "max-age", "", 0, "Stream Age in hours, e.g. 1,2.. 24 , etc.")
 	baseCmd.PersistentFlags().StringVarP(&maxSegmentSizeBytes, "stream-max-segment-size-bytes", "", "500MB", "Stream segment size bytes, e.g. 10MB, 1GB, etc.")
 	baseCmd.AddCommand(versionCmd)
 	baseCmd.AddCommand(newSilent())

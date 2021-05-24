@@ -39,8 +39,8 @@ func main() {
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
 			SetPort(5552).
-			SetUser("readonly").
-			SetPassword("readonly"))
+			SetUser("guest").
+			SetPassword("guest"))
 	CheckErr(err)
 	// Create a stream, you can create streams without any option like:
 	// err = env.DeclareStream(streamName, nil)
