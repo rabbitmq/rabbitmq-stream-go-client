@@ -50,7 +50,7 @@ func (s StreamOptions) buildParameters() (map[string]string, error) {
 	}
 
 	if s.MaxAge > 0 {
-		res["max-age"] = s.MaxAge.String()
+		res["max-age"] = fmt.Sprintf("%.0fs", s.MaxAge.Seconds())
 	}
 	return res, nil
 }
