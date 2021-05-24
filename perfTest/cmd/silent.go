@@ -160,6 +160,12 @@ func initStreams() error {
 				_ = env.Close()
 				return err
 			}
+
+			if err != stream.StreamAlreadyExists {
+				logError("Error during stream %s creation, err: %s", streamName, err)
+				_ = env.Close()
+				return err
+			}
 		}
 	}
 	logInfo("End Init streams :%s\n", streams)
