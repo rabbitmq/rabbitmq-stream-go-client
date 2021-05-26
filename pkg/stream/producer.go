@@ -7,7 +7,6 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 type UnConfirmedMessage struct {
@@ -20,12 +19,13 @@ type Producer struct {
 	ID                  uint8
 	options             *ProducerOptions
 	onClose             onInternalClose
-	publishConfirm      chan []*UnConfirmedMessage
-	CloseHandler        chan Event
 	unConfirmedMessages map[int64]*UnConfirmedMessage
 	sequence            int64
 	mutex               *sync.Mutex
-	publishError        chan PublishError
+
+	publishConfirm chan []*UnConfirmedMessage
+	publishError   chan PublishError
+	closeHandler   chan Event
 }
 
 type ProducerOptions struct {
@@ -83,6 +83,12 @@ func (producer *Producer) NotifyPublishError() ChannelPublishError {
 	return ch
 }
 
+func (producer *Producer) NotifyClose() ChannelClose {
+	ch := make(chan Event, 1)
+	producer.closeHandler = ch
+	return ch
+}
+
 func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) (int, error) {
 	if len(batchMessages) > 1000 {
 		return 0, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
@@ -113,7 +119,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amq
 
 	bufferToWrite := b.Bytes()
 	if len(bufferToWrite) > producer.options.client.tuneState.requestedMaxFrameSize {
-		return 0, fmt.Errorf("%s", lookErrorCode(responseCodeFrameTooLarge))
+		return 0, lookErrorCode(responseCodeFrameTooLarge)
 	}
 
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
@@ -171,15 +177,9 @@ func (c *Client) deletePublisher(publisherId byte) error {
 	writeByte(b, publisherId)
 	errWrite := c.handleWrite(b.Bytes(), resp)
 
-	producer, _ := c.coordinator.GetProducerById(publisherId)
+	//producer, _ := c.coordinator.GetProducerById(publisherId)
 	// if there are UnConfirmed messages here, most likely there will be an
 	// publisher error. Just try to wait a bit to receive the call back
-
-	tentatives := 0
-	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
-		time.Sleep(200 * time.Millisecond)
-		tentatives++
-	}
 
 	err := c.coordinator.RemoveProducerById(publisherId, Event{
 		Command: CommandDeletePublisher,

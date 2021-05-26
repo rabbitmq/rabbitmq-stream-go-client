@@ -27,7 +27,7 @@ func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
 	return arr
 }
 
-func confirmOne(confirms stream.ChannelPublishConfirm) {
+func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		messagesIds := <-confirms
 		for _, m := range messagesIds {
@@ -73,7 +73,7 @@ func main() {
 
 	//optional publish confirmation channel
 	chPublishConfirm := producer.NotifyPublishConfirmation()
-	confirmOne(chPublishConfirm)
+	handlePublishConfirm(chPublishConfirm)
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
 	for i := 0; i < 2; i++ {
@@ -102,7 +102,7 @@ func main() {
 			SetConsumerName("my_consumer").                  // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
-	channelClose := consumer.NotifyConsumerClose()
+	channelClose := consumer.NotifyClose()
 	// channelClose receives all the closing events, here you can handle the
 	// client reconnection or just log
 	defer consumerClose(channelClose)
@@ -111,6 +111,8 @@ func main() {
 	_, _ = reader.ReadString('\n')
 	err = consumer.Close()
 	time.Sleep(200 * time.Millisecond)
+	CheckErr(err)
+	err = env.DeleteStream(streamName)
 	CheckErr(err)
 	err = env.Close()
 	CheckErr(err)

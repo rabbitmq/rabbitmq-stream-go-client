@@ -47,7 +47,7 @@ func (consumer *Consumer) GetOffset() int64 {
 	return res
 }
 
-func (consumer *Consumer) NotifyConsumerClose() ChannelClose {
+func (consumer *Consumer) NotifyClose() ChannelClose {
 	ch := make(chan Event, 1)
 	consumer.CloseHandler = ch
 	return ch

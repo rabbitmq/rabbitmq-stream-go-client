@@ -62,8 +62,7 @@ func main() {
 			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
 		},
 	)
-
-	//CheckErr(err)
+	CheckErr(err)
 
 	producer, err := env.NewProducer(streamName, &stream.ProducerOptions{Name: "myProducer"})
 	CheckErr(err)

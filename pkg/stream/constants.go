@@ -80,7 +80,7 @@ var StreamAlreadyExists = errors.New("Stream Already Exists")
 var VirtualHostAccessFailure = errors.New("Virtual Host Access Failure")
 var SubscriptionIdDoesNotExist = errors.New("Subscription Id Does Not Exist")
 var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
-var FrameTooLarge = errors.New("Frame Too Large")
+var FrameTooLarge = errors.New("Frame Too Large, the buffer is too big")
 var CodeAccessRefused = errors.New("Resources Access Refused")
 
 func lookErrorCode(errorCode uint16) error {

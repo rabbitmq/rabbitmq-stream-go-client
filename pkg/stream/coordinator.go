@@ -6,6 +6,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type Coordinator struct {
@@ -66,14 +67,21 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 	return coordinator.removeById(id, coordinator.consumers)
 }
 func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error {
+
 	producer, err := coordinator.GetProducerById(id)
 	if err != nil {
 		return err
 	}
 	reason.StreamName = producer.GetStreamName()
 	reason.Name = producer.GetName()
-	if producer.CloseHandler != nil {
-		producer.CloseHandler <- reason
+	tentatives := 0
+	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
+		time.Sleep(200 * time.Millisecond)
+		tentatives++
+	}
+
+	if producer.closeHandler != nil {
+		producer.closeHandler <- reason
 	}
 	return coordinator.removeById(id, coordinator.producers)
 }

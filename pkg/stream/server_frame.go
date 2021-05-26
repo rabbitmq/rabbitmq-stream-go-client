@@ -225,7 +225,9 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		producer.publishConfirm <- unConfirmed
 	}
 	for _, l := range unConfirmed {
-		producer.removeUnConfirmed(l.MessageID)
+		if l != nil {
+			producer.removeUnConfirmed(l.MessageID)
+		}
 	}
 	return 0
 }
@@ -250,6 +252,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
+
+	// crc
 
 	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
 	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)

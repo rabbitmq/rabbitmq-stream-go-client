@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"sync/atomic"
+	"time"
 )
 
 func CheckErr(err error) {
@@ -43,51 +44,55 @@ func main() {
 			SetPassword("guest"))
 	CheckErr(err)
 
-	streamName := "offSet"
-	//err = env.DeclareStream(streamName,
-	//	&stream.StreamOptions{
-	//		MaxLengthBytes: stream.ByteCapacity{}.MB(500),
-	//	},
-	//)
-	//CheckErr(err)
+	streamName := uuid.New().String()
+	err = env.DeclareStream(streamName,
+		&stream.StreamOptions{
+			MaxLengthBytes: stream.ByteCapacity{}.MB(500),
+		},
+	)
+	CheckErr(err)
 
-	//producer, err := env.NewProducer(streamName, nil)
-	//CheckErr(err)
+	producer, err := env.NewProducer(streamName, nil)
+	CheckErr(err)
 
-	//// each publish sends a number of messages, the batchMessages should be around 100 messages for send
-	//go func() {
-	//	for i := 0; i < 9000000; i++ {
-	//		_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(100))
-	//		CheckErr(err)
-	//		time.Sleep(100 * time.Millisecond)
-	//	}
-	//}()
+	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
+	go func() {
+		for i := 0; i < 100; i++ {
+			_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(100))
+			CheckErr(err)
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
 
 	var count int32
 
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		if atomic.AddInt32(&count, 1)%1000 == 0 {
 			fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
+			// AVOID to commit for each single message, it will reduce the performances
+			err := consumerContext.Consumer.Commit()
+			if err != nil {
+				CheckErr(err)
+			}
 		}
-		// AVOID to commit for each single message, it will reduce the performances
-		err := consumerContext.Consumer.Commit()
-		if err != nil {
-			CheckErr(err)
-		}
+
 	}
 
-	for i := 0; i < 5; i++ {
-		_, err = env.NewConsumer(context.TODO(),
-			streamName,
-			handleMessages,
-			stream.NewConsumerOptions().
-				SetConsumerName(uuid.New().String()).            // set a consumer name
-				SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
-		CheckErr(err)
-	}
+	consumer, err := env.NewConsumer(context.TODO(),
+		streamName,
+		handleMessages,
+		stream.NewConsumerOptions().
+			SetConsumerName(uuid.New().String()).            // set a consumer name
+			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
+	CheckErr(err)
+
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
-	//err = producer.Close()
-	//CheckErr(err)
+	err = producer.Close()
+	CheckErr(err)
+	err = consumer.Close()
+	CheckErr(err)
+	err = env.DeleteStream(streamName)
+	CheckErr(err)
 
 }
