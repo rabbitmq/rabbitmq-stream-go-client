@@ -271,7 +271,10 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	//messages
 	var batchConsumingMessages []*amqp.Message
 	for numRecords != 0 {
-		entryType := peekByte(r)
+		entryType, err := peekByte(r)
+		if err != nil {
+			logWarn("error reading entryType %s ", err)
+		}
 		if (entryType & 0x80) == 0 {
 			sizeMessage, _ := readUInt(r)
 

@@ -24,9 +24,12 @@ func readUInt(readerStream io.Reader) (uint32, error) {
 	return res, err
 }
 
-func peekByte(readerStream *bufio.Reader) uint8 {
-	res, _ := readerStream.Peek(1)
-	return res[0]
+func peekByte(readerStream *bufio.Reader) (uint8, error) {
+	res, err := readerStream.Peek(1)
+	if err != nil {
+		return 0, err
+	}
+	return res[0], nil
 }
 
 func readInt64(readerStream io.Reader) int64 {
