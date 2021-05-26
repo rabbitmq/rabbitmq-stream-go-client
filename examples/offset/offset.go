@@ -54,7 +54,7 @@ func main() {
 
 	CheckErr(err)
 
-	producer, err := env.NewProducer(streamName, nil, nil)
+	producer, err := env.NewProducer(streamName, nil)
 	CheckErr(err)
 
 	go func() {
@@ -72,7 +72,6 @@ func main() {
 
 	consumer, err := env.NewConsumer(context.TODO(), streamName,
 		handleMessages,
-		nil,
 		stream.NewConsumerOptions().
 			SetConsumerName("my_consumer").                      // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.Offset(100))) // start specific offset, in this case we start from the 100 so it will consume 100 messages

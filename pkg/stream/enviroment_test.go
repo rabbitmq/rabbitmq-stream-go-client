@@ -19,15 +19,15 @@ var _ = Describe("Environment test", func() {
 		var producers []*Producer
 
 		for i := 0; i < 10; i++ {
-			producer, err := env.NewProducer(streamName, nil, nil)
+			producer, err := env.NewProducer(streamName, nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(producer.ID).To(Equal(uint8(i % 3)))
+			Expect(producer.ID).To(Equal(uint8(0)))
 			producers = append(producers, producer)
 		}
 
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
 		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(4))
+			getClientsPerContext())).To(Equal(10))
 
 		for _, producer := range producers {
 			err = producer.Close()
@@ -49,7 +49,7 @@ var _ = Describe("Environment test", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		for i := 0; i < 10; i++ {
-			producer, err := env.NewProducer(streamName, nil, nil)
+			producer, err := env.NewProducer(streamName, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(producer.ID).To(Equal(uint8(i % 2)))
 		}
@@ -73,7 +73,7 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
-				producer, err := env.NewProducer(streamName, nil, nil)
+				producer, err := env.NewProducer(streamName, nil)
 				Expect(err).NotTo(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 				err = producer.Close()
@@ -90,7 +90,10 @@ var _ = Describe("Environment test", func() {
 	})
 
 	It("Meta handler delete consistency", func() {
-		env, err := NewEnvironment(nil)
+		env, err := NewEnvironment(&EnvironmentOptions{
+			MaxProducersPerClient: 3,
+			MaxConsumersPerClient: 3,
+		})
 		Expect(err).NotTo(HaveOccurred())
 		streamNameWillBeDelete := uuid.New().String()
 		err = env.DeclareStream(streamNameWillBeDelete, nil)
@@ -105,9 +108,9 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func() {
-				_, errProd := env.NewProducer(streamNameWillBeDelete, nil, nil)
+				_, errProd := env.NewProducer(streamNameWillBeDelete, nil)
 				Expect(errProd).NotTo(HaveOccurred())
-				_, errProd = env.NewProducer(streamNameWillBeDeleteAfter, nil, nil)
+				_, errProd = env.NewProducer(streamNameWillBeDeleteAfter, nil)
 				Expect(errProd).NotTo(HaveOccurred())
 				wg.Done()
 			}()

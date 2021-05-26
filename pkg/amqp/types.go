@@ -331,7 +331,7 @@ type Message struct {
 	Annotations Annotations
 	// The message-annotations section is used for properties of the message which
 	// are aimed at the infrastructure and SHOULD be propagated across every
-	// delivery step. Message annotations convey information about the message.
+	// delivery step. UnConfirmedMessage annotations convey information about the message.
 	// Intermediaries MUST propagate the annotations unless the annotations are
 	// explicitly augmented or modified (e.g., by the use of the modified outcome).
 	//
