@@ -17,11 +17,35 @@ type Broker struct {
 func newBrokerDefault() Broker {
 	return Broker{
 		Host:     "localhost",
-		Port:     5552,
+		Port:     StreamTcpPort,
 		User:     "guest",
 		Password: "guest",
 		Vhost:    "/",
 	}
+}
+
+func (br *Broker) mergeWithDefault() {
+	broker := newBrokerDefault()
+	if br.Host == "" {
+		br.Host = broker.Host
+	}
+	if br.Vhost == "" {
+		br.Vhost = broker.Vhost
+	}
+
+	if br.User == "" {
+		br.User = broker.User
+	}
+	if br.User == "" {
+		br.User = broker.User
+	}
+	if br.Password == "" {
+		br.Password = broker.Password
+	}
+	if br.Port == 0 {
+		br.Port = broker.Port
+	}
+
 }
 
 func (br *Broker) cloneFrom(broker Broker) {

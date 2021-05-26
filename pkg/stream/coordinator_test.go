@@ -11,28 +11,40 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
 		It("Add/Remove Producers ", func() {
-			p, err := client.coordinator.NewProducer(nil, nil)
+			p, err := client.coordinator.NewProducer(nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.ID).To(Equal(uint8(0)))
-			err = client.coordinator.RemoveProducerById(p.ID)
+			err = client.coordinator.RemoveProducerById(p.ID, Event{
+				Command: 0,
+				Reason:  "UNIT_TEST",
+				Err:     nil,
+			})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("producer not found remove by id ", func() {
-			err := client.coordinator.RemoveProducerById(200)
+			err := client.coordinator.RemoveProducerById(200, Event{
+				Command: 0,
+				Reason:  "UNIT_TEST",
+				Err:     nil,
+			})
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("massive insert/delete coordinator ", func() {
 			var producersId []uint8
 			for i := 0; i < 100; i++ {
-				p, err := client.coordinator.NewProducer(nil, nil)
+				p, err := client.coordinator.NewProducer(nil)
 				producersId = append(producersId, p.ID)
 				Expect(err).NotTo(HaveOccurred())
 			}
 			Expect(client.coordinator.ProducersCount()).To(Equal(100))
 			for _, pid := range producersId {
-				err := client.coordinator.RemoveProducerById(pid)
+				err := client.coordinator.RemoveProducerById(pid, Event{
+					Command: 0,
+					Reason:  "UNIT_TEST",
+					Err:     nil,
+				})
 				Expect(err).NotTo(HaveOccurred())
 			}
 			Expect(client.coordinator.ProducersCount()).To(Equal(0))
@@ -42,7 +54,7 @@ var _ = Describe("Coordinator", func() {
 			var producersId []uint8
 			for i := 0; i < 500; i++ {
 
-				p, err := client.coordinator.NewProducer(nil, nil)
+				p, err := client.coordinator.NewProducer(nil)
 				if i >= int(^uint8(0)) {
 					Expect(fmt.Sprintf("%s", err)).
 						To(ContainSubstring("No more items available"))
@@ -57,19 +69,25 @@ var _ = Describe("Coordinator", func() {
 			for _, v := range randomRemove {
 				// remove an producer then recreate it and I must have the
 				// missing item
-				err := client.coordinator.RemoveProducerById(v)
+				err := client.coordinator.RemoveProducerById(v, Event{
+					Reason: "UNIT_TEST",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				err = client.coordinator.RemoveProducerById(v)
+				err = client.coordinator.RemoveProducerById(v, Event{
+					Reason: "UNIT_TEST",
+				})
 				// raise an logError not found
 				Expect(err).To(HaveOccurred())
 
-				p, err := client.coordinator.NewProducer(nil, nil)
+				p, err := client.coordinator.NewProducer(nil)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p.ID).To(Equal(v))
 			}
 
 			for _, pid := range producersId {
-				err := client.coordinator.RemoveProducerById(pid)
+				err := client.coordinator.RemoveProducerById(pid, Event{
+					Reason: "UNIT_TEST",
+				})
 				Expect(err).NotTo(HaveOccurred())
 			}
 
@@ -79,15 +97,19 @@ var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove consumers", func() {
 		It("Add/Remove consumers ", func() {
-			p, err := client.coordinator.NewProducer(nil, nil)
+			p, err := client.coordinator.NewProducer(nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.ID).To(Equal(uint8(0)))
-			err = client.coordinator.RemoveProducerById(p.ID)
+			err = client.coordinator.RemoveProducerById(p.ID, Event{
+				Reason: "UNIT_TEST",
+			})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("producer not found remove by id ", func() {
-			err := client.coordinator.RemoveProducerById(200)
+			err := client.coordinator.RemoveProducerById(200, Event{
+				Reason: "UNIT_TEST",
+			})
 			Expect(err).To(HaveOccurred())
 		})
 		It("consumer not found get by id ", func() {
@@ -98,7 +120,7 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete consumers ", func() {
 			var consumersId []uint8
 			for i := 0; i < 100; i++ {
-				p := client.coordinator.NewConsumer(nil, nil, nil)
+				p := client.coordinator.NewConsumer(nil, nil)
 				consumersId = append(consumersId, p.ID)
 			}
 			Expect(client.coordinator.ConsumersCount()).To(Equal(100))

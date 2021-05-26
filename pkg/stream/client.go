@@ -28,7 +28,7 @@ type Client struct {
 	coordinator          *Coordinator
 	broker               Broker
 	metadataListener     metadataListener
-	publishErrorListener PublishErrorListener
+	publishErrorListener ChannelPublishError
 }
 
 func newClient(connectionName string) *Client {
@@ -281,7 +281,14 @@ func (c *Client) closeHartBeat() {
 
 func (c *Client) Close() error {
 	for _, p := range c.coordinator.producers {
-		err := c.coordinator.RemoveProducerById(p.(*Producer).ID)
+		err := c.coordinator.RemoveProducerById(p.(*Producer).ID, Event{
+			Command:    CommandClose,
+			StreamName: p.(*Producer).GetStreamName(),
+			Name:       p.(*Producer).GetName(),
+			Reason:     "socket client closed",
+			Err:        nil,
+		})
+
 		if err != nil {
 			logWarn("error removing producer: %s", err)
 		}
@@ -290,7 +297,7 @@ func (c *Client) Close() error {
 		err := c.coordinator.RemoveConsumerById(cs.(*Consumer).ID, Event{
 			Command:    CommandClose,
 			StreamName: cs.(*Consumer).GetStreamName(),
-			Name:       cs.(*Consumer).GetConsumerName(),
+			Name:       cs.(*Consumer).GetName(),
 			Reason:     "socket client closed",
 			Err:        nil,
 		})
@@ -320,8 +327,8 @@ func (c *Client) Close() error {
 	return err
 }
 
-func (c *Client) DeclarePublisher(streamName string, channelConfirmListener PublishConfirmListener, options *ProducerOptions) (*Producer, error) {
-	producer, err := c.coordinator.NewProducer(channelConfirmListener, &ProducerOptions{
+func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
+	producer, err := c.coordinator.NewProducer(&ProducerOptions{
 		client:     c,
 		streamName: streamName,
 		Name:       options.Name,
@@ -422,11 +429,10 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 
 func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 	messagesHandler MessagesHandler,
-	closeHandler CloseListener,
 	options *ConsumerOptions) (*Consumer, error) {
 	options.client = c
 	options.streamName = streamName
-	consumer := c.coordinator.NewConsumer(messagesHandler, closeHandler, options)
+	consumer := c.coordinator.NewConsumer(messagesHandler, options)
 	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
 	if options.Offset.isOffset() ||
 		options.Offset.isTimestamp() {
@@ -439,7 +445,7 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 			_ = c.coordinator.RemoveConsumerById(consumer.ID, Event{
 				Command:    CommandQueryOffset,
 				StreamName: streamName,
-				Name:       consumer.GetConsumerName(),
+				Name:       consumer.GetName(),
 				Reason:     "error QueryOffset",
 				Err:        err,
 			})

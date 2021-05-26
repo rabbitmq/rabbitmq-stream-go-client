@@ -9,18 +9,14 @@ type Event struct {
 }
 
 type PublishError struct {
-	PublisherId  uint8
-	Name         string
-	PublishingId int64
-	Code         uint16
-	Err          error
+	Code               uint16
+	Err                error
+	UnConfirmedMessage *UnConfirmedMessage
 }
 
 type onInternalClose func(ch <-chan uint8)
 type metadataListener func(ch <-chan string)
 
-type CloseListener = chan<- Event
-
-type PublishErrorListener = chan<- PublishError
-
-type PublishConfirmListener chan<- []int64
+type ChannelClose = <-chan Event
+type ChannelPublishError = <-chan PublishError
+type ChannelPublishConfirm <-chan []*UnConfirmedMessage

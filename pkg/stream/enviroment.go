@@ -30,6 +30,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if options.MaxProducersPerClient == 0 {
 		options.MaxProducersPerClient = 3
 	}
+	options.ConnectionParameters.mergeWithDefault()
 
 	if options.ConnectionParameters.Uri != "" {
 		u, err := url.Parse(options.ConnectionParameters.Uri)
@@ -44,7 +45,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	return &Environment{
 		options:   options,
-		producers: newProducers(options.MaxProducersPerClient, options.publishErrorListener),
+		producers: newProducers(options.MaxProducersPerClient),
 		consumers: newConsumerEnvironment(options.MaxConsumersPerClient),
 	}, client.connect()
 }
@@ -82,7 +83,7 @@ func (env *Environment) DeleteStream(streamName string) error {
 	return client.DeleteStream(streamName)
 }
 
-func (env *Environment) NewProducer(streamName string, channelConfirmListener PublishConfirmListener, producerOptions *ProducerOptions) (*Producer, error) {
+func (env *Environment) NewProducer(streamName string, producerOptions *ProducerOptions) (*Producer, error) {
 	client, err := env.newClientLocator()
 	defer func(client *Client) {
 		err := client.Close()
@@ -96,7 +97,7 @@ func (env *Environment) NewProducer(streamName string, channelConfirmListener Pu
 	if producerOptions == nil {
 		producerOptions = NewProducerOptions()
 	}
-	return env.producers.newProducer(client, streamName, channelConfirmListener, producerOptions)
+	return env.producers.newProducer(client, streamName, producerOptions)
 }
 
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
@@ -117,7 +118,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 
 func (env *Environment) NewConsumer(ctx context.Context, streamName string,
 	messagesHandler MessagesHandler,
-	closeHandler CloseListener, options *ConsumerOptions) (*Consumer, error) {
+	options *ConsumerOptions) (*Consumer, error) {
 	client, err := env.newClientLocator()
 	defer func(client *Client) {
 		err := client.Close()
@@ -131,7 +132,7 @@ func (env *Environment) NewConsumer(ctx context.Context, streamName string,
 	if options == nil {
 		options = NewConsumerOptions()
 	}
-	return env.consumers.NewSubscriber(ctx, client, streamName, messagesHandler, closeHandler, options)
+	return env.consumers.NewSubscriber(ctx, client, streamName, messagesHandler, options)
 }
 
 func (env *Environment) Close() error {
@@ -144,13 +145,12 @@ type EnvironmentOptions struct {
 	ConnectionParameters  Broker
 	MaxProducersPerClient int
 	MaxConsumersPerClient int
-	publishErrorListener  PublishErrorListener
 }
 
 func NewEnvironmentOptions() *EnvironmentOptions {
 	return &EnvironmentOptions{
-		MaxProducersPerClient: 3,
-		MaxConsumersPerClient: 3,
+		MaxProducersPerClient: 1,
+		MaxConsumersPerClient: 1,
 		ConnectionParameters:  newBrokerDefault(),
 	}
 }
@@ -192,12 +192,6 @@ func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
 	return envOptions
 }
 
-func (envOptions *EnvironmentOptions) SetPublishErrorListener(
-	publishErrorListener PublishErrorListener) *EnvironmentOptions {
-	envOptions.publishErrorListener = publishErrorListener
-	return envOptions
-}
-
 type enviromentCoordinator struct {
 	mutex             *sync.Mutex
 	clientsPerContext map[int]*Client
@@ -230,8 +224,14 @@ func (cc *enviromentCoordinator) maybeCleanProducers(streamName string) {
 	defer cc.mutex.Unlock()
 	for _, client := range cc.clientsPerContext {
 		for pidx, producer := range client.coordinator.producers {
-			if producer.(*Producer).options.streamName == streamName {
-				err := client.coordinator.RemoveProducerById(pidx.(uint8))
+			if producer.(*Producer).GetStreamName() == streamName {
+				err := client.coordinator.RemoveProducerById(pidx.(uint8), Event{
+					Command:    CommandMetadataUpdate,
+					StreamName: streamName,
+					Name:       producer.(*Producer).GetName(),
+					Reason:     "Meta data update",
+					Err:        nil,
+				})
 				if err != nil {
 					return
 				}
@@ -261,7 +261,7 @@ func (cc *enviromentCoordinator) maybeCleanConsumers(streamName string) {
 				err := client.coordinator.RemoveConsumerById(pidx.(uint8), Event{
 					Command:    CommandMetadataUpdate,
 					StreamName: streamName,
-					Name:       consumer.(*Consumer).GetConsumerName(),
+					Name:       consumer.(*Consumer).GetName(),
 					Reason:     "Meta data update",
 					Err:        nil,
 				})
@@ -287,8 +287,7 @@ func (cc *enviromentCoordinator) maybeCleanConsumers(streamName string) {
 }
 
 func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
-	channelPublishErrListener PublishErrorListener,
-	channelConfirmListener PublishConfirmListener,
+	channelPublishErrListener ChannelPublishError,
 	options *ProducerOptions) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
@@ -318,7 +317,7 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 		return nil, err
 	}
 
-	publisher, err := clientResult.DeclarePublisher(streamName, channelConfirmListener, options)
+	publisher, err := clientResult.DeclarePublisher(streamName, options)
 
 	if err != nil {
 		return nil, err
@@ -329,7 +328,6 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 
 func (cc *enviromentCoordinator) newConsumer(ctx context.Context, leader *Broker,
 	streamName string, messagesHandler MessagesHandler,
-	closeHandler CloseListener,
 	options *ConsumerOptions) (*Consumer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
@@ -358,7 +356,7 @@ func (cc *enviromentCoordinator) newConsumer(ctx context.Context, leader *Broker
 		return nil, err
 	}
 
-	subscriber, err := clientResult.DeclareSubscriber(ctx, streamName, messagesHandler, closeHandler, options)
+	subscriber, err := clientResult.DeclareSubscriber(ctx, streamName, messagesHandler, options)
 
 	if err != nil {
 		return nil, err
@@ -386,21 +384,19 @@ type producersEnvironment struct {
 	mutex                *sync.Mutex
 	producersCoordinator map[string]*enviromentCoordinator
 	maxItemsForClient    int
-	publishErrorListener PublishErrorListener
+	publishErrorListener ChannelPublishError
 }
 
-func newProducers(maxItemsForClient int, publishErrorListener PublishErrorListener) *producersEnvironment {
+func newProducers(maxItemsForClient int) *producersEnvironment {
 	producers := &producersEnvironment{
 		mutex:                &sync.Mutex{},
 		producersCoordinator: map[string]*enviromentCoordinator{},
 		maxItemsForClient:    maxItemsForClient,
-		publishErrorListener: publishErrorListener,
 	}
 	return producers
 }
 
 func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName string,
-	channelConfirmListener PublishConfirmListener,
 	options *ProducerOptions) (*Producer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
@@ -420,7 +416,6 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 
 	producer, err := ps.producersCoordinator[leader.hostPort()].newProducer(leader, streamName,
 		ps.publishErrorListener,
-		channelConfirmListener,
 		options)
 	if err != nil {
 		return nil, err
@@ -453,7 +448,7 @@ type consumersEnvironment struct {
 	mutex                *sync.Mutex
 	consumersCoordinator map[string]*enviromentCoordinator
 	maxItemsForClient    int
-	PublishErrorListener PublishErrorListener
+	PublishErrorListener ChannelPublishError
 }
 
 func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {
@@ -467,7 +462,6 @@ func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {
 
 func (ps *consumersEnvironment) NewSubscriber(ctx context.Context, clientLocator *Client, streamName string,
 	messagesHandler MessagesHandler,
-	closeHandler CloseListener,
 	consumerOptions *ConsumerOptions) (*Consumer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
@@ -485,7 +479,7 @@ func (ps *consumersEnvironment) NewSubscriber(ctx context.Context, clientLocator
 	}
 	leader.cloneFrom(clientLocator.broker)
 	consumer, err := ps.consumersCoordinator[leader.hostPort()].
-		newConsumer(ctx, leader, streamName, messagesHandler, closeHandler, consumerOptions)
+		newConsumer(ctx, leader, streamName, messagesHandler, consumerOptions)
 	if err != nil {
 		return nil, err
 	}

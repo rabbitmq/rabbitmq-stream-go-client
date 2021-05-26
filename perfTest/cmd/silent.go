@@ -94,21 +94,10 @@ func startSimulation() error {
 	err := initStreams()
 	checkErr(err)
 
-	chPublishError := make(chan stream.PublishError, 1)
-	go func(ch chan stream.PublishError) {
-		for {
-			pError := <-ch
-			logError("publish %s error", pError.Name)
-			atomic.AddInt32(&publishErrors, 1)
-
-		}
-	}(chPublishError)
-
 	simulEnvironment, err = stream.NewEnvironment(stream.NewEnvironmentOptions().
 		SetUri(rabbitmqBrokerUrl).
 		SetMaxProducersPerClient(publishersPerClient).
-		SetMaxConsumersPerClient(consumersPerClient).
-		SetPublishErrorListener(chPublishError))
+		SetMaxConsumersPerClient(consumersPerClient))
 	checkErr(err)
 	if consumers > 0 {
 		err = startConsumers()
@@ -171,6 +160,26 @@ func initStreams() error {
 	logInfo("End Init streams :%s\n", streams)
 	return env.Close()
 }
+
+func handlePublishConfirms(confirms stream.ChannelPublishConfirm) {
+	go func() {
+		for {
+			ids := <-confirms
+			atomic.AddInt32(&confirmedMessageCount, int32(len(ids)))
+		}
+	}()
+}
+
+func handlePublishError(publishError stream.ChannelPublishError) {
+	go func() {
+		for {
+			<-publishError
+			atomic.AddInt32(&publishErrors, 1)
+		}
+	}()
+
+}
+
 func startPublishers() error {
 	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
 		rabbitmqBrokerUrl).SetMaxProducersPerClient(publishersPerClient))
@@ -180,25 +189,22 @@ func startPublishers() error {
 	}
 	logInfo("Starting %d publishers...", publishers)
 
-	chPublishConfirm := make(chan []int64, 1)
-	go func(ch chan []int64) {
-		for {
-			ids := <-ch
-			//confirmedMessageCount += int32(len(ids))
-			atomic.AddInt32(&confirmedMessageCount, int32(len(ids)))
-		}
-	}(chPublishConfirm)
-
 	for _, streamName := range streams {
 		for i := 1; i <= publishers; i++ {
 			logInfo("Starting publisher number: %d", i)
-			publisher, err := env.NewProducer(streamName, chPublishConfirm,
+			publisher, err := env.NewProducer(streamName,
 				stream.NewProducerOptions().SetProducerName(fmt.Sprintf("pub-%s-%d", streamName, i)))
 
 			if err != nil {
 				logError("Error create publisher: %s", err)
 				return err
 			}
+
+			chPublishConfirm := publisher.NotifyPublishConfirmation()
+			handlePublishConfirms(chPublishConfirm)
+
+			chPublishError := publisher.NotifyPublishError()
+			handlePublishError(chPublishError)
 
 			var arr []*amqp.Message
 			var body string
@@ -254,21 +260,9 @@ func startPublishers() error {
 	return nil
 }
 
-func startConsumer(consumerName string, streamName string) error {
-
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		//logError("consumerMessageCount Commit: %s", consumerMessageCount)
-		if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
-			err := consumerContext.Consumer.Commit()
-			if err != nil {
-				logError("Error Commit: %s", err)
-			}
-		}
-	}
-
-	chConsumerClose := make(chan stream.Event, 0)
+func consumerClose(channelClose stream.ChannelClose) {
 	go func() {
-		event := <-chConsumerClose
+		event := <-channelClose
 		logInfo("Consumer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
 		if exitOnError {
 			os.Exit(1)
@@ -282,13 +276,30 @@ func startConsumer(consumerName string, streamName string) error {
 		checkErr(err)
 	}()
 
-	_, err := simulEnvironment.NewConsumer(context.TODO(),
+}
+func startConsumer(consumerName string, streamName string) error {
+
+	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		//logError("consumerMessageCount Commit: %s", consumerMessageCount)
+		if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
+			err := consumerContext.Consumer.Commit()
+			if err != nil {
+				logError("Error Commit: %s", err)
+			}
+		}
+	}
+	consumer, err := simulEnvironment.NewConsumer(context.TODO(),
 		streamName,
 		handleMessages,
-		chConsumerClose,
 		stream.NewConsumerOptions().
 			SetConsumerName(consumerName))
-	return err
+	if err != nil {
+		return err
+	}
+	chConsumerClose := consumer.NotifyConsumerClose()
+	consumerClose(chConsumerClose)
+
+	return nil
 }
 
 func startConsumers() error {
