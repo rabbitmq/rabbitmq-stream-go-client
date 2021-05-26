@@ -5,13 +5,27 @@ import (
 	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"sync"
+	"sync/atomic"
 )
 
+type UnConfirmedMessage struct {
+	Message    *amqp.Message
+	ProducerID uint8
+	MessageID  int64
+}
+
 type Producer struct {
-	ID             uint8
-	options        *ProducerOptions
-	onClose        onInternalClose
-	publishConfirm PublishConfirmListener
+	ID                  uint8
+	options             *ProducerOptions
+	onClose             onInternalClose
+	unConfirmedMessages map[int64]*UnConfirmedMessage
+	sequence            int64
+	mutex               *sync.Mutex
+
+	publishConfirm chan []*UnConfirmedMessage
+	publishError   chan PublishError
+	closeHandler   chan Event
 }
 
 type ProducerOptions struct {
@@ -27,6 +41,52 @@ func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
 
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{}
+}
+
+func (producer *Producer) addUnConfirmed(messageid int64, message *amqp.Message, producerID uint8) {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	producer.unConfirmedMessages[messageid] = &UnConfirmedMessage{
+		Message:    message,
+		ProducerID: producerID,
+		MessageID:  messageid,
+	}
+}
+
+func (producer *Producer) removeUnConfirmed(messageid int64) {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	delete(producer.unConfirmedMessages, messageid)
+}
+
+func (producer *Producer) lenUnConfirmed() int {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	return len(producer.unConfirmedMessages)
+}
+
+func (producer *Producer) getUnConfirmed(messageid int64) *UnConfirmedMessage {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	return producer.unConfirmedMessages[messageid]
+}
+
+func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
+	ch := make(chan []*UnConfirmedMessage, 1)
+	producer.publishConfirm = ch
+	return ch
+}
+
+func (producer *Producer) NotifyPublishError() ChannelPublishError {
+	ch := make(chan PublishError, 1)
+	producer.publishError = ch
+	return ch
+}
+
+func (producer *Producer) NotifyClose() ChannelClose {
+	ch := make(chan Event, 1)
+	producer.closeHandler = ch
+	return ch
 }
 
 func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) (int, error) {
@@ -48,19 +108,18 @@ func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amq
 	writeByte(b, publishId)
 	writeInt(b, len(batchMessages)) //toExcluded - fromInclude
 
-	var seq int64
-	seq = 0
 	for _, msg := range batchMessages {
+		id := atomic.AddInt64(&producer.sequence, 1)
 		r, _ := msg.MarshalBinary()
-		writeLong(b, seq)   // sequence
+		writeLong(b, id)    // sequence
 		writeInt(b, len(r)) // len
 		b.Write(r)
-		seq += 1
+		producer.addUnConfirmed(id, msg, producer.ID)
 	}
 
 	bufferToWrite := b.Bytes()
 	if len(bufferToWrite) > producer.options.client.tuneState.requestedMaxFrameSize {
-		return 0, fmt.Errorf("%s", lookErrorCode(responseCodeFrameTooLarge))
+		return 0, lookErrorCode(responseCodeFrameTooLarge)
 	}
 
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
@@ -93,21 +152,42 @@ func (producer *Producer) Close() error {
 	return nil
 }
 
+func (producer *Producer) GetStreamName() string {
+	if producer.options == nil {
+		return ""
+	}
+	return producer.options.streamName
+}
+
+func (producer *Producer) GetName() string {
+	if producer.options == nil {
+		return ""
+	}
+	return producer.options.Name
+}
+
 func (c *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1
-	resp := c.coordinator.NewResponse(commandDeletePublisher)
+	resp := c.coordinator.NewResponse(CommandDeletePublisher)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandDeletePublisher,
+	writeProtocolHeader(b, length, CommandDeletePublisher,
 		correlationId)
 
 	writeByte(b, publisherId)
 	errWrite := c.handleWrite(b.Bytes(), resp)
 
-	err := c.coordinator.RemoveProducerById(publisherId)
+	//producer, _ := c.coordinator.GetProducerById(publisherId)
+	// if there are UnConfirmed messages here, most likely there will be an
+	// publisher error. Just try to wait a bit to receive the call back
+
+	err := c.coordinator.RemoveProducerById(publisherId, Event{
+		Command: CommandDeletePublisher,
+		Reason:  "deletePublisher",
+		Err:     nil,
+	})
 	if err != nil {
-		//TODO LOGWARN
-		logWarn("Error RemoveProducerById %d", publisherId)
+		logWarn("producer id: %d already removed", publisherId)
 	}
 
 	return errWrite.Err

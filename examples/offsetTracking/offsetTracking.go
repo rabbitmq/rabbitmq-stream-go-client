@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"sync/atomic"
+	"time"
 )
 
 func CheckErr(err error) {
@@ -35,71 +36,63 @@ func main() {
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
-	//chPublishError := make(chan stream.PublishError, 10)
-	//go func(ch chan stream.PublishError) {
-	//
-	//	for {
-	//		pError := <-ch
-	//		atomic.AddInt32(&totalMessages, 1)
-	//		fmt.Printf("Error during publish, message:%s ,  error: %s \n", pError.UnConfirmedMessage.UnConfirmedMessage.Data, pError.Err)
-	//	}
-	//
-	//}(chPublishError)
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
 			SetPort(5552).
 			SetUser("guest").
 			SetPassword("guest"))
-	//SetPublishErrorListener(chPublishError))
 	CheckErr(err)
-	// Create a stream, you can create streams without any option like:
-	// err = env.DeclareStream(streamName, nil)
-	// it is a best practise to define a size,  1GB for example:
+
 	streamName := uuid.New().String()
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
-			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
+			MaxLengthBytes: stream.ByteCapacity{}.MB(500),
 		},
 	)
 	CheckErr(err)
 
-	producer, err := env.NewProducer(streamName, &stream.ProducerOptions{Name: "myProducer"})
+	producer, err := env.NewProducer(streamName, nil)
 	CheckErr(err)
-
-	chPublishError := producer.NotifyPublishError()
-	handlePublishError(chPublishError)
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
 	go func() {
 		for i := 0; i < 100; i++ {
-			_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(2))
+			_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(100))
 			CheckErr(err)
-			//time.Sleep(100 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 		}
 	}()
-	//time.Sleep(100 * time.Millisecond)
-	err = producer.Close()
+
+	var count int32
+
+	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		if atomic.AddInt32(&count, 1)%1000 == 0 {
+			fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
+			// AVOID to commit for each single message, it will reduce the performances
+			err := consumerContext.Consumer.Commit()
+			if err != nil {
+				CheckErr(err)
+			}
+		}
+
+	}
+
+	consumer, err := env.NewConsumer(context.TODO(),
+		streamName,
+		handleMessages,
+		stream.NewConsumerOptions().
+			SetConsumerName(uuid.New().String()).            // set a consumer name
+			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
+	err = producer.Close()
 	CheckErr(err)
-
-}
-
-func handlePublishError(publishError stream.ChannelPublishError) {
-	go func() {
-		var totalMessages int32
-		for {
-			pError := <-publishError
-			atomic.AddInt32(&totalMessages, 1)
-			var data [][]byte
-			if pError.UnConfirmedMessage != nil {
-				data = pError.UnConfirmedMessage.Message.Data
-			}
-			fmt.Printf("Error during publish, message:%s ,  error: %s. Total %d  \n", data, pError.Err, totalMessages)
-		}
-	}()
+	err = consumer.Close()
+	CheckErr(err)
+	err = env.DeleteStream(streamName)
+	CheckErr(err)
 
 }

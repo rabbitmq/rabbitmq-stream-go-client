@@ -6,6 +6,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type Coordinator struct {
@@ -36,7 +37,7 @@ func NewCoordinator() *Coordinator {
 }
 
 // producersEnvironment
-func (coordinator *Coordinator) NewProducer(channelConfirmListener PublishConfirmListener,
+func (coordinator *Coordinator) NewProducer(
 	parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
@@ -45,8 +46,9 @@ func (coordinator *Coordinator) NewProducer(channelConfirmListener PublishConfir
 		return nil, err
 	}
 	var producer = &Producer{ID: lastId,
-		options:        parameters,
-		publishConfirm: channelConfirmListener}
+		options:             parameters,
+		mutex:               &sync.Mutex{},
+		unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }
@@ -56,13 +58,31 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 	if err != nil {
 		return err
 	}
+	reason.StreamName = consumer.GetStreamName()
+	reason.Name = consumer.GetName()
+
 	if consumer.CloseHandler != nil {
-		//consumer.CloseListener = make(chan Event, 1)
 		consumer.CloseHandler <- reason
 	}
 	return coordinator.removeById(id, coordinator.consumers)
 }
-func (coordinator *Coordinator) RemoveProducerById(id uint8) error {
+func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error {
+
+	producer, err := coordinator.GetProducerById(id)
+	if err != nil {
+		return err
+	}
+	reason.StreamName = producer.GetStreamName()
+	reason.Name = producer.GetName()
+	tentatives := 0
+	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
+		time.Sleep(200 * time.Millisecond)
+		tentatives++
+	}
+
+	if producer.closeHandler != nil {
+		producer.closeHandler <- reason
+	}
 	return coordinator.removeById(id, coordinator.producers)
 }
 
@@ -140,13 +160,12 @@ func (coordinator *Coordinator) ResponsesCount() int {
 
 /// Consumer functions
 func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
-	closeHandler CloseListener, parameters *ConsumerOptions) *Consumer {
+	parameters *ConsumerOptions) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
 	var item = &Consumer{ID: lastId, options: parameters,
 		response: newResponse(lookUpCommand(commandSubscribe)), mutex: &sync.Mutex{},
-		CloseHandler:    closeHandler,
 		MessagesHandler: messagesHandler,
 	}
 

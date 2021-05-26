@@ -17,14 +17,20 @@ type Consumer struct {
 	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
 	// and won't change. currentOffset is the status of the offset
 	currentOffset int64
-	CloseHandler  CloseListener
+	CloseHandler  chan Event
 }
 
 func (consumer *Consumer) GetStreamName() string {
+	if consumer.options == nil {
+		return ""
+	}
 	return consumer.options.streamName
 }
 
-func (consumer *Consumer) GetConsumerName() string {
+func (consumer *Consumer) GetName() string {
+	if consumer.options == nil {
+		return ""
+	}
 	return consumer.options.ConsumerName
 }
 
@@ -39,6 +45,12 @@ func (consumer *Consumer) GetOffset() int64 {
 	res := consumer.currentOffset
 	consumer.mutex.Unlock()
 	return res
+}
+
+func (consumer *Consumer) NotifyClose() ChannelClose {
+	ch := make(chan Event, 1)
+	consumer.CloseHandler = ch
+	return ch
 }
 
 type ConsumerContext struct {
@@ -113,7 +125,7 @@ func (consumer *Consumer) Close() error {
 	errC := consumer.options.client.coordinator.RemoveConsumerById(consumer.ID, Event{
 		Command:    CommandUnsubscribe,
 		StreamName: consumer.GetStreamName(),
-		Name:       consumer.GetConsumerName(),
+		Name:       consumer.GetName(),
 		Reason:     "unSubscribe",
 		Err:        nil,
 	})

@@ -46,7 +46,7 @@ func (c *Client) handleResponse() {
 				c.handleTune(buffer)
 			}
 		case commandDeclarePublisher,
-			commandDeletePublisher, commandDeleteStream,
+			CommandDeletePublisher, commandDeleteStream,
 			commandCreateStream, commandSaslAuthenticate, commandSubscribe,
 			CommandUnsubscribe:
 			{
@@ -210,22 +210,26 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	//readProtocol.PublishingIdCount = ReadIntFromReader(testEnvironment.reader)
 	publishingIdCount, _ := readUInt(r)
 	//var _publishingId int64
-	var ids []int64
-	for publishingIdCount != 0 {
-		ids = append(ids, readInt64(r))
-		publishingIdCount--
-	}
-
 	producer, err := c.coordinator.GetProducerById(readProtocol.PublishID)
 	if err != nil {
 		logWarn("%s", err)
 		return nil
 	}
+	var unConfirmed []*UnConfirmedMessage
+	for publishingIdCount != 0 {
+		unConfirmed = append(unConfirmed, producer.getUnConfirmed(readInt64(r)))
+		publishingIdCount--
+	}
+
 	if producer.publishConfirm != nil {
-		producer.publishConfirm <- ids
+		producer.publishConfirm <- unConfirmed
+	}
+	for _, l := range unConfirmed {
+		if l != nil {
+			producer.removeUnConfirmed(l.MessageID)
+		}
 	}
 	return 0
-
 }
 
 func (c *Client) handleDeliver(r *bufio.Reader) {
@@ -248,6 +252,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
+
+	// crc
 
 	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
 	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
@@ -314,6 +320,12 @@ func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.
 func (c *Client) handlePublishError(buffer *bufio.Reader) {
 
 	publisherId := readByte(buffer)
+	producer, err := c.coordinator.GetProducerById(publisherId)
+	if err != nil {
+		logWarn("producer not found :%s", err)
+		producer = &Producer{unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
+	}
+
 	publishingErrorCount, _ := readUInt(buffer)
 	var publishingId int64
 	var code uint16
@@ -321,14 +333,14 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		publishingId = readInt64(buffer)
 		code = readUShort(buffer)
 
-		if c.publishErrorListener != nil {
-			c.publishErrorListener <- PublishError{
-				PublisherId:  publisherId,
-				PublishingId: publishingId,
-				Code:         code,
-				Err:          lookErrorCode(code),
+		if producer.publishError != nil {
+			producer.publishError <- PublishError{
+				Code:               code,
+				Err:                lookErrorCode(code),
+				UnConfirmedMessage: producer.getUnConfirmed(publishingId),
 			}
 		}
+		producer.removeUnConfirmed(publishingId)
 		publishingErrorCount--
 	}
 

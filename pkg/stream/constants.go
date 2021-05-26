@@ -12,7 +12,7 @@ const (
 	commandPublishConfirm         = 3
 	commandPublishError           = 4
 	commandQueryPublisherSequence = 5
-	commandDeletePublisher        = 6
+	CommandDeletePublisher        = 6
 	commandSubscribe              = 7
 	commandDeliver                = 8
 	commandCredit                 = 9
@@ -69,6 +69,8 @@ const (
 
 	//
 	ClientVersion = "0.5-alpha"
+
+	StreamTcpPort = 5552
 )
 
 var PreconditionFailed = errors.New("Precondition Failed")
@@ -78,7 +80,7 @@ var StreamAlreadyExists = errors.New("Stream Already Exists")
 var VirtualHostAccessFailure = errors.New("Virtual Host Access Failure")
 var SubscriptionIdDoesNotExist = errors.New("Subscription Id Does Not Exist")
 var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
-var FrameTooLarge = errors.New("Frame Too Large")
+var FrameTooLarge = errors.New("Frame Too Large, the buffer is too big")
 var CodeAccessRefused = errors.New("Resources Access Refused")
 
 func lookErrorCode(errorCode uint16) error {
@@ -128,7 +130,7 @@ func lookUpCommand(command uint16) string {
 		commandCredit:           `CommandCredit`,
 		commandDeliver:          `CommandDeliver`,
 		commandSubscribe:        `CommandSubscribe`,
-		commandDeletePublisher:  `CommandDeletePublisher`,
+		CommandDeletePublisher:  `CommandDeletePublisher`,
 		commandPublishError:     `CommandPublishError`,
 		commandPublishConfirm:   `CommandPublishConfirm`,
 		commandDeclarePublisher: `CommandDeclarePublisher`,
