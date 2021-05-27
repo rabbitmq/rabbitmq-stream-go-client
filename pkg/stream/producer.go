@@ -123,6 +123,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amq
 	}
 
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
+	// TODO handle the socket read error to close the producer
 	if err != nil {
 		return 0, err
 	}

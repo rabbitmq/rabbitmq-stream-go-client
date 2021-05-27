@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"sync"
+	"time"
 )
 
 type Environment struct {
@@ -52,6 +53,18 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 func (env *Environment) newClientLocator() (*Client, error) {
 	client := newClient("stream-locator")
 	client.broker = env.options.ConnectionParameters
+	err := client.connect()
+	backoff := 1
+	for err != nil {
+		logError("Can't connect the locator client, error:%s, retry in %d seconds ", err, backoff)
+		time.Sleep(time.Duration(backoff) * time.Second)
+		err = client.connect()
+		backoff = backoff * 2
+		if backoff >= 60 {
+			backoff = 2
+		}
+	}
+
 	return client, client.connect()
 }
 

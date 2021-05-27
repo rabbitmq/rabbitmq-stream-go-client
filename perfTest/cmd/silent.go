@@ -244,6 +244,7 @@ func startPublisher(streamName string) error {
 			if err != nil {
 				logError("Error publishing %s", err)
 				time.Sleep(1 * time.Second)
+				return
 			}
 			checkErr(err)
 
