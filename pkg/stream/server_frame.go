@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"io"
 )
 
 type ReaderProtocol struct {
@@ -255,6 +256,18 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	// crc
 
+	//try {
+	//	// TODO handle exception in exception handler
+	//	chunkChecksum.checksum(message, dataLength, crc);
+	//} catch (ChunkChecksumValidationException e) {
+	//	LOGGER.warn(
+	//		"Checksum failure at offset {}, expecting {}, got {}",
+	//		offset,
+	//		e.getExpected(),
+	//		e.getComputed());
+	//	throw e;
+	//}
+
 	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
 	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
 	//fmt.Printf("%d numRecords %d \n", offset, numRecords)
@@ -273,7 +286,12 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	for numRecords != 0 {
 		entryType, err := peekByte(r)
 		if err != nil {
-			logWarn("error reading entryType %s ", err)
+			if err == io.EOF {
+				logDebug("EOF reading entryType %s ", err)
+				return
+			} else {
+				logWarn("error reading entryType %s ", err)
+			}
 		}
 		if (entryType & 0x80) == 0 {
 			sizeMessage, _ := readUInt(r)
@@ -357,10 +375,7 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 		logWarn("stream %s is no longer available", stream)
 		// TODO ASK WHAT TO DO HERE
 
-		streamCh := make(chan string, 1)
-		streamCh <- stream
-		c.metadataListener(streamCh)
-		close(streamCh)
+		c.metadataListener <- stream
 	} else {
 		//TODO handle the error, see the java code
 		logWarn("unsupported metadata update code %d", code)

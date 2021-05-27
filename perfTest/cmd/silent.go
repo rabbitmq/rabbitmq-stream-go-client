@@ -123,7 +123,7 @@ func checkErr(err error) {
 
 func randomSleep() {
 	rand.Seed(time.Now().UnixNano())
-	n := rand.Intn(500) // n will be between 0 and 2
+	n := rand.Intn(500)
 	time.Sleep(time.Duration(n) * time.Millisecond)
 }
 

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/url"
 	"sync"
@@ -390,6 +391,24 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 	return streamMetadata.Leader, nil
+}
+
+func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
+	streamsMetadata := c.metaData(stream)
+	if streamsMetadata == nil {
+		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
+	}
+
+	streamMetadata := streamsMetadata.Get(stream)
+	if streamMetadata.responseCode != responseCodeOk {
+		return nil, lookErrorCode(streamMetadata.responseCode)
+	}
+	var brokers []*Broker
+	brokers = append(brokers, streamMetadata.Leader)
+	brokers = append(brokers, streamMetadata.replicas...)
+	rand.Seed(time.Now().UnixNano())
+	n := rand.Intn(len(brokers))
+	return brokers[n], nil
 }
 
 func (c *Client) DeclareStream(streamName string, options *StreamOptions) error {

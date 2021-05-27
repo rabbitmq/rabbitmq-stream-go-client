@@ -15,7 +15,7 @@ type PublishError struct {
 }
 
 type onInternalClose func(ch <-chan uint8)
-type metadataListener func(ch <-chan string)
+type metadataListener chan string
 
 type ChannelClose = <-chan Event
 type ChannelPublishError = <-chan PublishError

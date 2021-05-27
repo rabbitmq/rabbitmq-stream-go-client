@@ -302,10 +302,19 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 	if clientResult == nil {
 		clientResult = newClient("stream-producers")
 		clientResult.broker = *leader
-		clientResult.metadataListener = func(ch <-chan string) {
-			streamName := <-ch
-			cc.maybeCleanProducers(streamName)
-		}
+		chMeta := make(chan string)
+		clientResult.metadataListener = chMeta
+		go func(ch <-chan string, cl *Client) {
+			for {
+				streamName := <-ch
+				cc.maybeCleanProducers(streamName)
+				if !cl.socket.isOpen() {
+					return
+				}
+			}
+
+		}(chMeta, clientResult)
+
 		clientResult.publishErrorListener = channelPublishErrListener
 
 		cc.nextId++
@@ -340,12 +349,20 @@ func (cc *enviromentCoordinator) newConsumer(ctx context.Context, leader *Broker
 	}
 
 	if clientResult == nil {
-		clientResult = newClient("stream-consumers")
+		clientResult = newClient("stream-consumer")
 		clientResult.broker = *leader
-		clientResult.metadataListener = func(ch <-chan string) {
-			streamName := <-ch
-			cc.maybeCleanConsumers(streamName)
-		}
+		chMeta := make(chan string)
+		clientResult.metadataListener = chMeta
+		go func(ch <-chan string, cl *Client) {
+			for {
+				<-ch
+				cc.maybeCleanConsumers(streamName)
+				if !cl.socket.isOpen() {
+					return
+				}
+			}
+
+		}(chMeta, clientResult)
 
 		cc.nextId++
 		cc.clientsPerContext[cc.nextId] = clientResult
@@ -465,21 +482,21 @@ func (ps *consumersEnvironment) NewSubscriber(ctx context.Context, clientLocator
 	consumerOptions *ConsumerOptions) (*Consumer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
-	leader, err := clientLocator.BrokerLeader(streamName)
+	consumerBroker, err := clientLocator.BrokerForConsumer(streamName)
 	if err != nil {
 		return nil, err
 	}
-	if ps.consumersCoordinator[leader.hostPort()] == nil {
-		ps.consumersCoordinator[leader.hostPort()] = &enviromentCoordinator{
+	if ps.consumersCoordinator[consumerBroker.hostPort()] == nil {
+		ps.consumersCoordinator[consumerBroker.hostPort()] = &enviromentCoordinator{
 			clientsPerContext: map[int]*Client{},
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
 			nextId:            0,
 		}
 	}
-	leader.cloneFrom(clientLocator.broker)
-	consumer, err := ps.consumersCoordinator[leader.hostPort()].
-		newConsumer(ctx, leader, streamName, messagesHandler, consumerOptions)
+	consumerBroker.cloneFrom(clientLocator.broker)
+	consumer, err := ps.consumersCoordinator[consumerBroker.hostPort()].
+		newConsumer(ctx, consumerBroker, streamName, messagesHandler, consumerOptions)
 	if err != nil {
 		return nil, err
 	}
