@@ -50,7 +50,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		consumers: newConsumerEnvironment(options.MaxConsumersPerClient),
 	}, client.connect()
 }
-func (env *Environment) newClientLocator() (*Client, error) {
+func (env *Environment) newReconnectClient() (*Client, error) {
 	client := newClient("stream-locator")
 	client.broker = env.options.ConnectionParameters
 	err := client.connect()
@@ -69,7 +69,7 @@ func (env *Environment) newClientLocator() (*Client, error) {
 }
 
 func (env *Environment) DeclareStream(streamName string, options *StreamOptions) error {
-	client, err := env.newClientLocator()
+	client, err := env.newReconnectClient()
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
@@ -83,7 +83,7 @@ func (env *Environment) DeclareStream(streamName string, options *StreamOptions)
 }
 
 func (env *Environment) DeleteStream(streamName string) error {
-	client, err := env.newClientLocator()
+	client, err := env.newReconnectClient()
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
@@ -97,7 +97,7 @@ func (env *Environment) DeleteStream(streamName string) error {
 }
 
 func (env *Environment) NewProducer(streamName string, producerOptions *ProducerOptions) (*Producer, error) {
-	client, err := env.newClientLocator()
+	client, err := env.newReconnectClient()
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
@@ -114,7 +114,7 @@ func (env *Environment) NewProducer(streamName string, producerOptions *Producer
 }
 
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
-	client, err := env.newClientLocator()
+	client, err := env.newReconnectClient()
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
@@ -132,7 +132,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 func (env *Environment) NewConsumer(ctx context.Context, streamName string,
 	messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
-	client, err := env.newClientLocator()
+	client, err := env.newReconnectClient()
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
