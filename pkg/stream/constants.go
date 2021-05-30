@@ -3,6 +3,7 @@ package stream
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"time"
 )
 
@@ -107,7 +108,7 @@ func lookErrorCode(errorCode uint16) error {
 		return CodeAccessRefused
 	default:
 		{
-			logWarn("Error not handled %d", errorCode)
+			logs.LogWarn("Error not handled %d", errorCode)
 			return errors.New("Generic Error")
 		}
 	}

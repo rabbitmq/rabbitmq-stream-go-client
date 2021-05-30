@@ -10,11 +10,13 @@ import (
 )
 
 type Coordinator struct {
-	counter   int
-	producers map[interface{}]interface{}
-	consumers map[interface{}]interface{}
-	responses map[interface{}]interface{}
-	mutex     *sync.Mutex
+	counter          int
+	producers        map[interface{}]interface{}
+	consumers        map[interface{}]interface{}
+	responses        map[interface{}]interface{}
+	nextItemProducer uint8
+	nextItemConsumer uint8
+	mutex            *sync.Mutex
 }
 
 type Code struct {
@@ -41,7 +43,7 @@ func (coordinator *Coordinator) NewProducer(
 	parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	var lastId, err = coordinator.getNextFreeId(coordinator.producers)
+	var lastId, err = coordinator.getNextProducerItem()
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +165,7 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 	parameters *ConsumerOptions) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	var lastId, _ = coordinator.getNextFreeId(coordinator.consumers)
+	var lastId, _ = coordinator.getNextConsumerItem()
 	var item = &Consumer{ID: lastId, options: parameters,
 		response: newResponse(lookUpCommand(commandSubscribe)), mutex: &sync.Mutex{},
 		MessagesHandler: messagesHandler,
@@ -228,19 +230,35 @@ func (coordinator *Coordinator) count(refmap map[interface{}]interface{}) int {
 	defer coordinator.mutex.Unlock()
 	return len(refmap)
 }
+func (coordinator *Coordinator) getNextProducerItem() (uint8, error) {
+	if coordinator.nextItemProducer >= ^uint8(0) {
+		return coordinator.reuseFreeId(coordinator.producers)
+	}
+	res := coordinator.nextItemProducer
+	coordinator.nextItemProducer++
+	return res, nil
+}
 
-func (coordinator *Coordinator) getNextFreeId(refmap map[interface{}]interface{}) (byte, error) {
+func (coordinator *Coordinator) getNextConsumerItem() (uint8, error) {
+	if coordinator.nextItemConsumer >= ^uint8(0) {
+		return coordinator.reuseFreeId(coordinator.consumers)
+	}
+	res := coordinator.nextItemConsumer
+	coordinator.nextItemConsumer++
+	return res, nil
+}
+
+func (coordinator *Coordinator) reuseFreeId(refMap map[interface{}]interface{}) (byte, error) {
 	maxValue := int(^uint8(0))
 	var result byte
 	for i := 0; i < maxValue; i++ {
-		if refmap[byte(i)] == nil {
+		if refMap[byte(i)] == nil {
 			return byte(i), nil
 		}
 		result++
 	}
 	if result >= ^uint8(0) {
 		return 0, errors.New("No more items available")
-		// TODO HANDLE THE error
 	}
 	return result, nil
 }

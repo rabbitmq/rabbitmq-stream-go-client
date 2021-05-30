@@ -1,0 +1,71 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+
+
+BOX_IMAGE = "ubuntu/xenial64"
+NODE_COUNT = 2
+
+Vagrant.configure("2") do |config|
+  config.vm.define "node0" do |subconfig|
+    subconfig.vm.box = BOX_IMAGE
+    subconfig.vm.hostname = "node0"
+    subconfig.vm.network :private_network, ip: "10.0.0.10"
+ end
+  
+  (1..NODE_COUNT).each do |i|
+    config.vm.define "node#{i}" do |subconfig|
+      subconfig.vm.box = BOX_IMAGE
+      subconfig.vm.hostname = "node#{i}"
+      subconfig.vm.network :private_network, ip: "10.0.0.#{i + 10}"
+    end
+  end
+
+  # Install avahi on all machines  
+  config.vm.provision "shell", inline: <<-SHELL
+      echo "10.0.0.11 node1 " >> /etc/hosts 
+      echo "10.0.0.12 node2 " >> /etc/hosts 
+      echo "10.0.0.10 node0 " >> /etc/hosts
+      apt-get update -y
+      apt-get install curl gnupg debian-keyring debian-archive-keyring apt-transport-https -y
+      apt-key adv --keyserver "hkps://keys.openpgp.org" --recv-keys "0x0A9AF2115F4687BD29803A206B73A36E6026DFCA"
+      apt-key adv --keyserver "keyserver.ubuntu.com" --recv-keys "F77F1EDA57EBB1CC"
+      apt-key adv --keyserver "keyserver.ubuntu.com" --recv-keys "F6609E60DC62814E"
+
+      tee /etc/apt/sources.list.d/rabbitmq.list <<EOF
+deb http://ppa.launchpad.net/rabbitmq/rabbitmq-erlang/ubuntu xenial main
+deb-src http://ppa.launchpad.net/rabbitmq/rabbitmq-erlang/ubuntu xenial main
+EOF
+      apt-get update -y 
+      apt-get install -y erlang-base \
+                        erlang-asn1 erlang-crypto erlang-eldap erlang-ftp erlang-inets \
+                        erlang-mnesia erlang-os-mon erlang-parsetools erlang-public-key \
+                        erlang-runtime-tools erlang-snmp erlang-ssl \
+                        erlang-syntax-tools erlang-tftp erlang-tools erlang-xmerl
+
+      apt-get update -y
+      apt install socat -y
+      wget https://github.com/rabbitmq/rabbitmq-server-binaries-dev/releases/download/v3.9.0-alpha.524/rabbitmq-server_3.9.0.alpha.524-1_all.deb
+      sudo dpkg -i rabbitmq-server_3.9.0.alpha.524-1_all.deb
+      sudo systemctl stop rabbitmq-server
+      echo "PLEASE_GENERATE_A_SECURE_VALUE" >  /var/lib/rabbitmq/.erlang.cookie
+      sudo systemctl start rabbitmq-server
+      sleep 5
+     sudo rabbitmq-plugins enable rabbitmq_management
+     sudo rabbitmq-plugins enable rabbitmq_stream
+     sudo rabbitmq-plugins enable rabbitmq_stream_management
+     sudo rabbitmqctl stop_app
+     sudo rabbitmqctl reset
+     sudo rabbitmqctl join_cluster rabbit@node0
+     sudo rabbitmqctl start_app 
+     sudo rabbitmqctl add_user test test
+     sudo rabbitmqctl set_user_tags test administrator
+     sudo rabbitmqctl set_permissions -p / test ".*" ".*" ".*"
+     SHELL
+end
+
+

@@ -3,16 +3,19 @@
 ![Build](https://github.com/rabbitmq/rabbitmq-stream-go-client/workflows/Build/badge.svg)
 [![codecov](https://codecov.io/gh/Gsantomaggio/go-stream-client/branch/main/graph/badge.svg?token=HZD4S71QIM)](https://codecov.io/gh/Gsantomaggio/go-stream-client)
 
-Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
+Experimental client
+for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 
 ### Download
 ---
+
 ```
 go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.5-alpha
 ```
 
 ### Getting started
 ---
+
 - Run RabbitMQ docker image with streaming:
    ```
    docker run -it --rm --name rabbitmq -p 5552:5552 -p 5672:5672 -p 15672:15672 \
@@ -25,6 +28,7 @@ go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.5-alpha
   ```
 
 ### Performance test tool is an easy way to do some test:
+
 ```
 go run perfTest/perftest.go silent
 ```
@@ -32,8 +36,9 @@ go run perfTest/perftest.go silent
 ### API
 ---
 
-The API are generally composed by mandatory arguments and optional arguments
-the optional arguments can be set in the standard go way as:
+The API are generally composed by mandatory arguments and optional arguments the optional arguments can be set in the
+standard go way as:
+
 ```golang
 env, err := stream.NewEnvironment(
             &stream.EnvironmentOptions{
@@ -48,7 +53,9 @@ env, err := stream.NewEnvironment(
                 },
             )
 ```
+
 or using Builders as:
+
 ```golang
 env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
@@ -59,6 +66,7 @@ env, err := stream.NewEnvironment(
 ```
 
 `nil` is also a valid value, default values will be provided:
+
 ```golang
 env, err := stream.NewEnvironment(nil) 
 ```
@@ -74,14 +82,13 @@ make build
 ```
 
 You need a docker image running to execute the tests in this way:
+
 ```
  docker run -it --rm --name rabbitmq -p 5552:5552 \
    -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
    pivotalrabbitmq/rabbitmq-stream
 ```
 
-
-
- ### Project status
- ---
- The client is a work in progress, the API(s) could change
+### Project status
+---
+The client is a work in progress, the API(s) could change

@@ -99,7 +99,7 @@ func main() {
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer").                  // set a consumer name
+			SetConsumerName("my_consumer"). // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
 	channelClose := consumer.NotifyClose()

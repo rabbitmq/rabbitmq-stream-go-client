@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
 	"net"
 	"net/url"
@@ -56,22 +57,22 @@ func (c *Client) connect() error {
 		c.tuneState.requestedMaxFrameSize = 1048576
 		resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
 		if err != nil {
-			logDebug("%s", err)
+			logs.LogDebug("%s", err)
 			return err
 		}
 		connection, err2 := net.DialTCP("tcp", nil, resolver)
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 		err2 = connection.SetReadBuffer(defaultReadSocketBuffer)
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 		err2 = connection.SetWriteBuffer(defaultReadSocketBuffer)
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 
@@ -85,13 +86,13 @@ func (c *Client) connect() error {
 		err2 = c.peerProperties()
 
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 		pwd, _ := u.User.Password()
 		err2 = c.authenticate(u.User.Username(), pwd)
 		if err2 != nil {
-			logDebug("User:%s, %s", u.User.Username(), err2)
+			logs.LogDebug("User:%s, %s", u.User.Username(), err2)
 			return err2
 		}
 		vhost := "/"
@@ -100,11 +101,11 @@ func (c *Client) connect() error {
 		}
 		err2 = c.open(vhost)
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 		c.heartBeat()
-		logDebug("User %s, connected to: %s, vhost:%s", u.User.Username(),
+		logs.LogDebug("User %s, connected to: %s, vhost:%s", u.User.Username(),
 			net.JoinHostPort(host, port),
 			vhost)
 	}
@@ -272,7 +273,7 @@ func (c *Client) closeHartBeat() {
 	c.destructor.Do(func() {
 		r, err := c.coordinator.GetResponseByName("heartbeat")
 		if err != nil {
-			logWarn("error removing heartbeat: %s", err)
+			logs.LogWarn("error removing heartbeat: %s", err)
 		} else {
 			r.code <- Code{id: closeChannel}
 		}
@@ -291,7 +292,7 @@ func (c *Client) Close() error {
 		})
 
 		if err != nil {
-			logWarn("error removing producer: %s", err)
+			logs.LogWarn("error removing producer: %s", err)
 		}
 	}
 	for _, cs := range c.coordinator.consumers {
@@ -303,7 +304,7 @@ func (c *Client) Close() error {
 			Err:        nil,
 		})
 		if err != nil {
-			logWarn("error removing consumer: %s", err)
+			logs.LogWarn("error removing consumer: %s", err)
 		}
 	}
 	var err error
@@ -319,7 +320,7 @@ func (c *Client) Close() error {
 
 		err = c.socket.writeAndFlush(b.Bytes())
 		if err != nil {
-			logWarn("error during send client close %s", err)
+			logs.LogWarn("error during send client close %s", err)
 		}
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
@@ -390,6 +391,10 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 	if streamMetadata.responseCode != responseCodeOk {
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
+	if streamMetadata.Leader == nil {
+		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
+	}
+
 	return streamMetadata.Leader, nil
 }
 

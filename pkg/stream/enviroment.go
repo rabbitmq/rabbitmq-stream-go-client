@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"net/url"
 	"sync"
 	"time"
@@ -56,7 +57,7 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 	err := client.connect()
 	backoff := 1
 	for err != nil {
-		logError("Can't connect the locator client, error:%s, retry in %d seconds ", err, backoff)
+		logs.LogError("Can't connect the locator client, error:%s, retry in %d seconds ", err, backoff)
 		time.Sleep(time.Duration(backoff) * time.Second)
 		err = client.connect()
 		backoff = backoff * 2
@@ -398,7 +399,7 @@ func (cc *enviromentCoordinator) close() error {
 	for _, client := range cc.clientsPerContext {
 		err := client.Close()
 		if err != nil {
-			logWarn("Error during close the client, %s", err)
+			logs.LogWarn("Error during close the client, %s", err)
 		}
 	}
 	return nil

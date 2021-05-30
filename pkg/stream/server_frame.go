@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"io"
 )
 
@@ -24,7 +25,7 @@ func (c *Client) handleResponse() {
 		readerProtocol := &ReaderProtocol{}
 		frameLen, err := readUInt(buffer)
 		if err != nil {
-			logDebug("socket: %s", err)
+			logs.LogDebug("socket error: %s", err)
 			_ = c.Close()
 			break
 		}
@@ -100,7 +101,7 @@ func (c *Client) handleResponse() {
 			}
 		default:
 			{
-				logWarn("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
+				logs.LogWarn("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 				break
 			}
 		}
@@ -213,7 +214,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	//var _publishingId int64
 	producer, err := c.coordinator.GetProducerById(readProtocol.PublishID)
 	if err != nil {
-		logWarn("%s", err)
+		logs.LogWarn("%s", err)
 		return nil
 	}
 	var unConfirmed []*UnConfirmedMessage
@@ -241,7 +242,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_ = readByte(r)
 	chunkType := readByte(r)
 	if chunkType != 0 {
-		logWarn("Invalid chunkType: %d ", chunkType)
+		logs.LogWarn("Invalid chunkType: %d ", chunkType)
 	}
 
 	_ = readUShort(r)
@@ -287,10 +288,10 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		entryType, err := peekByte(r)
 		if err != nil {
 			if err == io.EOF {
-				logDebug("EOF reading entryType %s ", err)
+				logs.LogDebug("EOF reading entryType %s ", err)
 				return
 			} else {
-				logWarn("error reading entryType %s ", err)
+				logs.LogWarn("error reading entryType %s ", err)
 			}
 		}
 		if (entryType & 0x80) == 0 {
@@ -303,13 +304,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				msg := &amqp.Message{}
 				err := msg.UnmarshalBinary(arrayMessage)
 				if err != nil {
-					logError("error unmarshal messages: %s", err)
+					logs.LogError("error unmarshal messages: %s", err)
 				}
 				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}
 
 		} else {
-			logWarn("entryType Not Handled %d", entryType)
+			logs.LogWarn("entryType Not Handled %d", entryType)
 		}
 		numRecords--
 		offset++
@@ -343,7 +344,7 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 	publisherId := readByte(buffer)
 	producer, err := c.coordinator.GetProducerById(publisherId)
 	if err != nil {
-		logWarn("producer not found :%s", err)
+		logs.LogWarn("producer not found :%s", err)
 		producer = &Producer{unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
 	}
 
@@ -372,13 +373,12 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 	code := readUShort(buffer)
 	if code == responseCodeStreamNotAvailable {
 		stream := readString(buffer)
-		logWarn("stream %s is no longer available", stream)
-		// TODO ASK WHAT TO DO HERE
+		logs.LogWarn("stream %s is no longer available", stream)
 
 		c.metadataListener <- stream
 	} else {
 		//TODO handle the error, see the java code
-		logWarn("unsupported metadata update code %d", code)
+		logs.LogWarn("unsupported metadata update code %d", code)
 	}
 }
 
@@ -424,7 +424,7 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader
 	readProtocol.CorrelationId, _ = readUInt(r)
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	closeReason := readString(r)
-	logInfo("Received close from server, reason: {} {}", lookErrorCode(readProtocol.ResponseCode),
+	logs.LogInfo("Received close from server, reason: {} {}", lookErrorCode(readProtocol.ResponseCode),
 		closeReason)
 
 	length := 2 + 2 + 4 + 2

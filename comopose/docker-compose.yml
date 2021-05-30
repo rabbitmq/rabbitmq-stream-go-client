@@ -12,9 +12,9 @@ services:
       - "5552:5552"
     tty: true
     volumes:
-#      - rabbit1:/var/lib/rabbitmq
+      #      - rabbit1:/var/lib/rabbitmq
       - ./conf/:/etc/rabbitmq/
-#    command:  bash -c "sleep 10; rabbitmq-server;"
+  #    command:  bash -c "sleep 10; rabbitmq-server;"
   rabbit_node_2:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
@@ -29,7 +29,7 @@ services:
       - "5554:5552"
     tty: true
     volumes:
-#      - rabbit2:/var/lib/rabbitmq
+      #      - rabbit2:/var/lib/rabbitmq
       - ./conf/:/etc/rabbitmq/
 #    command:  bash -c "sleep 10; rabbitmq-server;"
 #volumes:

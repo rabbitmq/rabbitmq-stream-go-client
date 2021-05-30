@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
 	"sync/atomic"
 )
@@ -87,6 +88,10 @@ func (producer *Producer) NotifyClose() ChannelClose {
 	ch := make(chan Event, 1)
 	producer.closeHandler = ch
 	return ch
+}
+
+func (producer *Producer) GetOptions() *ProducerOptions {
+	return producer.options
 }
 
 func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) (int, error) {
@@ -188,7 +193,7 @@ func (c *Client) deletePublisher(publisherId byte) error {
 		Err:     nil,
 	})
 	if err != nil {
-		logWarn("producer id: %d already removed", publisherId)
+		logs.LogWarn("producer id: %d already removed", publisherId)
 	}
 
 	return errWrite.Err
