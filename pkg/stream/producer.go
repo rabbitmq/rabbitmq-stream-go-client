@@ -94,16 +94,18 @@ func (producer *Producer) GetOptions() *ProducerOptions {
 	return producer.options
 }
 
-func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) (int, error) {
+func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) ([]int64, error) {
 	if len(batchMessages) > 1000 {
-		return 0, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
+		return nil, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
 	}
-
+	var result = make([]int64, len(batchMessages))
 	frameHeaderLength := 2 + 2 + 1 + 4
 	var msgLen int
-	for _, msg := range batchMessages {
+	for idx, msg := range batchMessages {
 		r, _ := msg.MarshalBinary()
 		msgLen += len(r) + 8 + 4
+		result[idx] = atomic.AddInt64(&producer.sequence, 1)
+		producer.addUnConfirmed(result[idx], msg, producer.ID)
 	}
 
 	length := frameHeaderLength + msgLen
@@ -113,26 +115,24 @@ func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amq
 	writeByte(b, publishId)
 	writeInt(b, len(batchMessages)) //toExcluded - fromInclude
 
-	for _, msg := range batchMessages {
-		id := atomic.AddInt64(&producer.sequence, 1)
+	for i, msg := range batchMessages {
 		r, _ := msg.MarshalBinary()
-		writeLong(b, id)    // sequence
-		writeInt(b, len(r)) // len
+		writeLong(b, result[i]) // sequence
+		writeInt(b, len(r))     // len
 		b.Write(r)
-		producer.addUnConfirmed(id, msg, producer.ID)
 	}
 
 	bufferToWrite := b.Bytes()
 	if len(bufferToWrite) > producer.options.client.tuneState.requestedMaxFrameSize {
-		return 0, lookErrorCode(responseCodeFrameTooLarge)
+		return nil, lookErrorCode(responseCodeFrameTooLarge)
 	}
 
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
 	// TODO handle the socket read error to close the producer
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return len(batchMessages), nil
+	return result, nil
 }
 
 func (producer *Producer) Close() error {

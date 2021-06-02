@@ -15,7 +15,7 @@ import (
 func newSilent() *cobra.Command {
 	var silentCmd = &cobra.Command{
 		Use:   "silent",
-		Short: "Start a silent simulation",
+		Short: "NewProducer a silent simulation",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return startSimulation()
 		},

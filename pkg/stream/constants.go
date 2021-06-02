@@ -63,7 +63,7 @@ const (
 	defaultSocketCallTimeout = 10 * time.Second
 
 	//
-	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5552/%2f"
+	LocalhostUriConnection = "rabbitmq-stream://guest:guest@localhost:5552/%2f"
 
 	///
 	defaultReadSocketBuffer = 4096 * 2
@@ -71,7 +71,7 @@ const (
 	//
 	ClientVersion = "0.5-alpha"
 
-	StreamTcpPort = 5552
+	StreamTcpPort = "5552"
 )
 
 var PreconditionFailed = errors.New("Precondition Failed")

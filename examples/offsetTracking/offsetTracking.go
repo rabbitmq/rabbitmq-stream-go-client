@@ -82,7 +82,7 @@ func main() {
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName(uuid.New().String()). // set a consumer name
+			SetConsumerName(uuid.New().String()).            // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
 

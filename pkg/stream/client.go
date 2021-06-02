@@ -28,7 +28,7 @@ type Client struct {
 	clientProperties     ClientProperties
 	tuneState            TuneState
 	coordinator          *Coordinator
-	broker               Broker
+	broker               *Broker
 	metadataListener     metadataListener
 	publishErrorListener ChannelPublishError
 }
@@ -46,7 +46,6 @@ func newClient(connectionName string) *Client {
 
 func (c *Client) connect() error {
 	if !c.socket.isOpen() {
-		c.broker.GetUri()
 		u, err := url.Parse(c.broker.GetUri())
 		if err != nil {
 			return err
@@ -398,6 +397,15 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 	return streamMetadata.Leader, nil
 }
 
+func (c *Client) StreamExists(stream string) bool {
+	streamsMetadata := c.metaData(stream)
+	if streamsMetadata == nil {
+		return false
+	}
+
+	streamMetadata := streamsMetadata.Get(stream)
+	return streamMetadata.responseCode == responseCodeOk
+}
 func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {

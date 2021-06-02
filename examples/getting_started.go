@@ -59,6 +59,7 @@ func main() {
 	// Create a stream, you can create streams without any option like:
 	// err = env.DeclareStream(streamName, nil)
 	// it is a best practise to define a size,  1GB for example:
+
 	streamName := uuid.New().String()
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
@@ -99,7 +100,7 @@ func main() {
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer"). // set a consumer name
+			SetConsumerName("my_consumer").                  // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
 	channelClose := consumer.NotifyClose()

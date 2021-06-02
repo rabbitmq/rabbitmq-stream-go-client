@@ -375,7 +375,11 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 		stream := readString(buffer)
 		logs.LogWarn("stream %s is no longer available", stream)
 
-		c.metadataListener <- stream
+		c.metadataListener <- metaDataUpdateEvent{
+			StreamName: stream,
+			code:       responseCodeStreamNotAvailable,
+		}
+
 	} else {
 		//TODO handle the error, see the java code
 		logs.LogWarn("unsupported metadata update code %d", code)

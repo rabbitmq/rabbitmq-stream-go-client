@@ -2,8 +2,11 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"math/rand"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -32,18 +35,28 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if options.MaxProducersPerClient == 0 {
 		options.MaxProducersPerClient = 3
 	}
-	options.ConnectionParameters.mergeWithDefault()
 
-	if options.ConnectionParameters.Uri != "" {
-		u, err := url.Parse(options.ConnectionParameters.Uri)
-		if err != nil {
-			return nil, err
-		}
-		options.ConnectionParameters.User = u.User.Username()
-		options.ConnectionParameters.Password, _ = u.User.Password()
+	if len(options.ConnectionParameters) == 0 {
+		options.ConnectionParameters = []*Broker{newBrokerDefault()}
 	}
 
-	client.broker = options.ConnectionParameters
+	for _, parameter := range options.ConnectionParameters {
+
+		if parameter.Uri != "" {
+			u, err := url.Parse(parameter.Uri)
+			if err != nil {
+				return nil, err
+			}
+			parameter.User = u.User.Username()
+			parameter.Password, _ = u.User.Password()
+			parameter.Host = u.Host
+			parameter.Port = u.Port()
+		}
+
+		parameter.mergeWithDefault()
+
+		client.broker = parameter
+	}
 
 	return &Environment{
 		options:   options,
@@ -53,17 +66,19 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 }
 func (env *Environment) newReconnectClient() (*Client, error) {
 	client := newClient("stream-locator")
-	client.broker = env.options.ConnectionParameters
+	client.broker = env.options.ConnectionParameters[0]
 	err := client.connect()
-	backoff := 1
+	tentatives := 1
 	for err != nil {
-		logs.LogError("Can't connect the locator client, error:%s, retry in %d seconds ", err, backoff)
-		time.Sleep(time.Duration(backoff) * time.Second)
+		logs.LogError("Can't connect the locator client, error:%s, retry in %d seconds, broker: ", err, tentatives,
+			client.broker)
+		time.Sleep(time.Duration(tentatives) * time.Second)
+		rand.Seed(time.Now().UnixNano())
+		n := rand.Intn(len(env.options.ConnectionParameters))
+		client.broker = env.options.ConnectionParameters[n]
+		tentatives = tentatives + 1
 		err = client.connect()
-		backoff = backoff * 2
-		if backoff >= 60 {
-			backoff = 2
-		}
+
 	}
 
 	return client, client.connect()
@@ -127,6 +142,20 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	}
 	streamsMetadata := client.metaData(streamName)
 	streamMetadata := streamsMetadata.Get(streamName)
+
+	tentatives := 0
+	for streamMetadata == nil || streamMetadata.Leader == nil && tentatives < 3 {
+		streamsMetadata = client.metaData(streamName)
+		streamMetadata = streamsMetadata.Get(streamName)
+		tentatives++
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if streamMetadata.Leader == nil {
+
+		return nil, errors.New("can't find leader for stream: " + streamName)
+	}
+
 	return streamMetadata, nil
 }
 
@@ -156,7 +185,7 @@ func (env *Environment) Close() error {
 }
 
 type EnvironmentOptions struct {
-	ConnectionParameters  Broker
+	ConnectionParameters  []*Broker
 	MaxProducersPerClient int
 	MaxConsumersPerClient int
 }
@@ -165,7 +194,7 @@ func NewEnvironmentOptions() *EnvironmentOptions {
 	return &EnvironmentOptions{
 		MaxProducersPerClient: 1,
 		MaxConsumersPerClient: 1,
-		ConnectionParameters:  newBrokerDefault(),
+		ConnectionParameters:  []*Broker{},
 	}
 }
 
@@ -182,28 +211,59 @@ func (envOptions *EnvironmentOptions) SetMaxConsumersPerClient(maxConsumersPerCl
 }
 
 func (envOptions *EnvironmentOptions) SetUri(uri string) *EnvironmentOptions {
-	envOptions.ConnectionParameters.Uri = uri
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Uri: uri})
+	} else {
+		envOptions.ConnectionParameters[0].Uri = uri
+	}
+
 	return envOptions
 }
 
-func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
-	envOptions.ConnectionParameters.User = user
-	return envOptions
-}
-
-func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentOptions {
-	envOptions.ConnectionParameters.Password = password
+func (envOptions *EnvironmentOptions) SetUris(uris []string) *EnvironmentOptions {
+	for _, s := range uris {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Uri: s})
+	}
 	return envOptions
 }
 
 func (envOptions *EnvironmentOptions) SetHost(host string) *EnvironmentOptions {
-	envOptions.ConnectionParameters.Host = host
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Host: host})
+	} else {
+		envOptions.ConnectionParameters[0].Host = host
+	}
 	return envOptions
 }
 
 func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
-	envOptions.ConnectionParameters.Port = port
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Port: strconv.Itoa(port)})
+	} else {
+		envOptions.ConnectionParameters[0].Port = strconv.Itoa(port)
+	}
 	return envOptions
+
+}
+
+func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{User: user})
+	} else {
+		envOptions.ConnectionParameters[0].User = user
+	}
+	return envOptions
+
+}
+
+func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Password: password})
+	} else {
+		envOptions.ConnectionParameters[0].Password = password
+	}
+	return envOptions
+
 }
 
 type enviromentCoordinator struct {
@@ -236,6 +296,7 @@ func (cc *enviromentCoordinator) maybeCleanClients() {
 func (cc *enviromentCoordinator) maybeCleanProducers(streamName string) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
+
 	for _, client := range cc.clientsPerContext {
 		for pidx, producer := range client.coordinator.producers {
 			if producer.(*Producer).GetStreamName() == streamName {
@@ -315,13 +376,13 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 
 	if clientResult == nil {
 		clientResult = newClient("stream-producers")
-		clientResult.broker = *leader
-		chMeta := make(chan string)
+		clientResult.broker = leader
+		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
-		go func(ch <-chan string, cl *Client) {
+		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
 			for {
-				streamName := <-ch
-				cc.maybeCleanProducers(streamName)
+				metaDataUpdateEvent := <-ch
+				cc.maybeCleanProducers(metaDataUpdateEvent.StreamName)
 				if !cl.socket.isOpen() {
 					return
 				}
@@ -364,13 +425,13 @@ func (cc *enviromentCoordinator) newConsumer(ctx context.Context, leader *Broker
 
 	if clientResult == nil {
 		clientResult = newClient("stream-consumer")
-		clientResult.broker = *leader
-		chMeta := make(chan string)
+		clientResult.broker = leader
+		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
-		go func(ch <-chan string, cl *Client) {
+		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
 			for {
-				<-ch
-				cc.maybeCleanConsumers(streamName)
+				metaDataUpdateEvent := <-ch
+				cc.maybeCleanConsumers(metaDataUpdateEvent.StreamName)
 				if !cl.socket.isOpen() {
 					return
 				}
