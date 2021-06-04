@@ -222,10 +222,11 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		unConfirmed = append(unConfirmed, producer.getUnConfirmed(readInt64(r)))
 		publishingIdCount--
 	}
-
+	producer.mutex.Lock()
 	if producer.publishConfirm != nil {
 		producer.publishConfirm <- unConfirmed
 	}
+	producer.mutex.Unlock()
 	for _, l := range unConfirmed {
 		if l != nil {
 			producer.removeUnConfirmed(l.MessageID)
@@ -374,11 +375,12 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 	if code == responseCodeStreamNotAvailable {
 		stream := readString(buffer)
 		logs.LogWarn("stream %s is no longer available", stream)
-
+		c.mutex.Lock()
 		c.metadataListener <- metaDataUpdateEvent{
 			StreamName: stream,
 			code:       responseCodeStreamNotAvailable,
 		}
+		c.mutex.Unlock()
 
 	} else {
 		//TODO handle the error, see the java code

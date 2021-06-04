@@ -44,6 +44,12 @@ func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{}
 }
 
+func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedMessage {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	return producer.unConfirmedMessages
+}
+
 func (producer *Producer) addUnConfirmed(messageid int64, message *amqp.Message, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
@@ -94,12 +100,48 @@ func (producer *Producer) GetOptions() *ProducerOptions {
 	return producer.options
 }
 
+func (producer *Producer) ResendUnConfirmed(ctx context.Context) error {
+
+	for _, message := range producer.GetUnConfirmed() {
+
+		var msgLen int
+		r, _ := message.Message.MarshalBinary()
+		msgLen += len(r) + 8 + 4
+
+		frameHeaderLength := 2 + 2 + 1 + 4
+		length := frameHeaderLength + msgLen
+		publishId := producer.ID
+		var b = bytes.NewBuffer(make([]byte, 0, length+4))
+		writeProtocolHeader(b, length, commandPublish)
+		writeByte(b, publishId)
+		writeInt(b, 1) //toExcluded - fromInclude
+
+		//for i, msg := range batchMessages {
+		buff, _ := message.Message.MarshalBinary()
+		writeLong(b, message.MessageID) // sequence
+		writeInt(b, len(buff))          // len
+		b.Write(buff)
+		//}
+
+		bufferToWrite := b.Bytes()
+		if len(bufferToWrite) > producer.options.client.tuneState.requestedMaxFrameSize {
+			return lookErrorCode(responseCodeFrameTooLarge)
+		}
+
+		err := producer.options.client.socket.writeAndFlush(b.Bytes())
+		// TODO handle the socket read error to close the producer
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) ([]int64, error) {
 	if len(batchMessages) > 1000 {
 		return nil, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
 	}
 	var result = make([]int64, len(batchMessages))
-	frameHeaderLength := 2 + 2 + 1 + 4
 	var msgLen int
 	for idx, msg := range batchMessages {
 		r, _ := msg.MarshalBinary()
@@ -108,6 +150,7 @@ func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amq
 		producer.addUnConfirmed(result[idx], msg, producer.ID)
 	}
 
+	frameHeaderLength := 2 + 2 + 1 + 4
 	length := frameHeaderLength + msgLen
 	publishId := producer.ID
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -154,6 +197,13 @@ func (producer *Producer) Close() error {
 	ch <- producer.ID
 	producer.onClose(ch)
 	close(ch)
+
+	producer.mutex.Lock()
+	if producer.publishConfirm != nil {
+		close(producer.publishConfirm)
+		producer.publishConfirm = nil
+	}
+	producer.mutex.Unlock()
 
 	return nil
 }

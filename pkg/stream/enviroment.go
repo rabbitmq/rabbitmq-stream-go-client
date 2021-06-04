@@ -380,8 +380,7 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
-			for {
-				metaDataUpdateEvent := <-ch
+			for metaDataUpdateEvent := range ch {
 				cc.maybeCleanProducers(metaDataUpdateEvent.StreamName)
 				if !cl.socket.isOpen() {
 					return
@@ -390,7 +389,7 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 
 		}(chMeta, clientResult)
 
-		clientResult.publishErrorListener = channelPublishErrListener
+		//clientResult.publishErrorListener = channelPublishErrListener
 
 		cc.nextId++
 		cc.clientsPerContext[cc.nextId] = clientResult
@@ -429,8 +428,7 @@ func (cc *enviromentCoordinator) newConsumer(ctx context.Context, leader *Broker
 		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
-			for {
-				metaDataUpdateEvent := <-ch
+			for metaDataUpdateEvent := range ch {
 				cc.maybeCleanConsumers(metaDataUpdateEvent.StreamName)
 				if !cl.socket.isOpen() {
 					return

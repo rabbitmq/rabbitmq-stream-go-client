@@ -20,9 +20,11 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	time.Sleep(200 * time.Millisecond)
 	err := testEnvironment.Close()
 	Expect(err).NotTo(HaveOccurred())
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+
 	//Expect(testEnvironment.Coordinators()[0].ProducersCount()).To(Equal(0))
 	//Expect(testEnvironment.clientLocator.coordinator.ResponsesCount()).To(Equal(0))
 	//Expect(testEnvironment.clientLocator.coordinator.ConsumersCount()).To(Equal(0))

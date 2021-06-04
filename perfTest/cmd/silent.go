@@ -96,7 +96,7 @@ func startSimulation() error {
 	checkErr(err)
 
 	simulEnvironment, err = stream.NewEnvironment(stream.NewEnvironmentOptions().
-		SetUri(rabbitmqBrokerUrl).
+		SetUris(rabbitmqBrokerUrl).
 		SetMaxProducersPerClient(publishersPerClient).
 		SetMaxConsumersPerClient(consumersPerClient))
 	checkErr(err)
@@ -129,7 +129,7 @@ func randomSleep() {
 
 func initStreams() error {
 	logInfo("Declaring streams: %s", streams)
-	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
+	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUris(
 		rabbitmqBrokerUrl))
 	if err != nil {
 		logError("Error init stream connection: %s", err)
@@ -164,8 +164,7 @@ func initStreams() error {
 
 func handlePublishConfirms(confirms stream.ChannelPublishConfirm) {
 	go func() {
-		for {
-			ids := <-confirms
+		for ids := range confirms {
 			atomic.AddInt32(&confirmedMessageCount, int32(len(ids)))
 		}
 	}()
@@ -173,8 +172,7 @@ func handlePublishConfirms(confirms stream.ChannelPublishConfirm) {
 
 func handlePublishError(publishError stream.ChannelPublishError) {
 	go func() {
-		for {
-			<-publishError
+		for range publishError {
 			atomic.AddInt32(&publishErrors, 1)
 		}
 	}()
@@ -183,22 +181,18 @@ func handlePublishError(publishError stream.ChannelPublishError) {
 
 func startPublisher(streamName string) error {
 
-	publisher, err := simulEnvironment.NewProducer(streamName,
-		stream.NewProducerOptions().SetProducerName(fmt.Sprintf("pub-%s", streamName)))
-
+	rPublisher := stream.NewHAProducer(simulEnvironment)
+	err := rPublisher.NewProducer(streamName, fmt.Sprintf("pub-%s", streamName))
 	if err != nil {
 		logError("Error create publisher: %s", err)
 		return err
 	}
 
-	chPublishConfirm := publisher.NotifyPublishConfirmation()
+	chPublishConfirm := rPublisher.NotifyPublishConfirmation()
 	handlePublishConfirms(chPublishConfirm)
 
-	chPublishError := publisher.NotifyPublishError()
+	chPublishError := rPublisher.NotifyPublishError()
 	handlePublishError(chPublishError)
-
-	chPublishClose := publisher.NotifyClose()
-	handlePublishClose(chPublishClose)
 
 	var arr []*amqp.Message
 	var body string
@@ -216,7 +210,7 @@ func startPublisher(streamName string) error {
 		arr = append(arr, amqp.NewMessage([]byte(body)))
 	}
 
-	go func(prod *stream.Producer, messages []*amqp.Message) {
+	go func(prod *stream.ReliableProducer, messages []*amqp.Message) {
 		for {
 			if rate > 0 {
 				var v1 float64
@@ -240,16 +234,16 @@ func startPublisher(streamName string) error {
 			}
 
 			atomic.AddInt32(&publisherMessageCount, int32(batchSize))
-			_, err := prod.BatchPublish(context.Background(), arr)
-			if err != nil {
-				logError("Error publishing %s", err)
-				time.Sleep(1 * time.Second)
-				return
-			}
+			prod.BatchPublish(arr)
+			//if err != nil {
+			//	logError("Error publishing %s", err)
+			//	time.Sleep(1 * time.Second)
+			//	return
+			//}
 			checkErr(err)
 
 		}
-	}(publisher, arr)
+	}(rPublisher, arr)
 
 	return nil
 
@@ -269,22 +263,22 @@ func startPublishers() error {
 	return nil
 }
 
-func handlePublishClose(channelClose stream.ChannelClose) {
-	go func() {
-		event := <-channelClose
-		logInfo("Producer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
-		if exitOnError {
-			os.Exit(1)
-		}
-		atomic.AddInt32(&producersCloseCount, 1)
-		time.Sleep(800 * time.Millisecond)
-		err := startPublisher(event.StreamName)
-		if err != nil {
-			logError("Error starting producer: %s", err)
-		}
-		checkErr(err)
-	}()
-}
+//func handlePublishClose(channelClose stream.ChannelClose) {
+//	go func() {
+//		event := <-channelClose
+//		logInfo("Producer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
+//		if exitOnError {
+//			os.Exit(1)
+//		}
+//		atomic.AddInt32(&producersCloseCount, 1)
+//		time.Sleep(800 * time.Millisecond)
+//		err := startPublisher(event.StreamName)
+//		if err != nil {
+//			logError("Error starting producer: %s", err)
+//		}
+//		checkErr(err)
+//	}()
+//}
 
 func handleConsumerClose(channelClose stream.ChannelClose) {
 	go func() {

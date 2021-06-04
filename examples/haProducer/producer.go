@@ -2,13 +2,11 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
-	"strconv"
 	"time"
 )
 
@@ -22,7 +20,7 @@ func CheckErr(err error) {
 func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
 	var arr []*amqp.Message
 	for z := 0; z < bacthMessages; z++ {
-		arr = append(arr, amqp.NewMessage([]byte("hello_world_"+strconv.Itoa(z))))
+		arr = append(arr, amqp.NewMessage([]byte(uuid.NewString())))
 	}
 	return arr
 }
@@ -35,11 +33,6 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 			}
 		}
 	}()
-}
-
-func consumerClose(channelClose stream.ChannelClose) {
-	event := <-channelClose
-	fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", event.Name, event.StreamName, event.Reason)
 }
 
 func main() {
@@ -68,51 +61,26 @@ func main() {
 		},
 	)
 
-	CheckErr(err)
-
-	producer, err := env.NewProducer(streamName, nil)
+	//CheckErr(err)
+	rProducer := stream.NewHAProducer(env)
+	err = rProducer.NewProducer(streamName, "producer-ha")
 	CheckErr(err)
 
 	//optional publish confirmation channel
-	chPublishConfirm := producer.NotifyPublishConfirmation()
+	chPublishConfirm := rProducer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
-	for i := 0; i < 2; i++ {
-		_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(10))
+	for i := 0; i < 2000; i++ {
+		err := rProducer.BatchPublish(CreateArrayMessagesForTesting(10))
+		time.Sleep(10 * time.Millisecond)
 		CheckErr(err)
 	}
 
-	// this sleep is not mandatory, just to show the confirmed messages
-	time.Sleep(1 * time.Second)
-	err = producer.Close()
-	CheckErr(err)
-
-	// Define a consumer per stream, there are different offset options to define a consumer, default is
-	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.UnConfirmedMessage) {
-	//
-	//}, nil)
-	// if you need to track the offset you need a consumer name like:
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
-	}
-
-	consumer, err := env.NewConsumer(context.TODO(),
-		streamName,
-		handleMessages,
-		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer").                  // set a consumer name
-			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
-	CheckErr(err)
-	channelClose := consumer.NotifyClose()
-	// channelClose receives all the closing events, here you can handle the
-	// client reconnection or just log
-	defer consumerClose(channelClose)
-
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
-	err = consumer.Close()
 	time.Sleep(200 * time.Millisecond)
+	err = rProducer.Close()
 	CheckErr(err)
 	err = env.DeleteStream(streamName)
 	CheckErr(err)

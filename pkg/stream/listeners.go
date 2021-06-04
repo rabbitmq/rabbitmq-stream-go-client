@@ -23,5 +23,5 @@ type onInternalClose func(ch <-chan uint8)
 type metadataListener chan metaDataUpdateEvent
 
 type ChannelClose = <-chan Event
-type ChannelPublishError = <-chan PublishError
-type ChannelPublishConfirm <-chan []*UnConfirmedMessage
+type ChannelPublishError = chan PublishError
+type ChannelPublishConfirm chan []*UnConfirmedMessage

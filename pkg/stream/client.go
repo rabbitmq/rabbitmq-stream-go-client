@@ -23,14 +23,14 @@ type ClientProperties struct {
 }
 
 type Client struct {
-	socket               socket
-	destructor           *sync.Once
-	clientProperties     ClientProperties
-	tuneState            TuneState
-	coordinator          *Coordinator
-	broker               *Broker
-	metadataListener     metadataListener
-	publishErrorListener ChannelPublishError
+	socket           socket
+	destructor       *sync.Once
+	clientProperties ClientProperties
+	tuneState        TuneState
+	coordinator      *Coordinator
+	broker           *Broker
+	mutex            *sync.Mutex
+	metadataListener metadataListener
 }
 
 func newClient(connectionName string) *Client {
@@ -38,6 +38,7 @@ func newClient(connectionName string) *Client {
 		coordinator:      NewCoordinator(),
 		broker:           newBrokerDefault(),
 		destructor:       &sync.Once{},
+		mutex:            &sync.Mutex{},
 		clientProperties: ClientProperties{items: make(map[string]string)},
 	}
 	c.setConnectionName(connectionName)
@@ -306,8 +307,15 @@ func (c *Client) Close() error {
 			logs.LogWarn("error removing consumer: %s", err)
 		}
 	}
+
 	var err error
 	if c.socket.isOpen() {
+		c.mutex.Lock()
+		if c.metadataListener != nil {
+			close(c.metadataListener)
+			c.metadataListener = nil
+		}
+		c.mutex.Unlock()
 		c.closeHartBeat()
 		res := c.coordinator.NewResponse(CommandClose)
 		length := 2 + 2 + 4 + 2
@@ -328,6 +336,19 @@ func (c *Client) Close() error {
 	return err
 }
 
+func (c *Client) ReusePublisher(streamName string, existingProducer *Producer) (*Producer, error) {
+	existingProducer.options.client = c
+	_, err := c.coordinator.GetProducerById(existingProducer.ID)
+	if err != nil {
+		c.coordinator.producers[existingProducer.ID] = existingProducer
+	} else {
+		return nil, fmt.Errorf("can't reuse producer")
+	}
+	res := c.internalDeclarePublisher(streamName, existingProducer)
+
+	return existingProducer, res.Err
+}
+
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
 	producer, err := c.coordinator.NewProducer(&ProducerOptions{
 		client:     c,
@@ -337,6 +358,11 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	if err != nil {
 		return nil, err
 	}
+	res := c.internalDeclarePublisher(streamName, producer)
+	return producer, res.Err
+}
+
+func (c *Client) internalDeclarePublisher(streamName string, producer *Producer) responseError {
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(streamName)
 	resp := c.coordinator.NewResponse(commandDeclarePublisher, streamName)
@@ -349,7 +375,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	writeShort(b, int16(publisherReferenceSize))
 	writeString(b, streamName)
 	res := c.handleWrite(b.Bytes(), resp)
-	return producer, res.Err
+	return res
 }
 
 func (c *Client) metaData(streams ...string) *StreamsMetadata {
@@ -517,7 +543,6 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 			select {
 			case code := <-consumer.response.code:
 				if code.id == closeChannel {
-					<-ctx.Done()
 					return
 				}
 

@@ -22,9 +22,9 @@ var _ = FDescribe("Integration tests", func() {
 	nodes := []string{"node0", "node1", "node2"}
 
 	addresses := []string{
-		"rabbitmq-stream://test:test@node0:5552/%2f",
-		"rabbitmq-stream://test:test@node1:5552/%2f",
-		"rabbitmq-stream://test:test@node2:5552/%2f"}
+		"rabbitmq-stream://guest:guest@localhost:5552/%2f",
+		"rabbitmq-stream://guest:guest@localhost:5553/%2f",
+		"rabbitmq-stream://guest:guest@localhost:5554/%2f"}
 
 	BeforeEach(func() {
 		time.Sleep(200 * time.Millisecond)
