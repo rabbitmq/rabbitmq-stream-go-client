@@ -321,9 +321,9 @@ func (cc *enviromentCoordinator) maybeCleanProducers(streamName string) {
 		}
 	}
 
-	for i, client := range cc.clientsPerContext {
+	for i, client := range cc.getClientsPerContext() {
 		if !client.socket.isOpen() {
-			delete(cc.clientsPerContext, i)
+			delete(cc.getClientsPerContext(), i)
 		}
 	}
 }
