@@ -44,6 +44,17 @@ func newClient(connectionName string) *Client {
 	c.setConnectionName(connectionName)
 	return c
 }
+func (c *Client) getSocket() *socket {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return &c.socket
+}
+
+func (c *Client) setSocket(sck socket) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.socket = sck
+}
 
 func (c *Client) connect() error {
 	if !c.socket.isOpen() {
@@ -76,10 +87,10 @@ func (c *Client) connect() error {
 			return err2
 		}
 
-		c.socket = socket{connection: connection, mutex: &sync.Mutex{},
+		c.setSocket(socket{connection: connection, mutex: &sync.Mutex{},
 			writer:     bufio.NewWriter(connection),
 			destructor: &sync.Once{},
-		}
+		})
 		c.socket.setOpen()
 
 		go c.handleResponse()
@@ -282,6 +293,13 @@ func (c *Client) closeHartBeat() {
 }
 
 func (c *Client) Close() error {
+	c.mutex.Lock()
+	if c.metadataListener != nil {
+		close(c.metadataListener)
+		c.metadataListener = nil
+	}
+	c.mutex.Unlock()
+
 	for _, p := range c.coordinator.producers {
 		err := c.coordinator.RemoveProducerById(p.(*Producer).ID, Event{
 			Command:    CommandClose,
@@ -309,13 +327,8 @@ func (c *Client) Close() error {
 	}
 
 	var err error
-	if c.socket.isOpen() {
-		c.mutex.Lock()
-		if c.metadataListener != nil {
-			close(c.metadataListener)
-			c.metadataListener = nil
-		}
-		c.mutex.Unlock()
+	if c.getSocket().isOpen() {
+
 		c.closeHartBeat()
 		res := c.coordinator.NewResponse(CommandClose)
 		length := 2 + 2 + 4 + 2
@@ -332,7 +345,7 @@ func (c *Client) Close() error {
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
 
-	c.socket.shutdown(nil)
+	c.getSocket().shutdown(nil)
 	return err
 }
 

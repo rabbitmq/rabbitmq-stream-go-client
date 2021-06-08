@@ -29,6 +29,7 @@ type ReliableProducer struct {
 	mutex                    *sync.Mutex
 	publishChannel           chan []*amqp.Message
 	resendUnConfirmedMessage bool
+	totalSent                int64
 }
 
 func NewHAProducer(env *Environment) *ReliableProducer {
@@ -40,7 +41,7 @@ func NewHAProducer(env *Environment) *ReliableProducer {
 		backoff:                  1,
 		name:                     "",
 		mutex:                    &sync.Mutex{},
-		publishChannel:           make(chan []*amqp.Message, 100000),
+		publishChannel:           make(chan []*amqp.Message, 1),
 		resendUnConfirmedMessage: false,
 	}
 	res.asyncPublish()
@@ -53,6 +54,18 @@ func (p *ReliableProducer) IsOpen() bool {
 	return p.status == StatusOpen
 }
 
+func (p *ReliableProducer) getStatus() int {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.status
+}
+
+func (p *ReliableProducer) setStatus(value int) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.status = value
+}
+
 func (p *ReliableProducer) reconnectMonitor(streamName string) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -63,6 +76,8 @@ func (p *ReliableProducer) reconnectMonitor(streamName string) error {
 	for err != nil {
 		logs.LogError("Can't connect the locator client, for stream %s error:%s, retry in %d seconds ", streamName, err, tentatives)
 		time.Sleep(time.Duration(tentatives) * time.Second)
+		client = newClient(p.name)
+		_ = client.Close()
 		err = client.connect()
 		if len(p.streamMetadata.replicas) >= tentatives {
 			client.broker = p.streamMetadata.replicas[tentatives]
@@ -75,36 +90,35 @@ func (p *ReliableProducer) reconnectMonitor(streamName string) error {
 	chMeta := make(chan metaDataUpdateEvent)
 	client.metadataListener = chMeta
 	go func(ch <-chan metaDataUpdateEvent, cl *Client) {
-		for range ch {
-			p.mutex.Lock()
-			p.status = StatusReconnection
-			p.mutex.Unlock()
-			time.Sleep(10 * time.Millisecond)
 
-			if cl.StreamExists(p.producer.GetStreamName()) {
-				p.NewProducer(p.producer.GetStreamName(), p.name)
-			} else {
-				p.status = StatusStreamDoesNotExist
-			}
+		<-ch
+		p.setStatus(StatusReconnection)
+		time.Sleep(10 * time.Millisecond)
 
-			err := cl.Close()
-			if err != nil {
-				return
-			}
+		if !cl.StreamExists(p.producer.GetStreamName()) {
+			p.setStatus(StatusStreamDoesNotExist)
+		}
 
-			if !cl.socket.isOpen() {
-				return
-			}
+		err := cl.Close()
+		if err != nil {
+			logs.LogWarn("Error during close the socket %s", err)
+		}
+
+		if p.getStatus() == StatusReconnection {
+			p.NewProducer(p.producer.GetStreamName(), p.name)
 		}
 
 	}(chMeta, client)
 
 	var producer *Producer
 	var errGetProducer error
+	isNew := true
 	if p.producer == nil {
 		producer, errGetProducer = client.DeclarePublisher(streamName, NewProducerOptions().SetProducerName(p.name))
 	} else {
 		producer, errGetProducer = client.ReusePublisher(streamName, p.producer)
+		isNew = false
+
 	}
 	if errGetProducer != nil {
 		logs.LogWarn("Producer on stream %s creation fails, retry in %d seconds, error: %s", streamName, p.backoff, err)
@@ -112,8 +126,10 @@ func (p *ReliableProducer) reconnectMonitor(streamName string) error {
 	}
 	p.status = StatusOpen
 	p.producer = producer
-	channelClose := producer.NotifyClose()
-	p.handleClose(channelClose)
+	if isNew {
+		channelClose := producer.NotifyClose()
+		p.handleClose(channelClose)
+	}
 	logs.LogDebug("Producer connected on stream %s", streamName)
 	p.backoff = 1
 
@@ -154,21 +170,21 @@ func (p *ReliableProducer) NewProducer(streamName string, producerName string) e
 
 func (p *ReliableProducer) handleClose(channelClose ChannelClose) {
 	go func(chClose ChannelClose) {
-		event := <-channelClose
-		if event.Command == CommandDeletePublisher {
-			p.status = StatusReconnection
-			logs.LogInfo("Producer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
-			return
+		for event := range channelClose {
+			if event.Command == CommandDeletePublisher {
+				p.setStatus(StatusReconnection)
+				logs.LogInfo("Producer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
+				return
+			}
+			if p.IsOpen() {
+				logs.LogInfo("Producer %s closed on stream %s, cause: %s. Going to restart it in %d seconds",
+					event.Name,
+					event.StreamName,
+					event.Reason, p.backoff)
+				p.backoffWait()
+				p.NewProducer(p.producer.GetStreamName(), p.name)
+			}
 		}
-		if p.IsOpen() {
-			logs.LogInfo("Producer %s closed on stream %s, cause: %s. Going to restart it in %d seconds",
-				event.Name,
-				event.StreamName,
-				event.Reason, p.backoff)
-			p.backoffWait()
-			p.NewProducer(p.producer.GetStreamName(), p.name)
-		}
-
 	}(channelClose)
 }
 
@@ -176,7 +192,7 @@ func (p *ReliableProducer) publishOldUnConfirmed() {
 	if p.resendUnConfirmedMessage {
 		err := p.producer.ResendUnConfirmed(context.TODO())
 		if err != nil {
-			return
+			logs.LogWarn("can't resend the message")
 		}
 	}
 	p.resendUnConfirmedMessage = false
@@ -187,6 +203,11 @@ func (p *ReliableProducer) asyncPublish() {
 		for messages := range p.publishChannel {
 			p.publishOldUnConfirmed()
 			_, errW := p.producer.BatchPublish(context.TODO(), messages)
+			if errW != nil {
+				fmt.Printf("cant %s \n", errW)
+			}
+
+			p.totalSent += 1
 			switch err := errW.(type) {
 			case *net.OpError:
 				fmt.Printf("cant %s \n", err.Err)
@@ -199,10 +220,10 @@ func (p *ReliableProducer) asyncPublish() {
 }
 
 func (p *ReliableProducer) BatchPublish(msgs []*amqp.Message) error {
-	if p.status == StatusStreamDoesNotExist {
+	if p.getStatus() == StatusStreamDoesNotExist {
 		return StreamDoesNotExist
 	}
-	if p.status == StatusClosed {
+	if p.getStatus() == StatusClosed {
 		return errors.New("Producer is closed")
 	}
 
@@ -210,8 +231,9 @@ func (p *ReliableProducer) BatchPublish(msgs []*amqp.Message) error {
 	return nil
 	//_, err := p.producer.BatchPublish(context.TODO(), msgs)
 	//if err != nil {
-	//	return
+	//	return err
 	//}
+	//return nil
 }
 
 func (p *ReliableProducer) NotifyPublishError() ChannelPublishError {
@@ -227,7 +249,12 @@ func (p *ReliableProducer) Close() error {
 	if !p.IsOpen() {
 		return nil
 	}
-	p.status = StatusClosed
+	p.setStatus(StatusClosed)
+
+	if p.producer.closeHandler != nil {
+		close(p.producer.closeHandler)
+		p.producer.closeHandler = nil
+	}
 
 	err := p.producer.options.client.deletePublisher(p.producer.ID)
 	if err != nil {
@@ -237,6 +264,7 @@ func (p *ReliableProducer) Close() error {
 	if err != nil {
 		return err
 	}
+
 	close(p.publishChannel)
 	p.producer = nil
 	return nil

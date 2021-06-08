@@ -1,6 +1,7 @@
 package system_integration
 
 import (
+	"fmt"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -18,24 +19,44 @@ func CreateArrayMessagesForTesting(numberOfMessages int) []*amqp.Message {
 	return arr
 }
 
+func getHttpPort(tcpPort string) string {
+	switch tcpPort {
+	case "5552":
+		return "15672"
+	case "5553":
+		return "15673"
+	case "5554":
+		return "15674"
+	}
+	return ""
+}
+
 var _ = FDescribe("Integration tests", func() {
-	nodes := []string{"node0", "node1", "node2"}
+	ports := []string{"5552", "5553", "5554"}
 
 	addresses := []string{
 		"rabbitmq-stream://guest:guest@localhost:5552/%2f",
 		"rabbitmq-stream://guest:guest@localhost:5553/%2f",
 		"rabbitmq-stream://guest:guest@localhost:5554/%2f"}
 
+	//BeforeSuite(func() {
+	//	for _, port := range ports {
+	//		err := Operations{}.InstallTools(port)
+	//		Expect(err).NotTo(HaveOccurred())
+	//	}
+	//
+	//})
+
 	BeforeEach(func() {
-		time.Sleep(200 * time.Millisecond)
-		for _, node := range nodes {
-			err := Operations{}.StartRabbitMQNode(node)
+		time.Sleep(500 * time.Millisecond)
+		for _, port := range ports {
+			err := Operations{}.StartRabbitMQNode(port)
 			Expect(err).NotTo(HaveOccurred())
 		}
 
 	})
 	AfterEach(func() {
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(800 * time.Millisecond)
 
 	})
 
@@ -126,7 +147,7 @@ var _ = FDescribe("Integration tests", func() {
 		Expect(len(env.ClientCoordinator())).To(Equal(3))
 	})
 
-	FIt("HA producer test reconnection", func() {
+	It("HA producer test reconnection", func() {
 		env, err := stream.NewEnvironment(
 			stream.NewEnvironmentOptions().SetUris(addresses))
 		Expect(err).NotTo(HaveOccurred())
@@ -144,15 +165,16 @@ var _ = FDescribe("Integration tests", func() {
 
 		data, err := env.StreamMetaData(streamName)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(rProducer.GetConnectedBroker().Host).To(Equal(data.Leader.Host))
-		err = Operations{}.StopRabbitMQNode(data.Leader.Host)
+		Expect(rProducer.GetConnectedBroker().Port).To(Equal(data.Leader.Port))
+		err = Operations{}.StopRabbitMQNode(data.Leader.Port)
 		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(10 * time.Second)
 		Expect(rProducer.IsOpen()).To(Equal(true))
-		Expect(rProducer.GetConnectedBroker().Host).NotTo(Equal(data.Leader.Host))
+		Expect(rProducer.GetConnectedBroker().Port).NotTo(Equal(data.Leader.Port))
 
 		time.Sleep(1 * time.Second)
 
-		err = Operations{}.StartRabbitMQNode(data.Leader.Host)
+		err = Operations{}.StartRabbitMQNode(data.Leader.Port)
 		Expect(err).NotTo(HaveOccurred())
 
 		err = rProducer.Close()
@@ -195,7 +217,7 @@ var _ = FDescribe("Integration tests", func() {
 
 	})
 
-	FIt("Remove replica", func() {
+	It("Remove replica", func() {
 		env, err := stream.NewEnvironment(
 			stream.NewEnvironmentOptions().SetUris(addresses))
 		Expect(err).NotTo(HaveOccurred())
@@ -204,24 +226,71 @@ var _ = FDescribe("Integration tests", func() {
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(5 * time.Second)
-		data, err := env.StreamMetaData(streamName)
-		Expect(err).NotTo(HaveOccurred())
 
 		rProducer := stream.NewHAProducer(env)
 		err = rProducer.NewProducer(streamName, "remove-replica-test")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(rProducer.GetConnectedBroker().Host).To(Equal(data.Leader.Host))
 
-		err = Operations{}.DeleteReplica(data.Leader.Host, streamName)
+		for i := 0; i < 2; i++ {
+			data, err := env.StreamMetaData(streamName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rProducer.GetConnectedBroker().Port).To(Equal(data.Leader.Port))
+			err = Operations{}.DeleteReplica(data.Leader.Port, streamName)
+			Expect(err).NotTo(HaveOccurred())
+			data1, err1 := env.StreamMetaData(streamName)
+			Expect(err1).NotTo(HaveOccurred())
+			Expect(rProducer.GetConnectedBroker().Port).To(Equal(data1.Leader.Port))
+			Expect(data1.Leader.Port).NotTo(Equal(data.Leader.Port))
+		}
+
+		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
-
-		data1, err1 := env.StreamMetaData(streamName)
-		Expect(err1).NotTo(HaveOccurred())
-		Expect(rProducer.GetConnectedBroker().Host).To(Equal(data1.Leader.Host))
-		Expect(data1.Leader.Host).NotTo(Equal(data.Leader.Host))
 
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	FIt("HA producer messages", func() {
+		env, err := stream.NewEnvironment(
+			stream.NewEnvironmentOptions().SetUris(addresses))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env).NotTo(BeNil())
+		rProducer := stream.NewHAProducer(env)
+		streamName := uuid.New().String()
+		err = env.DeclareStream(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		err = rProducer.NewProducer(streamName, "producer-ha-test")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rProducer.IsOpen()).To(Equal(true))
+		go func(p *stream.ReliableProducer) {
+			for i := 0; i < 100; i++ {
+				err1 := p.BatchPublish(CreateArrayMessagesForTesting(10))
+				Expect(err1).NotTo(HaveOccurred())
+				time.Sleep(100 * time.Millisecond)
+			}
+		}(rProducer)
+		data, errs := env.StreamMetaData(streamName)
+		Expect(errs).NotTo(HaveOccurred())
+		Expect(rProducer.GetConnectedBroker().Port).To(Equal(data.Leader.Port))
+		err1 := Operations{}.DeleteReplica(data.Leader.Port, streamName)
+		Expect(err1).NotTo(HaveOccurred())
+		data1, err1 := env.StreamMetaData(streamName)
+		Expect(err1).NotTo(HaveOccurred())
+		Expect(rProducer.GetConnectedBroker().Port).To(Equal(data1.Leader.Port))
+
+		time.Sleep(15 * time.Second)
+
+		messages, errGet := messagesReady(streamName, getHttpPort(rProducer.GetConnectedBroker().Port))
+		Expect(errGet).NotTo(HaveOccurred())
+		fmt.Printf("MESSAGES %d \n", messages)
+
+		err = env.DeleteStream(streamName)
+		Expect(messages >= 1000).To(Equal(true))
+
+		Expect(err).NotTo(HaveOccurred())
+		err = env.Close()
+		Expect(err).NotTo(HaveOccurred())
+
 	})
 
 })

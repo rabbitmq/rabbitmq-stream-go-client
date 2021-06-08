@@ -48,5 +48,5 @@ def call_api(rabbitmq_host, vhost, user, password):
 
 
 if __name__ == '__main__':
-    rabbitmq_host = "10.0.0.10";
-    call_api(rabbitmq_host, "%2f", "test", "test")
+    rabbitmq_host = "localhost"
+    call_api(rabbitmq_host, "%2f", "guest", "guest")

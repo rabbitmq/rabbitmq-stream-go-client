@@ -2,11 +2,12 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -17,10 +18,13 @@ func CheckErr(err error) {
 	}
 }
 
+var idx = 0
+
 func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
 	var arr []*amqp.Message
 	for z := 0; z < bacthMessages; z++ {
-		arr = append(arr, amqp.NewMessage([]byte(uuid.NewString())))
+		idx++
+		arr = append(arr, amqp.NewMessage([]byte(strconv.Itoa(idx))))
 	}
 	return arr
 }
@@ -29,7 +33,9 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for messagesIds := range confirms {
 			for _, m := range messagesIds {
-				fmt.Printf("Confirmed %s message \n  ", m.Message.Data)
+				if !m.Confirmed {
+					fmt.Printf("Confirmed %s message - status %t \n  ", m.Message.Data, m.Confirmed)
+				}
 			}
 		}
 	}()
@@ -54,7 +60,7 @@ func main() {
 	// err = env.DeclareStream(streamName, nil)
 	// it is a best practise to define a size,  1GB for example:
 
-	streamName := uuid.New().String()
+	streamName := "test"
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
 			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
@@ -69,18 +75,34 @@ func main() {
 	//optional publish confirmation channel
 	chPublishConfirm := rProducer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
-
+	time.Sleep(4 * time.Second)
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
-	for i := 0; i < 2000; i++ {
+	for i := 0; i < 300; i++ {
+
 		err := rProducer.BatchPublish(CreateArrayMessagesForTesting(10))
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(30 * time.Millisecond)
 		CheckErr(err)
 	}
+
+	fmt.Println("Press any key to start consuming ")
+	_, _ = reader.ReadString('\n')
+
+	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		fmt.Printf("messages consumed: %s \n ", message.Data)
+	}
+
+	consumer, err := env.NewConsumer(context.TODO(), streamName,
+		handleMessages,
+		stream.NewConsumerOptions().
+			SetConsumerName("my_consumer"))
+	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	time.Sleep(200 * time.Millisecond)
 	err = rProducer.Close()
+	CheckErr(err)
+	err = consumer.Close()
 	CheckErr(err)
 	err = env.DeleteStream(streamName)
 	CheckErr(err)

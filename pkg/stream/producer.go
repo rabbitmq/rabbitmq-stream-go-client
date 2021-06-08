@@ -14,6 +14,7 @@ type UnConfirmedMessage struct {
 	Message    *amqp.Message
 	ProducerID uint8
 	MessageID  int64
+	Confirmed  bool
 }
 
 type Producer struct {
@@ -57,6 +58,7 @@ func (producer *Producer) addUnConfirmed(messageid int64, message *amqp.Message,
 		Message:    message,
 		ProducerID: producerID,
 		MessageID:  messageid,
+		Confirmed:  false,
 	}
 }
 
@@ -131,6 +133,12 @@ func (producer *Producer) ResendUnConfirmed(ctx context.Context) error {
 		err := producer.options.client.socket.writeAndFlush(b.Bytes())
 		// TODO handle the socket read error to close the producer
 		if err != nil {
+			if producer.publishConfirm != nil {
+				message.Confirmed = false
+				producer.publishConfirm <- []*UnConfirmedMessage{message}
+				producer.removeUnConfirmed(message.MessageID)
+			}
+
 			return err
 		}
 	}
@@ -203,6 +211,11 @@ func (producer *Producer) Close() error {
 		close(producer.publishConfirm)
 		producer.publishConfirm = nil
 	}
+	if producer.closeHandler != nil {
+		close(producer.closeHandler)
+		producer.closeHandler = nil
+	}
+
 	producer.mutex.Unlock()
 
 	return nil

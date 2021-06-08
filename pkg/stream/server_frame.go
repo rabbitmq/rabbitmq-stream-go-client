@@ -214,12 +214,14 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	//var _publishingId int64
 	producer, err := c.coordinator.GetProducerById(readProtocol.PublishID)
 	if err != nil {
-		logs.LogWarn("%s", err)
+		logs.LogWarn("can't find the producer during confirmation: %s", err)
 		return nil
 	}
 	var unConfirmed []*UnConfirmedMessage
 	for publishingIdCount != 0 {
-		unConfirmed = append(unConfirmed, producer.getUnConfirmed(readInt64(r)))
+		m := producer.getUnConfirmed(readInt64(r))
+		m.Confirmed = true
+		unConfirmed = append(unConfirmed, m)
 		publishingIdCount--
 	}
 	producer.mutex.Lock()

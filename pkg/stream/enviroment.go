@@ -29,11 +29,11 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		options = NewEnvironmentOptions()
 	}
 	if options.MaxConsumersPerClient == 0 {
-		options.MaxConsumersPerClient = 3
+		options.MaxConsumersPerClient = 1
 	}
 
 	if options.MaxProducersPerClient == 0 {
-		options.MaxProducersPerClient = 3
+		options.MaxProducersPerClient = 1
 	}
 
 	if len(options.ConnectionParameters) == 0 {
@@ -75,6 +75,7 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 		time.Sleep(time.Duration(tentatives) * time.Second)
 		rand.Seed(time.Now().UnixNano())
 		n := rand.Intn(len(env.options.ConnectionParameters))
+		client = newClient("stream-locator")
 		client.broker = env.options.ConnectionParameters[n]
 		tentatives = tentatives + 1
 		err = client.connect()
