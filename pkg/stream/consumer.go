@@ -154,11 +154,10 @@ func (consumer *Consumer) Commit() error {
 	if consumer.options.streamName == "" {
 		return fmt.Errorf("stream Name can't be empty")
 	}
-	length := 2 + 2 + 4 + 2 + len(consumer.options.ConsumerName) + 2 +
+	length := 2 + 2 + 2 + len(consumer.options.ConsumerName) + 2 +
 		len(consumer.options.streamName) + 8
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandCommitOffset,
-		0) // correlation ID not used yet, may be used if commit offset has a confirm
+	writeProtocolHeader(b, length, commandCommitOffset) // correlation ID not used yet, may be used if commit offset has a confirm
 
 	writeString(b, consumer.options.ConsumerName)
 	writeString(b, consumer.options.streamName)

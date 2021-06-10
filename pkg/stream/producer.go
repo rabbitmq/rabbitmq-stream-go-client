@@ -69,11 +69,11 @@ func (producer *Producer) removeUnConfirmed(messageid int64) {
 	delete(producer.unConfirmedMessages, messageid)
 }
 
-//func (producer *Producer) resetUnConfirmed() {
-//	producer.mutex.Lock()
-//	defer producer.mutex.Unlock()
-//	producer.unConfirmedMessages = map[int64]*UnConfirmedMessage{}
-//}
+func (producer *Producer) resetUnConfirmed() {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	producer.unConfirmedMessages = map[int64]*UnConfirmedMessage{}
+}
 
 func (producer *Producer) lenUnConfirmed() int {
 	producer.mutex.Lock()

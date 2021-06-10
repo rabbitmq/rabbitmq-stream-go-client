@@ -81,15 +81,15 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 		time.Sleep(200 * time.Millisecond)
 		tentatives++
 	}
-	//producer.mutex.Lock()
-	//if producer.publishConfirm != nil {
-	//	for _, message := range producer.unConfirmedMessages {
-	//		message.Confirmed = false
-	//		producer.publishConfirm <- []*UnConfirmedMessage{message}
-	//	}
-	//}
-	//producer.mutex.Unlock()
-	//producer.resetUnConfirmed()
+	producer.mutex.Lock()
+	if producer.publishConfirm != nil {
+		for _, message := range producer.unConfirmedMessages {
+			message.Confirmed = false
+			producer.publishConfirm <- []*UnConfirmedMessage{message}
+		}
+	}
+	producer.mutex.Unlock()
+	producer.resetUnConfirmed()
 
 	if producer.closeHandler != nil {
 		producer.closeHandler <- reason

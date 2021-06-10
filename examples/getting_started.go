@@ -29,9 +29,14 @@ func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
 
 func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
-		for messagesIds := range confirms {
-			for _, m := range messagesIds {
-				fmt.Printf("Confirmed %s message \n  ", m.Message.Data)
+		for confirmed := range confirms {
+			for _, msg := range confirmed {
+				if msg.Confirmed {
+					fmt.Printf("message %s stored \n  ", msg.Message.Data)
+				} else {
+					fmt.Printf("message %s failed \n  ", msg.Message.Data)
+				}
+
 			}
 		}
 	}()
