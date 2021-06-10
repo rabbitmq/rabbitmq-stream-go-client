@@ -26,7 +26,7 @@ test: vet fmt check
 	go test -v  ./pkg/stream -race -coverprofile=coverage.txt -covermode=atomic -tags debug
 
 integration-test: vet fmt check
-	go test -v  ./pkg/system_integration -race -coverprofile=coverage.txt -covermode=atomic -tags debug
+	cd ./pkg/system_integration && go test -v  . -race -coverprofile=coverage.txt -covermode=atomic -tags debug -timeout 99999s
 
 build: vet fmt check
 	go build -ldflags=$(LDFLAGS) -v ./...

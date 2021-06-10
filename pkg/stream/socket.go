@@ -3,6 +3,7 @@ package stream
 import (
 	"bufio"
 	"fmt"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -34,7 +35,7 @@ func (sck *socket) shutdown(err error) {
 		defer sck.mutex.Unlock()
 		err := sck.connection.Close()
 		if err != nil {
-			logWarn("error during close socket: %s", err)
+			logs.LogWarn("error during close socket: %s", err)
 		}
 	})
 

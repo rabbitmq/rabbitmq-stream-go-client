@@ -6,10 +6,22 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var client = newClient("test-client")
 var _ = Describe("Coordinator", func() {
 
 	Describe("Add/Remove Producers", func() {
+
+		var (
+			client *Client
+		)
+		BeforeEach(func() {
+			client = newClient("test-client")
+
+		})
+		AfterEach(func() {
+			client = nil
+
+		})
+
 		It("Add/Remove Producers ", func() {
 			p, err := client.coordinator.NewProducer(nil)
 			Expect(err).NotTo(HaveOccurred())
@@ -50,6 +62,25 @@ var _ = Describe("Coordinator", func() {
 			Expect(client.coordinator.ProducersCount()).To(Equal(0))
 		})
 
+		It("Get next publisher id ", func() {
+			// publisher id are always a sequence
+			// until reach 255 then start reusing the old
+			// unused ids
+			for i := 0; i < 250; i++ {
+				p, err := client.coordinator.NewProducer(nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(p.ID).To(Equal(uint8(i)))
+				err = client.coordinator.RemoveProducerById(p.ID, Event{
+					Command:    0,
+					StreamName: "",
+					Name:       "UNIT TEST",
+					Reason:     "",
+					Err:        nil,
+				})
+				Expect(err).NotTo(HaveOccurred())
+			}
+		})
+
 		It("To many publishers ", func() {
 			var producersId []uint8
 			for i := 0; i < 500; i++ {
@@ -59,8 +90,8 @@ var _ = Describe("Coordinator", func() {
 					Expect(fmt.Sprintf("%s", err)).
 						To(ContainSubstring("No more items available"))
 				} else {
-					producersId = append(producersId, p.ID)
 					Expect(err).NotTo(HaveOccurred())
+					producersId = append(producersId, p.ID)
 				}
 			}
 
@@ -96,6 +127,19 @@ var _ = Describe("Coordinator", func() {
 	})
 
 	Describe("Add/Remove consumers", func() {
+
+		var (
+			client *Client
+		)
+		BeforeEach(func() {
+			client = newClient("test-client")
+
+		})
+		AfterEach(func() {
+			client = nil
+
+		})
+
 		It("Add/Remove consumers ", func() {
 			p, err := client.coordinator.NewProducer(nil)
 			Expect(err).NotTo(HaveOccurred())
@@ -138,6 +182,18 @@ var _ = Describe("Coordinator", func() {
 	})
 
 	Describe("Add/Remove Response", func() {
+		var (
+			client *Client
+		)
+		BeforeEach(func() {
+			client = newClient("test-client")
+
+		})
+		AfterEach(func() {
+			client = nil
+
+		})
+
 		It("Add/Remove Response ", func() {
 			r := client.coordinator.NewResponse(commandUnitTest)
 			Expect(r.correlationid).ToNot(Equal(0))

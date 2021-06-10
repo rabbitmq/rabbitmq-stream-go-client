@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"math/rand"
 	"net"
 	"net/url"
 	"sync"
@@ -21,14 +23,14 @@ type ClientProperties struct {
 }
 
 type Client struct {
-	socket               socket
-	destructor           *sync.Once
-	clientProperties     ClientProperties
-	tuneState            TuneState
-	coordinator          *Coordinator
-	broker               Broker
-	metadataListener     metadataListener
-	publishErrorListener ChannelPublishError
+	socket           socket
+	destructor       *sync.Once
+	clientProperties ClientProperties
+	tuneState        TuneState
+	coordinator      *Coordinator
+	broker           *Broker
+	mutex            *sync.Mutex
+	metadataListener metadataListener
 }
 
 func newClient(connectionName string) *Client {
@@ -36,15 +38,26 @@ func newClient(connectionName string) *Client {
 		coordinator:      NewCoordinator(),
 		broker:           newBrokerDefault(),
 		destructor:       &sync.Once{},
+		mutex:            &sync.Mutex{},
 		clientProperties: ClientProperties{items: make(map[string]string)},
 	}
 	c.setConnectionName(connectionName)
 	return c
 }
+func (c *Client) getSocket() *socket {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return &c.socket
+}
+
+func (c *Client) setSocket(sck socket) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.socket = sck
+}
 
 func (c *Client) connect() error {
 	if !c.socket.isOpen() {
-		c.broker.GetUri()
 		u, err := url.Parse(c.broker.GetUri())
 		if err != nil {
 			return err
@@ -55,42 +68,42 @@ func (c *Client) connect() error {
 		c.tuneState.requestedMaxFrameSize = 1048576
 		resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
 		if err != nil {
-			logDebug("%s", err)
+			logs.LogDebug("%s", err)
 			return err
 		}
 		connection, err2 := net.DialTCP("tcp", nil, resolver)
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 		err2 = connection.SetReadBuffer(defaultReadSocketBuffer)
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 		err2 = connection.SetWriteBuffer(defaultReadSocketBuffer)
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 
-		c.socket = socket{connection: connection, mutex: &sync.Mutex{},
+		c.setSocket(socket{connection: connection, mutex: &sync.Mutex{},
 			writer:     bufio.NewWriter(connection),
 			destructor: &sync.Once{},
-		}
+		})
 		c.socket.setOpen()
 
 		go c.handleResponse()
 		err2 = c.peerProperties()
 
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 		pwd, _ := u.User.Password()
 		err2 = c.authenticate(u.User.Username(), pwd)
 		if err2 != nil {
-			logDebug("User:%s, %s", u.User.Username(), err2)
+			logs.LogDebug("User:%s, %s", u.User.Username(), err2)
 			return err2
 		}
 		vhost := "/"
@@ -99,11 +112,11 @@ func (c *Client) connect() error {
 		}
 		err2 = c.open(vhost)
 		if err2 != nil {
-			logDebug("%s", err2)
+			logs.LogDebug("%s", err2)
 			return err2
 		}
 		c.heartBeat()
-		logDebug("User %s, connected to: %s, vhost:%s", u.User.Username(),
+		logs.LogDebug("User %s, connected to: %s, vhost:%s", u.User.Username(),
 			net.JoinHostPort(host, port),
 			vhost)
 	}
@@ -271,7 +284,7 @@ func (c *Client) closeHartBeat() {
 	c.destructor.Do(func() {
 		r, err := c.coordinator.GetResponseByName("heartbeat")
 		if err != nil {
-			logWarn("error removing heartbeat: %s", err)
+			logs.LogWarn("error removing heartbeat: %s", err)
 		} else {
 			r.code <- Code{id: closeChannel}
 		}
@@ -280,6 +293,7 @@ func (c *Client) closeHartBeat() {
 }
 
 func (c *Client) Close() error {
+
 	for _, p := range c.coordinator.producers {
 		err := c.coordinator.RemoveProducerById(p.(*Producer).ID, Event{
 			Command:    CommandClose,
@@ -290,7 +304,7 @@ func (c *Client) Close() error {
 		})
 
 		if err != nil {
-			logWarn("error removing producer: %s", err)
+			logs.LogWarn("error removing producer: %s", err)
 		}
 	}
 	for _, cs := range c.coordinator.consumers {
@@ -302,11 +316,20 @@ func (c *Client) Close() error {
 			Err:        nil,
 		})
 		if err != nil {
-			logWarn("error removing consumer: %s", err)
+			logs.LogWarn("error removing consumer: %s", err)
 		}
 	}
+
+	c.mutex.Lock()
+	if c.metadataListener != nil {
+		close(c.metadataListener)
+		c.metadataListener = nil
+	}
+	c.mutex.Unlock()
+
 	var err error
-	if c.socket.isOpen() {
+	if c.getSocket().isOpen() {
+
 		c.closeHartBeat()
 		res := c.coordinator.NewResponse(CommandClose)
 		length := 2 + 2 + 4 + 2
@@ -318,13 +341,26 @@ func (c *Client) Close() error {
 
 		err = c.socket.writeAndFlush(b.Bytes())
 		if err != nil {
-			logWarn("error during send client close %s", err)
+			logs.LogWarn("error during send client close %s", err)
 		}
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
 
-	c.socket.shutdown(nil)
+	c.getSocket().shutdown(nil)
 	return err
+}
+
+func (c *Client) ReusePublisher(streamName string, existingProducer *Producer) (*Producer, error) {
+	existingProducer.options.client = c
+	_, err := c.coordinator.GetProducerById(existingProducer.ID)
+	if err != nil {
+		c.coordinator.producers[existingProducer.ID] = existingProducer
+	} else {
+		return nil, fmt.Errorf("can't reuse producer")
+	}
+	res := c.internalDeclarePublisher(streamName, existingProducer)
+
+	return existingProducer, res.Err
 }
 
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
@@ -336,6 +372,11 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	if err != nil {
 		return nil, err
 	}
+	res := c.internalDeclarePublisher(streamName, producer)
+	return producer, res.Err
+}
+
+func (c *Client) internalDeclarePublisher(streamName string, producer *Producer) responseError {
 	publisherReferenceSize := 0
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(streamName)
 	resp := c.coordinator.NewResponse(commandDeclarePublisher, streamName)
@@ -348,7 +389,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	writeShort(b, int16(publisherReferenceSize))
 	writeString(b, streamName)
 	res := c.handleWrite(b.Bytes(), resp)
-	return producer, res.Err
+	return res
 }
 
 func (c *Client) metaData(streams ...string) *StreamsMetadata {
@@ -389,7 +430,38 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 	if streamMetadata.responseCode != responseCodeOk {
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
+	if streamMetadata.Leader == nil {
+		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
+	}
+
 	return streamMetadata.Leader, nil
+}
+
+func (c *Client) StreamExists(stream string) bool {
+	streamsMetadata := c.metaData(stream)
+	if streamsMetadata == nil {
+		return false
+	}
+
+	streamMetadata := streamsMetadata.Get(stream)
+	return streamMetadata.responseCode == responseCodeOk
+}
+func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
+	streamsMetadata := c.metaData(stream)
+	if streamsMetadata == nil {
+		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
+	}
+
+	streamMetadata := streamsMetadata.Get(stream)
+	if streamMetadata.responseCode != responseCodeOk {
+		return nil, lookErrorCode(streamMetadata.responseCode)
+	}
+	var brokers []*Broker
+	brokers = append(brokers, streamMetadata.Leader)
+	brokers = append(brokers, streamMetadata.replicas...)
+	rand.Seed(time.Now().UnixNano())
+	n := rand.Intn(len(brokers))
+	return brokers[n], nil
 }
 
 func (c *Client) DeclareStream(streamName string, options *StreamOptions) error {
@@ -485,7 +557,6 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 			select {
 			case code := <-consumer.response.code:
 				if code.id == closeChannel {
-					<-ctx.Done()
 					return
 				}
 

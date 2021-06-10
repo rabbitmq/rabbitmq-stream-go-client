@@ -40,8 +40,11 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
-		Expect(err).NotTo(HaveOccurred())
+		ids, err1 := producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(5)) // batch send
+		Expect(err1).NotTo(HaveOccurred())
+		Expect(len(ids)).To(Equal(5))
+		Expect(ids[3]).To(Equal(int64(4)))
+
 		// we can't close the subscribe until the publish is finished
 		time.Sleep(500 * time.Millisecond)
 		err = producer.Close()

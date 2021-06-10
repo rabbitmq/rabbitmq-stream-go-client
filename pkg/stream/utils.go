@@ -2,7 +2,7 @@ package stream
 
 import (
 	"fmt"
-	"log"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"time"
 )
 
@@ -41,7 +41,7 @@ func waitCodeWithTimeOut(response *Response, timeout time.Duration) responseErro
 		}
 		return newResponseError(nil, false)
 	case <-time.After(timeout):
-		logError("timeout %d ms - waiting Code, operation: %s", defaultSocketCallTimeout, response.commandDescription)
+		logs.LogError("timeout %d ms - waiting Code, operation: %s", defaultSocketCallTimeout, response.commandDescription)
 
 		return newResponseError(
 			fmt.Errorf("timeout %d ms - waiting Code, operation: %s ",
@@ -49,31 +49,6 @@ func waitCodeWithTimeOut(response *Response, timeout time.Duration) responseErro
 	}
 }
 
-var logLevel int8
-
 func SetLevelInfo(value int8) {
-	logLevel = value
-}
-
-const (
-	INFO  = 0
-	DEBUG = 1
-)
-
-func logInfo(message string, v ...interface{}) {
-	log.Printf(fmt.Sprintf("[info] - %s", message), v...)
-}
-
-func logError(message string, v ...interface{}) {
-	log.Printf(fmt.Sprintf("[error] - %s", message), v...)
-}
-
-func logDebug(message string, v ...interface{}) {
-	if logLevel > INFO {
-		log.Printf(fmt.Sprintf("[debug] - %s", message), v...)
-	}
-}
-
-func logWarn(message string, v ...interface{}) {
-	log.Printf(fmt.Sprintf("[warn] - %s", message), v...)
+	logs.LogLevel = value
 }

@@ -1,42 +1,51 @@
 version: "3"
 services:
-  rabbit_node_1:
+  rabbit_node0:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host localhost advertised_port 5552
     networks:
       - back
-    hostname: rabbit_node_1
+    hostname: node0
     image: pivotalrabbitmq/rabbitmq-stream
     ports:
       - "15672:15672"
       - "5552:5552"
     tty: true
     volumes:
-#      - rabbit1:/var/lib/rabbitmq
-      - ./conf/:/etc/rabbitmq/
-#    command:  bash -c "sleep 10; rabbitmq-server;"
-  rabbit_node_2:
+     - ./conf/:/etc/rabbitmq/
+  rabbit_node1:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host localhost advertised_port 5553
     networks:
       - back
-    hostname: rabbit_node_2
+    hostname: node1
+    depends_on:
+      - rabbit_node_0
+    image: pivotalrabbitmq/rabbitmq-stream
+    ports:
+      - "15673:15672"
+      - "5553:5552"
+    tty: true
+    volumes:
+      - ./conf/:/etc/rabbitmq/
+  rabbit_node2:
+    environment:
+      - RABBITMQ_ERLANG_COOKIE='secret_cookie'
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host localhost advertised_port 5554
+    networks:
+      - back
+    hostname: node2
     depends_on:
       - rabbit_node_1
     image: pivotalrabbitmq/rabbitmq-stream
     ports:
-      - "15673:15672"
+      - "15674:15672"
       - "5554:5552"
     tty: true
     volumes:
-#      - rabbit2:/var/lib/rabbitmq
       - ./conf/:/etc/rabbitmq/
-#    command:  bash -c "sleep 10; rabbitmq-server;"
-#volumes:
-#  rabbit1:
-#    driver: local
-#  rabbit2:
-#    driver: local
 
 networks:
   back:

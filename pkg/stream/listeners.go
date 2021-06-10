@@ -8,6 +8,11 @@ type Event struct {
 	Err        error
 }
 
+type metaDataUpdateEvent struct {
+	StreamName string
+	code       uint16
+}
+
 type PublishError struct {
 	Code               uint16
 	Err                error
@@ -15,8 +20,8 @@ type PublishError struct {
 }
 
 type onInternalClose func(ch <-chan uint8)
-type metadataListener func(ch <-chan string)
+type metadataListener chan metaDataUpdateEvent
 
 type ChannelClose = <-chan Event
-type ChannelPublishError = <-chan PublishError
-type ChannelPublishConfirm <-chan []*UnConfirmedMessage
+type ChannelPublishError = chan PublishError
+type ChannelPublishConfirm chan []*UnConfirmedMessage

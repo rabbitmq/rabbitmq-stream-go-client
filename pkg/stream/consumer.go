@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	logs "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
 )
 
@@ -99,7 +100,7 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 	writeShort(b, credit)
 	err := c.socket.writeAndFlush(b.Bytes())
 	if err != nil {
-		logWarn("credit error:%s", err)
+		logs.LogWarn("credit error:%s", err)
 	}
 }
 
@@ -131,7 +132,8 @@ func (consumer *Consumer) Close() error {
 	})
 
 	if errC != nil {
-		logWarn("Error during remove consumer id:%s", errC)
+		logs.LogWarn("Error during remove consumer id:%s", errC)
+
 	}
 
 	if consumer.options.client.coordinator.ConsumersCount() == 0 {

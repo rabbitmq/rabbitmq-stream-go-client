@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
 	"sync/atomic"
 )
@@ -13,6 +14,8 @@ type UnConfirmedMessage struct {
 	Message    *amqp.Message
 	ProducerID uint8
 	MessageID  int64
+	Confirmed  bool
+	Err        error
 }
 
 type Producer struct {
@@ -43,6 +46,12 @@ func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{}
 }
 
+func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedMessage {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	return producer.unConfirmedMessages
+}
+
 func (producer *Producer) addUnConfirmed(messageid int64, message *amqp.Message, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
@@ -50,6 +59,7 @@ func (producer *Producer) addUnConfirmed(messageid int64, message *amqp.Message,
 		Message:    message,
 		ProducerID: producerID,
 		MessageID:  messageid,
+		Confirmed:  false,
 	}
 }
 
@@ -58,6 +68,12 @@ func (producer *Producer) removeUnConfirmed(messageid int64) {
 	defer producer.mutex.Unlock()
 	delete(producer.unConfirmedMessages, messageid)
 }
+
+//func (producer *Producer) resetUnConfirmed() {
+//	producer.mutex.Lock()
+//	defer producer.mutex.Unlock()
+//	producer.unConfirmedMessages = map[int64]*UnConfirmedMessage{}
+//}
 
 func (producer *Producer) lenUnConfirmed() int {
 	producer.mutex.Lock()
@@ -89,18 +105,73 @@ func (producer *Producer) NotifyClose() ChannelClose {
 	return ch
 }
 
-func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) (int, error) {
+func (producer *Producer) GetOptions() *ProducerOptions {
+	return producer.options
+}
+
+func (producer *Producer) GetBroker() *Broker {
+	return producer.options.client.broker
+}
+
+func (producer *Producer) ResendUnConfirmed(ctx context.Context) error {
+
+	for _, message := range producer.GetUnConfirmed() {
+
+		var msgLen int
+		r, _ := message.Message.MarshalBinary()
+		msgLen += len(r) + 8 + 4
+
+		frameHeaderLength := 2 + 2 + 1 + 4
+		length := frameHeaderLength + msgLen
+		publishId := producer.ID
+		var b = bytes.NewBuffer(make([]byte, 0, length+4))
+		writeProtocolHeader(b, length, commandPublish)
+		writeByte(b, publishId)
+		writeInt(b, 1) //toExcluded - fromInclude
+
+		//for i, msg := range batchMessages {
+		buff, _ := message.Message.MarshalBinary()
+		writeLong(b, message.MessageID) // sequence
+		writeInt(b, len(buff))          // len
+		b.Write(buff)
+		//}
+
+		bufferToWrite := b.Bytes()
+		if len(bufferToWrite) > producer.options.client.tuneState.requestedMaxFrameSize {
+			return lookErrorCode(responseCodeFrameTooLarge)
+		}
+
+		err := producer.options.client.socket.writeAndFlush(b.Bytes())
+		// TODO handle the socket read error to close the producer
+		if err != nil {
+			//producer.mutex.Lock()
+			if producer.publishConfirm != nil {
+				message.Confirmed = false
+				producer.publishConfirm <- []*UnConfirmedMessage{message}
+				producer.removeUnConfirmed(message.MessageID)
+			}
+			//producer.mutex.Unlock()
+
+			return err
+		}
+	}
+	return nil
+}
+
+func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) ([]int64, error) {
 	if len(batchMessages) > 1000 {
-		return 0, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
+		return nil, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
+	}
+	var result = make([]int64, len(batchMessages))
+	var msgLen int
+	for idx, msg := range batchMessages {
+		r, _ := msg.MarshalBinary()
+		msgLen += len(r) + 8 + 4
+		result[idx] = atomic.AddInt64(&producer.sequence, 1)
+		producer.addUnConfirmed(result[idx], msg, producer.ID)
 	}
 
 	frameHeaderLength := 2 + 2 + 1 + 4
-	var msgLen int
-	for _, msg := range batchMessages {
-		r, _ := msg.MarshalBinary()
-		msgLen += len(r) + 8 + 4
-	}
-
 	length := frameHeaderLength + msgLen
 	publishId := producer.ID
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -108,25 +179,39 @@ func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amq
 	writeByte(b, publishId)
 	writeInt(b, len(batchMessages)) //toExcluded - fromInclude
 
-	for _, msg := range batchMessages {
-		id := atomic.AddInt64(&producer.sequence, 1)
+	for i, msg := range batchMessages {
 		r, _ := msg.MarshalBinary()
-		writeLong(b, id)    // sequence
-		writeInt(b, len(r)) // len
+		writeLong(b, result[i]) // sequence
+		writeInt(b, len(r))     // len
 		b.Write(r)
-		producer.addUnConfirmed(id, msg, producer.ID)
 	}
 
 	bufferToWrite := b.Bytes()
 	if len(bufferToWrite) > producer.options.client.tuneState.requestedMaxFrameSize {
-		return 0, lookErrorCode(responseCodeFrameTooLarge)
+		return nil, lookErrorCode(responseCodeFrameTooLarge)
 	}
 
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
+	// TODO handle the socket read error to close the producer
 	if err != nil {
-		return 0, err
+		if producer.publishConfirm != nil {
+			var unConfirmedMessages []*UnConfirmedMessage
+			for i, message := range batchMessages {
+				unConfirmedMessages = append(unConfirmedMessages, &UnConfirmedMessage{
+					Message:    message,
+					ProducerID: producer.ID,
+					MessageID:  result[i],
+					Confirmed:  false,
+					Err:        err,
+				})
+				producer.removeUnConfirmed(result[i])
+			}
+			producer.publishConfirm <- unConfirmedMessages
+		}
+
+		return nil, err
 	}
-	return len(batchMessages), nil
+	return result, nil
 }
 
 func (producer *Producer) Close() error {
@@ -148,6 +233,18 @@ func (producer *Producer) Close() error {
 	ch <- producer.ID
 	producer.onClose(ch)
 	close(ch)
+
+	producer.mutex.Lock()
+	if producer.publishConfirm != nil {
+		close(producer.publishConfirm)
+		producer.publishConfirm = nil
+	}
+	if producer.closeHandler != nil {
+		close(producer.closeHandler)
+		producer.closeHandler = nil
+	}
+
+	producer.mutex.Unlock()
 
 	return nil
 }
@@ -187,7 +284,7 @@ func (c *Client) deletePublisher(publisherId byte) error {
 		Err:     nil,
 	})
 	if err != nil {
-		logWarn("producer id: %d already removed", publisherId)
+		logs.LogWarn("producer id: %d already removed", publisherId)
 	}
 
 	return errWrite.Err

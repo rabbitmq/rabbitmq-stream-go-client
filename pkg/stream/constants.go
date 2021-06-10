@@ -3,6 +3,7 @@ package stream
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"time"
 )
 
@@ -62,15 +63,15 @@ const (
 	defaultSocketCallTimeout = 10 * time.Second
 
 	//
-	LocalhostUriConnection = "rabbitmq-streaming://guest:guest@localhost:5552/%2f"
+	LocalhostUriConnection = "rabbitmq-stream://guest:guest@localhost:5552/%2f"
 
 	///
 	defaultReadSocketBuffer = 4096 * 2
 
 	//
-	ClientVersion = "0.5-alpha"
+	ClientVersion = "0.6-alpha"
 
-	StreamTcpPort = 5552
+	StreamTcpPort = "5552"
 )
 
 var PreconditionFailed = errors.New("Precondition Failed")
@@ -107,7 +108,7 @@ func lookErrorCode(errorCode uint16) error {
 		return CodeAccessRefused
 	default:
 		{
-			logWarn("Error not handled %d", errorCode)
+			logs.LogWarn("Error not handled %d", errorCode)
 			return errors.New("Generic Error")
 		}
 	}

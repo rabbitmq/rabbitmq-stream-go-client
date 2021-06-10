@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/spf13/cobra"
 	"math/rand"
@@ -15,7 +16,7 @@ import (
 func newSilent() *cobra.Command {
 	var silentCmd = &cobra.Command{
 		Use:   "silent",
-		Short: "Start a silent simulation",
+		Short: "NewProducer a silent simulation",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return startSimulation()
 		},
@@ -24,12 +25,13 @@ func newSilent() *cobra.Command {
 }
 
 var (
-	publisherMessageCount int32
-	consumerMessageCount  int32
-	confirmedMessageCount int32
-	consumersCloseCount   int32
-	producersCloseCount   int32
-	publishErrors         int32
+	publisherMessageCount    int32
+	consumerMessageCount     int32
+	confirmedMessageCount    int32
+	notConfirmedMessageCount int32
+	consumersCloseCount      int32
+	producersCloseCount      int32
+	publishErrors            int32
 	//connections           []*stream.Client
 	simulEnvironment *stream.Environment
 )
@@ -51,6 +53,7 @@ func printStats() {
 					atomic.SwapInt32(&publisherMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
 					atomic.SwapInt32(&confirmedMessageCount, 0)
+					atomic.SwapInt32(&notConfirmedMessageCount, 0)
 					start = time.Now()
 				}
 			}
@@ -96,7 +99,7 @@ func startSimulation() error {
 	checkErr(err)
 
 	simulEnvironment, err = stream.NewEnvironment(stream.NewEnvironmentOptions().
-		SetUri(rabbitmqBrokerUrl).
+		SetUris(rabbitmqBrokerUrl).
 		SetMaxProducersPerClient(publishersPerClient).
 		SetMaxConsumersPerClient(consumersPerClient))
 	checkErr(err)
@@ -123,13 +126,13 @@ func checkErr(err error) {
 
 func randomSleep() {
 	rand.Seed(time.Now().UnixNano())
-	n := rand.Intn(500) // n will be between 0 and 2
+	n := rand.Intn(500)
 	time.Sleep(time.Duration(n) * time.Millisecond)
 }
 
 func initStreams() error {
 	logInfo("Declaring streams: %s", streams)
-	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUri(
+	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUris(
 		rabbitmqBrokerUrl))
 	if err != nil {
 		logError("Error init stream connection: %s", err)
@@ -164,17 +167,23 @@ func initStreams() error {
 
 func handlePublishConfirms(confirms stream.ChannelPublishConfirm) {
 	go func() {
-		for {
-			ids := <-confirms
-			atomic.AddInt32(&confirmedMessageCount, int32(len(ids)))
+		for ids := range confirms {
+			for _, msg := range ids {
+				if msg.Confirmed {
+					atomic.AddInt32(&confirmedMessageCount, 1)
+				} else {
+					atomic.AddInt32(&notConfirmedMessageCount, 1)
+				}
+
+			}
+
 		}
 	}()
 }
 
 func handlePublishError(publishError stream.ChannelPublishError) {
 	go func() {
-		for {
-			<-publishError
+		for range publishError {
 			atomic.AddInt32(&publishErrors, 1)
 		}
 	}()
@@ -183,22 +192,17 @@ func handlePublishError(publishError stream.ChannelPublishError) {
 
 func startPublisher(streamName string) error {
 
-	publisher, err := simulEnvironment.NewProducer(streamName,
-		stream.NewProducerOptions().SetProducerName(fmt.Sprintf("pub-%s", streamName)))
-
+	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName, fmt.Sprintf("pub-%s", streamName))
 	if err != nil {
 		logError("Error create publisher: %s", err)
 		return err
 	}
 
-	chPublishConfirm := publisher.NotifyPublishConfirmation()
+	chPublishConfirm := rPublisher.NotifyPublishConfirmation()
 	handlePublishConfirms(chPublishConfirm)
 
-	chPublishError := publisher.NotifyPublishError()
+	chPublishError := rPublisher.NotifyPublishError()
 	handlePublishError(chPublishError)
-
-	chPublishClose := publisher.NotifyClose()
-	handlePublishClose(chPublishClose)
 
 	var arr []*amqp.Message
 	var body string
@@ -216,7 +220,7 @@ func startPublisher(streamName string) error {
 		arr = append(arr, amqp.NewMessage([]byte(body)))
 	}
 
-	go func(prod *stream.Producer, messages []*amqp.Message) {
+	go func(prod *ha.ReliableProducer, messages []*amqp.Message) {
 		for {
 			if rate > 0 {
 				var v1 float64
@@ -240,15 +244,16 @@ func startPublisher(streamName string) error {
 			}
 
 			atomic.AddInt32(&publisherMessageCount, int32(batchSize))
-			_, err := prod.BatchPublish(context.Background(), arr)
+			err = prod.BatchPublish(arr)
 			if err != nil {
-				logError("Error publishing %s", err)
-				time.Sleep(1 * time.Second)
+				logError("Error publishing: %s", err)
+				//	time.Sleep(1 * time.Second)
+				//	return
 			}
 			checkErr(err)
 
 		}
-	}(publisher, arr)
+	}(rPublisher, arr)
 
 	return nil
 
@@ -268,22 +273,22 @@ func startPublishers() error {
 	return nil
 }
 
-func handlePublishClose(channelClose stream.ChannelClose) {
-	go func() {
-		event := <-channelClose
-		logInfo("Producer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
-		if exitOnError {
-			os.Exit(1)
-		}
-		atomic.AddInt32(&producersCloseCount, 1)
-		time.Sleep(800 * time.Millisecond)
-		err := startPublisher(event.StreamName)
-		if err != nil {
-			logError("Error starting producer: %s", err)
-		}
-		checkErr(err)
-	}()
-}
+//func handlePublishClose(channelClose stream.ChannelClose) {
+//	go func() {
+//		event := <-channelClose
+//		logInfo("Producer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
+//		if exitOnError {
+//			os.Exit(1)
+//		}
+//		atomic.AddInt32(&producersCloseCount, 1)
+//		time.Sleep(800 * time.Millisecond)
+//		err := startPublisher(event.StreamName)
+//		if err != nil {
+//			logError("Error starting producer: %s", err)
+//		}
+//		checkErr(err)
+//	}()
+//}
 
 func handleConsumerClose(channelClose stream.ChannelClose) {
 	go func() {

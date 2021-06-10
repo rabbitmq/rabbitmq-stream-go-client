@@ -2,20 +2,21 @@ package stream
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 )
 
 type Broker struct {
 	Host     string
-	Port     int
+	Port     string
 	User     string
 	Vhost    string
 	Uri      string
 	Password string
 }
 
-func newBrokerDefault() Broker {
-	return Broker{
+func newBrokerDefault() *Broker {
+	return &Broker{
 		Host:     "localhost",
 		Port:     StreamTcpPort,
 		User:     "guest",
@@ -42,13 +43,13 @@ func (br *Broker) mergeWithDefault() {
 	if br.Password == "" {
 		br.Password = broker.Password
 	}
-	if br.Port == 0 {
+	if br.Port == "" {
 		br.Port = broker.Port
 	}
 
 }
 
-func (br *Broker) cloneFrom(broker Broker) {
+func (br *Broker) cloneFrom(broker *Broker) {
 	br.User = broker.User
 	br.Password = broker.Password
 	br.Vhost = broker.Vhost
@@ -57,17 +58,17 @@ func (br *Broker) cloneFrom(broker Broker) {
 
 func (br *Broker) GetUri() string {
 	if br.Uri == "" {
-		br.Uri = fmt.Sprintf("rabbitmq-streaming://%s:%s@%s:%d/%s",
+		br.Uri = fmt.Sprintf("rabbitmq-streaming://%s:%s@%s:%s/%s",
 			br.User, br.Password,
 			br.Host, br.Port, br.Vhost)
 	}
 	return br.Uri
 }
 
-func newBroker(host string, port uint32) *Broker {
+func newBroker(host string, port string) *Broker {
 	return &Broker{
 		Host: host,
-		Port: int(port),
+		Port: port,
 	}
 }
 
@@ -80,7 +81,7 @@ func newBrokers() *Brokers {
 }
 
 func (brs *Brokers) Add(brokerReference int16, host string, port uint32) *Broker {
-	broker := newBroker(host, port)
+	broker := newBroker(host, strconv.Itoa(int(port)))
 	brs.items.Store(brokerReference, broker)
 	return broker
 }
@@ -95,7 +96,7 @@ func (brs *Brokers) Get(brokerReference int16) *Broker {
 }
 
 func (br *Broker) hostPort() string {
-	return fmt.Sprintf("%s:%d", br.Host, br.Port)
+	return fmt.Sprintf("%s:%s", br.Host, br.Port)
 }
 
 type StreamMetadata struct {
