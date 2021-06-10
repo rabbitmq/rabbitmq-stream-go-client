@@ -1,13 +1,15 @@
 package system_integration
 
 import (
-	"fmt"
+	"context"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
@@ -31,7 +33,7 @@ func getHttpPort(tcpPort string) string {
 	return ""
 }
 
-var _ = FDescribe("Integration tests", func() {
+var _ = Describe("Integration tests", func() {
 	ports := []string{"5552", "5553", "5554"}
 
 	addresses := []string{
@@ -158,19 +160,19 @@ var _ = FDescribe("Integration tests", func() {
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		rProducer := stream.NewHAProducer(env)
-		err = rProducer.NewProducer(streamName, "producer-ha-test")
+		rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha-test")
+		Expect(err).NotTo(HaveOccurred())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rProducer.IsOpen()).To(Equal(true))
 
 		data, err := env.StreamMetaData(streamName)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(rProducer.GetConnectedBroker().Port).To(Equal(data.Leader.Port))
+		Expect(rProducer.GetBroker().Port).To(Equal(data.Leader.Port))
 		err = Operations{}.StopRabbitMQNode(data.Leader.Port)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(10 * time.Second)
 		Expect(rProducer.IsOpen()).To(Equal(true))
-		Expect(rProducer.GetConnectedBroker().Port).NotTo(Equal(data.Leader.Port))
+		Expect(rProducer.GetBroker().Port).NotTo(Equal(data.Leader.Port))
 
 		time.Sleep(1 * time.Second)
 
@@ -200,8 +202,8 @@ var _ = FDescribe("Integration tests", func() {
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		rProducer := stream.NewHAProducer(env)
-		err = rProducer.NewProducer(streamName, "producer-ha-test")
+		rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha-test")
+		Expect(err).NotTo(HaveOccurred())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rProducer.IsOpen()).To(Equal(true))
 
@@ -227,19 +229,19 @@ var _ = FDescribe("Integration tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(5 * time.Second)
 
-		rProducer := stream.NewHAProducer(env)
-		err = rProducer.NewProducer(streamName, "remove-replica-test")
+		rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha-test")
+		Expect(err).NotTo(HaveOccurred())
 		Expect(err).NotTo(HaveOccurred())
 
 		for i := 0; i < 2; i++ {
 			data, err := env.StreamMetaData(streamName)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(rProducer.GetConnectedBroker().Port).To(Equal(data.Leader.Port))
+			Expect(rProducer.GetBroker().Port).To(Equal(data.Leader.Port))
 			err = Operations{}.DeleteReplica(data.Leader.Port, streamName)
 			Expect(err).NotTo(HaveOccurred())
 			data1, err1 := env.StreamMetaData(streamName)
 			Expect(err1).NotTo(HaveOccurred())
-			Expect(rProducer.GetConnectedBroker().Port).To(Equal(data1.Leader.Port))
+			Expect(rProducer.GetBroker().Port).To(Equal(data1.Leader.Port))
 			Expect(data1.Leader.Port).NotTo(Equal(data.Leader.Port))
 		}
 
@@ -250,19 +252,31 @@ var _ = FDescribe("Integration tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	FIt("HA producer messages", func() {
+	It("HA producer messages", func() {
 		env, err := stream.NewEnvironment(
 			stream.NewEnvironmentOptions().SetUris(addresses))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(env).NotTo(BeNil())
-		rProducer := stream.NewHAProducer(env)
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		err = rProducer.NewProducer(streamName, "producer-ha-test")
+		rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha-test")
+		Expect(err).NotTo(HaveOccurred())
+		chConfirm := rProducer.NotifyPublishConfirmation()
+		var messagesNotConfirmed int32 = 0
+		go func(ch stream.ChannelPublishConfirm) {
+			for messages := range ch {
+				for _, message := range messages {
+					if !message.Confirmed {
+						atomic.AddInt32(&messagesNotConfirmed, 1)
+					}
+				}
+			}
+		}(chConfirm)
+
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rProducer.IsOpen()).To(Equal(true))
-		go func(p *stream.ReliableProducer) {
+		go func(p *ha.ReliableProducer) {
 			for i := 0; i < 100; i++ {
 				err1 := p.BatchPublish(CreateArrayMessagesForTesting(10))
 				Expect(err1).NotTo(HaveOccurred())
@@ -271,26 +285,34 @@ var _ = FDescribe("Integration tests", func() {
 		}(rProducer)
 		data, errs := env.StreamMetaData(streamName)
 		Expect(errs).NotTo(HaveOccurred())
-		Expect(rProducer.GetConnectedBroker().Port).To(Equal(data.Leader.Port))
+		Expect(rProducer.GetBroker().Port).To(Equal(data.Leader.Port))
 		err1 := Operations{}.DeleteReplica(data.Leader.Port, streamName)
 		Expect(err1).NotTo(HaveOccurred())
 		data1, err1 := env.StreamMetaData(streamName)
 		Expect(err1).NotTo(HaveOccurred())
-		Expect(rProducer.GetConnectedBroker().Port).To(Equal(data1.Leader.Port))
+		Expect(rProducer.GetBroker().Port).To(Equal(data1.Leader.Port))
 
-		time.Sleep(15 * time.Second)
+		time.Sleep(8 * time.Second)
 
-		messages, errGet := messagesReady(streamName, getHttpPort(rProducer.GetConnectedBroker().Port))
-		Expect(errGet).NotTo(HaveOccurred())
-		fmt.Printf("MESSAGES %d \n", messages)
+		var messagesCount int32 = 0
+		handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+			atomic.AddInt32(&messagesCount, 1)
+		}
 
-		err = env.DeleteStream(streamName)
-		Expect(messages >= 1000).To(Equal(true))
-
+		consumer, err2 := env.NewConsumer(context.TODO(), streamName,
+			handleMessages, stream.NewConsumerOptions().SetOffset(
+				stream.OffsetSpecification{}.First()))
+		Expect(err2).NotTo(HaveOccurred())
+		time.Sleep(10 * time.Second)
+		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
+		v := atomic.LoadInt32(&messagesCount)+atomic.LoadInt32(&messagesNotConfirmed) >= 1000
+		Expect(v).To(Equal(true))
+		err = env.DeleteStream(streamName)
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(100 * time.Second)
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
-
 	})
 
 })

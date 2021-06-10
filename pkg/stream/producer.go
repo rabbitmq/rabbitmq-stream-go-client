@@ -15,6 +15,7 @@ type UnConfirmedMessage struct {
 	ProducerID uint8
 	MessageID  int64
 	Confirmed  bool
+	Err        error
 }
 
 type Producer struct {
@@ -68,6 +69,12 @@ func (producer *Producer) removeUnConfirmed(messageid int64) {
 	delete(producer.unConfirmedMessages, messageid)
 }
 
+func (producer *Producer) resetUnConfirmed() {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	producer.unConfirmedMessages = map[int64]*UnConfirmedMessage{}
+}
+
 func (producer *Producer) lenUnConfirmed() int {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
@@ -102,6 +109,10 @@ func (producer *Producer) GetOptions() *ProducerOptions {
 	return producer.options
 }
 
+func (producer *Producer) GetBroker() *Broker {
+	return producer.options.client.broker
+}
+
 func (producer *Producer) ResendUnConfirmed(ctx context.Context) error {
 
 	for _, message := range producer.GetUnConfirmed() {
@@ -133,11 +144,13 @@ func (producer *Producer) ResendUnConfirmed(ctx context.Context) error {
 		err := producer.options.client.socket.writeAndFlush(b.Bytes())
 		// TODO handle the socket read error to close the producer
 		if err != nil {
+			//producer.mutex.Lock()
 			if producer.publishConfirm != nil {
 				message.Confirmed = false
 				producer.publishConfirm <- []*UnConfirmedMessage{message}
 				producer.removeUnConfirmed(message.MessageID)
 			}
+			//producer.mutex.Unlock()
 
 			return err
 		}
@@ -181,6 +194,21 @@ func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amq
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
 	// TODO handle the socket read error to close the producer
 	if err != nil {
+		if producer.publishConfirm != nil {
+			var unConfirmedMessages []*UnConfirmedMessage
+			for i, message := range batchMessages {
+				unConfirmedMessages = append(unConfirmedMessages, &UnConfirmedMessage{
+					Message:    message,
+					ProducerID: producer.ID,
+					MessageID:  result[i],
+					Confirmed:  false,
+					Err:        err,
+				})
+				producer.removeUnConfirmed(result[i])
+			}
+			producer.publishConfirm <- unConfirmedMessages
+		}
+
 		return nil, err
 	}
 	return result, nil

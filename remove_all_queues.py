@@ -23,14 +23,14 @@ def get_auth(username, password):
 def call_api(rabbitmq_host, vhost, user, password):
 
     p = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-    p.add_password(None, "http://" + rabbitmq_host + ":15672/api/queues", user, password)
+    p.add_password(None, "http://" + rabbitmq_host + ":15676/api/queues", user, password)
 
     auth_handler = urllib.request.HTTPBasicAuthHandler(p)
     opener = urllib.request.build_opener(auth_handler)
 
     urllib.request.install_opener(opener)
 
-    req = urllib.request.Request("http://" + rabbitmq_host + ":15672/api/queues",
+    req = urllib.request.Request("http://" + rabbitmq_host + ":15676/api/queues",
                                  method='GET')
 
     res = urllib.request.urlopen(req, timeout=5)
@@ -41,12 +41,12 @@ def call_api(rabbitmq_host, vhost, user, password):
         print_time(" *** removing " + q['name'])
 
         request_del = urllib.request.Request(
-            "http://" + rabbitmq_host + ":15672/api/queues/" + vhost + "/" + q[
-                'name'], method='DELETE')
+            "http://" + rabbitmq_host + ":15676/api/queues/" + vhost + "/" + q[
+                'name']  + '/contents', method='DELETE')
         urllib.request.urlopen(request_del, timeout=5)
         print_time(" *** removed " + q['name'])
 
 
 if __name__ == '__main__':
     rabbitmq_host = "localhost"
-    call_api(rabbitmq_host, "%2f", "guest", "guest")
+    call_api(rabbitmq_host, "%2f", "test", "test")

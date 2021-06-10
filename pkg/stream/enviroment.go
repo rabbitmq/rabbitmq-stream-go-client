@@ -130,6 +130,20 @@ func (env *Environment) NewProducer(streamName string, producerOptions *Producer
 	return env.producers.newProducer(client, streamName, producerOptions)
 }
 
+func (env *Environment) StreamExists(streamName string) (bool, error) {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		err := client.Close()
+		if err != nil {
+			return
+		}
+	}(client)
+	if err != nil {
+		return false, err
+	}
+	return client.StreamExists(streamName), nil
+}
+
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
@@ -269,6 +283,7 @@ func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentO
 
 type enviromentCoordinator struct {
 	mutex             *sync.Mutex
+	mutexContext      *sync.Mutex
 	clientsPerContext map[int]*Client
 	maxItemsForClient int
 	nextId            int
@@ -376,7 +391,7 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 	}
 
 	if clientResult == nil {
-		clientResult = newClient("stream-producers")
+		clientResult = newClient("go-stream-producer")
 		clientResult.broker = leader
 		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
@@ -466,8 +481,8 @@ func (cc *enviromentCoordinator) close() error {
 }
 
 func (cc *enviromentCoordinator) getClientsPerContext() map[int]*Client {
-	cc.mutex.Lock()
-	defer cc.mutex.Unlock()
+	cc.mutexContext.Lock()
+	defer cc.mutexContext.Unlock()
 	return cc.clientsPerContext
 }
 
@@ -500,6 +515,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 			clientsPerContext: map[int]*Client{},
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
+			mutexContext:      &sync.Mutex{},
 			nextId:            0,
 		}
 	}
@@ -565,6 +581,7 @@ func (ps *consumersEnvironment) NewSubscriber(ctx context.Context, clientLocator
 			clientsPerContext: map[int]*Client{},
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
+			mutexContext:      &sync.Mutex{},
 			nextId:            0,
 		}
 	}

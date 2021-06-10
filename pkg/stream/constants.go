@@ -69,7 +69,7 @@ const (
 	defaultReadSocketBuffer = 4096 * 2
 
 	//
-	ClientVersion = "0.5-alpha"
+	ClientVersion = "0.6-alpha"
 
 	StreamTcpPort = "5552"
 )

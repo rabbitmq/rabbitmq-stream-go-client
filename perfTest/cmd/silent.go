@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/spf13/cobra"
 	"math/rand"
@@ -24,12 +25,13 @@ func newSilent() *cobra.Command {
 }
 
 var (
-	publisherMessageCount int32
-	consumerMessageCount  int32
-	confirmedMessageCount int32
-	consumersCloseCount   int32
-	producersCloseCount   int32
-	publishErrors         int32
+	publisherMessageCount    int32
+	consumerMessageCount     int32
+	confirmedMessageCount    int32
+	notConfirmedMessageCount int32
+	consumersCloseCount      int32
+	producersCloseCount      int32
+	publishErrors            int32
 	//connections           []*stream.Client
 	simulEnvironment *stream.Environment
 )
@@ -51,6 +53,7 @@ func printStats() {
 					atomic.SwapInt32(&publisherMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
 					atomic.SwapInt32(&confirmedMessageCount, 0)
+					atomic.SwapInt32(&notConfirmedMessageCount, 0)
 					start = time.Now()
 				}
 			}
@@ -165,7 +168,15 @@ func initStreams() error {
 func handlePublishConfirms(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for ids := range confirms {
-			atomic.AddInt32(&confirmedMessageCount, int32(len(ids)))
+			for _, msg := range ids {
+				if msg.Confirmed {
+					atomic.AddInt32(&confirmedMessageCount, 1)
+				} else {
+					atomic.AddInt32(&notConfirmedMessageCount, 1)
+				}
+
+			}
+
 		}
 	}()
 }
@@ -181,8 +192,7 @@ func handlePublishError(publishError stream.ChannelPublishError) {
 
 func startPublisher(streamName string) error {
 
-	rPublisher := stream.NewHAProducer(simulEnvironment)
-	err := rPublisher.NewProducer(streamName, fmt.Sprintf("pub-%s", streamName))
+	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName, fmt.Sprintf("pub-%s", streamName))
 	if err != nil {
 		logError("Error create publisher: %s", err)
 		return err
@@ -210,7 +220,7 @@ func startPublisher(streamName string) error {
 		arr = append(arr, amqp.NewMessage([]byte(body)))
 	}
 
-	go func(prod *stream.ReliableProducer, messages []*amqp.Message) {
+	go func(prod *ha.ReliableProducer, messages []*amqp.Message) {
 		for {
 			if rate > 0 {
 				var v1 float64
@@ -234,12 +244,12 @@ func startPublisher(streamName string) error {
 			}
 
 			atomic.AddInt32(&publisherMessageCount, int32(batchSize))
-			prod.BatchPublish(arr)
-			//if err != nil {
-			//	logError("Error publishing %s", err)
-			//	time.Sleep(1 * time.Second)
-			//	return
-			//}
+			err = prod.BatchPublish(arr)
+			if err != nil {
+				logError("Error publishing: %s", err)
+				//	time.Sleep(1 * time.Second)
+				//	return
+			}
 			checkErr(err)
 
 		}

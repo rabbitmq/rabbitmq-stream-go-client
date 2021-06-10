@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,11 +32,14 @@ func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
 }
 
 func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
+	var counter int32 = 0
 	go func() {
 		for messagesIds := range confirms {
 			for _, m := range messagesIds {
 				if !m.Confirmed {
-					fmt.Printf("Confirmed %s message - status %t \n  ", m.Message.Data, m.Confirmed)
+					if atomic.AddInt32(&counter, 1)%10 == 0 {
+						fmt.Printf("Confirmed %s message - status %t - %d \n  ", m.Message.Data, m.Confirmed, atomic.LoadInt32(&counter))
+					}
 				}
 			}
 		}
@@ -67,20 +72,18 @@ func main() {
 		},
 	)
 
-	//CheckErr(err)
-	rProducer := stream.NewHAProducer(env)
-	err = rProducer.NewProducer(streamName, "producer-ha")
+	rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha")
 	CheckErr(err)
 
-	//optional publish confirmation channel
 	chPublishConfirm := rProducer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
 	time.Sleep(4 * time.Second)
-	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
-	for i := 0; i < 300; i++ {
-
+	for i := 0; i < 1000000; i++ {
 		err := rProducer.BatchPublish(CreateArrayMessagesForTesting(10))
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
+		if i%1000 == 0 {
+			fmt.Println("sent.. " + strconv.Itoa(i))
+		}
 		CheckErr(err)
 	}
 

@@ -293,12 +293,6 @@ func (c *Client) closeHartBeat() {
 }
 
 func (c *Client) Close() error {
-	c.mutex.Lock()
-	if c.metadataListener != nil {
-		close(c.metadataListener)
-		c.metadataListener = nil
-	}
-	c.mutex.Unlock()
 
 	for _, p := range c.coordinator.producers {
 		err := c.coordinator.RemoveProducerById(p.(*Producer).ID, Event{
@@ -325,6 +319,13 @@ func (c *Client) Close() error {
 			logs.LogWarn("error removing consumer: %s", err)
 		}
 	}
+
+	c.mutex.Lock()
+	if c.metadataListener != nil {
+		close(c.metadataListener)
+		c.metadataListener = nil
+	}
+	c.mutex.Unlock()
 
 	var err error
 	if c.getSocket().isOpen() {
