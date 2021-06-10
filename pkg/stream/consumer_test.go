@@ -74,9 +74,6 @@ var _ = Describe("Streaming Consumers", func() {
 
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(1200 * time.Millisecond)
-		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(0))
 
 	})
 

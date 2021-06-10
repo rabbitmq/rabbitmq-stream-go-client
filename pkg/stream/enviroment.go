@@ -283,7 +283,7 @@ func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentO
 
 type enviromentCoordinator struct {
 	mutex             *sync.Mutex
-	mutexContext      *sync.Mutex
+	mutexContext      *sync.RWMutex
 	clientsPerContext map[int]*Client
 	maxItemsForClient int
 	nextId            int
@@ -369,9 +369,9 @@ func (cc *enviromentCoordinator) maybeCleanConsumers(streamName string) {
 		}
 	}
 
-	for i, client := range cc.clientsPerContext {
+	for i, client := range cc.getClientsPerContext() {
 		if !client.socket.isOpen() {
-			delete(cc.clientsPerContext, i)
+			delete(cc.getClientsPerContext(), i)
 		}
 	}
 
@@ -481,8 +481,8 @@ func (cc *enviromentCoordinator) close() error {
 }
 
 func (cc *enviromentCoordinator) getClientsPerContext() map[int]*Client {
-	cc.mutexContext.Lock()
-	defer cc.mutexContext.Unlock()
+	cc.mutexContext.RLock()
+	defer cc.mutexContext.RUnlock()
 	return cc.clientsPerContext
 }
 
@@ -515,7 +515,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 			clientsPerContext: map[int]*Client{},
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
-			mutexContext:      &sync.Mutex{},
+			mutexContext:      &sync.RWMutex{},
 			nextId:            0,
 		}
 	}
@@ -581,7 +581,7 @@ func (ps *consumersEnvironment) NewSubscriber(ctx context.Context, clientLocator
 			clientsPerContext: map[int]*Client{},
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
-			mutexContext:      &sync.Mutex{},
+			mutexContext:      &sync.RWMutex{},
 			nextId:            0,
 		}
 	}
