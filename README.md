@@ -1,31 +1,32 @@
 # GO stream client for RabbitMQ streaming queues
 ---
 ![Build](https://github.com/rabbitmq/rabbitmq-stream-go-client/workflows/Build/badge.svg)
-[![codecov](https://codecov.io/gh/Gsantomaggio/go-stream-client/branch/main/graph/badge.svg?token=HZD4S71QIM)](https://codecov.io/gh/Gsantomaggio/go-stream-client)
 
-Experimental client
-for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
+Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 
 ### Download
 ---
 
 ```
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.5-alpha
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.6-alpha
 ```
 
 ### Getting started
 ---
 
-- Run RabbitMQ docker image with streaming:
-   ```
-   docker run -it --rm --name rabbitmq -p 5552:5552 -p 5672:5672 -p 15672:15672 \
-   -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
-   pivotalrabbitmq/rabbitmq-stream
-  ```
-- Run "getting started" example:
-  ```
-   go run examples/getting_started.go
-  ```
+Run RabbitMQ docker image with streaming:
+```
+docker run -it --rm --name rabbitmq -p 5552:5552 -p 5672:5672 -p 15672:15672 \
+-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
+pivotalrabbitmq/rabbitmq-stream
+```
+
+Run "getting started" example:
+```
+go run examples/getting_started.go
+```
+
+See [examples](./examples/) for more use cases
 
 ### Performance test tool is an easy way to do some test:
 
@@ -36,25 +37,25 @@ go run perfTest/perftest.go silent
 ### API
 ---
 
-The API are generally composed by mandatory arguments and optional arguments the optional arguments can be set in the
-standard go way as:
+The API are composed by mandatory and optional arguments.
+The optional be set in the standard go way as:
 
 ```golang
 env, err := stream.NewEnvironment(
             &stream.EnvironmentOptions{
                     ConnectionParameters:  stream.Broker{
                     Host:     "localhost",
-                    Port:     5551,
+                    Port:     5552,
                     User:     "guest",
                     Password: "guest",
                 },
-                MaxProducersPerClient: 3,
-                MaxConsumersPerClient: 3,
+                MaxProducersPerClient: 1,
+                MaxConsumersPerClient: 1,
                 },
             )
 ```
 
-or using Builders as:
+or using builders ( the suggested way):
 
 ```golang
 env, err := stream.NewEnvironment(
@@ -78,10 +79,10 @@ The suggested way is to use builders.
 ---
 
 ```shell
-make build
+make 
 ```
 
-You need a docker image running to execute the tests in this way:
+You need a docker image running to execute the tests:
 
 ```
  docker run -it --rm --name rabbitmq -p 5552:5552 \

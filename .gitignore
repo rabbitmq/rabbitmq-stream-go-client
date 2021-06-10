@@ -21,3 +21,4 @@ vet
 .DS_Store
 perfTest/
 .vagrant/
+local/

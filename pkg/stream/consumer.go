@@ -157,7 +157,7 @@ func (consumer *Consumer) Commit() error {
 	length := 2 + 2 + 2 + len(consumer.options.ConsumerName) + 2 +
 		len(consumer.options.streamName) + 8
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandCommitOffset) // correlation ID not used yet, may be used if commit offset has a confirm
+	writeProtocolHeader(b, length, commandCommitOffset)
 
 	writeString(b, consumer.options.ConsumerName)
 	writeString(b, consumer.options.streamName)
