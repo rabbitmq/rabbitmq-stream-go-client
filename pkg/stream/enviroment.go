@@ -281,7 +281,7 @@ func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentO
 
 }
 
-type enviromentCoordinator struct {
+type environmentCoordinator struct {
 	mutex             *sync.Mutex
 	mutexContext      *sync.RWMutex
 	clientsPerContext map[int]*Client
@@ -289,19 +289,21 @@ type enviromentCoordinator struct {
 	nextId            int
 }
 
-func (cc *enviromentCoordinator) isProducerListFull(clientsPerContextId int) bool {
+func (cc *environmentCoordinator) isProducerListFull(clientsPerContextId int) bool {
 	return cc.clientsPerContext[clientsPerContextId].coordinator.
 		ProducersCount() >= cc.maxItemsForClient
 }
 
-func (cc *enviromentCoordinator) isConsumerListFull(clientsPerContextId int) bool {
+func (cc *environmentCoordinator) isConsumerListFull(clientsPerContextId int) bool {
 	return cc.clientsPerContext[clientsPerContextId].coordinator.
 		ConsumersCount() >= cc.maxItemsForClient
 }
 
-func (cc *enviromentCoordinator) maybeCleanClients() {
+func (cc *environmentCoordinator) maybeCleanClients() {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
+	cc.mutexContext.Lock()
+	defer cc.mutexContext.Unlock()
 	for i, client := range cc.clientsPerContext {
 		if !client.socket.isOpen() {
 			delete(cc.clientsPerContext, i)
@@ -309,76 +311,57 @@ func (cc *enviromentCoordinator) maybeCleanClients() {
 	}
 }
 
-func (cc *enviromentCoordinator) maybeCleanProducers(streamName string) {
-	cc.mutex.Lock()
-	defer cc.mutex.Unlock()
-
-	for _, client := range cc.clientsPerContext {
-		for pidx, producer := range client.coordinator.producers {
-			if producer.(*Producer).GetStreamName() == streamName {
-				err := client.coordinator.RemoveProducerById(pidx.(uint8), Event{
-					Command:    CommandMetadataUpdate,
-					StreamName: streamName,
-					Name:       producer.(*Producer).GetName(),
-					Reason:     "Meta data update",
-					Err:        nil,
-				})
-				if err != nil {
-					return
-				}
-			}
-		}
-		if client.coordinator.ProducersCount() == 0 {
-			err := client.Close()
+func (client *Client) maybeCleanProducers(streamName string) {
+	client.mutex.Lock()
+	for pidx, producer := range client.coordinator.Producers() {
+		if producer.(*Producer).GetStreamName() == streamName {
+			err := client.coordinator.RemoveProducerById(pidx.(uint8), Event{
+				Command:    CommandMetadataUpdate,
+				StreamName: streamName,
+				Name:       producer.(*Producer).GetName(),
+				Reason:     "Meta data update",
+				Err:        nil,
+			})
 			if err != nil {
 				return
 			}
 		}
 	}
-
-	for i, client := range cc.getClientsPerContext() {
-		if !client.socket.isOpen() {
-			delete(cc.getClientsPerContext(), i)
+	client.mutex.Unlock()
+	if client.coordinator.ProducersCount() == 0 {
+		err := client.Close()
+		if err != nil {
+			return
 		}
 	}
 }
 
-func (cc *enviromentCoordinator) maybeCleanConsumers(streamName string) {
-	cc.mutex.Lock()
-	defer cc.mutex.Unlock()
-	for _, client := range cc.clientsPerContext {
-		for pidx, consumer := range client.coordinator.consumers {
-			if consumer.(*Consumer).options.streamName == streamName {
-				err := client.coordinator.RemoveConsumerById(pidx.(uint8), Event{
-					Command:    CommandMetadataUpdate,
-					StreamName: streamName,
-					Name:       consumer.(*Consumer).GetName(),
-					Reason:     "Meta data update",
-					Err:        nil,
-				})
-				if err != nil {
-					return
-				}
-			}
-		}
-		if client.coordinator.ConsumersCount() == 0 {
-			err := client.Close()
+func (client *Client) maybeCleanConsumers(streamName string) {
+	client.mutex.Lock()
+	for pidx, consumer := range client.coordinator.consumers {
+		if consumer.(*Consumer).options.streamName == streamName {
+			err := client.coordinator.RemoveConsumerById(pidx.(uint8), Event{
+				Command:    CommandMetadataUpdate,
+				StreamName: streamName,
+				Name:       consumer.(*Consumer).GetName(),
+				Reason:     "Meta data update",
+				Err:        nil,
+			})
 			if err != nil {
 				return
 			}
 		}
 	}
-
-	for i, client := range cc.getClientsPerContext() {
-		if !client.socket.isOpen() {
-			delete(cc.getClientsPerContext(), i)
+	client.mutex.Unlock()
+	if client.coordinator.ConsumersCount() == 0 {
+		err := client.Close()
+		if err != nil {
+			return
 		}
 	}
-
 }
 
-func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
-	channelPublishErrListener ChannelPublishError,
+func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 	options *ProducerOptions) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
@@ -393,11 +376,12 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 	if clientResult == nil {
 		clientResult = newClient("go-stream-producer")
 		clientResult.broker = leader
-		chMeta := make(chan metaDataUpdateEvent)
+		chMeta := make(chan metaDataUpdateEvent, 10)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
 			for metaDataUpdateEvent := range ch {
-				cc.maybeCleanProducers(metaDataUpdateEvent.StreamName)
+				clientResult.maybeCleanProducers(metaDataUpdateEvent.StreamName)
+				cc.maybeCleanClients()
 				if !cl.socket.isOpen() {
 					return
 				}
@@ -425,7 +409,7 @@ func (cc *enviromentCoordinator) newProducer(leader *Broker, streamName string,
 	return publisher, nil
 }
 
-func (cc *enviromentCoordinator) newConsumer(ctx context.Context, leader *Broker,
+func (cc *environmentCoordinator) newConsumer(ctx context.Context, leader *Broker,
 	streamName string, messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	cc.mutex.Lock()
@@ -445,7 +429,8 @@ func (cc *enviromentCoordinator) newConsumer(ctx context.Context, leader *Broker
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
 			for metaDataUpdateEvent := range ch {
-				cc.maybeCleanConsumers(metaDataUpdateEvent.StreamName)
+				clientResult.maybeCleanConsumers(metaDataUpdateEvent.StreamName)
+				cc.maybeCleanClients()
 				if !cl.socket.isOpen() {
 					return
 				}
@@ -470,8 +455,8 @@ func (cc *enviromentCoordinator) newConsumer(ctx context.Context, leader *Broker
 	return subscriber, nil
 }
 
-func (cc *enviromentCoordinator) close() error {
-	for _, client := range cc.clientsPerContext {
+func (cc *environmentCoordinator) close() error {
+	for _, client := range cc.getClientsPerContext() {
 		err := client.Close()
 		if err != nil {
 			logs.LogWarn("Error during close the client, %s", err)
@@ -480,23 +465,22 @@ func (cc *enviromentCoordinator) close() error {
 	return nil
 }
 
-func (cc *enviromentCoordinator) getClientsPerContext() map[int]*Client {
-	cc.mutexContext.RLock()
-	defer cc.mutexContext.RUnlock()
+func (cc *environmentCoordinator) getClientsPerContext() map[int]*Client {
+	cc.mutexContext.Lock()
+	defer cc.mutexContext.Unlock()
 	return cc.clientsPerContext
 }
 
 type producersEnvironment struct {
 	mutex                *sync.Mutex
-	producersCoordinator map[string]*enviromentCoordinator
+	producersCoordinator map[string]*environmentCoordinator
 	maxItemsForClient    int
-	publishErrorListener ChannelPublishError
 }
 
 func newProducers(maxItemsForClient int) *producersEnvironment {
 	producers := &producersEnvironment{
 		mutex:                &sync.Mutex{},
-		producersCoordinator: map[string]*enviromentCoordinator{},
+		producersCoordinator: map[string]*environmentCoordinator{},
 		maxItemsForClient:    maxItemsForClient,
 	}
 	return producers
@@ -511,7 +495,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 		return nil, err
 	}
 	if ps.producersCoordinator[leader.hostPort()] == nil {
-		ps.producersCoordinator[leader.hostPort()] = &enviromentCoordinator{
+		ps.producersCoordinator[leader.hostPort()] = &environmentCoordinator{
 			clientsPerContext: map[int]*Client{},
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
@@ -522,7 +506,6 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 	leader.cloneFrom(clientLocator.broker)
 
 	producer, err := ps.producersCoordinator[leader.hostPort()].newProducer(leader, streamName,
-		ps.publishErrorListener,
 		options)
 	if err != nil {
 		return nil, err
@@ -545,7 +528,7 @@ func (ps *producersEnvironment) close() error {
 	return nil
 }
 
-func (ps *producersEnvironment) getCoordinators() map[string]*enviromentCoordinator {
+func (ps *producersEnvironment) getCoordinators() map[string]*environmentCoordinator {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 	return ps.producersCoordinator
@@ -553,7 +536,7 @@ func (ps *producersEnvironment) getCoordinators() map[string]*enviromentCoordina
 
 type consumersEnvironment struct {
 	mutex                *sync.Mutex
-	consumersCoordinator map[string]*enviromentCoordinator
+	consumersCoordinator map[string]*environmentCoordinator
 	maxItemsForClient    int
 	PublishErrorListener ChannelPublishError
 }
@@ -561,7 +544,7 @@ type consumersEnvironment struct {
 func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {
 	producers := &consumersEnvironment{
 		mutex:                &sync.Mutex{},
-		consumersCoordinator: map[string]*enviromentCoordinator{},
+		consumersCoordinator: map[string]*environmentCoordinator{},
 		maxItemsForClient:    maxItemsForClient,
 	}
 	return producers
@@ -577,7 +560,7 @@ func (ps *consumersEnvironment) NewSubscriber(ctx context.Context, clientLocator
 		return nil, err
 	}
 	if ps.consumersCoordinator[consumerBroker.hostPort()] == nil {
-		ps.consumersCoordinator[consumerBroker.hostPort()] = &enviromentCoordinator{
+		ps.consumersCoordinator[consumerBroker.hostPort()] = &environmentCoordinator{
 			clientsPerContext: map[int]*Client{},
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
@@ -608,7 +591,7 @@ func (ps *consumersEnvironment) close() error {
 	return nil
 }
 
-func (ps *consumersEnvironment) getCoordinators() map[string]*enviromentCoordinator {
+func (ps *consumersEnvironment) getCoordinators() map[string]*environmentCoordinator {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 	return ps.consumersCoordinator

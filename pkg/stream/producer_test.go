@@ -90,7 +90,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(14))
 		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(14)))
 
 		err = producer.Close()

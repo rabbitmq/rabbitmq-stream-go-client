@@ -271,3 +271,9 @@ func (coordinator *Coordinator) reuseFreeId(refMap map[interface{}]interface{}) 
 	}
 	return result, nil
 }
+
+func (coordinator *Coordinator) Producers() map[interface{}]interface{} {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	return coordinator.producers
+}

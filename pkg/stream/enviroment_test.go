@@ -26,16 +26,16 @@ var _ = Describe("Environment test", func() {
 		}
 
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		//Expect(len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext())).To(Equal(10))
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
+			getClientsPerContext())).To(Equal(10))
 
 		for _, producer := range producers {
 			err = producer.Close()
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		//Expect(len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext())).To(Equal(0))
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
+			getClientsPerContext())).To(Equal(0))
 
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
@@ -57,13 +57,9 @@ var _ = Describe("Environment test", func() {
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
 
-		//for len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext()) > 0 {
-		//	time.Sleep(200 * time.Millisecond)
-		//}
-		//
-		//Expect(len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext())).To(Equal(0))
+		time.Sleep(500 * time.Millisecond)
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
+			getClientsPerContext())).To(Equal(0))
 
 	})
 
@@ -88,17 +84,13 @@ var _ = Describe("Environment test", func() {
 		}
 		wg.Wait()
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		//for len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext()) > 0 {
-		//	time.Sleep(200 * time.Millisecond)
-		//}
-		//Expect(len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext())).To(Equal(0))
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
+			getClientsPerContext())).To(Equal(0))
 		err = env.DeleteStream(streamName)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Meta handler delete consistency", func() {
+	It("Meta handler delete consistency threads", func() {
 		env, err := NewEnvironment(&EnvironmentOptions{
 			MaxProducersPerClient: 3,
 			MaxConsumersPerClient: 3,
@@ -114,7 +106,7 @@ var _ = Describe("Environment test", func() {
 
 		wg := &sync.WaitGroup{}
 
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func() {
 				_, errProd := env.NewProducer(streamNameWillBeDelete, nil)
@@ -129,23 +121,55 @@ var _ = Describe("Environment test", func() {
 		time.Sleep(500 * time.Millisecond)
 		err = env.DeleteStream(streamNameWillBeDelete)
 		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(500 * time.Millisecond)
-		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		//for len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext()) != 3 {
-		//	time.Sleep(200 * time.Millisecond)
-		//}
-		//
-		//Expect(len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext())).To(Equal(3))
+		time.Sleep(200 * time.Millisecond)
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
-		//for len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext()) != 0 {
-		//	time.Sleep(200 * time.Millisecond)
-		//}
-		//Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		//Expect(len(env.producers.getCoordinators()["localhost:5552"].
-		//	getClientsPerContext())).To(Equal(0))
+		time.Sleep(200 * time.Millisecond)
+		Expect(len(env.producers.getCoordinators())).To(Equal(1))
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
+			getClientsPerContext())).To(Equal(0))
+		Expect(err).NotTo(HaveOccurred())
+
+		err = env.Close()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("Meta handler delete consistency sync", func() {
+		env, err := NewEnvironment(&EnvironmentOptions{
+			MaxProducersPerClient: 5,
+			MaxConsumersPerClient: 5,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		streamNameWillBeDelete := uuid.New().String()
+		err = env.DeclareStream(streamNameWillBeDelete, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		streamNameWillBeDeleteAfter := uuid.New().String()
+		err = env.DeclareStream(streamNameWillBeDeleteAfter, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		for i := 0; i < 25; i++ {
+			_, errProd := env.NewProducer(streamNameWillBeDelete, nil)
+			Expect(errProd).NotTo(HaveOccurred())
+			_, errProd = env.NewProducer(streamNameWillBeDeleteAfter, nil)
+			Expect(errProd).NotTo(HaveOccurred())
+		}
+
+		time.Sleep(500 * time.Millisecond)
+		err = env.DeleteStream(streamNameWillBeDelete)
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(200 * time.Millisecond)
+		Expect(len(env.producers.getCoordinators())).To(Equal(1))
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
+			getClientsPerContext())).To(Equal(10))
+
+		err = env.DeleteStream(streamNameWillBeDeleteAfter)
+		time.Sleep(200 * time.Millisecond)
+		Expect(len(env.producers.getCoordinators())).To(Equal(1))
+		Expect(len(env.producers.getCoordinators()["localhost:5552"].
+			getClientsPerContext())).To(Equal(0))
+		Expect(err).NotTo(HaveOccurred())
+
+		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
 

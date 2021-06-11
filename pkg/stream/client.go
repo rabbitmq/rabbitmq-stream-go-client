@@ -294,7 +294,7 @@ func (c *Client) closeHartBeat() {
 
 func (c *Client) Close() error {
 
-	for _, p := range c.coordinator.producers {
+	for _, p := range c.coordinator.Producers() {
 		err := c.coordinator.RemoveProducerById(p.(*Producer).ID, Event{
 			Command:    CommandClose,
 			StreamName: p.(*Producer).GetStreamName(),
