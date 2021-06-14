@@ -12,7 +12,7 @@ var testEnvironment *Environment
 var testStreamName string
 
 var _ = BeforeSuite(func() {
-	//SetLevelInfo(DEBUG)
+	//SetLevelInfo(logs.DEBUG)
 	client, err := NewEnvironment(nil)
 	testEnvironment = client
 	Expect(err).NotTo(HaveOccurred())

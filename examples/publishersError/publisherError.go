@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
@@ -75,9 +74,8 @@ func main() {
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
 	go func() {
 		for i := 0; i < 100; i++ {
-			_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(2))
+			_, err := producer.BatchPublish(CreateArrayMessagesForTesting(2))
 			CheckErr(err)
-			//time.Sleep(100 * time.Millisecond)
 		}
 	}()
 	//time.Sleep(100 * time.Millisecond)

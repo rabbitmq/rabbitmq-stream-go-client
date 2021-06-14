@@ -151,7 +151,7 @@ var _ = Describe("Streaming Consumers", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(100)) // batch send
+		_, err = producer.BatchPublish(CreateArrayMessagesForTesting(100)) // batch send
 		Expect(err).NotTo(HaveOccurred())
 		// we can't close the subscribe until the publish is finished
 		time.Sleep(500 * time.Millisecond)
@@ -173,7 +173,7 @@ var _ = Describe("Streaming Consumers", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = producer.BatchPublish(context.TODO(), CreateArrayMessagesForTesting(107)) // batch send
+		_, err = producer.BatchPublish(CreateArrayMessagesForTesting(107)) // batch send
 		Expect(err).NotTo(HaveOccurred())
 		// we can't close the subscribe until the publish is finished
 		time.Sleep(500 * time.Millisecond)

@@ -4,7 +4,7 @@ package stream
 
 import "sort"
 
-type ProducersCoordinator = enviromentCoordinator
+type ProducersCoordinator = environmentCoordinator
 
 func (env *Environment) ClientCoordinator() map[string]*ProducersCoordinator {
 	return env.producers.producersCoordinator

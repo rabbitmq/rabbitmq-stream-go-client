@@ -372,11 +372,10 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 }
 
 func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
-
 	code := readUShort(buffer)
 	if code == responseCodeStreamNotAvailable {
 		stream := readString(buffer)
-		logs.LogWarn("stream %s is no longer available", stream)
+		logs.LogDebug("stream %s is no longer available", stream)
 		c.mutex.Lock()
 		c.metadataListener <- metaDataUpdateEvent{
 			StreamName: stream,

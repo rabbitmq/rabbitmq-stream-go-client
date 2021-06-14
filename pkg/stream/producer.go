@@ -158,7 +158,7 @@ func (producer *Producer) ResendUnConfirmed(ctx context.Context) error {
 	return nil
 }
 
-func (producer *Producer) BatchPublish(ctx context.Context, batchMessages []*amqp.Message) ([]int64, error) {
+func (producer *Producer) BatchPublish(batchMessages []*amqp.Message) ([]int64, error) {
 	if len(batchMessages) > 1000 {
 		return nil, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
 	}
