@@ -58,7 +58,7 @@ func main() {
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
 	go func() {
 		for i := 0; i < 100; i++ {
-			_, err := producer.BatchPublish(context.Background(), CreateArrayMessagesForTesting(100))
+			_, err := producer.BatchPublish(CreateArrayMessagesForTesting(100))
 			CheckErr(err)
 			time.Sleep(100 * time.Millisecond)
 		}

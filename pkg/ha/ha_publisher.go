@@ -1,7 +1,6 @@
 package ha
 
 import (
-	"context"
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
@@ -79,7 +78,7 @@ func (p *ReliableProducer) BatchPublish(messages []*amqp.Message) error {
 	}
 
 	p.mutex.Lock()
-	_, errW := p.producer.BatchPublish(context.TODO(), messages)
+	_, errW := p.producer.BatchPublish(messages)
 	p.mutex.Unlock()
 	p.totalSent += 1
 	switch err := errW.(type) {
