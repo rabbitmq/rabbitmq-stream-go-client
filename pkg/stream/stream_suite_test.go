@@ -9,5 +9,5 @@ import (
 
 func TestStream(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Stream Suite")
+	RunSpecs(t, "Go-streaming-client")
 }
