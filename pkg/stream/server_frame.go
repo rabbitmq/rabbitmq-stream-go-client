@@ -220,8 +220,10 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	var unConfirmed []*UnConfirmedMessage
 	for publishingIdCount != 0 {
 		m := producer.getUnConfirmed(readInt64(r))
-		m.Confirmed = true
-		unConfirmed = append(unConfirmed, m)
+		if m != nil {
+			m.Confirmed = true
+			unConfirmed = append(unConfirmed, m)
+		}
 		publishingIdCount--
 	}
 	producer.mutex.Lock()

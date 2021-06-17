@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"sync/atomic"
 )
@@ -156,6 +157,65 @@ func (producer *Producer) ResendUnConfirmed(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (producer *Producer) Test(batchMessages []message.StreamMessage) ([]int64, error) {
+	if len(batchMessages) > 1000 {
+		return nil, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
+	}
+	var result = make([]int64, len(batchMessages))
+	var msgLen int
+	for idx, msg := range batchMessages {
+		r, _ := msg.MarshalBinary()
+		msgLen += len(r) + 8 + 4
+		if msg.GetPublishingId() > 0 {
+			result[idx] = msg.GetPublishingId()
+		} else {
+			result[idx] = atomic.AddInt64(&producer.sequence, 1)
+		}
+	}
+
+	frameHeaderLength := 2 + 2 + 1 + 4
+	length := frameHeaderLength + msgLen
+	publishId := producer.ID
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandPublish)
+	writeByte(b, publishId)
+	writeInt(b, len(batchMessages)) //toExcluded - fromInclude
+
+	for i, msg := range batchMessages {
+		r, _ := msg.MarshalBinary()
+		writeLong(b, result[i]) // sequence
+		writeInt(b, len(r))     // len
+		b.Write(r)
+	}
+
+	bufferToWrite := b.Bytes()
+	if len(bufferToWrite) > producer.options.client.tuneState.requestedMaxFrameSize {
+		return nil, lookErrorCode(responseCodeFrameTooLarge)
+	}
+
+	err := producer.options.client.socket.writeAndFlush(b.Bytes())
+	// TODO handle the socket read error to close the producer
+	if err != nil {
+		//if producer.publishConfirm != nil {
+		//	var unConfirmedMessages []*UnConfirmedMessage
+		//	for i, message := range batchMessages {
+		//		unConfirmedMessages = append(unConfirmedMessages, &UnConfirmedMessage{
+		//			Message:    message,
+		//			ProducerID: producer.ID,
+		//			MessageID:  result[i],
+		//			Confirmed:  false,
+		//			Err:        err,
+		//		})
+		//		producer.removeUnConfirmed(result[i])
+		//	}
+		//	producer.publishConfirm <- unConfirmedMessages
+		//}
+
+		return nil, err
+	}
+	return result, nil
 }
 
 func (producer *Producer) BatchPublish(batchMessages []*amqp.Message) ([]int64, error) {

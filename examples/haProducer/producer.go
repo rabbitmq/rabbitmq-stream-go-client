@@ -80,7 +80,7 @@ func main() {
 	time.Sleep(4 * time.Second)
 	for i := 0; i < 1000000; i++ {
 		err := rProducer.BatchPublish(CreateArrayMessagesForTesting(10))
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		if i%1000 == 0 {
 			fmt.Println("sent.. " + strconv.Itoa(i))
 		}
