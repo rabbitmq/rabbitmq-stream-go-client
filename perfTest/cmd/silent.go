@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/spf13/cobra"
 	"math/rand"
@@ -204,7 +205,7 @@ func startPublisher(streamName string) error {
 	chPublishError := rPublisher.NotifyPublishError()
 	handlePublishError(chPublishError)
 
-	var arr []*amqp.Message
+	var arr []message.StreamMessage
 	var body string
 	for z := 0; z < batchSize; z++ {
 		if variableBody > 0 {
@@ -220,7 +221,7 @@ func startPublisher(streamName string) error {
 		arr = append(arr, amqp.NewMessage([]byte(body)))
 	}
 
-	go func(prod *ha.ReliableProducer, messages []*amqp.Message) {
+	go func(prod *ha.ReliableProducer, messages []message.StreamMessage) {
 		for {
 			if rate > 0 {
 				var v1 float64

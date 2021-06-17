@@ -390,12 +390,44 @@ type Message struct {
 	doneSignal chan struct{}
 }
 
+type AMQP10 struct {
+	publishingId int64
+	message      *Message
+}
+
+func NewMessage(data []byte) *AMQP10 {
+	return &AMQP10{
+		message:      newMessage(data),
+		publishingId: -1,
+	}
+}
+
+func (amqp *AMQP10) SetPublishingId(id int64) {
+	amqp.publishingId = id
+}
+
+func (amqp *AMQP10) GetPublishingId() int64 {
+	return amqp.publishingId
+}
+
+func (amqp *AMQP10) MarshalBinary() ([]byte, error) {
+	return amqp.message.MarshalBinary()
+}
+
+func (amqp *AMQP10) UnmarshalBinary(data []byte) error {
+	return amqp.message.UnmarshalBinary(data)
+}
+
+func (amqp *AMQP10) GetData() [][]byte {
+	return amqp.message.Data
+}
+
 // NewMessage returns a *Message with data as the payload.
 //
 // This constructor is intended as a helper for basic Messages with a
 // single data payload. It is valid to construct a Message directly for
 // more complex usages.
-func NewMessage(data []byte) *Message {
+func newMessage(data []byte) *Message {
 	return &Message{
 		Data:       [][]byte{data},
 		doneSignal: make(chan struct{}),

@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -142,7 +143,7 @@ var _ = Describe("Streaming Producers", func() {
 	It("pre Publisher errors / Frame too large / too many messages", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		var arr []*amqp.Message
+		var arr []message.StreamMessage
 		for z := 0; z < 100; z++ {
 			s := make([]byte, 15000)
 			arr = append(arr, amqp.NewMessage(s))

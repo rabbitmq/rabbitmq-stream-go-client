@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
@@ -22,8 +23,8 @@ func CheckErr(err error) {
 
 var idx = 0
 
-func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
-	var arr []*amqp.Message
+func CreateArrayMessagesForTesting(bacthMessages int) []message.StreamMessage {
+	var arr []message.StreamMessage
 	for z := 0; z < bacthMessages; z++ {
 		idx++
 		arr = append(arr, amqp.NewMessage([]byte(strconv.Itoa(idx))))
@@ -38,7 +39,7 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 			for _, m := range messagesIds {
 				if !m.Confirmed {
 					if atomic.AddInt32(&counter, 1)%10 == 0 {
-						fmt.Printf("Confirmed %s message - status %t - %d \n  ", m.Message.Data, m.Confirmed, atomic.LoadInt32(&counter))
+						fmt.Printf("Confirmed %s message - status %t - %d \n  ", m.Message.GetData(), m.Confirmed, atomic.LoadInt32(&counter))
 					}
 				}
 			}

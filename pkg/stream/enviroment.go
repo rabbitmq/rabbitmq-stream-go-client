@@ -389,8 +389,6 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 
 		}(chMeta, clientResult)
 
-		//clientResult.publishErrorListener = channelPublishErrListener
-
 		cc.nextId++
 		cc.clientsPerContext[cc.nextId] = clientResult
 	}
@@ -400,16 +398,22 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 		return nil, err
 	}
 
-	publisher, err := clientResult.DeclarePublisher(streamName, options)
+	producer, err := clientResult.DeclarePublisher(streamName, options)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return publisher, nil
+	if producer.options != nil {
+		if producer.options.Name != "" {
+			producer.sequence = clientResult.queryPublisherSequence(producer.options.Name, streamName)
+		}
+	}
+
+	return producer, nil
 }
 
-func (cc *environmentCoordinator) newConsumer(ctx context.Context, leader *Broker,
+func (cc *environmentCoordinator) newConsumer(leader *Broker,
 	streamName string, messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	cc.mutex.Lock()
@@ -447,7 +451,7 @@ func (cc *environmentCoordinator) newConsumer(ctx context.Context, leader *Broke
 		return nil, err
 	}
 
-	subscriber, err := clientResult.DeclareSubscriber(ctx, streamName, messagesHandler, options)
+	subscriber, err := clientResult.DeclareSubscriber(streamName, messagesHandler, options)
 
 	if err != nil {
 		return nil, err
@@ -570,7 +574,7 @@ func (ps *consumersEnvironment) NewSubscriber(ctx context.Context, clientLocator
 	}
 	consumerBroker.cloneFrom(clientLocator.broker)
 	consumer, err := ps.consumersCoordinator[consumerBroker.hostPort()].
-		newConsumer(ctx, consumerBroker, streamName, messagesHandler, consumerOptions)
+		newConsumer(consumerBroker, streamName, messagesHandler, consumerOptions)
 	if err != nil {
 		return nil, err
 	}

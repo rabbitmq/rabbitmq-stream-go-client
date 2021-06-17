@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"time"
@@ -18,8 +19,8 @@ func CheckErr(err error) {
 	}
 }
 
-func CreateArrayMessagesForTesting(batchMessages int) []*amqp.Message {
-	var arr []*amqp.Message
+func CreateArrayMessagesForTesting(batchMessages int) []message.StreamMessage {
+	var arr []message.StreamMessage
 	for z := 0; z < batchMessages; z++ {
 		arr = append(arr, amqp.NewMessage([]byte("1234567890")))
 	}

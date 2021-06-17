@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"net"
 	"sync"
@@ -69,7 +70,7 @@ func (p *ReliableProducer) NotifyPublishConfirmation() stream.ChannelPublishConf
 
 }
 
-func (p *ReliableProducer) BatchPublish(messages []*amqp.Message) error {
+func (p *ReliableProducer) BatchPublish(messages []message.StreamMessage) error {
 	if p.getStatus() == StatusStreamDoesNotExist {
 		return stream.StreamDoesNotExist
 	}
