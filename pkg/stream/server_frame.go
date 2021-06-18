@@ -72,6 +72,10 @@ func (c *Client) handleResponse() {
 				c.handleDeliver(buffer)
 
 			}
+		case commandQueryPublisherSequence:
+			{
+				c.queryPublisherSequenceFrameHandler(readerProtocol, buffer)
+			}
 		case CommandMetadataUpdate:
 			{
 
@@ -83,6 +87,7 @@ func (c *Client) handleResponse() {
 			}
 		case commandHeartbeat:
 			{
+
 				//logDebug("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 
 			}
@@ -220,10 +225,13 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	var unConfirmed []*UnConfirmedMessage
 	for publishingIdCount != 0 {
 		m := producer.getUnConfirmed(readInt64(r))
-		m.Confirmed = true
-		unConfirmed = append(unConfirmed, m)
+		if m != nil {
+			m.Confirmed = true
+			unConfirmed = append(unConfirmed, m)
+		}
 		publishingIdCount--
 	}
+
 	producer.mutex.Lock()
 	if producer.publishConfirm != nil {
 		producer.publishConfirm <- unConfirmed
@@ -235,6 +243,20 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		}
 	}
 	return 0
+}
+
+func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+
+	readProtocol.CorrelationId, _ = readUInt(r)
+	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
+	sequence := readInt64(r)
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	if err != nil {
+		// TODO handle readProtocol
+		return
+	}
+	res.code <- Code{id: readProtocol.ResponseCode}
+	res.data <- sequence
 }
 
 func (c *Client) handleDeliver(r *bufio.Reader) {

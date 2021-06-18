@@ -1,12 +1,13 @@
 package stream
 
 import (
-	"context"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
@@ -33,7 +34,7 @@ var _ = Describe("Streaming Consumers", func() {
 	It("Multi Consumers", func() {
 		var consumers []*Consumer
 		for i := 0; i < 10; i++ {
-			consumer, err := env.NewConsumer(context.TODO(), streamName,
+			consumer, err := env.NewConsumer(streamName,
 				func(consumerContext ConsumerContext, message *amqp.Message) {
 
 				}, nil)
@@ -64,7 +65,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		for i := 0; i < 10; i++ {
-			consumer, err := env.NewConsumer(context.TODO(), streamName,
+			consumer, err := env.NewConsumer(streamName,
 				func(consumerContext ConsumerContext, message *amqp.Message) {
 
 				}, nil)
@@ -84,7 +85,7 @@ var _ = Describe("Streaming Consumers", func() {
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		consumer, err := env.NewConsumer(context.TODO(), streamName,
+		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 
 			}, nil)
@@ -95,7 +96,7 @@ var _ = Describe("Streaming Consumers", func() {
 	})
 
 	It("Subscribe fail not exist", func() {
-		_, err := env.NewConsumer(context.TODO(), "NOT_EXIST",
+		_, err := env.NewConsumer("NOT_EXIST",
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 
 			}, nil)
@@ -108,7 +109,7 @@ var _ = Describe("Streaming Consumers", func() {
 	It("Consumer close handler unSubscribe", func() {
 		var commandIdRecv int32
 
-		consumer, err := env.NewConsumer(context.TODO(), streamName,
+		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 			}, nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -129,7 +130,7 @@ var _ = Describe("Streaming Consumers", func() {
 		streamName := uuid.New().String()
 		err := env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		consumer, err := env.NewConsumer(context.TODO(), streamName,
+		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 			}, nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -158,13 +159,47 @@ var _ = Describe("Streaming Consumers", func() {
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 		var messagesCount int32 = 0
-		consumer, err := env.NewConsumer(context.TODO(), streamName,
+		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesCount, 1)
 			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.Offset(50)))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(50)))
+		err = consumer.Close()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("Deduplication", func() {
+		producer, err := env.NewProducer(streamName, NewProducerOptions().SetProducerName("producer-ded"))
+		Expect(err).NotTo(HaveOccurred())
+		var arr []message.StreamMessage
+		for z := 0; z < 10; z++ {
+			m := amqp.NewMessage([]byte("test_" + strconv.Itoa(z)))
+			m.SetPublishingId(int64(z * 10))
+			arr = append(arr, m)
+		}
+
+		// here we handle the deduplication so we must have only
+		// 10 messages on the stream, since we are using the
+		// same SetPublishingId
+		for i := 0; i < 10; i++ {
+			_, err = producer.BatchPublish(arr)
+		}
+
+		Expect(err).NotTo(HaveOccurred())
+		// we can't close the subscribe until the publish is finished
+		time.Sleep(500 * time.Millisecond)
+		err = producer.Close()
+		Expect(err).NotTo(HaveOccurred())
+		var messagesCount int32 = 0
+		consumer, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				atomic.AddInt32(&messagesCount, 1)
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
 		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -180,7 +215,7 @@ var _ = Describe("Streaming Consumers", func() {
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 		var messagesCount int32 = 0
-		consumer, err := env.NewConsumer(context.TODO(), streamName,
+		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesCount, 1)
 				_ = consumerContext.Consumer.Commit()
@@ -192,7 +227,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		atomic.SwapInt32(&messagesCount, 0)
-		consumer, err = env.NewConsumer(context.TODO(), streamName,
+		consumer, err = env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesCount, 1)
 			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.LastConsumed()).

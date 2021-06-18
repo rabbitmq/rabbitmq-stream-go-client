@@ -45,6 +45,10 @@ func writeString(inputBuff *bytes.Buffer, value string) {
 	inputBuff.Write([]byte(value))
 }
 
+func writeBytes(inputBuff *bytes.Buffer, value []byte) {
+	inputBuff.Write(value)
+}
+
 // writeProtocolHeader  protocol utils functions
 func writeProtocolHeader(inputBuff *bytes.Buffer,
 	length int, command int16,

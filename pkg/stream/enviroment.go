@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"context"
 	"errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
@@ -18,7 +17,7 @@ type Environment struct {
 }
 
 func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
-	client := newClient("stream-locator")
+	client := newClient("go-stream-locator")
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
@@ -174,7 +173,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	return streamMetadata, nil
 }
 
-func (env *Environment) NewConsumer(ctx context.Context, streamName string,
+func (env *Environment) NewConsumer(streamName string,
 	messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	client, err := env.newReconnectClient()
@@ -190,8 +189,16 @@ func (env *Environment) NewConsumer(ctx context.Context, streamName string,
 	if options == nil {
 		options = NewConsumerOptions()
 	}
-	return env.consumers.NewSubscriber(ctx, client, streamName, messagesHandler, options)
+	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options)
 }
+
+//func (env *Environment) NewStreamMessage(data []byte) message.StreamMessage {
+//	env.options.Codec
+//	return &AMQP10{
+//		message:      newMessage(data),
+//		publishingId: -1,
+//	}
+//}
 
 func (env *Environment) Close() error {
 	_ = env.producers.close()
@@ -216,13 +223,11 @@ func NewEnvironmentOptions() *EnvironmentOptions {
 func (envOptions *EnvironmentOptions) SetMaxProducersPerClient(maxProducersPerClient int) *EnvironmentOptions {
 	envOptions.MaxProducersPerClient = maxProducersPerClient
 	return envOptions
-
 }
 
 func (envOptions *EnvironmentOptions) SetMaxConsumersPerClient(maxConsumersPerClient int) *EnvironmentOptions {
 	envOptions.MaxConsumersPerClient = maxConsumersPerClient
 	return envOptions
-
 }
 
 func (envOptions *EnvironmentOptions) SetUri(uri string) *EnvironmentOptions {
@@ -389,8 +394,6 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 
 		}(chMeta, clientResult)
 
-		//clientResult.publishErrorListener = channelPublishErrListener
-
 		cc.nextId++
 		cc.clientsPerContext[cc.nextId] = clientResult
 	}
@@ -400,16 +403,16 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 		return nil, err
 	}
 
-	publisher, err := clientResult.DeclarePublisher(streamName, options)
+	producer, err := clientResult.DeclarePublisher(streamName, options)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return publisher, nil
+	return producer, nil
 }
 
-func (cc *environmentCoordinator) newConsumer(ctx context.Context, leader *Broker,
+func (cc *environmentCoordinator) newConsumer(leader *Broker,
 	streamName string, messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	cc.mutex.Lock()
@@ -447,7 +450,7 @@ func (cc *environmentCoordinator) newConsumer(ctx context.Context, leader *Broke
 		return nil, err
 	}
 
-	subscriber, err := clientResult.DeclareSubscriber(ctx, streamName, messagesHandler, options)
+	subscriber, err := clientResult.DeclareSubscriber(streamName, messagesHandler, options)
 
 	if err != nil {
 		return nil, err
@@ -550,7 +553,7 @@ func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {
 	return producers
 }
 
-func (ps *consumersEnvironment) NewSubscriber(ctx context.Context, clientLocator *Client, streamName string,
+func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName string,
 	messagesHandler MessagesHandler,
 	consumerOptions *ConsumerOptions) (*Consumer, error) {
 	ps.mutex.Lock()
@@ -570,7 +573,7 @@ func (ps *consumersEnvironment) NewSubscriber(ctx context.Context, clientLocator
 	}
 	consumerBroker.cloneFrom(clientLocator.broker)
 	consumer, err := ps.consumersCoordinator[consumerBroker.hostPort()].
-		newConsumer(ctx, consumerBroker, streamName, messagesHandler, consumerOptions)
+		newConsumer(consumerBroker, streamName, messagesHandler, consumerOptions)
 	if err != nil {
 		return nil, err
 	}

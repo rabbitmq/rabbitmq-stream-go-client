@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"sync/atomic"
 )
 
 type UnConfirmedMessage struct {
-	Message    *amqp.Message
+	Message    message.StreamMessage
 	ProducerID uint8
 	MessageID  int64
 	Confirmed  bool
@@ -52,7 +52,7 @@ func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedMessage {
 	return producer.unConfirmedMessages
 }
 
-func (producer *Producer) addUnConfirmed(messageid int64, message *amqp.Message, producerID uint8) {
+func (producer *Producer) addUnConfirmed(messageid int64, message message.StreamMessage, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
 	producer.unConfirmedMessages[messageid] = &UnConfirmedMessage{
@@ -158,7 +158,7 @@ func (producer *Producer) ResendUnConfirmed(ctx context.Context) error {
 	return nil
 }
 
-func (producer *Producer) BatchPublish(batchMessages []*amqp.Message) ([]int64, error) {
+func (producer *Producer) BatchPublish(batchMessages []message.StreamMessage) ([]int64, error) {
 	if len(batchMessages) > 1000 {
 		return nil, fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
 	}
@@ -167,7 +167,14 @@ func (producer *Producer) BatchPublish(batchMessages []*amqp.Message) ([]int64, 
 	for idx, msg := range batchMessages {
 		r, _ := msg.MarshalBinary()
 		msgLen += len(r) + 8 + 4
-		result[idx] = atomic.AddInt64(&producer.sequence, 1)
+		if msg.GetPublishingId() >= 0 {
+			result[idx] = msg.GetPublishingId()
+		} else {
+			/// query_publish_id
+			///
+			result[idx] = atomic.AddInt64(&producer.sequence, 1)
+		}
+
 		producer.addUnConfirmed(result[idx], msg, producer.ID)
 	}
 

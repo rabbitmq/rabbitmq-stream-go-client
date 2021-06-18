@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
@@ -22,8 +22,8 @@ func CheckErr(err error) {
 
 var idx = 0
 
-func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
-	var arr []*amqp.Message
+func CreateArrayMessagesForTesting(bacthMessages int) []message.StreamMessage {
+	var arr []message.StreamMessage
 	for z := 0; z < bacthMessages; z++ {
 		idx++
 		arr = append(arr, amqp.NewMessage([]byte(strconv.Itoa(idx))))
@@ -38,7 +38,7 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 			for _, m := range messagesIds {
 				if !m.Confirmed {
 					if atomic.AddInt32(&counter, 1)%10 == 0 {
-						fmt.Printf("Confirmed %s message - status %t - %d \n  ", m.Message.Data, m.Confirmed, atomic.LoadInt32(&counter))
+						fmt.Printf("Confirmed %s message - status %t - %d \n  ", m.Message.GetData(), m.Confirmed, atomic.LoadInt32(&counter))
 					}
 				}
 			}
@@ -80,7 +80,7 @@ func main() {
 	time.Sleep(4 * time.Second)
 	for i := 0; i < 1000000; i++ {
 		err := rProducer.BatchPublish(CreateArrayMessagesForTesting(10))
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		if i%1000 == 0 {
 			fmt.Println("sent.. " + strconv.Itoa(i))
 		}
@@ -94,7 +94,7 @@ func main() {
 		fmt.Printf("messages consumed: %s \n ", message.Data)
 	}
 
-	consumer, err := env.NewConsumer(context.TODO(), streamName,
+	consumer, err := env.NewConsumer(streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
 			SetConsumerName("my_consumer"))

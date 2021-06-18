@@ -3,7 +3,6 @@ package stream
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
@@ -378,6 +377,12 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 
 func (c *Client) internalDeclarePublisher(streamName string, producer *Producer) responseError {
 	publisherReferenceSize := 0
+	if producer.options != nil {
+		if producer.options.Name != "" {
+			publisherReferenceSize = len(producer.options.Name)
+		}
+	}
+
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(streamName)
 	resp := c.coordinator.NewResponse(commandDeclarePublisher, streamName)
 	correlationId := resp.correlationid
@@ -387,8 +392,17 @@ func (c *Client) internalDeclarePublisher(streamName string, producer *Producer)
 
 	writeByte(b, producer.ID)
 	writeShort(b, int16(publisherReferenceSize))
+	if publisherReferenceSize > 0 {
+		writeBytes(b, []byte(producer.options.Name))
+	}
+
 	writeString(b, streamName)
 	res := c.handleWrite(b.Bytes(), resp)
+
+	if publisherReferenceSize > 0 {
+		producer.sequence = c.queryPublisherSequence(producer.options.Name, streamName)
+	}
+
 	return res
 }
 
@@ -418,6 +432,23 @@ func (c *Client) metaData(streams ...string) *StreamsMetadata {
 
 	data := <-resp.data
 	return data.(*StreamsMetadata)
+}
+
+func (c *Client) queryPublisherSequence(publisherReference string, stream string) int64 {
+
+	length := 2 + 2 + 4 + 2 + len(publisherReference) + 2 + len(stream)
+	resp := c.coordinator.NewResponse(commandQueryPublisherSequence)
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandQueryPublisherSequence, correlationId)
+
+	writeString(b, publisherReference)
+	writeString(b, stream)
+	c.handleWrite(b.Bytes(), resp)
+
+	sequence := <-resp.data
+	return sequence.(int64)
+
 }
 
 func (c *Client) BrokerLeader(stream string) (*Broker, error) {
@@ -499,7 +530,7 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 
 }
 
-func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
+func (c *Client) DeclareSubscriber(streamName string,
 	messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	options.client = c
@@ -567,6 +598,7 @@ func (c *Client) DeclareSubscriber(ctx context.Context, streamName string,
 				for _, message := range messages {
 					consumer.MessagesHandler(ConsumerContext{Consumer: consumer}, message)
 				}
+
 			}
 		}
 	}()

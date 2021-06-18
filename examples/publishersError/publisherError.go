@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 
 	//"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
@@ -20,8 +21,8 @@ func CheckErr(err error) {
 	}
 }
 
-func CreateArrayMessagesForTesting(bacthMessages int) []*amqp.Message {
-	var arr []*amqp.Message
+func CreateArrayMessagesForTesting(bacthMessages int) []message.StreamMessage {
+	var arr []message.StreamMessage
 	for z := 0; z < bacthMessages; z++ {
 		arr = append(arr, amqp.NewMessage([]byte("hello_world_"+strconv.Itoa(z))))
 	}
@@ -96,7 +97,7 @@ func handlePublishError(publishError stream.ChannelPublishError) {
 			atomic.AddInt32(&totalMessages, 1)
 			var data [][]byte
 			if pError.UnConfirmedMessage != nil {
-				data = pError.UnConfirmedMessage.Message.Data
+				data = pError.UnConfirmedMessage.Message.GetData()
 			}
 			fmt.Printf("Error during publish, message:%s ,  error: %s. Total %d  \n", data, pError.Err, totalMessages)
 		}
