@@ -150,14 +150,14 @@ func (consumer *Consumer) Close() error {
 	return err.Err
 }
 
-func (consumer *Consumer) Commit() error {
+func (consumer *Consumer) StoreOffset() error {
 	if consumer.options.streamName == "" {
 		return fmt.Errorf("stream Name can't be empty")
 	}
 	length := 2 + 2 + 2 + len(consumer.options.ConsumerName) + 2 +
 		len(consumer.options.streamName) + 8
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandCommitOffset)
+	writeProtocolHeader(b, length, commandStoreOffset)
 
 	writeString(b, consumer.options.ConsumerName)
 	writeString(b, consumer.options.streamName)

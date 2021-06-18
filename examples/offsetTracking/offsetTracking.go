@@ -69,8 +69,8 @@ func main() {
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		if atomic.AddInt32(&count, 1)%1000 == 0 {
 			fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
-			// AVOID to commit for each single message, it will reduce the performances
-			err := consumerContext.Consumer.Commit()
+			// AVOID to store for each single message, it will reduce the performances
+			err := consumerContext.Consumer.StoreOffset()
 			if err != nil {
 				CheckErr(err)
 			}
