@@ -409,12 +409,6 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 		return nil, err
 	}
 
-	if producer.options != nil {
-		if producer.options.Name != "" {
-			producer.sequence = clientResult.queryPublisherSequence(producer.options.Name, streamName)
-		}
-	}
-
 	return producer, nil
 }
 

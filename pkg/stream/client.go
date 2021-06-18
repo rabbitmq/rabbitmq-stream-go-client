@@ -398,6 +398,11 @@ func (c *Client) internalDeclarePublisher(streamName string, producer *Producer)
 
 	writeString(b, streamName)
 	res := c.handleWrite(b.Bytes(), resp)
+
+	if publisherReferenceSize > 0 {
+		producer.sequence = c.queryPublisherSequence(producer.options.Name, streamName)
+	}
+
 	return res
 }
 
