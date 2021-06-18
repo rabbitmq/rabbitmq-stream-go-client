@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
@@ -79,7 +78,7 @@ func main() {
 
 	}
 
-	consumer, err := env.NewConsumer(context.TODO(),
+	consumer, err := env.NewConsumer(
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().

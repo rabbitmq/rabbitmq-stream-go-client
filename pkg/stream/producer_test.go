@@ -118,7 +118,6 @@ var _ = Describe("Streaming Producers", func() {
 
 	It("Publish Error", func() {
 		var messagesCount int32 = 0
-
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		chPublishError := producer.NotifyPublishError()

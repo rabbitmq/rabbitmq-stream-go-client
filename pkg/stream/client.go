@@ -593,10 +593,9 @@ func (c *Client) DeclareSubscriber(streamName string,
 				for _, message := range messages {
 					consumer.MessagesHandler(ConsumerContext{Consumer: consumer}, message)
 				}
+
 			}
 		}
 	}()
 	return consumer, err.Err
 }
-
-

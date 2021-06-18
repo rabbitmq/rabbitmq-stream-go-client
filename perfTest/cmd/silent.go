@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
@@ -319,7 +318,7 @@ func startConsumer(consumerName string, streamName string) error {
 			}
 		}
 	}
-	consumer, err := simulEnvironment.NewConsumer(context.TODO(),
+	consumer, err := simulEnvironment.NewConsumer(
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().

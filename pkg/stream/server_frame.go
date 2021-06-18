@@ -87,6 +87,7 @@ func (c *Client) handleResponse() {
 			}
 		case commandHeartbeat:
 			{
+
 				//logDebug("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 
 			}
@@ -210,10 +211,6 @@ func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
 
 }
 
-
-
-
-
 func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 
 	readProtocol.PublishID = readByte(r)
@@ -261,7 +258,6 @@ func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- sequence
 }
-
 
 func (c *Client) handleDeliver(r *bufio.Reader) {
 
