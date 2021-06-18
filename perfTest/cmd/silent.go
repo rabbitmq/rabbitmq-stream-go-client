@@ -310,11 +310,11 @@ func handleConsumerClose(channelClose stream.ChannelClose) {
 func startConsumer(consumerName string, streamName string) error {
 
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		//logError("consumerMessageCount Commit: %s", consumerMessageCount)
+		//logError("consumerMessageCount StoreOffset: %s", consumerMessageCount)
 		if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
-			err := consumerContext.Consumer.Commit()
+			err := consumerContext.Consumer.StoreOffset()
 			if err != nil {
-				logError("Error Commit: %s", err)
+				logError("Error StoreOffset: %s", err)
 			}
 		}
 	}

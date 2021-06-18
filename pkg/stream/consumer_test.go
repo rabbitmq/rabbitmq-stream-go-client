@@ -218,7 +218,7 @@ var _ = Describe("Streaming Consumers", func() {
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesCount, 1)
-				_ = consumerContext.Consumer.Commit()
+				_ = consumerContext.Consumer.StoreOffset()
 			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)

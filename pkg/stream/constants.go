@@ -17,7 +17,7 @@ const (
 	commandSubscribe              = 7
 	commandDeliver                = 8
 	commandCredit                 = 9
-	commandCommitOffset           = 10
+	commandStoreOffset            = 10
 	CommandQueryOffset            = 11
 	CommandUnsubscribe            = 12
 	commandCreateStream           = 13
