@@ -30,10 +30,8 @@ func CreateArrayMessagesForTesting(bacthMessages int) []message.StreamMessage {
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
-	// Set log level, not mandatory by default is INFO
-	//stream.SetLevelInfo(stream.DEBUG)
 
-	fmt.Println("Getting started with Streaming client for RabbitMQ")
+	fmt.Println("Tracking offset example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
 	env, err := stream.NewEnvironment(
@@ -55,7 +53,6 @@ func main() {
 	producer, err := env.NewProducer(streamName, nil)
 	CheckErr(err)
 
-	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
 	go func() {
 		for i := 0; i < 100; i++ {
 			_, err := producer.BatchPublish(CreateArrayMessagesForTesting(100))
@@ -70,6 +67,7 @@ func main() {
 		if atomic.AddInt32(&count, 1)%1000 == 0 {
 			fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
 			// AVOID to store for each single message, it will reduce the performances
+			// The server keeps the consume tracking using the consumer name
 			err := consumerContext.Consumer.StoreOffset()
 			if err != nil {
 				CheckErr(err)

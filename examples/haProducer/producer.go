@@ -48,10 +48,8 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
-	// Set log level, not mandatory by default is INFO
-	//stream.SetLevelInfo(stream.DEBUG)
 
-	fmt.Println("Getting started with Streaming client for RabbitMQ")
+	fmt.Println("HA producer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
 	env, err := stream.NewEnvironment(
@@ -61,9 +59,6 @@ func main() {
 			SetUser("guest").
 			SetPassword("guest"))
 	CheckErr(err)
-	// Create a stream, you can create streams without any option like:
-	// err = env.DeclareStream(streamName, nil)
-	// it is a best practise to define a size,  1GB for example:
 
 	streamName := "test"
 	err = env.DeclareStream(streamName,
