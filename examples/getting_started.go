@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
@@ -50,11 +51,12 @@ func consumerClose(channelClose stream.ChannelClose) {
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 	// Set log level, not mandatory by default is INFO
-	//stream.SetLevelInfo(stream.DEBUG)
+	stream.SetLevelInfo(logs.DEBUG)
 
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
+	// Connect to the broker ( or brokers )
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
@@ -75,6 +77,7 @@ func main() {
 
 	CheckErr(err)
 
+	// Get a new producer for a stream
 	producer, err := env.NewProducer(streamName, nil)
 	CheckErr(err)
 
@@ -94,7 +97,7 @@ func main() {
 	CheckErr(err)
 
 	// Define a consumer per stream, there are different offset options to define a consumer, default is
-	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.UnConfirmedMessage) {
+	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.Message) {
 	//
 	//}, nil)
 	// if you need to track the offset you need a consumer name like:

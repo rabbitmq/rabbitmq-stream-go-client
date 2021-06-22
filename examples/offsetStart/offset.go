@@ -28,10 +28,8 @@ func CreateArrayMessagesForTesting(batchMessages int) []message.StreamMessage {
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
-	// Set log level, not mandatory by default is INFO
-	//stream.SetLevelInfo(stream.DEBUG)
 
-	fmt.Println("Getting started with Streaming client for RabbitMQ")
+	fmt.Println("Start Offset example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
 	env, err := stream.NewEnvironment(
@@ -42,9 +40,6 @@ func main() {
 			SetPassword("guest").
 			SetMaxConsumersPerClient(1))
 	CheckErr(err)
-	// Create a stream, you can create streams without any option like:
-	// err = env.DeclareStream(streamName, nil)
-	// it is a best practise to define a size,  1GB for example:
 	streamName := uuid.New().String()
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
@@ -73,8 +68,10 @@ func main() {
 	consumer, err := env.NewConsumer(streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer").                      // set a consumer name
-			SetOffset(stream.OffsetSpecification{}.Offset(100))) // start specific offset, in this case we start from the 100 so it will consume 100 messages
+			SetConsumerName("my_consumer"). // set a consumer name
+			SetOffset(stream.OffsetSpecification{}.Offset(100)))
+	// start specific offset, in this case we start from the 100 so it will consume 100 messages
+	// see the others stream.OffsetSpecification{}.XXX
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")

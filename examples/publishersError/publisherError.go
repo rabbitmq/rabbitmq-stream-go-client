@@ -31,33 +31,17 @@ func CreateArrayMessagesForTesting(bacthMessages int) []message.StreamMessage {
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
-	// Set log level, not mandatory by default is INFO
-	//stream.SetLevelInfo(stream.DEBUG)
 
-	fmt.Println("Getting started with Streaming client for RabbitMQ")
+	fmt.Println("Publish Error example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
-	//chPublishError := make(chan stream.PublishError, 10)
-	//go func(ch chan stream.PublishError) {
-	//
-	//	for {
-	//		pError := <-ch
-	//		atomic.AddInt32(&totalMessages, 1)
-	//		fmt.Printf("Error during publish, message:%s ,  error: %s \n", pError.UnConfirmedMessage.UnConfirmedMessage.Data, pError.Err)
-	//	}
-	//
-	//}(chPublishError)
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
 			SetPort(5552).
 			SetUser("guest").
 			SetPassword("guest"))
-	//SetPublishErrorListener(chPublishError))
 	CheckErr(err)
-	// Create a stream, you can create streams without any option like:
-	// err = env.DeclareStream(streamName, nil)
-	// it is a best practise to define a size,  1GB for example:
 	streamName := uuid.New().String()
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
@@ -69,17 +53,20 @@ func main() {
 	producer, err := env.NewProducer(streamName, &stream.ProducerOptions{Name: "myProducer"})
 	CheckErr(err)
 
+	// This channel receives the callback in case the is some error during the
+	// publisher.
 	chPublishError := producer.NotifyPublishError()
 	handlePublishError(chPublishError)
 
-	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
 	go func() {
 		for i := 0; i < 100; i++ {
 			_, err := producer.BatchPublish(CreateArrayMessagesForTesting(2))
 			CheckErr(err)
 		}
 	}()
-	//time.Sleep(100 * time.Millisecond)
+	// Here we close the producer during the publishing
+	// so an publish error is raised
+
 	err = producer.Close()
 	CheckErr(err)
 
