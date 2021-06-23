@@ -66,7 +66,7 @@ const (
 	LocalhostUriConnection = "rabbitmq-stream://guest:guest@localhost:5552/%2f"
 
 	///
-	defaultReadSocketBuffer = 4096 * 2
+	defaultSocketBuffer = 4096 * 2
 
 	//
 	ClientVersion = "0.7-alpha"

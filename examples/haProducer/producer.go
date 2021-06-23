@@ -67,7 +67,7 @@ func main() {
 		},
 	)
 
-	rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha")
+	rProducer, err := ha.NewHAProducer(env, streamName, nil)
 	CheckErr(err)
 
 	chPublishConfirm := rProducer.NotifyPublishConfirmation()
