@@ -14,7 +14,7 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client")
+			client = newClient("test-client", nil)
 
 		})
 		AfterEach(func() {
@@ -132,7 +132,7 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client")
+			client = newClient("test-client", nil)
 
 		})
 		AfterEach(func() {
@@ -186,7 +186,7 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client")
+			client = newClient("test-client", nil)
 
 		})
 		AfterEach(func() {

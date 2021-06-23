@@ -192,7 +192,7 @@ func handlePublishError(publishError stream.ChannelPublishError) {
 
 func startPublisher(streamName string) error {
 
-	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName, fmt.Sprintf("pub-%s", streamName))
+	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName, nil)
 	if err != nil {
 		logError("Error create publisher: %s", err)
 		return err

@@ -6,7 +6,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,29 +18,29 @@ const (
 )
 
 type ReliableProducer struct {
-	env            *stream.Environment
-	producer       *stream.Producer
-	status         int
-	backoff        int
-	streamName     string
-	producerName   string
-	mutex          *sync.Mutex
-	mutexStatus    *sync.Mutex
-	publishChannel chan []*amqp.Message
-	totalSent      int64
+	env             *stream.Environment
+	producer        *stream.Producer
+	status          int
+	backoff         int
+	streamName      string
+	producerOptions *stream.ProducerOptions
+	mutex           *sync.Mutex
+	mutexStatus     *sync.Mutex
+	publishChannel  chan []*amqp.Message
+	totalSent       int64
 }
 
-func NewHAProducer(env *stream.Environment, streamName string, producerName string) (*ReliableProducer, error) {
+func NewHAProducer(env *stream.Environment, streamName string, producerOptions *stream.ProducerOptions) (*ReliableProducer, error) {
 	res := &ReliableProducer{
-		env:            env,
-		producer:       nil,
-		status:         StatusClosed,
-		backoff:        1,
-		streamName:     streamName,
-		producerName:   producerName,
-		mutex:          &sync.Mutex{},
-		mutexStatus:    &sync.Mutex{},
-		publishChannel: make(chan []*amqp.Message, 1),
+		env:             env,
+		producer:        nil,
+		status:          StatusClosed,
+		backoff:         1,
+		streamName:      streamName,
+		producerOptions: producerOptions,
+		mutex:           &sync.Mutex{},
+		mutexStatus:     &sync.Mutex{},
+		publishChannel:  make(chan []*amqp.Message, 1),
 	}
 	newProducer := res.newProducer()
 	if newProducer == nil {
@@ -53,7 +53,7 @@ func NewHAProducer(env *stream.Environment, streamName string, producerName stri
 func (p *ReliableProducer) newProducer() error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	producer, err := p.env.NewProducer(p.streamName, stream.NewProducerOptions().SetProducerName(p.producerName))
+	producer, err := p.env.NewProducer(p.streamName, p.producerOptions)
 	if err != nil {
 		return err
 	}
@@ -82,9 +82,9 @@ func (p *ReliableProducer) BatchPublish(messages []message.StreamMessage) error 
 	_, errW := p.producer.BatchPublish(messages)
 	p.mutex.Unlock()
 	p.totalSent += 1
-	switch err := errW.(type) {
-	case *net.OpError:
-		fmt.Printf("cant %s \n", err.Err)
+	// tls e non tls  connections have different error message
+	if errW != nil && strings.Index(errW.Error(), "closed") > 0 {
+		fmt.Printf("cant %s \n", errW.Error())
 		time.Sleep(200 * time.Millisecond)
 		exists, errS := p.env.StreamExists(p.streamName)
 		if errS != nil {

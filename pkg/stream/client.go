@@ -3,12 +3,14 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
 	"net"
 	"net/url"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -28,14 +30,20 @@ type Client struct {
 	tuneState        TuneState
 	coordinator      *Coordinator
 	broker           *Broker
+
 	mutex            *sync.Mutex
 	metadataListener metadataListener
 }
 
-func newClient(connectionName string) *Client {
+func newClient(connectionName string, broker *Broker) *Client {
+	var clientBroker = broker
+	if broker == nil {
+		clientBroker = newBrokerDefault()
+	}
+
 	c := &Client{
 		coordinator:      NewCoordinator(),
-		broker:           newBrokerDefault(),
+		broker:           clientBroker,
 		destructor:       &sync.Once{},
 		mutex:            &sync.Mutex{},
 		clientProperties: ClientProperties{items: make(map[string]string)},
@@ -62,28 +70,55 @@ func (c *Client) connect() error {
 			return err
 		}
 		host, port := u.Hostname(), u.Port()
-
 		c.tuneState.requestedHeartbeat = 60
 		c.tuneState.requestedMaxFrameSize = 1048576
-		resolver, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
-		if err != nil {
-			logs.LogDebug("%s", err)
-			return err
+
+		var dialer = &net.Dialer{
+			Control: func(network, address string, c syscall.RawConn) error {
+				return c.Control(func(fd uintptr) {
+					err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF, defaultSocketBuffer)
+					if err != nil {
+						logs.LogError("Set socket option error: %s", err)
+						return
+					}
+
+					err = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, defaultSocketBuffer)
+					if err != nil {
+						logs.LogError("Set socket option error: %s", err)
+						return
+					}
+				})
+			},
 		}
-		connection, err2 := net.DialTCP("tcp", nil, resolver)
-		if err2 != nil {
-			logs.LogDebug("%s", err2)
-			return err2
-		}
-		err2 = connection.SetReadBuffer(defaultReadSocketBuffer)
-		if err2 != nil {
-			logs.LogDebug("%s", err2)
-			return err2
-		}
-		err2 = connection.SetWriteBuffer(defaultReadSocketBuffer)
-		if err2 != nil {
-			logs.LogDebug("%s", err2)
-			return err2
+
+		var connection net.Conn
+		var errorConnection error
+		if c.broker.isTLS() {
+			conf := &tls.Config{
+				InsecureSkipVerify: true,
+			}
+
+			if c.broker.tlsConfig != nil {
+				conf = c.broker.tlsConfig
+			}
+
+			var tlsDial = &tls.Dialer{
+				NetDialer: dialer,
+				Config:    conf,
+			}
+
+			connection, errorConnection = tlsDial.Dial("tcp", net.JoinHostPort(host, port))
+			if errorConnection != nil {
+				logs.LogDebug("TLS error connection %s", errorConnection)
+				return errorConnection
+			}
+
+		} else {
+			connection, errorConnection = dialer.Dial("tcp", net.JoinHostPort(host, port))
+			if errorConnection != nil {
+				logs.LogDebug("%s", errorConnection)
+				return errorConnection
+			}
 		}
 
 		c.setSocket(socket{connection: connection, mutex: &sync.Mutex{},
@@ -93,7 +128,7 @@ func (c *Client) connect() error {
 		c.socket.setOpen()
 
 		go c.handleResponse()
-		err2 = c.peerProperties()
+		err2 := c.peerProperties()
 
 		if err2 != nil {
 			logs.LogDebug("%s", err2)

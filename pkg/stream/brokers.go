@@ -1,28 +1,37 @@
 package stream
 
 import (
+	"crypto/tls"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 )
 
 type Broker struct {
-	Host     string
-	Port     string
-	User     string
-	Vhost    string
-	Uri      string
-	Password string
+	Host      string
+	Port      string
+	User      string
+	Vhost     string
+	Uri       string
+	Password  string
+	Scheme    string
+	tlsConfig *tls.Config
 }
 
 func newBrokerDefault() *Broker {
 	return &Broker{
+		Scheme:   "rabbitmq-stream",
 		Host:     "localhost",
 		Port:     StreamTcpPort,
 		User:     "guest",
 		Password: "guest",
 		Vhost:    "/",
 	}
+}
+
+func (br *Broker) isTLS() bool {
+	return strings.Index(br.Scheme, "+tls") > 0
 }
 
 func (br *Broker) mergeWithDefault() {
@@ -46,6 +55,13 @@ func (br *Broker) mergeWithDefault() {
 	if br.Port == "" {
 		br.Port = broker.Port
 	}
+	if br.Scheme == "" {
+		br.Scheme = broker.Scheme
+	}
+
+	if br.tlsConfig == nil {
+		br.tlsConfig = broker.tlsConfig
+	}
 
 }
 
@@ -53,12 +69,15 @@ func (br *Broker) cloneFrom(broker *Broker) {
 	br.User = broker.User
 	br.Password = broker.Password
 	br.Vhost = broker.Vhost
+	br.Scheme = broker.Scheme
+	br.tlsConfig = broker.tlsConfig
 
 }
 
 func (br *Broker) GetUri() string {
 	if br.Uri == "" {
-		br.Uri = fmt.Sprintf("rabbitmq-streaming://%s:%s@%s:%s/%s",
+		br.Uri = fmt.Sprintf("%s://%s:%s@%s:%s/%s",
+			br.Scheme,
 			br.User, br.Password,
 			br.Host, br.Port, br.Vhost)
 	}

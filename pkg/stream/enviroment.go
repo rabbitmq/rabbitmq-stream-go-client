@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"crypto/tls"
 	"errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
@@ -17,7 +18,7 @@ type Environment struct {
 }
 
 func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
-	client := newClient("go-stream-locator")
+	client := newClient("go-stream-locator", nil)
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
@@ -50,13 +51,13 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 			parameter.Password, _ = u.User.Password()
 			parameter.Host = u.Host
 			parameter.Port = u.Port()
+			parameter.Scheme = u.Scheme
 		}
 
 		parameter.mergeWithDefault()
 
 		client.broker = parameter
 	}
-
 	return &Environment{
 		options:   options,
 		producers: newProducers(options.MaxProducersPerClient),
@@ -64,8 +65,9 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	}, client.connect()
 }
 func (env *Environment) newReconnectClient() (*Client, error) {
-	client := newClient("stream-locator")
-	client.broker = env.options.ConnectionParameters[0]
+	broker := &env.options.ConnectionParameters[0]
+	client := newClient("go-stream-locator", *broker)
+
 	err := client.connect()
 	tentatives := 1
 	for err != nil {
@@ -74,8 +76,7 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 		time.Sleep(time.Duration(tentatives) * time.Second)
 		rand.Seed(time.Now().UnixNano())
 		n := rand.Intn(len(env.options.ConnectionParameters))
-		client = newClient("stream-locator")
-		client.broker = env.options.ConnectionParameters[n]
+		client = newClient("stream-locator", env.options.ConnectionParameters[n])
 		tentatives = tentatives + 1
 		err = client.connect()
 
@@ -256,6 +257,31 @@ func (envOptions *EnvironmentOptions) SetHost(host string) *EnvironmentOptions {
 	return envOptions
 }
 
+func (envOptions *EnvironmentOptions) SetTLSConfig(config *tls.Config) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{tlsConfig: config})
+	} else {
+		for _, parameter := range envOptions.ConnectionParameters {
+			parameter.tlsConfig = config
+		}
+	}
+
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) IsTLS(val bool) *EnvironmentOptions {
+	if val {
+		if len(envOptions.ConnectionParameters) == 0 {
+			envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Scheme: "rabbitmq-stream+tls"})
+		} else {
+			for _, parameter := range envOptions.ConnectionParameters {
+				parameter.Scheme = "rabbitmq-stream+tls"
+			}
+		}
+	}
+	return envOptions
+}
+
 func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
 		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Port: strconv.Itoa(port)})
@@ -379,9 +405,8 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 	}
 
 	if clientResult == nil {
-		clientResult = newClient("go-stream-producer")
-		clientResult.broker = leader
-		chMeta := make(chan metaDataUpdateEvent, 10)
+		clientResult = newClient("go-stream-producer", leader)
+		chMeta := make(chan metaDataUpdateEvent, 1)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
 			for metaDataUpdateEvent := range ch {
@@ -426,8 +451,7 @@ func (cc *environmentCoordinator) newConsumer(leader *Broker,
 	}
 
 	if clientResult == nil {
-		clientResult = newClient("stream-consumer")
-		clientResult.broker = leader
+		clientResult = newClient("go-stream-consumer", leader)
 		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
