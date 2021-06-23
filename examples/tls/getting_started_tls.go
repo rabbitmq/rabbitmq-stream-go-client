@@ -67,6 +67,8 @@ func main() {
 			SetPassword("guest").
 			IsTLS(true).
 			// default value is InsecureSkipVerify: true
+			// in case of InsecureSkipVerify: true
+			// this line is not necessary
 			SetTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
 	CheckErr(err)
