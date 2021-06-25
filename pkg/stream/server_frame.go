@@ -3,11 +3,11 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"hash/crc32"
 	"io"
-	"sync/atomic"
 )
 
 type ReaderProtocol struct {
@@ -260,7 +260,6 @@ func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- sequence
 }
-var counter int32
 
 func (c *Client) handleDeliver(r *bufio.Reader) {
 
@@ -283,21 +282,10 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
 
-
-
-	if dataLength <= uint32(r.Buffered()) {
-		if atomic.AddInt32(&counter,1) % 100 == 0 {
-			logs.LogInfo("Checked CRC %d", atomic.LoadInt32(&counter) )
-		}
-
-		bytesCrc, _ := r.Peek(int(dataLength))
-		checkSum := crc32.ChecksumIEEE(bytesCrc)
-		if crc != checkSum {
-			logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
-			panic("Error during CRC")
-			/// ???
-		}
+	if len(c.plainCRCBuffer) < int(dataLength) {
+		c.plainCRCBuffer = make([]byte, dataLength)
 	}
+
 
 	c.credit(subscriptionId, 1)
 
@@ -311,6 +299,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	//messages
 	var batchConsumingMessages []*amqp.Message
+	position := 0
+
 	for numRecords != 0 {
 		entryType, err := peekByte(r)
 		if err != nil {
@@ -323,8 +313,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		}
 		if (entryType & 0x80) == 0 {
 			sizeMessage, _ := readUInt(r)
-
+			binary.BigEndian.PutUint32(c.plainCRCBuffer[position:], sizeMessage)
+			position = position + 4
 			arrayMessage := readUint8Array(r, sizeMessage)
+
+			copy(c.plainCRCBuffer[position:], arrayMessage)
+			position = position + int(sizeMessage)
+
 			if filter && (offset < offsetLimit) {
 				/// TODO set recordset as filtered
 			} else {
@@ -343,8 +338,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		offset++
 	}
 
-	//logs.LogError("ZERo expected %d", r.Buffered())
+	checkSum := crc32.ChecksumIEEE(c.plainCRCBuffer[0:dataLength])
 
+	if crc != checkSum {
+		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
+		panic("Error during CRC")
+	} /// ???
+	//
 	consumer.response.data <- offset
 	consumer.response.messages <- batchConsumingMessages
 

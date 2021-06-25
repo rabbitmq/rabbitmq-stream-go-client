@@ -31,6 +31,7 @@ type Client struct {
 	tuneState        TuneState
 	coordinator      *Coordinator
 	broker           *Broker
+	plainCRCBuffer   []byte
 
 	mutex            *sync.Mutex
 	metadataListener metadataListener
@@ -48,6 +49,7 @@ func newClient(connectionName string, broker *Broker) *Client {
 		destructor:       &sync.Once{},
 		mutex:            &sync.Mutex{},
 		clientProperties: ClientProperties{items: make(map[string]string)},
+		plainCRCBuffer:   make([]byte, 4096),
 	}
 	c.setConnectionName(connectionName)
 	return c
