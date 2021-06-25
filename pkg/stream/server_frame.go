@@ -7,6 +7,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"hash/crc32"
 	"io"
+	"sync/atomic"
 )
 
 type ReaderProtocol struct {
@@ -259,8 +260,10 @@ func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- sequence
 }
+var counter int32
 
 func (c *Client) handleDeliver(r *bufio.Reader) {
+
 	subscriptionId := readByte(r)
 	consumer, _ := c.coordinator.GetConsumerById(subscriptionId)
 
@@ -283,11 +286,15 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 
 	if dataLength <= uint32(r.Buffered()) {
-		logs.LogInfo("Check CRC %d", dataLength)
+		if atomic.AddInt32(&counter,1) % 100 == 0 {
+			logs.LogInfo("Checked CRC %d", atomic.LoadInt32(&counter) )
+		}
+
 		bytesCrc, _ := r.Peek(int(dataLength))
 		checkSum := crc32.ChecksumIEEE(bytesCrc)
 		if crc != checkSum {
 			logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
+			panic("Error during CRC")
 			/// ???
 		}
 	}
