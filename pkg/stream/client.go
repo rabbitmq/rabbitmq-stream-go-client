@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -77,16 +78,19 @@ func (c *Client) connect() error {
 			Control: func(network, address string, c syscall.RawConn) error {
 				return c.Control(func(fd uintptr) {
 					err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF, defaultSocketBuffer)
+					runtime.KeepAlive(fd)
 					if err != nil {
 						logs.LogError("Set socket option error: %s", err)
 						return
 					}
 
 					err = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, defaultSocketBuffer)
+					runtime.KeepAlive(fd)
 					if err != nil {
 						logs.LogError("Set socket option error: %s", err)
 						return
 					}
+
 				})
 			},
 		}

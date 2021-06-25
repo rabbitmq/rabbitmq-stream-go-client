@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"hash/crc32"
 	"io"
 )
 
@@ -275,28 +276,19 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_ = readInt64(r) // timestamp
 	_ = readInt64(r) // epoch, unsigned long
 	offset := readInt64(r)
+	crc, _ := readUInt(r)
+	dataLength, _ := readUInt(r)
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
-	_, _ = readUInt(r)
-	_, _ = readUInt(r)
+	bytesCrc, _ := r.Peek(int(dataLength))
 
-	// crc
+	checkSum := crc32.ChecksumIEEE(bytesCrc)
 
-	//try {
-	//	// TODO handle exception in exception handler
-	//	chunkChecksum.checksum(message, dataLength, crc);
-	//} catch (ChunkChecksumValidationException e) {
-	//	LOGGER.warn(
-	//		"Checksum failure at offset {}, expecting {}, got {}",
-	//		offset,
-	//		e.getExpected(),
-	//		e.getComputed());
-	//	throw e;
-	//}
+	if crc != checkSum {
+		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
+		/// ???
+	}
 
-	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
-	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
-	//fmt.Printf("%d numRecords %d \n", offset, numRecords)
 	c.credit(subscriptionId, 1)
 
 	var offsetLimit int64 = -1
