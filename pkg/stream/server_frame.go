@@ -261,7 +261,6 @@ func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol
 }
 
 func (c *Client) handleDeliver(r *bufio.Reader) {
-
 	subscriptionId := readByte(r)
 	consumer, _ := c.coordinator.GetConsumerById(subscriptionId)
 
@@ -280,13 +279,17 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	dataLength, _ := readUInt(r)
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
-	bytesCrc, _ := r.Peek(int(dataLength))
 
-	checkSum := crc32.ChecksumIEEE(bytesCrc)
 
-	if crc != checkSum {
-		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
-		/// ???
+
+	if dataLength <= uint32(r.Buffered()) {
+		logs.LogInfo("Check CRC %d", dataLength)
+		bytesCrc, _ := r.Peek(int(dataLength))
+		checkSum := crc32.ChecksumIEEE(bytesCrc)
+		if crc != checkSum {
+			logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
+			/// ???
+		}
 	}
 
 	c.credit(subscriptionId, 1)
@@ -332,6 +335,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		numRecords--
 		offset++
 	}
+
+	//logs.LogError("ZERo expected %d", r.Buffered())
 
 	consumer.response.data <- offset
 	consumer.response.messages <- batchConsumingMessages
