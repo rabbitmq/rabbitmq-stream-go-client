@@ -82,9 +82,21 @@ func (p *ReliableProducer) BatchPublish(messages []message.StreamMessage) error 
 	_, errW := p.producer.BatchPublish(messages)
 	p.mutex.Unlock()
 	p.totalSent += 1
+
+	if errW != nil {
+		switch errW {
+		case stream.FrameTooLarge:
+			{
+				fmt.Printf("Frame too large, try to reduce the batch size %s \n", errW.Error())
+			}
+		default:
+			fmt.Printf("Publish error %s \n", errW.Error())
+		}
+
+	}
+
 	// tls e non tls  connections have different error message
 	if errW != nil && strings.Index(errW.Error(), "closed") > 0 {
-		fmt.Printf("cant %s \n", errW.Error())
 		time.Sleep(200 * time.Millisecond)
 		exists, errS := p.env.StreamExists(p.streamName)
 		if errS != nil {

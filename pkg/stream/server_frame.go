@@ -276,8 +276,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	numRecords, _ := readUInt(r)
 	_ = readInt64(r) // timestamp
 	_ = readInt64(r) // epoch, unsigned long
-	offset := readInt64(r)
-	crc, _ := readUInt(r)
+	offset := readInt64(r) // offset position
+	crc, _ := readUInt(r)  /// crc and dataLength are needed to calculate the CRC
 	dataLength, _ := readUInt(r)
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
@@ -285,7 +285,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	if len(c.plainCRCBuffer) < int(dataLength) {
 		c.plainCRCBuffer = make([]byte, dataLength)
 	}
-
 
 	c.credit(subscriptionId, 1)
 
