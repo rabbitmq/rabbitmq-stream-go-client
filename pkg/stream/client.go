@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -30,6 +31,7 @@ type Client struct {
 	tuneState        TuneState
 	coordinator      *Coordinator
 	broker           *Broker
+	plainCRCBuffer   []byte
 
 	mutex            *sync.Mutex
 	metadataListener metadataListener
@@ -47,6 +49,7 @@ func newClient(connectionName string, broker *Broker) *Client {
 		destructor:       &sync.Once{},
 		mutex:            &sync.Mutex{},
 		clientProperties: ClientProperties{items: make(map[string]string)},
+		plainCRCBuffer:   make([]byte, 4096),
 	}
 	c.setConnectionName(connectionName)
 	return c
@@ -77,16 +80,19 @@ func (c *Client) connect() error {
 			Control: func(network, address string, c syscall.RawConn) error {
 				return c.Control(func(fd uintptr) {
 					err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF, defaultSocketBuffer)
+					runtime.KeepAlive(fd)
 					if err != nil {
 						logs.LogError("Set socket option error: %s", err)
 						return
 					}
 
 					err = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, defaultSocketBuffer)
+					runtime.KeepAlive(fd)
 					if err != nil {
 						logs.LogError("Set socket option error: %s", err)
 						return
 					}
+
 				})
 			},
 		}

@@ -3,8 +3,10 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"hash/crc32"
 	"io"
 )
 
@@ -274,29 +276,16 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	numRecords, _ := readUInt(r)
 	_ = readInt64(r) // timestamp
 	_ = readInt64(r) // epoch, unsigned long
-	offset := readInt64(r)
-	_, _ = readUInt(r)
-	_, _ = readUInt(r)
+	offset := readInt64(r) // offset position
+	crc, _ := readUInt(r)  /// crc and dataLength are needed to calculate the CRC
+	dataLength, _ := readUInt(r)
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
 
-	// crc
+	if len(c.plainCRCBuffer) < int(dataLength) {
+		c.plainCRCBuffer = make([]byte, dataLength)
+	}
 
-	//try {
-	//	// TODO handle exception in exception handler
-	//	chunkChecksum.checksum(message, dataLength, crc);
-	//} catch (ChunkChecksumValidationException e) {
-	//	LOGGER.warn(
-	//		"Checksum failure at offset {}, expecting {}, got {}",
-	//		offset,
-	//		e.getExpected(),
-	//		e.getComputed());
-	//	throw e;
-	//}
-
-	//fmt.Printf("%d - %d - %d - %d - %d - %d - %d - %d - %d - %d - %d \n", subscriptionId, b, chunkType,
-	//		numEntries, numRecords, timestamp, epoch, unsigned, crc, dataLength, trailer)
-	//fmt.Printf("%d numRecords %d \n", offset, numRecords)
 	c.credit(subscriptionId, 1)
 
 	var offsetLimit int64 = -1
@@ -309,6 +298,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	//messages
 	var batchConsumingMessages []*amqp.Message
+	position := 0
+
 	for numRecords != 0 {
 		entryType, err := peekByte(r)
 		if err != nil {
@@ -321,8 +312,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		}
 		if (entryType & 0x80) == 0 {
 			sizeMessage, _ := readUInt(r)
-
+			binary.BigEndian.PutUint32(c.plainCRCBuffer[position:], sizeMessage)
+			position = position + 4
 			arrayMessage := readUint8Array(r, sizeMessage)
+
+			copy(c.plainCRCBuffer[position:], arrayMessage)
+			position = position + int(sizeMessage)
+
 			if filter && (offset < offsetLimit) {
 				/// TODO set recordset as filtered
 			} else {
@@ -341,6 +337,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		offset++
 	}
 
+	checkSum := crc32.ChecksumIEEE(c.plainCRCBuffer[0:dataLength])
+
+	if crc != checkSum {
+		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
+		panic("Error during CRC")
+	} /// ???
+	//
 	consumer.response.data <- offset
 	consumer.response.messages <- batchConsumingMessages
 
