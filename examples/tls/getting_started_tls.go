@@ -95,7 +95,7 @@ func main() {
 
 	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
 	for i := 0; i < 2; i++ {
-		_, err := producer.BatchPublish(CreateArrayMessagesForTesting(10))
+		err := producer.BatchPublish(CreateArrayMessagesForTesting(10))
 		CheckErr(err)
 	}
 

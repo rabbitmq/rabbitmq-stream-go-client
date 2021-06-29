@@ -408,11 +408,17 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		client:     c,
 		streamName: streamName,
 		Name:       options.Name,
+		QueueSize:  options.QueueSize,
+		BatchSize:  options.BatchSize,
 	})
+
 	if err != nil {
 		return nil, err
 	}
 	res := c.internalDeclarePublisher(streamName, producer)
+	if res.Err == nil {
+		producer.startPublishTask()
+	}
 	return producer, res.Err
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"strconv"
 	"sync"
 	"time"
@@ -43,6 +44,11 @@ func (coordinator *Coordinator) NewProducer(
 	parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
+	size := 10000
+	if parameters != nil {
+		size = parameters.QueueSize
+	}
+
 	var lastId, err = coordinator.getNextProducerItem()
 	if err != nil {
 		return nil, err
@@ -50,7 +56,10 @@ func (coordinator *Coordinator) NewProducer(
 	var producer = &Producer{ID: lastId,
 		options:             parameters,
 		mutex:               &sync.Mutex{},
-		unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
+		unConfirmedMessages: map[int64]*UnConfirmedMessage{},
+		status:              running,
+		publishChannel:      make(chan message.StreamMessage, size),
+		queuePublish:        make([]message.StreamMessage, 0)}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }
@@ -83,9 +92,9 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 	}
 	producer.mutex.Lock()
 	if producer.publishConfirm != nil {
-		for _, message := range producer.unConfirmedMessages {
-			message.Confirmed = false
-			producer.publishConfirm <- []*UnConfirmedMessage{message}
+		for _, msg := range producer.unConfirmedMessages {
+			msg.Confirmed = false
+			producer.publishConfirm <- []*UnConfirmedMessage{msg}
 		}
 	}
 	producer.mutex.Unlock()

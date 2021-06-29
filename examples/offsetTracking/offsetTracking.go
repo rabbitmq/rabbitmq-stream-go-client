@@ -55,7 +55,7 @@ func main() {
 
 	go func() {
 		for i := 0; i < 100; i++ {
-			_, err := producer.BatchPublish(CreateArrayMessagesForTesting(100))
+			err := producer.BatchPublish(CreateArrayMessagesForTesting(100))
 			CheckErr(err)
 			time.Sleep(100 * time.Millisecond)
 		}

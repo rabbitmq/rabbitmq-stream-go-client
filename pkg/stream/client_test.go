@@ -20,7 +20,7 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(400 * time.Millisecond)
 	err := testEnvironment.Close()
 	Expect(err).NotTo(HaveOccurred())
 	time.Sleep(100 * time.Millisecond)

@@ -79,7 +79,7 @@ func (p *ReliableProducer) BatchPublish(messages []message.StreamMessage) error 
 	}
 
 	p.mutex.Lock()
-	_, errW := p.producer.BatchPublish(messages)
+	errW := p.producer.BatchPublish(messages)
 	p.mutex.Unlock()
 	p.totalSent += 1
 

@@ -241,7 +241,9 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	producer.mutex.Unlock()
 	for _, l := range unConfirmed {
 		if l != nil {
-			producer.removeUnConfirmed(l.MessageID)
+			producer.removeUnConfirmed(l.SequenceID)
+		} else {
+			logs.LogError("nil")
 		}
 	}
 	return 0
@@ -274,8 +276,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	_ = readUShort(r)
 	numRecords, _ := readUInt(r)
-	_ = readInt64(r) // timestamp
-	_ = readInt64(r) // epoch, unsigned long
+	_ = readInt64(r)       // timestamp
+	_ = readInt64(r)       // epoch, unsigned long
 	offset := readInt64(r) // offset position
 	crc, _ := readUInt(r)  /// crc and dataLength are needed to calculate the CRC
 	dataLength, _ := readUInt(r)

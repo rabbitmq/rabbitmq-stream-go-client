@@ -60,7 +60,7 @@ func main() {
 
 	go func() {
 		for i := 0; i < 100; i++ {
-			_, err := producer.BatchPublish(CreateArrayMessagesForTesting(2))
+			err := producer.BatchPublish(CreateArrayMessagesForTesting(2))
 			CheckErr(err)
 		}
 	}()

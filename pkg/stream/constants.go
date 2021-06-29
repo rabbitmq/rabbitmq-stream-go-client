@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+// is needed to indicate the general status
+// for example the producer status
+
+const (
+	running = iota
+	closed  = iota
+)
+
 const (
 	commandDeclarePublisher       = 1
 	commandPublish                = 2
