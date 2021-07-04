@@ -29,14 +29,14 @@ var _ = Describe("Streaming Producers", func() {
 
 	})
 
-	It("newProducer/Close Publisher", func() {
+	It("NewProducer/Close Publisher", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("newProducer/Send/Close Publisher", func() {
+	It("NewProducer/Send/Close Publisher", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -95,7 +95,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Send handle close", func() {
+	It("Handle close", func() {
 		var commandIdRecv int32
 
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
@@ -137,7 +137,7 @@ var _ = Describe("Streaming Producers", func() {
 	//	Expect(atomic.LoadInt32(&messagesCount)).NotTo(Equal(int32(0)))
 	//})
 
-	It("pre Publisher errors / Frame too large / too many messages", func() {
+	It("Pre Publisher errors / Frame too large / too many messages", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		var arr []message.StreamMessage
@@ -158,7 +158,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Smart Send", func() {
+	It("Smart Send/Close", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		var messagesCount int32
@@ -178,10 +178,14 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(100)))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
+		// in this case must raise an error since the producer is closed
+		err = producer.Close()
+		Expect(err).To(HaveOccurred())
 	})
 
-	It("Smart Send", func() {
-		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
+	It("Smart Send Split frame", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream,
+			NewProducerOptions().SetBatchSize(50))
 		Expect(err).NotTo(HaveOccurred())
 		var messagesCount int32
 		chConfirm := producer.NotifyPublishConfirmation()
@@ -191,13 +195,18 @@ var _ = Describe("Streaming Producers", func() {
 			}
 		}(chConfirm)
 
-		for z := 0; z < 100; z++ {
-			s := make([]byte, 50)
+		for z := 0; z < 3; z++ {
+			s := make([]byte, 1048000)
 			err = producer.Send(amqp.NewMessage(s))
 			Expect(err).NotTo(HaveOccurred())
 		}
 		time.Sleep(400 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(100)))
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(3)))
+		By("Max frame Error")
+		s := make([]byte, 1148576)
+		err = producer.Send(amqp.NewMessage(s))
+		Expect(err).To(HaveOccurred())
+
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
