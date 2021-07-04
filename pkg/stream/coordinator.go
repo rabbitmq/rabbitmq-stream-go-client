@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"strconv"
 	"sync"
 	"time"
@@ -58,8 +57,11 @@ func (coordinator *Coordinator) NewProducer(
 		mutex:               &sync.Mutex{},
 		unConfirmedMessages: map[int64]*UnConfirmedMessage{},
 		status:              running,
-		publishChannel:      make(chan message.StreamMessage, size),
-		queuePublish:        make([]message.StreamMessage, 0)}
+		messageSequenceCh:   make(chan messageSequence, size),
+		pendingMessages: pendingMessagesSequence{
+			messages: make([]messageSequence, 0),
+			size:     initBufferPublishSize,
+		}}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }
@@ -87,18 +89,10 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 	reason.Name = producer.GetName()
 	tentatives := 0
 	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		tentatives++
 	}
-	producer.mutex.Lock()
-	if producer.publishConfirm != nil {
-		for _, msg := range producer.unConfirmedMessages {
-			msg.Confirmed = false
-			producer.publishConfirm <- []*UnConfirmedMessage{msg}
-		}
-	}
-	producer.mutex.Unlock()
-	producer.resetUnConfirmed()
+	producer.FlushUnConfirmedMessages()
 
 	if producer.closeHandler != nil {
 		producer.closeHandler <- reason

@@ -18,6 +18,17 @@ type UnConfirmedMessage struct {
 	Err        error
 }
 
+type pendingMessagesSequence struct {
+	messages []messageSequence
+	size     int
+}
+
+type messageSequence struct {
+	message      message.StreamMessage
+	size         int
+	publishingId int64
+}
+
 type Producer struct {
 	ID                  uint8
 	options             *ProducerOptions
@@ -31,9 +42,8 @@ type Producer struct {
 	status              int
 
 	/// needed for the async publish
-	publishChannel chan message.StreamMessage
-	queuePublish   []message.StreamMessage
-	lastSent       time.Time
+	messageSequenceCh chan messageSequence
+	pendingMessages   pendingMessagesSequence
 }
 
 type ProducerOptions struct {
@@ -72,27 +82,21 @@ func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedMessage {
 	return producer.unConfirmedMessages
 }
 
-func (producer *Producer) addUnConfirmed(messageid int64, message message.StreamMessage, producerID uint8) {
+func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamMessage, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
-	producer.unConfirmedMessages[messageid] = &UnConfirmedMessage{
+	producer.unConfirmedMessages[sequence] = &UnConfirmedMessage{
 		Message:    message,
 		ProducerID: producerID,
-		SequenceID: messageid,
+		SequenceID: sequence,
 		Confirmed:  false,
 	}
 }
 
-func (producer *Producer) removeUnConfirmed(messageid int64) {
+func (producer *Producer) removeUnConfirmed(sequence int64) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
-	delete(producer.unConfirmedMessages, messageid)
-}
-
-func (producer *Producer) resetUnConfirmed() {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
-	producer.unConfirmedMessages = map[int64]*UnConfirmedMessage{}
+	delete(producer.unConfirmedMessages, sequence)
 }
 
 func (producer *Producer) lenUnConfirmed() int {
@@ -101,20 +105,20 @@ func (producer *Producer) lenUnConfirmed() int {
 	return len(producer.unConfirmedMessages)
 }
 
-func (producer *Producer) getUnConfirmed(messageid int64) *UnConfirmedMessage {
+func (producer *Producer) getUnConfirmed(sequence int64) *UnConfirmedMessage {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
-	return producer.unConfirmedMessages[messageid]
+	return producer.unConfirmedMessages[sequence]
 }
 
 func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
-	ch := make(chan []*UnConfirmedMessage, 1)
+	ch := make(chan []*UnConfirmedMessage)
 	producer.publishConfirm = ch
 	return ch
 }
 
 func (producer *Producer) NotifyPublishError() ChannelPublishError {
-	ch := make(chan PublishError, 1)
+	ch := make(chan PublishError)
 	producer.publishError = ch
 	return ch
 }
@@ -145,33 +149,39 @@ func (producer *Producer) getStatus() int {
 }
 
 func (producer *Producer) sendBufferedMessages() {
-	if len(producer.queuePublish) > producer.options.BatchSize {
-		logs.LogError("eeeeeeeeeeeee")
-	}
 
-	if len(producer.queuePublish) > 0 {
-		//logs.LogInfo("len %d",  len(producer.queuePublish))
-		producer.BatchPublish(producer.queuePublish)
-		producer.queuePublish = producer.queuePublish[:0]
-		producer.lastSent = time.Now()
+	if len(producer.pendingMessages.messages) > 0 {
+		//logs.LogInfo("len %d",  len(producer.pendingMessages.messages))
+		err := producer.internalBatchPublish(producer.pendingMessages.messages)
+		if err != nil {
+			return
+		}
+		producer.pendingMessages.messages = producer.pendingMessages.messages[:0]
+		producer.pendingMessages.size = initBufferPublishSize
 	}
 }
 func (producer *Producer) startPublishTask() {
-	producer.lastSent = time.Now()
-
-	go func() {
+	go func(ch chan messageSequence) {
 		var ticker = time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 
 			select {
-			case msg, running := <-producer.publishChannel:
-				if !running {
-					return
-				}
-				producer.queuePublish = append(producer.queuePublish, msg)
-				if len(producer.queuePublish) >= producer.options.BatchSize {
-					producer.sendBufferedMessages()
+
+			case msg, running := <-ch:
+				{
+					if !running {
+						return
+					}
+					if producer.pendingMessages.size+msg.size >= producer.options.client.getTuneState().requestedMaxFrameSize {
+						producer.sendBufferedMessages()
+					}
+
+					producer.pendingMessages.size += producer.pendingMessages.size + msg.size
+					producer.pendingMessages.messages = append(producer.pendingMessages.messages, msg)
+					if len(producer.pendingMessages.messages) >= producer.options.BatchSize {
+						producer.sendBufferedMessages()
+					}
 				}
 
 			case <-ticker.C:
@@ -179,88 +189,118 @@ func (producer *Producer) startPublishTask() {
 			}
 
 		}
-	}()
+	}(producer.messageSequenceCh)
+
 }
 
-func (producer *Producer) Publish(message message.StreamMessage) error {
-	if producer.getStatus() == closed {
-		return fmt.Errorf("producer id: %d  already closed", producer.ID)
+func (producer *Producer) Send(message message.StreamMessage) error {
+
+	msgBytes, err := message.MarshalBinary()
+	if err != nil {
+		return err
 	}
-	producer.publishChannel <- message
+
+	if len(msgBytes)+initBufferPublishSize > producer.options.client.getTuneState().requestedMaxFrameSize {
+		return FrameTooLarge
+	}
+	sequence := producer.getPublishingID(message)
+	producer.addUnConfirmed(sequence, message, producer.ID)
+
+	if producer.getStatus() == closed {
+		return fmt.Errorf("producer id: %d  closed", producer.ID)
+	}
+
+	producer.messageSequenceCh <- messageSequence{
+		message:      message,
+		size:         len(msgBytes),
+		publishingId: sequence,
+	}
 
 	return nil
 }
 
+func (producer *Producer) getPublishingID(message message.StreamMessage) int64 {
+	sequence := message.GetPublishingId()
+	if message.GetPublishingId() < 0 {
+		sequence = atomic.AddInt64(&producer.sequence, 1)
+	}
+	return sequence
+}
+
 func (producer *Producer) BatchPublish(batchMessages []message.StreamMessage) error {
-	if producer.getStatus() == closed {
-		return fmt.Errorf("producer id: %d  already closed", producer.ID)
-	}
-
-	if len(batchMessages) > 1000 {
-		return fmt.Errorf("%d - %s", len(batchMessages), "too many messages")
-	}
-	var msgLen int
-	var sequences = make([]int64, len(batchMessages))
-	for idx, msg := range batchMessages {
-		r, _ := msg.MarshalBinary()
-		msgLen += len(r) + 8 + 4
-		if msg.GetPublishingId() >= 0 {
-			/// The user didn't set the id
-			/// so, it will be automatic assigned by the client
-			sequences[idx] = msg.GetPublishingId()
-		} else {
-			sequences[idx] = atomic.AddInt64(&producer.sequence, 1)
+	var messagesSequence = make([]messageSequence, len(batchMessages))
+	for i, batchMessage := range batchMessages {
+		messageBytes, err := batchMessage.MarshalBinary()
+		if err != nil {
+			return nil
 		}
-
-		producer.addUnConfirmed(sequences[idx], msg, producer.ID)
+		sequence := producer.getPublishingID(batchMessage)
+		messagesSequence[i] = messageSequence{
+			message:      batchMessage,
+			size:         len(messageBytes),
+			publishingId: sequence,
+		}
+		producer.addUnConfirmed(sequence, batchMessage, producer.ID)
 	}
 
-	frameHeaderLength := 2 + 2 + 1 + 4
+	return producer.internalBatchPublish(messagesSequence)
+}
+
+func (producer *Producer) internalBatchPublish(messagesSequence []messageSequence) error {
+	if producer.getStatus() == closed {
+		return fmt.Errorf("producer id: %d closed", producer.ID)
+	}
+
+	var msgLen int
+	for _, msg := range messagesSequence {
+		msgLen += msg.size + 8 + 4
+	}
+
+	frameHeaderLength := initBufferPublishSize
 	length := frameHeaderLength + msgLen
 	publishId := producer.ID
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandPublish)
 	writeByte(b, publishId)
-	writeInt(b, len(batchMessages)) //toExcluded - fromInclude
+	writeInt(b, len(messagesSequence)) //toExcluded - fromInclude
 
-	for idx, msg := range batchMessages {
-		r, _ := msg.MarshalBinary()
-		writeLong(b, sequences[idx]) // sequence
-		writeInt(b, len(r))          // len
+	for _, msg := range messagesSequence {
+		r, _ := msg.message.MarshalBinary()
+		writeLong(b, msg.publishingId) // publishingId
+		writeInt(b, len(r))            // len
 		b.Write(r)
 	}
 
 	bufferToWrite := b.Bytes()
-	if len(bufferToWrite) > producer.options.client.tuneState.requestedMaxFrameSize {
+	if len(bufferToWrite) > producer.options.client.getTuneState().requestedMaxFrameSize {
 		return lookErrorCode(responseCodeFrameTooLarge)
 	}
 
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
-	// TODO handle the socket read error to close the producer
 	if err != nil {
-		if producer.publishConfirm != nil {
-			var unConfirmedMessages []*UnConfirmedMessage
-			for idx, msg := range batchMessages {
-				unConfirmedMessages = append(unConfirmedMessages, &UnConfirmedMessage{
-					Message:    msg,
-					ProducerID: producer.ID,
-					SequenceID: sequences[idx],
-					Confirmed:  false,
-					Err:        err,
-				})
-				producer.removeUnConfirmed(msg.GetPublishingId())
-			}
-			producer.publishConfirm <- unConfirmedMessages
-		}
+		time.Sleep(800 * time.Millisecond)
+		producer.setStatus(closed)
+		producer.FlushUnConfirmedMessages()
 
 		return err
 	}
 	return nil
 }
 
+func (producer *Producer) FlushUnConfirmedMessages() {
+	producer.mutex.Lock()
+	if producer.publishConfirm != nil {
+		for _, msg := range producer.unConfirmedMessages {
+			msg.Confirmed = false
+			producer.publishConfirm <- []*UnConfirmedMessage{msg}
+			delete(producer.unConfirmedMessages, msg.SequenceID)
+		}
+	}
+	producer.mutex.Unlock()
+}
+
 func (producer *Producer) Close() error {
 	producer.setStatus(closed)
-	close(producer.publishChannel)
 	if !producer.options.client.socket.isOpen() {
 		return fmt.Errorf("connection already closed")
 	}
@@ -289,6 +329,7 @@ func (producer *Producer) Close() error {
 		close(producer.closeHandler)
 		producer.closeHandler = nil
 	}
+	close(producer.messageSequenceCh)
 
 	producer.mutex.Unlock()
 

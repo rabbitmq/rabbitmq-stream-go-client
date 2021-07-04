@@ -32,7 +32,7 @@ func CreateArrayMessagesForTesting(bacthMessages int) []message.StreamMessage {
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Println("Publish Error example")
+	fmt.Println("Send Error example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
 	env, err := stream.NewEnvironment(

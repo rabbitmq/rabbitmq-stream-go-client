@@ -15,6 +15,8 @@ const (
 	closed  = iota
 )
 
+const initBufferPublishSize = 2 + 2 + 1 + 4
+
 const (
 	commandDeclarePublisher       = 1
 	commandPublish                = 2

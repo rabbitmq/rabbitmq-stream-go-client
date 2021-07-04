@@ -230,6 +230,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		if m != nil {
 			m.Confirmed = true
 			unConfirmed = append(unConfirmed, m)
+			producer.removeUnConfirmed(m.SequenceID)
 		}
 		publishingIdCount--
 	}
@@ -239,13 +240,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		producer.publishConfirm <- unConfirmed
 	}
 	producer.mutex.Unlock()
-	for _, l := range unConfirmed {
-		if l != nil {
-			producer.removeUnConfirmed(l.SequenceID)
-		} else {
-			logs.LogError("nil")
-		}
-	}
+
 	return 0
 }
 

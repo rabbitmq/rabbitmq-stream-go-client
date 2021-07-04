@@ -55,18 +55,27 @@ func newClient(connectionName string, broker *Broker) *Client {
 	return c
 }
 func (c *Client) getSocket() *socket {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	//c.mutex.Lock()
+	//defer c.mutex.Unlock()
 	return &c.socket
 }
 
 func (c *Client) setSocket(sck socket) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	//c.mutex.Lock()
+	//defer c.mutex.Unlock()
 	c.socket = sck
 }
 
+func (c *Client) getTuneState() TuneState {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.tuneState
+
+}
+
 func (c *Client) connect() error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if !c.socket.isOpen() {
 		u, err := url.Parse(c.broker.GetUri())
 		if err != nil {
@@ -385,8 +394,9 @@ func (c *Client) Close() error {
 		}
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
-
+	c.mutex.Lock()
 	c.getSocket().shutdown(nil)
+	c.mutex.Unlock()
 	return err
 }
 

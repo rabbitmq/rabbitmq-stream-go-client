@@ -36,7 +36,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("newProducer/Publish/Close Publisher", func() {
+	It("newProducer/Send/Close Publisher", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -49,7 +49,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Multi-thread newProducer/Publish", func() {
+	It("Multi-thread newProducer/Send", func() {
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
@@ -75,7 +75,7 @@ var _ = Describe("Streaming Producers", func() {
 			To(Equal(StreamDoesNotExist))
 	})
 
-	It("Publish Confirmation", func() {
+	It("Send Confirmation", func() {
 		var messagesCount int32 = 0
 
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
@@ -95,7 +95,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Publish handle close", func() {
+	It("Send handle close", func() {
 		var commandIdRecv int32
 
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
@@ -114,7 +114,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandDeletePublisher)))
 	})
 
-	//It("Publish Error", func() {
+	//It("Send Error", func() {
 	//	var messagesCount int32 = 0
 	//	producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 	//	Expect(err).NotTo(HaveOccurred())
@@ -126,7 +126,7 @@ var _ = Describe("Streaming Producers", func() {
 	//
 	//	go func(p *Producer) {
 	//		for i := 0; i < 10; i++ {
-	//			err := p.BatchPublish(CreateArrayMessagesForTesting(2))
+	//			err := p.Send(CreateArrayMessagesForTesting(2))
 	//			Expect(err).NotTo(HaveOccurred())
 	//		}
 	//	}(producer)
@@ -158,7 +158,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Smart Publish", func() {
+	It("Smart Send", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		var messagesCount int32
@@ -171,7 +171,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		for z := 0; z < 100; z++ {
 			s := make([]byte, 50)
-			err = producer.Publish(amqp.NewMessage(s))
+			err = producer.Send(amqp.NewMessage(s))
 			Expect(err).NotTo(HaveOccurred())
 		}
 		time.Sleep(400 * time.Millisecond)
@@ -180,7 +180,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Smart Publish", func() {
+	It("Smart Send", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		var messagesCount int32
@@ -193,7 +193,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		for z := 0; z < 100; z++ {
 			s := make([]byte, 50)
-			err = producer.Publish(amqp.NewMessage(s))
+			err = producer.Send(amqp.NewMessage(s))
 			Expect(err).NotTo(HaveOccurred())
 		}
 		time.Sleep(400 * time.Millisecond)
@@ -202,7 +202,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Smart Publish send after", func() {
+	It("Smart Send send after", func() {
 		// this test is need to test the send after
 		// and the time check
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
@@ -217,14 +217,14 @@ var _ = Describe("Streaming Producers", func() {
 
 		for z := 0; z < 5; z++ {
 			s := make([]byte, 50)
-			err = producer.Publish(amqp.NewMessage(s))
+			err = producer.Send(amqp.NewMessage(s))
 			Expect(err).NotTo(HaveOccurred())
 			time.Sleep(300)
 		}
 
 		for z := 0; z < 5; z++ {
 			s := make([]byte, 50)
-			err = producer.Publish(amqp.NewMessage(s))
+			err = producer.Send(amqp.NewMessage(s))
 			Expect(err).NotTo(HaveOccurred())
 			time.Sleep(50 * time.Millisecond)
 		}

@@ -278,7 +278,7 @@ var _ = Describe("Integration tests", func() {
 		Expect(rProducer.IsOpen()).To(Equal(true))
 		go func(p *ha.ReliableProducer) {
 			for i := 0; i < 100; i++ {
-				err1 := p.BatchPublish(CreateArrayMessagesForTesting(10))
+				err1 := p.Send(CreateArrayMessagesForTesting(10))
 				Expect(err1).NotTo(HaveOccurred())
 				time.Sleep(100 * time.Millisecond)
 			}
