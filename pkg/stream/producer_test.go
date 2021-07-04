@@ -195,13 +195,13 @@ var _ = Describe("Streaming Producers", func() {
 			}
 		}(chConfirm)
 
-		for z := 0; z < 3; z++ {
+		for z := 0; z < 2; z++ {
 			s := make([]byte, 1048000)
 			err = producer.Send(amqp.NewMessage(s))
 			Expect(err).NotTo(HaveOccurred())
 		}
-		time.Sleep(400 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(3)))
+		time.Sleep(800 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(2)))
 		By("Max frame Error")
 		s := make([]byte, 1148576)
 		err = producer.Send(amqp.NewMessage(s))
