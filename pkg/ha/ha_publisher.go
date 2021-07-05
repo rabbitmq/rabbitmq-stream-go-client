@@ -3,11 +3,10 @@ package ha
 import (
 	"fmt"
 	"github.com/pkg/errors"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -17,94 +16,134 @@ const (
 	StatusStreamDoesNotExist = 3
 )
 
+func (r *ReliableProducer) handlePublishError(publishError stream.ChannelPublishError) {
+	go func() {
+		for {
+			for err := range publishError {
+				r.channelPublishError <- err
+			}
+		}
+	}()
+
+}
+
+func (r *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
+	go func() {
+		for messagesIds := range confirms {
+			atomic.AddInt32(&r.count, int32(len(messagesIds)))
+			r.channelPublishConfirm <- messagesIds
+		}
+	}()
+}
+
 type ReliableProducer struct {
-	env             *stream.Environment
-	producer        *stream.Producer
-	status          int
-	backoff         int
-	streamName      string
-	producerOptions *stream.ProducerOptions
-	mutex           *sync.Mutex
-	mutexStatus     *sync.Mutex
-	publishChannel  chan []*amqp.Message
-	totalSent       int64
+	env                   *stream.Environment
+	producer              *stream.Producer
+	streamName            string
+	producerOptions       *stream.ProducerOptions
+	channelPublishConfirm stream.ChannelPublishConfirm
+	channelPublishError   stream.ChannelPublishError
+	count                 int32
+
+	mutex       *sync.Mutex
+	mutexStatus *sync.Mutex
+	status      int
+	totalSent   int64
 }
 
 func NewHAProducer(env *stream.Environment, streamName string, producerOptions *stream.ProducerOptions) (*ReliableProducer, error) {
 	res := &ReliableProducer{
-		env:             env,
-		producer:        nil,
-		status:          StatusClosed,
-		backoff:         1,
-		streamName:      streamName,
-		producerOptions: producerOptions,
-		mutex:           &sync.Mutex{},
-		mutexStatus:     &sync.Mutex{},
-		publishChannel:  make(chan []*amqp.Message, 1),
+		env:                   env,
+		producer:              nil,
+		status:                StatusClosed,
+		streamName:            streamName,
+		producerOptions:       producerOptions,
+		mutex:                 &sync.Mutex{},
+		mutexStatus:           &sync.Mutex{},
+		channelPublishConfirm: make(chan []*stream.UnConfirmedMessage, 0),
+		channelPublishError:   make(chan stream.PublishError, 0),
 	}
-	newProducer := res.newProducer()
-	if newProducer == nil {
+	err := res.newProducer()
+	if err == nil {
 		res.setStatus(StatusOpen)
 	}
 
-	return res, newProducer
+	return res, err
 }
 
 func (p *ReliableProducer) newProducer() error {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+
+	//if p.producer != nil && len(p.producer.GetUnConfirmed()) > 0 {
+	//	for _, msg := range p.producer.GetUnConfirmed() {
+	//		msg.Confirmed = false
+	//		p.channelPublishConfirm <- []*stream.UnConfirmedMessage{msg}
+	//	}
+	//
+	//}
+
 	producer, err := p.env.NewProducer(p.streamName, p.producerOptions)
 	if err != nil {
 		return err
 	}
+	channelPublishError := producer.NotifyPublishError()
+	p.handlePublishError(channelPublishError)
+	channelPublishConfirm := producer.NotifyPublishConfirmation()
+	p.handlePublishConfirm(channelPublishConfirm)
 	p.producer = producer
 	return err
 }
 
 func (p *ReliableProducer) NotifyPublishError() stream.ChannelPublishError {
-	return p.producer.NotifyPublishError()
+	return p.channelPublishError
 }
 
 func (p *ReliableProducer) NotifyPublishConfirmation() stream.ChannelPublishConfirm {
-	return p.producer.NotifyPublishConfirmation()
+	return p.channelPublishConfirm
 
 }
 
-func (p *ReliableProducer) BatchPublish(messages []message.StreamMessage) error {
+func (p *ReliableProducer) Send(message message.StreamMessage) error {
 	if p.getStatus() == StatusStreamDoesNotExist {
 		return stream.StreamDoesNotExist
 	}
 	if p.getStatus() == StatusClosed {
 		return errors.New("Producer is closed")
 	}
-
 	p.mutex.Lock()
-	_, errW := p.producer.BatchPublish(messages)
-	p.mutex.Unlock()
+	defer p.mutex.Unlock()
+
+	errW := p.producer.Send(message)
 	p.totalSent += 1
 
 	if errW != nil {
 		switch errW {
 		case stream.FrameTooLarge:
 			{
-				fmt.Printf("Frame too large, try to reduce the batch size %s \n", errW.Error())
+				return stream.FrameTooLarge
 			}
 		default:
-			fmt.Printf("Publish error %s \n", errW.Error())
+			fmt.Printf("Send error %s \n", errW.Error())
 		}
 
 	}
-
 	// tls e non tls  connections have different error message
-	if errW != nil && strings.Index(errW.Error(), "closed") > 0 {
+	if errW != nil {
 		time.Sleep(200 * time.Millisecond)
 		exists, errS := p.env.StreamExists(p.streamName)
 		if errS != nil {
 			return errS
 
 		}
-		time.Sleep(100 * time.Millisecond)
 		if exists {
+			time.Sleep(800 * time.Millisecond)
+			p.producer.FlushUnConfirmedMessages()
+			//if len(p.producer.GetUnConfirmed()) > 0 {
+			//	for _, msg := range p.producer.GetUnConfirmed() {
+			//		msg.Confirmed = false
+			//		p.channelPublishConfirm <- []*stream.UnConfirmedMessage{msg}
+			//	}
+			//}
+
 			return p.newProducer()
 		} else {
 			return stream.StreamDoesNotExist
@@ -141,6 +180,9 @@ func (p *ReliableProducer) GetBroker() *stream.Broker {
 func (p *ReliableProducer) Close() error {
 	p.setStatus(StatusClosed)
 	err := p.producer.Close()
+	close(p.channelPublishConfirm)
+	close(p.channelPublishError)
+
 	if err != nil {
 		return err
 	}

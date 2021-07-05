@@ -54,8 +54,8 @@ func main() {
 	CheckErr(err)
 
 	go func() {
-		for i := 0; i < 100; i++ {
-			_, err := producer.BatchPublish(CreateArrayMessagesForTesting(100))
+		for i := 0; i < 2000; i++ {
+			err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 			CheckErr(err)
 			time.Sleep(100 * time.Millisecond)
 		}

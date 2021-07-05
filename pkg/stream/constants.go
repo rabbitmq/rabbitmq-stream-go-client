@@ -7,6 +7,16 @@ import (
 	"time"
 )
 
+// is needed to indicate the general status
+// for example the producer status
+
+const (
+	running = iota
+	closed  = iota
+)
+
+const initBufferPublishSize = 2 + 2 + 1 + 4
+
 const (
 	commandDeclarePublisher       = 1
 	commandPublish                = 2
@@ -69,7 +79,7 @@ const (
 	defaultSocketBuffer = 4096
 
 	//
-	ClientVersion = "0.7-alpha"
+	ClientVersion = "0.8-alpha"
 
 	StreamTcpPort = "5552"
 )

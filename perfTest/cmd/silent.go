@@ -244,11 +244,11 @@ func startPublisher(streamName string) error {
 			}
 
 			atomic.AddInt32(&publisherMessageCount, int32(batchSize))
-			err = prod.BatchPublish(arr)
-			if err != nil {
-				logError("Error publishing: %s", err)
-				//	time.Sleep(1 * time.Second)
-				//	return
+			for _, streamMessage := range arr {
+				err = prod.Send(streamMessage)
+				if err != nil {
+					logError("Error publishing: %s", err)
+				}
 			}
 			checkErr(err)
 

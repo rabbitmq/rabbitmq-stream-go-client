@@ -54,19 +54,34 @@ func newClient(connectionName string, broker *Broker) *Client {
 	c.setConnectionName(connectionName)
 	return c
 }
+
+func NewDirectClient(broker *Broker) (*Client, error) {
+	client := newClient("direct-connection", broker)
+	return client, client.connect()
+}
+
 func (c *Client) getSocket() *socket {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	//c.mutex.Lock()
+	//defer c.mutex.Unlock()
 	return &c.socket
 }
 
 func (c *Client) setSocket(sck socket) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	//c.mutex.Lock()
+	//defer c.mutex.Unlock()
 	c.socket = sck
 }
 
+func (c *Client) getTuneState() TuneState {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.tuneState
+
+}
+
 func (c *Client) connect() error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if !c.socket.isOpen() {
 		u, err := url.Parse(c.broker.GetUri())
 		if err != nil {
@@ -385,8 +400,9 @@ func (c *Client) Close() error {
 		}
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
-
+	c.mutex.Lock()
 	c.getSocket().shutdown(nil)
+	c.mutex.Unlock()
 	return err
 }
 
@@ -404,15 +420,24 @@ func (c *Client) ReusePublisher(streamName string, existingProducer *Producer) (
 }
 
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
+	if options == nil {
+		options = NewProducerOptions()
+	}
 	producer, err := c.coordinator.NewProducer(&ProducerOptions{
 		client:     c,
 		streamName: streamName,
 		Name:       options.Name,
+		QueueSize:  options.QueueSize,
+		BatchSize:  options.BatchSize,
 	})
+
 	if err != nil {
 		return nil, err
 	}
 	res := c.internalDeclarePublisher(streamName, producer)
+	if res.Err == nil {
+		producer.startPublishTask()
+	}
 	return producer, res.Err
 }
 
@@ -574,6 +599,10 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 func (c *Client) DeclareSubscriber(streamName string,
 	messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
+	if options == nil {
+		options = NewConsumerOptions()
+	}
+
 	options.client = c
 	options.streamName = streamName
 	consumer := c.coordinator.NewConsumer(messagesHandler, options)

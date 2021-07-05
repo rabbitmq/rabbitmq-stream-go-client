@@ -124,9 +124,7 @@ func (env *Environment) NewProducer(streamName string, producerOptions *Producer
 	if err != nil {
 		return nil, err
 	}
-	if producerOptions == nil {
-		producerOptions = NewProducerOptions()
-	}
+
 	return env.producers.newProducer(client, streamName, producerOptions)
 }
 
@@ -187,9 +185,7 @@ func (env *Environment) NewConsumer(streamName string,
 	if err != nil {
 		return nil, err
 	}
-	if options == nil {
-		options = NewConsumerOptions()
-	}
+
 	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options)
 }
 

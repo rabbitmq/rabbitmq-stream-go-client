@@ -43,6 +43,11 @@ func (coordinator *Coordinator) NewProducer(
 	parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
+	size := 10000
+	if parameters != nil {
+		size = parameters.QueueSize
+	}
+
 	var lastId, err = coordinator.getNextProducerItem()
 	if err != nil {
 		return nil, err
@@ -50,7 +55,13 @@ func (coordinator *Coordinator) NewProducer(
 	var producer = &Producer{ID: lastId,
 		options:             parameters,
 		mutex:               &sync.Mutex{},
-		unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
+		unConfirmedMessages: map[int64]*UnConfirmedMessage{},
+		status:              running,
+		messageSequenceCh:   make(chan messageSequence, size),
+		pendingMessages: pendingMessagesSequence{
+			messages: make([]messageSequence, 0),
+			size:     initBufferPublishSize,
+		}}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }
@@ -78,18 +89,10 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 	reason.Name = producer.GetName()
 	tentatives := 0
 	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		tentatives++
 	}
-	producer.mutex.Lock()
-	if producer.publishConfirm != nil {
-		for _, message := range producer.unConfirmedMessages {
-			message.Confirmed = false
-			producer.publishConfirm <- []*UnConfirmedMessage{message}
-		}
-	}
-	producer.mutex.Unlock()
-	producer.resetUnConfirmed()
+	producer.FlushUnConfirmedMessages()
 
 	if producer.closeHandler != nil {
 		producer.closeHandler <- reason

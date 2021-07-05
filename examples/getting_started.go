@@ -85,9 +85,10 @@ func main() {
 	chPublishConfirm := producer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
 
-	// each publish sends a number of messages, the batchMessages should be around 100 messages for send
-	for i := 0; i < 2; i++ {
-		_, err := producer.BatchPublish(CreateArrayMessagesForTesting(10))
+	// the send method automatically aggregates the messages
+	// based on batch size
+	for i := 0; i < 1000; i++ {
+		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 		CheckErr(err)
 	}
 

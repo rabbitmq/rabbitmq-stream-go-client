@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
@@ -32,23 +31,23 @@ func CreateArrayMessagesForTesting(bacthMessages int) []message.StreamMessage {
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Println("Publish Error example")
+	fmt.Println("Send Error example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
 			SetPort(5552).
-			SetUser("guest").
-			SetPassword("guest"))
+			SetUser("test").
+			SetPassword("test"))
 	CheckErr(err)
-	streamName := uuid.New().String()
-	err = env.DeclareStream(streamName,
-		&stream.StreamOptions{
-			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
-		},
-	)
-	CheckErr(err)
+	streamName := "no"
+	//err = env.DeclareStream(streamName,
+	//	&stream.StreamOptions{
+	//		MaxLengthBytes: stream.ByteCapacity{}.GB(2),
+	//	},
+	//)
+	//CheckErr(err)
 
 	producer, err := env.NewProducer(streamName, &stream.ProducerOptions{Name: "myProducer"})
 	CheckErr(err)
@@ -60,7 +59,7 @@ func main() {
 
 	go func() {
 		for i := 0; i < 100; i++ {
-			_, err := producer.BatchPublish(CreateArrayMessagesForTesting(2))
+			err := producer.BatchSend(CreateArrayMessagesForTesting(2))
 			CheckErr(err)
 		}
 	}()

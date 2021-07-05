@@ -84,7 +84,7 @@ var _ = Describe("Integration tests", func() {
 			producer1, err := env.NewProducer(stream, nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = producer1.BatchPublish(nil, CreateArrayMessagesForTesting(1000))
+			_, err = producer1.BatchSend(nil, CreateArrayMessagesForTesting(1000))
 			Expect(err).NotTo(HaveOccurred())
 		}
 
@@ -120,7 +120,7 @@ var _ = Describe("Integration tests", func() {
 			producer1, err := env.NewProducer(stream, nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = producer1.BatchPublish(nil, CreateArrayMessagesForTesting(1000))
+			_, err = producer1.BatchSend(nil, CreateArrayMessagesForTesting(1000))
 			Expect(err).NotTo(HaveOccurred())
 		}
 
@@ -278,7 +278,7 @@ var _ = Describe("Integration tests", func() {
 		Expect(rProducer.IsOpen()).To(Equal(true))
 		go func(p *ha.ReliableProducer) {
 			for i := 0; i < 100; i++ {
-				err1 := p.BatchPublish(CreateArrayMessagesForTesting(10))
+				err1 := p.Send(CreateArrayMessagesForTesting(10))
 				Expect(err1).NotTo(HaveOccurred())
 				time.Sleep(100 * time.Millisecond)
 			}
