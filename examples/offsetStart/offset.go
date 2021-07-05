@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
-	"time"
+	"strconv"
 )
 
 func CheckErr(err error) {
@@ -16,14 +15,6 @@ func CheckErr(err error) {
 		fmt.Printf("%s ", err)
 		os.Exit(1)
 	}
-}
-
-func CreateArrayMessagesForTesting(batchMessages int) []message.StreamMessage {
-	var arr []message.StreamMessage
-	for z := 0; z < batchMessages; z++ {
-		arr = append(arr, amqp.NewMessage([]byte("1234567890")))
-	}
-	return arr
 }
 
 func main() {
@@ -53,9 +44,9 @@ func main() {
 	CheckErr(err)
 
 	go func() {
-		for i := 0; i < 2; i++ {
-			err = producer.BatchPublish(CreateArrayMessagesForTesting(100))
-			time.Sleep(1 * time.Second)
+		for i := 0; i < 200; i++ {
+			err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
+			CheckErr(err)
 		}
 	}()
 

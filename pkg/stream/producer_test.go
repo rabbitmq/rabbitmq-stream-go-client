@@ -40,7 +40,7 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		err1 := producer.BatchPublish(CreateArrayMessagesForTesting(5)) // batch send
+		err1 := producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch send
 		Expect(err1).NotTo(HaveOccurred())
 
 		// we can't close the subscribe until the publish is finished
@@ -58,7 +58,7 @@ var _ = Describe("Streaming Producers", func() {
 				producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				err = producer.BatchPublish(CreateArrayMessagesForTesting(5)) // batch send
+				err = producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch send
 				Expect(err).NotTo(HaveOccurred())
 				// we can't close the subscribe until the publish is finished
 				time.Sleep(500 * time.Millisecond)
@@ -86,7 +86,7 @@ var _ = Describe("Streaming Producers", func() {
 			atomic.AddInt32(&messagesCount, int32(len(ids)))
 		}(chConfirm)
 
-		err = producer.BatchPublish(CreateArrayMessagesForTesting(14))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(14))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(200 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(14)))
@@ -106,7 +106,7 @@ var _ = Describe("Streaming Producers", func() {
 			atomic.AddInt32(&commandIdRecv, int32(event.Command))
 		}(chConfirm)
 
-		err = producer.BatchPublish(CreateArrayMessagesForTesting(14))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(14))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(200 * time.Millisecond)
 		err = producer.Close()
@@ -145,14 +145,14 @@ var _ = Describe("Streaming Producers", func() {
 			s := make([]byte, 15000)
 			arr = append(arr, amqp.NewMessage(s))
 		}
-		err = producer.BatchPublish(arr)
+		err = producer.BatchSend(arr)
 		Expect(err).To(Equal(FrameTooLarge))
 
 		for z := 0; z < 901; z++ {
 			s := make([]byte, 0)
 			arr = append(arr, amqp.NewMessage(s))
 		}
-		err = producer.BatchPublish(arr)
+		err = producer.BatchSend(arr)
 		Expect(err).To(HaveOccurred())
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())

@@ -73,9 +73,13 @@ func NewHAProducer(env *stream.Environment, streamName string, producerOptions *
 
 func (p *ReliableProducer) newProducer() error {
 
-	if p.producer != nil && len(p.producer.GetUnConfirmed()) > 0 {
-		fmt.Printf("")
-	}
+	//if p.producer != nil && len(p.producer.GetUnConfirmed()) > 0 {
+	//	for _, msg := range p.producer.GetUnConfirmed() {
+	//		msg.Confirmed = false
+	//		p.channelPublishConfirm <- []*stream.UnConfirmedMessage{msg}
+	//	}
+	//
+	//}
 
 	producer, err := p.env.NewProducer(p.streamName, p.producerOptions)
 	if err != nil {
@@ -132,15 +136,13 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		}
 		if exists {
 			time.Sleep(800 * time.Millisecond)
-			if len(p.producer.GetUnConfirmed()) > 0 {
-				for _, msg := range p.producer.GetUnConfirmed() {
-					msg.Confirmed = false
-					p.channelPublishConfirm <- []*stream.UnConfirmedMessage{msg}
-					//delete(p.producer.unConfirmedMessages, msg.SequenceID)
-				}
-
-				fmt.Printf("lll")
-			}
+			p.producer.FlushUnConfirmedMessages()
+			//if len(p.producer.GetUnConfirmed()) > 0 {
+			//	for _, msg := range p.producer.GetUnConfirmed() {
+			//		msg.Confirmed = false
+			//		p.channelPublishConfirm <- []*stream.UnConfirmedMessage{msg}
+			//	}
+			//}
 
 			return p.newProducer()
 		} else {

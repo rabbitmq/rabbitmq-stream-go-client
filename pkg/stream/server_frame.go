@@ -367,11 +367,6 @@ func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.
 func (c *Client) handlePublishError(buffer *bufio.Reader) {
 
 	publisherId := readByte(buffer)
-	producer, err := c.coordinator.GetProducerById(publisherId)
-	if err != nil {
-		logs.LogWarn("producer not found :%s", err)
-		producer = &Producer{unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
-	}
 
 	publishingErrorCount, _ := readUInt(buffer)
 	var publishingId int64
@@ -379,15 +374,22 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 	for publishingErrorCount != 0 {
 		publishingId = readInt64(buffer)
 		code = readUShort(buffer)
-
-		if producer.publishError != nil {
-			producer.publishError <- PublishError{
-				Code:               code,
-				Err:                lookErrorCode(code),
-				UnConfirmedMessage: producer.getUnConfirmed(publishingId),
+		producer, err := c.coordinator.GetProducerById(publisherId)
+		if err != nil {
+			logs.LogWarn("producer not found :%s", err)
+			producer = &Producer{unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
+		} else {
+			producer.mutex.Lock()
+			if producer.publishError != nil {
+				producer.publishError <- PublishError{
+					Code:               code,
+					Err:                lookErrorCode(code),
+					UnConfirmedMessage: producer.getUnConfirmed(publishingId),
+				}
 			}
+			producer.removeUnConfirmed(publishingId)
+			producer.mutex.Unlock()
 		}
-		producer.removeUnConfirmed(publishingId)
 		publishingErrorCount--
 	}
 

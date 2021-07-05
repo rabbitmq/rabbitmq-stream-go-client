@@ -38,8 +38,18 @@ go run perfTest/perftest.go silent
 ---
 
 The API are composed by mandatory and optional arguments.
-The optional be set in the standard go way as:
+To set the optional parameters you can use builders:
 
+```golang
+env, err := stream.NewEnvironment(
+		stream.NewEnvironmentOptions().
+			SetHost("localhost").
+			SetPort(5552).
+			SetUser("guest").
+			SetPassword("guest"))
+```
+
+or standard way:
 ```golang
 env, err := stream.NewEnvironment(
             &stream.EnvironmentOptions{
@@ -55,25 +65,12 @@ env, err := stream.NewEnvironment(
             )
 ```
 
-or using builders ( the suggested way):
-
-```golang
-env, err := stream.NewEnvironment(
-		stream.NewEnvironmentOptions().
-			SetHost("localhost").
-			SetPort(5552).
-			SetUser("guest").
-			SetPassword("guest"))
-```
 
 `nil` is also a valid value, default values will be provided:
 
 ```golang
 env, err := stream.NewEnvironment(nil) 
 ```
-
-The suggested way is to use builders.
-
 
 ### Build from source
 ---

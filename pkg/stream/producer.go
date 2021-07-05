@@ -82,6 +82,8 @@ func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedMessage {
 	return producer.unConfirmedMessages
 }
 
+
+
 func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamMessage, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
@@ -152,7 +154,7 @@ func (producer *Producer) sendBufferedMessages() {
 
 	if len(producer.pendingMessages.messages) > 0 {
 		//logs.LogInfo("len %d",  len(producer.pendingMessages.messages))
-		err := producer.internalBatchPublish(producer.pendingMessages.messages)
+		err := producer.internalBatchSend(producer.pendingMessages.messages)
 		if err != nil {
 			return
 		}
@@ -227,7 +229,7 @@ func (producer *Producer) getPublishingID(message message.StreamMessage) int64 {
 	return sequence
 }
 
-func (producer *Producer) BatchPublish(batchMessages []message.StreamMessage) error {
+func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
 	var messagesSequence = make([]messageSequence, len(batchMessages))
 	for i, batchMessage := range batchMessages {
 		messageBytes, err := batchMessage.MarshalBinary()
@@ -243,10 +245,10 @@ func (producer *Producer) BatchPublish(batchMessages []message.StreamMessage) er
 		producer.addUnConfirmed(sequence, batchMessage, producer.ID)
 	}
 
-	return producer.internalBatchPublish(messagesSequence)
+	return producer.internalBatchSend(messagesSequence)
 }
 
-func (producer *Producer) internalBatchPublish(messagesSequence []messageSequence) error {
+func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) error {
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.ID)
 	}
@@ -278,6 +280,8 @@ func (producer *Producer) internalBatchPublish(messagesSequence []messageSequenc
 
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
 	if err != nil {
+		// This sleep is need to wait the
+		// 200 milliseconds to flush all the pending messages
 		time.Sleep(800 * time.Millisecond)
 		producer.setStatus(closed)
 		producer.FlushUnConfirmedMessages()

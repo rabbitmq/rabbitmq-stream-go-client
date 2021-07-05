@@ -84,7 +84,7 @@ var _ = Describe("Integration tests", func() {
 			producer1, err := env.NewProducer(stream, nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = producer1.BatchPublish(nil, CreateArrayMessagesForTesting(1000))
+			_, err = producer1.BatchSend(nil, CreateArrayMessagesForTesting(1000))
 			Expect(err).NotTo(HaveOccurred())
 		}
 
@@ -120,7 +120,7 @@ var _ = Describe("Integration tests", func() {
 			producer1, err := env.NewProducer(stream, nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = producer1.BatchPublish(nil, CreateArrayMessagesForTesting(1000))
+			_, err = producer1.BatchSend(nil, CreateArrayMessagesForTesting(1000))
 			Expect(err).NotTo(HaveOccurred())
 		}
 
