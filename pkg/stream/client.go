@@ -54,6 +54,12 @@ func newClient(connectionName string, broker *Broker) *Client {
 	c.setConnectionName(connectionName)
 	return c
 }
+
+func NewDirectClient(broker *Broker) (*Client, error) {
+	client := newClient("direct-connection", broker)
+	return client, client.connect()
+}
+
 func (c *Client) getSocket() *socket {
 	//c.mutex.Lock()
 	//defer c.mutex.Unlock()
@@ -414,6 +420,9 @@ func (c *Client) ReusePublisher(streamName string, existingProducer *Producer) (
 }
 
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
+	if options == nil {
+		options = NewProducerOptions()
+	}
 	producer, err := c.coordinator.NewProducer(&ProducerOptions{
 		client:     c,
 		streamName: streamName,
@@ -590,6 +599,10 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 func (c *Client) DeclareSubscriber(streamName string,
 	messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
+	if options == nil {
+		options = NewConsumerOptions()
+	}
+
 	options.client = c
 	options.streamName = streamName
 	consumer := c.coordinator.NewConsumer(messagesHandler, options)

@@ -96,7 +96,7 @@ func main() {
 	// the send method automatically aggregates the messages
 	// based on batch size
 	for i := 0; i < 1000; i++ {
-		err := producer.Send(amqp.NewMessage([]byte("hello_world_"+strconv.Itoa(i))))
+		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 		CheckErr(err)
 	}
 

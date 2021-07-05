@@ -82,8 +82,6 @@ func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedMessage {
 	return producer.unConfirmedMessages
 }
 
-
-
 func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamMessage, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
@@ -319,10 +317,13 @@ func (producer *Producer) Close() error {
 			return err
 		}
 	}
-	ch := make(chan uint8, 1)
-	ch <- producer.ID
-	producer.onClose(ch)
-	close(ch)
+
+	if producer.onClose != nil {
+		ch := make(chan uint8, 1)
+		ch <- producer.ID
+		producer.onClose(ch)
+		close(ch)
+	}
 
 	producer.mutex.Lock()
 	if producer.publishConfirm != nil {

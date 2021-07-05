@@ -120,8 +120,7 @@ func main() {
 	}
 	go func() {
 
-
-		for  {
+		for {
 
 			coo, err := http.Connections("15672")
 			if err != nil {
@@ -132,12 +131,10 @@ func main() {
 				http.DropConnection(connection.Name, "15672")
 			}
 
-			time.Sleep(3*time.Second)
+			time.Sleep(3 * time.Second)
 		}
 
 	}()
-
-
 
 	wg.Wait()
 
