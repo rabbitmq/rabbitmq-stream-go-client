@@ -64,6 +64,9 @@ func printStats() {
 
 func decodeBody() string {
 	if publishers > 0 {
+		if fixedBody > 0 {
+			return fmt.Sprintf("Fixed Body: %d", fixedBody)
+		}
 		if variableBody > 0 {
 			return fmt.Sprintf("Variable Body: %d", variableBody)
 		}
@@ -207,14 +210,22 @@ func startPublisher(streamName string) error {
 	var arr []message.StreamMessage
 	var body string
 	for z := 0; z < batchSize; z++ {
-		if variableBody > 0 {
-			rand.Seed(time.Now().UnixNano())
-			n := rand.Intn(variableBody)
-			for i := 0; i < n; i++ {
+		body = fmt.Sprintf("simul_message")
+
+		if fixedBody > 0 {
+			body = ""
+			for i := 0; i < fixedBody; i++ {
 				body += "s"
 			}
 		} else {
-			body = fmt.Sprintf("simul_message")
+			if variableBody > 0 {
+				body = ""
+				rand.Seed(time.Now().UnixNano())
+				n := rand.Intn(variableBody)
+				for i := 0; i < n; i++ {
+					body += "s"
+				}
+			}
 		}
 
 		arr = append(arr, amqp.NewMessage([]byte(body)))
@@ -272,23 +283,6 @@ func startPublishers() error {
 	}
 	return nil
 }
-
-//func handlePublishClose(channelClose stream.ChannelClose) {
-//	go func() {
-//		event := <-channelClose
-//		logInfo("Producer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
-//		if exitOnError {
-//			os.Exit(1)
-//		}
-//		atomic.AddInt32(&producersCloseCount, 1)
-//		time.Sleep(800 * time.Millisecond)
-//		err := startPublisher(event.StreamName)
-//		if err != nil {
-//			logError("Error starting producer: %s", err)
-//		}
-//		checkErr(err)
-//	}()
-//}
 
 func handleConsumerClose(channelClose stream.ChannelClose) {
 	go func() {

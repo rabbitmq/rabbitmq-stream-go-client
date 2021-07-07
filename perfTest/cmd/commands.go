@@ -36,6 +36,7 @@ var (
 	rate                int
 	variableRate        int
 	variableBody        int
+	fixedBody           int
 	batchSize           int
 	exitOnError         bool
 )
@@ -54,6 +55,7 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.PersistentFlags().IntVarP(&rate, "rate", "", 0, "Limit publish rate")
 	baseCmd.PersistentFlags().IntVarP(&variableRate, "variable-rate", "", 0, "Variable rate to value")
 	baseCmd.PersistentFlags().IntVarP(&variableBody, "variable-body", "", 0, "Variable body size")
+	baseCmd.PersistentFlags().IntVarP(&fixedBody, "fixed-body", "", 0, "Body size")
 	baseCmd.PersistentFlags().BoolVarP(&exitOnError, "exit-on-error", "", true, "Close the app in case of error")
 	baseCmd.PersistentFlags().BoolVarP(&printStatsV, "print-stats", "", true, "Print stats")
 	baseCmd.PersistentFlags().StringSliceVarP(&streams, "streams", "", []string{"perf-test-go"}, "Stream names")
