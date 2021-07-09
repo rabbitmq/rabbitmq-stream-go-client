@@ -326,7 +326,7 @@ func (c *Client) heartBeat() {
 				}
 				return
 			case <-ticker.C:
-				if time.Since(c.lastHeartBeat) > 60*time.Second {
+				if time.Since(c.lastHeartBeat) > 120*time.Second {
 					v := atomic.AddInt32(&heartBeatMissed, 1)
 					logs.LogWarn("Missing heart beat %d", v)
 					if v > 3 {
