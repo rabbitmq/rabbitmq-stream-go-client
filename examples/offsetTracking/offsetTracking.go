@@ -80,8 +80,8 @@ func main() {
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName(uuid.New().String()).            // set a consumer name
-			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
+			SetConsumerName("my_consumer").            // set a consumer name
+			SetOffset(stream.OffsetSpecification{}.LastConsumed())) // start consuming from the beginning
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")

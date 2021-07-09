@@ -8,6 +8,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"hash/crc32"
 	"io"
+	"time"
 )
 
 type ReaderProtocol struct {
@@ -90,6 +91,7 @@ func (c *Client) handleResponse() {
 		case commandHeartbeat:
 			{
 
+				c.handleHeartbeat()
 				//logDebug("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 
 			}
@@ -469,4 +471,9 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader
 		return
 	}
 
+}
+
+
+func (c *Client) handleHeartbeat() {
+	c.lastHeartBeat = time.Now()
 }
