@@ -473,7 +473,6 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader
 
 }
 
-
 func (c *Client) handleHeartbeat() {
 	c.lastHeartBeat = time.Now()
 }
