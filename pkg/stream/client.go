@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -35,6 +36,7 @@ type Client struct {
 
 	mutex            *sync.Mutex
 	metadataListener metadataListener
+	lastHeartBeat    time.Time
 }
 
 func newClient(connectionName string, broker *Broker) *Client {
@@ -50,6 +52,7 @@ func newClient(connectionName string, broker *Broker) *Client {
 		mutex:            &sync.Mutex{},
 		clientProperties: ClientProperties{items: make(map[string]string)},
 		plainCRCBuffer:   make([]byte, 4096),
+		lastHeartBeat:    time.Now(),
 	}
 	c.setConnectionName(connectionName)
 	return c
@@ -313,6 +316,7 @@ func (c *Client) heartBeat() {
 
 	ticker := time.NewTicker(60 * time.Second)
 	resp := c.coordinator.NewResponseWitName("heartbeat")
+	var heartBeatMissed int32
 	go func() {
 		for {
 			select {
@@ -322,6 +326,18 @@ func (c *Client) heartBeat() {
 				}
 				return
 			case <-ticker.C:
+				if time.Since(c.lastHeartBeat) > 60*time.Second {
+					v := atomic.AddInt32(&heartBeatMissed, 1)
+					logs.LogWarn("Missing heart beat %d", v)
+					if v > 3 {
+						logs.LogWarn("Too many heartbeat missing: %d", v)
+						go func() {
+							c.Close()
+						}()
+					}
+				} else {
+					atomic.StoreInt32(&heartBeatMissed, 0)
+				}
 				c.sendHeartbeat()
 			}
 		}
