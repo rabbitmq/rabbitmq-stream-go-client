@@ -23,7 +23,7 @@ check: $(STATICCHECK)
 	$(STATICCHECK) ./pkg/stream
 
 test: vet fmt check
-	go test -v  ./pkg/stream -race -coverprofile=coverage.txt -covermode=atomic -tags debug #-ginkgo.v
+	go test --tags=debug -v  ./pkg/stream -race -coverprofile=coverage.txt -covermode=atomic  #-ginkgo.v
 
 integration-test: vet fmt check
 	cd ./pkg/system_integration && go test -v  . -race -coverprofile=coverage.txt -covermode=atomic -tags debug -timeout 99999s

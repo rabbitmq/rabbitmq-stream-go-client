@@ -366,10 +366,6 @@ func (c *Client) deletePublisher(publisherId byte) error {
 	writeByte(b, publisherId)
 	errWrite := c.handleWrite(b.Bytes(), resp)
 
-	//producer, _ := c.coordinator.GetProducerById(publisherId)
-	// if there are UnConfirmed messages here, most likely there will be an
-	// publisher error. Just try to wait a bit to receive the call back
-
 	err := c.coordinator.RemoveProducerById(publisherId, Event{
 		Command: CommandDeletePublisher,
 		Reason:  "deletePublisher",

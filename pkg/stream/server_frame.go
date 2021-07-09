@@ -263,8 +263,12 @@ func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol
 func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	subscriptionId := readByte(r)
-	consumer, _ := c.coordinator.GetConsumerById(subscriptionId)
+	consumer, err := c.coordinator.GetConsumerById(subscriptionId)
+	if err != nil {
+		logs.LogError("Handle Deliver consumer not found %s", err)
+		return
 
+	}
 	_ = readByte(r)
 	chunkType := readByte(r)
 	if chunkType != 0 {

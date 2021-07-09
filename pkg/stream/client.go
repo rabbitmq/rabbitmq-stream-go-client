@@ -315,8 +315,29 @@ func (c *Client) DeleteStream(streamName string) error {
 func (c *Client) heartBeat() {
 
 	ticker := time.NewTicker(60 * time.Second)
+
+	tickerHeatBeat := time.NewTicker(20 * time.Second)
+	//defer tickerHeatBeat.Stop()
 	resp := c.coordinator.NewResponseWitName("heartbeat")
 	var heartBeatMissed int32
+	go func() {
+		for c.socket.isOpen() {
+			<-tickerHeatBeat.C
+			if time.Since(c.lastHeartBeat) > 60*time.Second {
+				v := atomic.AddInt32(&heartBeatMissed, 1)
+				logs.LogWarn("Missing heart beat %d", v)
+				if v > 3 {
+					logs.LogWarn("Too many heartbeat missing: %d", v)
+					c.Close()
+				}
+			} else {
+				atomic.StoreInt32(&heartBeatMissed, 0)
+			}
+
+		}
+		tickerHeatBeat.Stop()
+	}()
+
 	go func() {
 		for {
 			select {
@@ -324,24 +345,14 @@ func (c *Client) heartBeat() {
 				if code.id == closeChannel {
 					_ = c.coordinator.RemoveResponseByName("heartbeat")
 				}
+				ticker.Stop()
 				return
 			case <-ticker.C:
-				if time.Since(c.lastHeartBeat) > 120*time.Second {
-					v := atomic.AddInt32(&heartBeatMissed, 1)
-					logs.LogWarn("Missing heart beat %d", v)
-					if v > 3 {
-						logs.LogWarn("Too many heartbeat missing: %d", v)
-						go func() {
-							c.Close()
-						}()
-					}
-				} else {
-					atomic.StoreInt32(&heartBeatMissed, 0)
-				}
 				c.sendHeartbeat()
 			}
 		}
 	}()
+
 }
 
 func (c *Client) sendHeartbeat() {
@@ -507,12 +518,13 @@ func (c *Client) metaData(streams ...string) *StreamsMetadata {
 		writeString(b, stream)
 	}
 
-	err := c.handleWrite(b.Bytes(), resp)
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
 	if err.Err != nil {
 		return nil
 	}
 
 	data := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return data.(*StreamsMetadata)
 }
 
@@ -526,9 +538,9 @@ func (c *Client) queryPublisherSequence(publisherReference string, stream string
 
 	writeString(b, publisherReference)
 	writeString(b, stream)
-	c.handleWrite(b.Bytes(), resp)
-
+	c.handleWriteWithResponse(b.Bytes(), resp, false)
 	sequence := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return sequence.(int64)
 
 }
