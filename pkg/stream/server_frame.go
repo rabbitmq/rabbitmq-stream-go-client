@@ -478,5 +478,6 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader
 }
 
 func (c *Client) handleHeartbeat() {
+	logs.LogDebug("Heart beat received at %s", time.Now())
 	c.lastHeartBeat = time.Now()
 }

@@ -323,12 +323,13 @@ func (c *Client) heartBeat() {
 	go func() {
 		for c.socket.isOpen() {
 			<-tickerHeatBeat.C
-			if time.Since(c.lastHeartBeat) > 60*time.Second {
+			logs.LogDebug("Heart beat since: %s", time.Since(c.lastHeartBeat))
+			if time.Since(c.lastHeartBeat) > 120*time.Second {
 				v := atomic.AddInt32(&heartBeatMissed, 1)
-				logs.LogWarn("Missing heart beat %d", v)
+				logs.LogWarn("Missing heart beat: %d", v)
 				if v > 3 {
 					logs.LogWarn("Too many heartbeat missing: %d", v)
-					c.Close()
+					//c.Close()
 				}
 			} else {
 				atomic.StoreInt32(&heartBeatMissed, 0)
@@ -348,6 +349,7 @@ func (c *Client) heartBeat() {
 				ticker.Stop()
 				return
 			case <-ticker.C:
+				logs.LogDebug("Sending heart beat: %s", time.Now())
 				c.sendHeartbeat()
 			}
 		}

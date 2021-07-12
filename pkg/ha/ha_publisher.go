@@ -137,13 +137,6 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		if exists {
 			time.Sleep(800 * time.Millisecond)
 			p.producer.FlushUnConfirmedMessages()
-			//if len(p.producer.GetUnConfirmed()) > 0 {
-			//	for _, msg := range p.producer.GetUnConfirmed() {
-			//		msg.Confirmed = false
-			//		p.channelPublishConfirm <- []*stream.UnConfirmedMessage{msg}
-			//	}
-			//}
-
 			return p.newProducer()
 		} else {
 			return stream.StreamDoesNotExist
