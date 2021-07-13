@@ -32,6 +32,7 @@ func (c *Client) handleResponse() {
 			_ = c.Close()
 			break
 		}
+		c.lastHeartBeat = time.Now()
 		readerProtocol.FrameLen = frameLen
 		readerProtocol.CommandID = uShortExtractResponseCode(readUShort(buffer))
 		readerProtocol.Version = readUShort(buffer)
@@ -92,7 +93,6 @@ func (c *Client) handleResponse() {
 			{
 
 				c.handleHeartbeat()
-				//logDebug("RECEIVED Heartbeat %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
 
 			}
 		case CommandQueryOffset:
@@ -479,5 +479,5 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader
 
 func (c *Client) handleHeartbeat() {
 	logs.LogDebug("Heart beat received at %s", time.Now())
-	c.lastHeartBeat = time.Now()
+	c.setLastHeartBeat(time.Now())
 }

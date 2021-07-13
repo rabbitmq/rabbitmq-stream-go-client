@@ -79,7 +79,18 @@ func (c *Client) getTuneState() TuneState {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	return c.tuneState
+}
 
+func (c *Client) getLastHeartBeat() time.Time {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.lastHeartBeat
+}
+
+func (c *Client) setLastHeartBeat(value time.Time) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.lastHeartBeat = value
 }
 
 func (c *Client) connect() error {
@@ -313,23 +324,19 @@ func (c *Client) DeleteStream(streamName string) error {
 }
 
 func (c *Client) heartBeat() {
-
 	ticker := time.NewTicker(60 * time.Second)
-
 	tickerHeatBeat := time.NewTicker(20 * time.Second)
-	//defer tickerHeatBeat.Stop()
 	resp := c.coordinator.NewResponseWitName("heartbeat")
 	var heartBeatMissed int32
 	go func() {
 		for c.socket.isOpen() {
 			<-tickerHeatBeat.C
-			logs.LogDebug("Heart beat since: %s", time.Since(c.lastHeartBeat))
-			if time.Since(c.lastHeartBeat) > 120*time.Second {
+			if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
 				v := atomic.AddInt32(&heartBeatMissed, 1)
 				logs.LogWarn("Missing heart beat: %d", v)
-				if v > 3 {
+				if v >= 2 {
 					logs.LogWarn("Too many heartbeat missing: %d", v)
-					//c.Close()
+					c.Close()
 				}
 			} else {
 				atomic.StoreInt32(&heartBeatMissed, 0)
