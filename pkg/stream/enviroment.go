@@ -4,12 +4,14 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 type Environment struct {
@@ -46,11 +48,18 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 			if err != nil {
 				return nil, err
 			}
+			parameter.Scheme = u.Scheme
 			parameter.User = u.User.Username()
 			parameter.Password, _ = u.User.Password()
 			parameter.Host = u.Host
 			parameter.Port = u.Port()
-			parameter.Scheme = u.Scheme
+
+			if vhost := strings.TrimPrefix(u.Path, "/"); len(vhost) > 0 {
+				if strings.Contains(vhost, "/") {
+					return nil, errors.New("multiple segments in URI path: " + u.Path)
+				}
+				parameter.Vhost = vhost
+			}
 		}
 
 		parameter.mergeWithDefault()
