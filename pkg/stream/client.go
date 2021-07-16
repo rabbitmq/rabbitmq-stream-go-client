@@ -9,10 +9,8 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
-	"runtime"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
 
@@ -106,24 +104,7 @@ func (c *Client) connect() error {
 		c.tuneState.requestedMaxFrameSize = 1048576
 
 		var dialer = &net.Dialer{
-			Control: func(network, address string, c syscall.RawConn) error {
-				return c.Control(func(fd uintptr) {
-					err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF, defaultSocketBuffer)
-					runtime.KeepAlive(fd)
-					if err != nil {
-						logs.LogError("Set socket option error: %s", err)
-						return
-					}
-
-					err = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, defaultSocketBuffer)
-					runtime.KeepAlive(fd)
-					if err != nil {
-						logs.LogError("Set socket option error: %s", err)
-						return
-					}
-
-				})
-			},
+			Control: controlFunc,
 		}
 
 		var connection net.Conn
