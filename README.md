@@ -8,7 +8,7 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
 ---
 
 ```
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.9-alpha
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.10-alpha
 ```
 
 ### Getting started

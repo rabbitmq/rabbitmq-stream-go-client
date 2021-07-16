@@ -11,8 +11,8 @@ import (
 // for example the producer status
 
 const (
-	running = iota
-	closed  = iota
+	open   = iota
+	closed = iota
 )
 
 const initBufferPublishSize = 2 + 2 + 1 + 4
@@ -79,10 +79,12 @@ const (
 	defaultSocketBuffer = 4096
 
 	//
-	ClientVersion = "0.9-alpha"
+	ClientVersion = "0.10-alpha"
 
 	StreamTcpPort = "5552"
 )
+
+var AlreadyClosed = errors.New("Already Closed")
 
 var PreconditionFailed = errors.New("Precondition Failed")
 var AuthenticationFailure = errors.New("Authentication Failure")

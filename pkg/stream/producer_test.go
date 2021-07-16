@@ -244,4 +244,18 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("Already Closed", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(5))
+		Expect(err).NotTo(HaveOccurred())
+		producer, err := env.NewProducer(testProducerStream, nil)
+		Expect(err).NotTo(HaveOccurred())
+		err = producer.Close()
+		Expect(err).NotTo(HaveOccurred())
+
+		err = producer.Close()
+		Expect(err).To(Equal(AlreadyClosed))
+		err = env.Close()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 })

@@ -73,14 +73,6 @@ func NewHAProducer(env *stream.Environment, streamName string, producerOptions *
 
 func (p *ReliableProducer) newProducer() error {
 
-	//if p.producer != nil && len(p.producer.GetUnConfirmed()) > 0 {
-	//	for _, msg := range p.producer.GetUnConfirmed() {
-	//		msg.Confirmed = false
-	//		p.channelPublishConfirm <- []*stream.UnConfirmedMessage{msg}
-	//	}
-	//
-	//}
-
 	producer, err := p.env.NewProducer(p.streamName, p.producerOptions)
 	if err != nil {
 		return err
