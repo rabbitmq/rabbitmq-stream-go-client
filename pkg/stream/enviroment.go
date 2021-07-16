@@ -55,7 +55,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 			parameter.Port = u.Port()
 
 			if vhost := strings.TrimPrefix(u.Path, "/"); len(vhost) > 0 {
-				if strings.Contains(vhost, "/") {
+				if vhost != "/" && strings.Contains(vhost, "/") {
 					return nil, errors.New("multiple segments in URI path: " + u.Path)
 				}
 				parameter.Vhost = vhost
