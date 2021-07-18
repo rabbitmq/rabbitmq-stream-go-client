@@ -176,21 +176,76 @@ var _ = Describe("Environment test", func() {
 	Describe("Environment Authentication", func() {
 		It("Connection Authentication Failure", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				SetUri("rabbitmq-StreamOptions://wrong_user:wrong_password@localhost:5552/%2f"))
+				SetUri("rabbitmq-stream://wrong_user:wrong_password@localhost:5552/%2f"))
 			Expect(err).
 				To(Equal(AuthenticationFailure))
 		})
 
 		It("Connection Vhost not exist", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				SetUri("rabbitmq-StreamOptions://guest:guest@localhost:5552/VHOSTNOEXIST"))
+				SetUri("rabbitmq-stream://guest:guest@localhost:5552/VHOSTNOEXIST"))
 			Expect(err).To(Equal(VirtualHostAccessFailure))
 		})
 
 		It("Connection No Endpoint", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				SetUri("rabbitmq-StreamOptions://g:g@noendpoint:5552/%2f"))
+				SetUri("rabbitmq-Stream://g:g@noendpoint:5552/%2f"))
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	Describe("Environment Validations", func() {
+
+		_, err := NewEnvironment(NewEnvironmentOptions().
+			SetMaxConsumersPerClient(0).
+			SetMaxProducersPerClient(0))
+		Expect(err).To(HaveOccurred())
+
+		_, err = NewEnvironment(NewEnvironmentOptions().
+			SetMaxConsumersPerClient(500).
+			SetMaxProducersPerClient(500))
+		Expect(err).To(HaveOccurred())
+
+		It("Malformed URI", func() {
+			_, err := NewEnvironment(NewEnvironmentOptions().
+				SetUri("rabbitmq-stream%%%malformed_uri"))
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Merge with Default", func() {
+			env2, err := NewEnvironment(NewEnvironmentOptions().SetHost("").
+				SetUser("").SetPassword("").SetPort(0))
+			Expect(err).NotTo(HaveOccurred())
+			err = env2.Close()
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("Stream Existing/Meta data", func() {
+
+		env, err := NewEnvironment(NewEnvironmentOptions().SetPort(5552).
+			SetUser("guest").
+			SetPassword("guest").SetHost("localhost"))
+		Expect(err).NotTo(HaveOccurred())
+		stream := uuid.New().String()
+		err = env.DeclareStream(stream, nil)
+		Expect(err).NotTo(HaveOccurred())
+		exists, err := env.StreamExists(stream)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(Equal(true))
+		metaData, err := env.StreamMetaData(stream)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(metaData.Leader.Host).To(Equal("localhost"))
+		Expect(metaData.Leader.Port).To(Equal("5552"))
+		Expect(len(metaData.replicas)).To(Equal(0))
+		err = env.DeleteStream(stream)
+		Expect(err).NotTo(HaveOccurred())
+		exists, err = env.StreamExists(stream)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(Equal(false))
+		err = env.Close()
+		Expect(err).NotTo(HaveOccurred())
+
+	})
+
 })
