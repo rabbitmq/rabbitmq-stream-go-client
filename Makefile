@@ -23,15 +23,21 @@ check: $(STATICCHECK)
 	$(STATICCHECK) ./pkg/stream
 
 test: vet fmt check
-	go test --tags=debug -v  ./pkg/stream -race -coverprofile=coverage.txt -covermode=atomic  #-ginkgo.v
+	go test --tags=debug -v  ./pkg/stream -coverprofile=coverage.txt -covermode=atomic  #-ginkgo.v
+
+build-all: vet fmt check build-darwin build-windows build-linux
+	 go test --tags=debug -v -race ./pkg/stream -coverprofile=coverage.txt -covermode=atomic  #-ginkgo.v
 
 integration-test: vet fmt check
 	cd ./pkg/system_integration && go test -v  . -race -coverprofile=coverage.txt -covermode=atomic -tags debug -timeout 99999s
 
+build-%: vet fmt check
+	GOOS=$(*) GOARCH=amd64 go build -ldflags=$(LDFLAGS) -v ./...
+
 build: vet fmt check
 	go build -ldflags=$(LDFLAGS) -v ./...
 
-PERFTEST_FLAGS ?= --producers 1 --consumers 1
+PERFTEST_FLAGS ?= --publishers 1 --consumers 1
 perf-test-run: perf-test-build
 	go run perfTest/perftest.go silent $(PERFTEST_FLAGS)
 

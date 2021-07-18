@@ -239,4 +239,41 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("Check already closed", func() {
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		err = producer.BatchSend(CreateArrayMessagesForTesting(500)) // batch send
+		Expect(err).NotTo(HaveOccurred())
+		defer func(producer *Producer) {
+			err := producer.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}(producer)
+
+		var messagesCount int32 = 0
+		consumer, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				if atomic.AddInt32(&messagesCount, 1) >= 250 {
+					err := consumerContext.Consumer.Close()
+					if err != nil {
+						return
+					}
+				}
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
+		err = consumer.Close()
+		Expect(err).To(Equal(AlreadyClosed))
+
+	})
+
+	It("Validation", func() {
+		_, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			}, &ConsumerOptions{
+				Offset: OffsetSpecification{},
+			})
+		Expect(err).To(HaveOccurred())
+
+	})
+
 })
