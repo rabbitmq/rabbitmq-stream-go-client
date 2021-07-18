@@ -71,8 +71,8 @@ func (po *ProducerOptions) SetBatchSize(size int) *ProducerOptions {
 
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{
-		QueueSize: 10000,
-		BatchSize: 100,
+		QueueSize: defaultQueuePublisherSize,
+		BatchSize: defaultBatchSize,
 	}
 }
 

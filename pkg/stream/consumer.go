@@ -74,7 +74,7 @@ type ConsumerContext struct {
 
 type MessagesHandler func(consumerContext ConsumerContext, message *amqp.Message)
 
-type ConsumerOptions struct {
+type /**/ ConsumerOptions struct {
 	client       *Client
 	ConsumerName string
 	streamName   string

@@ -266,4 +266,14 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
+	It("Validation", func() {
+		_, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			}, &ConsumerOptions{
+				Offset: OffsetSpecification{},
+			})
+		Expect(err).To(HaveOccurred())
+
+	})
+
 })

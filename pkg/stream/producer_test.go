@@ -183,7 +183,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("Smart Send Split frame", func() {
+	It("Smart Send Split frame/BatchSize", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchSize(50))
 		Expect(err).NotTo(HaveOccurred())
@@ -206,9 +206,32 @@ var _ = Describe("Streaming Producers", func() {
 		s := make([]byte, 1148576)
 		err = producer.Send(amqp.NewMessage(s))
 		Expect(err).To(HaveOccurred())
+		err = producer.Close()
+		Expect(err).NotTo(HaveOccurred())
+
+		producer, err = testEnvironment.NewProducer(testProducerStream,
+			NewProducerOptions().SetBatchSize(2))
+		Expect(err).NotTo(HaveOccurred())
+		var messagesCountBatch int32
+		chConfirmBatch := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for ids := range ch {
+				atomic.AddInt32(&messagesCountBatch, int32(len(ids)))
+			}
+		}(chConfirmBatch)
+
+		for i := 0; i < 100; i++ {
+			s := make([]byte, 11)
+			err = producer.Send(amqp.NewMessage(s))
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		time.Sleep(800 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCountBatch)).To(Equal(int32(100)))
 
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
+
 	})
 
 	It("Smart Send send after", func() {
@@ -244,7 +267,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Already Closed", func() {
+	It("Already Closed/Limits", func() {
 		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(5))
 		Expect(err).NotTo(HaveOccurred())
 		producer, err := env.NewProducer(testProducerStream, nil)
@@ -254,6 +277,27 @@ var _ = Describe("Streaming Producers", func() {
 
 		err = producer.Close()
 		Expect(err).To(Equal(AlreadyClosed))
+
+		/// validation limits
+		/// options.QueueSize and options.BatchSize
+		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
+			QueueSize: 1,
+		})
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().SetQueueSize(5000000))
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
+			BatchSize: 0,
+		})
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
+			BatchSize: 5000000,
+		})
+		Expect(err).To(HaveOccurred())
+
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})

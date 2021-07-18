@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 
 	//"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
@@ -20,14 +19,6 @@ func CheckErr(err error) {
 	}
 }
 
-func CreateArrayMessagesForTesting(bacthMessages int) []message.StreamMessage {
-	var arr []message.StreamMessage
-	for z := 0; z < bacthMessages; z++ {
-		arr = append(arr, amqp.NewMessage([]byte("hello_world_"+strconv.Itoa(z))))
-	}
-	return arr
-}
-
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 
@@ -41,15 +32,16 @@ func main() {
 			SetUser("test").
 			SetPassword("test"))
 	CheckErr(err)
-	streamName := "no"
-	//err = env.DeclareStream(streamName,
-	//	&stream.StreamOptions{
-	//		MaxLengthBytes: stream.ByteCapacity{}.GB(2),
-	//	},
-	//)
-	//CheckErr(err)
+	streamName := "pub-error"
+	err = env.DeclareStream(streamName,
+		&stream.StreamOptions{
+			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
+		},
+	)
 
-	producer, err := env.NewProducer(streamName, &stream.ProducerOptions{Name: "myProducer"})
+	CheckErr(err)
+
+	producer, err := env.NewProducer(streamName, stream.NewProducerOptions().SetProducerName("myProducer"))
 	CheckErr(err)
 
 	// This channel receives the callback in case the is some error during the
@@ -57,20 +49,18 @@ func main() {
 	chPublishError := producer.NotifyPublishError()
 	handlePublishError(chPublishError)
 
-	go func() {
-		for i := 0; i < 100; i++ {
-			err := producer.BatchSend(CreateArrayMessagesForTesting(2))
-			CheckErr(err)
-		}
-	}()
-	// Here we close the producer during the publishing
-	// so an publish error is raised
-
-	err = producer.Close()
-	CheckErr(err)
+	for i := 0; i < 100; i++ {
+		msg := amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i)))
+		err := producer.Send(msg)
+		CheckErr(err)
+	}
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
+	CheckErr(err)
+	err = env.DeleteStream(streamName)
+	CheckErr(err)
+	err = env.Close()
 	CheckErr(err)
 
 }
@@ -78,8 +68,7 @@ func main() {
 func handlePublishError(publishError stream.ChannelPublishError) {
 	go func() {
 		var totalMessages int32
-		for {
-			pError := <-publishError
+		for pError := range publishError {
 			atomic.AddInt32(&totalMessages, 1)
 			var data [][]byte
 			if pError.UnConfirmedMessage != nil {

@@ -189,14 +189,6 @@ func (env *Environment) NewConsumer(streamName string,
 	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options)
 }
 
-//func (env *Environment) NewStreamMessage(data []byte) message.StreamMessage {
-//	env.options.Codec
-//	return &AMQP10{
-//		message:      newMessage(data),
-//		publishingId: -1,
-//	}
-//}
-
 func (env *Environment) Close() error {
 	_ = env.producers.close()
 	_ = env.consumers.close()
