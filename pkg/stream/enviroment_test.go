@@ -174,7 +174,7 @@ var _ = Describe("Environment test", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	Describe("Environment Authentication", func() {
+	Describe("Environment Authentication/Validation", func() {
 		It("Connection Authentication Failure", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
 				SetUri("rabbitmq-stream://wrong_user:wrong_password@localhost:5552/%2f"))
