@@ -1,11 +1,12 @@
 package stream
 
 import (
+	"sync"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"sync"
-	"time"
 )
 
 var _ = Describe("Environment test", func() {
@@ -187,9 +188,15 @@ var _ = Describe("Environment test", func() {
 			Expect(err).To(Equal(VirtualHostAccessFailure))
 		})
 
+		It("Connection Vhost exists", func() {
+			_, err := NewEnvironment(NewEnvironmentOptions().
+				SetUri("rabbitmq-stream://guest:guest@localhost:5552/" + testVhost))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
 		It("Connection No Endpoint", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
-				SetUri("rabbitmq-Stream://g:g@noendpoint:5552/%2f"))
+				SetUri("rabbitmq-stream://g:g@noendpoint:5552/%2f"))
 			Expect(err).To(HaveOccurred())
 		})
 	})
