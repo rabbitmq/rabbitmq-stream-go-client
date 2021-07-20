@@ -32,7 +32,7 @@ func (c *Client) handleResponse() {
 			_ = c.Close()
 			break
 		}
-		c.lastHeartBeat = time.Now()
+		c.setLastHeartBeat(time.Now())
 		readerProtocol.FrameLen = frameLen
 		readerProtocol.CommandID = uShortExtractResponseCode(readUShort(buffer))
 		readerProtocol.Version = readUShort(buffer)
@@ -384,7 +384,7 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		code = readUShort(buffer)
 		producer, err := c.coordinator.GetProducerById(publisherId)
 		if err != nil {
-			logs.LogWarn("producer not found :%s", err)
+			logs.LogWarn("producer id %d not found, publish error :%s", publishingId, lookErrorCode(code))
 			producer = &Producer{unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
 		} else {
 			producer.mutex.Lock()

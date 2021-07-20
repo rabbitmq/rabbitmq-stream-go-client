@@ -22,6 +22,10 @@ type TuneState struct {
 type ClientProperties struct {
 	items map[string]string
 }
+type HeartBeat struct {
+	mutex sync.Mutex
+	value time.Time
+}
 
 type Client struct {
 	socket           socket
@@ -34,7 +38,7 @@ type Client struct {
 
 	mutex            *sync.Mutex
 	metadataListener metadataListener
-	lastHeartBeat    time.Time
+	lastHeartBeat    HeartBeat
 }
 
 func newClient(connectionName string, broker *Broker) *Client {
@@ -50,7 +54,9 @@ func newClient(connectionName string, broker *Broker) *Client {
 		mutex:            &sync.Mutex{},
 		clientProperties: ClientProperties{items: make(map[string]string)},
 		plainCRCBuffer:   make([]byte, 4096),
-		lastHeartBeat:    time.Now(),
+		lastHeartBeat: HeartBeat{
+			value: time.Now(),
+		},
 	}
 	c.setConnectionName(connectionName)
 	return c
@@ -80,15 +86,15 @@ func (c *Client) getTuneState() TuneState {
 }
 
 func (c *Client) getLastHeartBeat() time.Time {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	return c.lastHeartBeat
+	c.lastHeartBeat.mutex.Lock()
+	defer c.lastHeartBeat.mutex.Unlock()
+	return c.lastHeartBeat.value
 }
 
 func (c *Client) setLastHeartBeat(value time.Time) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	c.lastHeartBeat = value
+	c.lastHeartBeat.mutex.Lock()
+	defer c.lastHeartBeat.mutex.Unlock()
+	c.lastHeartBeat.value = value
 }
 
 func (c *Client) connect() error {
