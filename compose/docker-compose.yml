@@ -22,8 +22,6 @@ services:
     networks:
       - back
     hostname: node1
-    depends_on:
-      - rabbit_node_0
     image: pivotalrabbitmq/rabbitmq-stream
 #    ports:
 #      - "15673:15672"
@@ -39,8 +37,6 @@ services:
     networks:
       - back
     hostname: node2
-    depends_on:
-      - rabbit_node_1
     image: pivotalrabbitmq/rabbitmq-stream
     ports:
       - "5556:5551"
