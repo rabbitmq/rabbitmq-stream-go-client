@@ -61,8 +61,8 @@ rabbitmq-server:
 		pivotalrabbitmq/rabbitmq-stream
 
 rabbitmq-ha-proxy:
-	rm -rf tls-gen; git clone https://github.com/michaelklishin/tls-gen tls-gen
-	cd tls-gen/basic; make
+	cd compose; rm -rf tls-gen;
+	cd compose; git clone https://github.com/michaelklishin/tls-gen tls-gen; cd tls-gen/basic; make
 	cd compose; docker build -t haproxy-rabbitmq-cluster  .
-	cd compose; docker compose down
-	cd compose; docker compose up
+	cd compose; docker-compose down
+	cd compose; docker-compose up
