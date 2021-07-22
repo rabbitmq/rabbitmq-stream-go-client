@@ -59,3 +59,10 @@ rabbitmq-server:
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
 		--pull always \
 		pivotalrabbitmq/rabbitmq-stream
+
+rabbitmq-ha-proxy:
+	rm -rf tls-gen; git clone https://github.com/michaelklishin/tls-gen tls-gen
+	cd tls-gen/basic; make
+	cd compose; docker build -t haproxy-rabbitmq-cluster  .
+	docker compose  -f compose/docker-compose.yml down
+	docker compose  -f compose/docker-compose.yml up

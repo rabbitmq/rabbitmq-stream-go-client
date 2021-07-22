@@ -133,7 +133,7 @@ func (env *Environment) NewProducer(streamName string, producerOptions *Producer
 		return nil, err
 	}
 
-	return env.producers.newProducer(client, streamName, producerOptions)
+	return env.producers.newProducer(client, streamName, producerOptions, env.options.AddressResolver)
 }
 
 func (env *Environment) StreamExists(streamName string) (bool, error) {
@@ -194,7 +194,7 @@ func (env *Environment) NewConsumer(streamName string,
 		return nil, err
 	}
 
-	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options)
+	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options, env.options.AddressResolver)
 }
 
 func (env *Environment) Close() error {
@@ -207,6 +207,7 @@ type EnvironmentOptions struct {
 	ConnectionParameters  []*Broker
 	MaxProducersPerClient int
 	MaxConsumersPerClient int
+	AddressResolver       *AddressResolver
 }
 
 func NewEnvironmentOptions() *EnvironmentOptions {
@@ -215,6 +216,14 @@ func NewEnvironmentOptions() *EnvironmentOptions {
 		MaxConsumersPerClient: 1,
 		ConnectionParameters:  []*Broker{},
 	}
+}
+
+func (envOptions *EnvironmentOptions) SetAddressResolver(addressResolver AddressResolver) *EnvironmentOptions {
+	envOptions.AddressResolver = &AddressResolver{
+		Host: addressResolver.Host,
+		Port: addressResolver.Port,
+	}
+	return envOptions
 }
 
 func (envOptions *EnvironmentOptions) SetMaxProducersPerClient(maxProducersPerClient int) *EnvironmentOptions {
@@ -392,6 +401,8 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 	options *ProducerOptions) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
+	cc.mutexContext.Lock()
+	defer cc.mutexContext.Unlock()
 	var clientResult *Client
 	for i, client := range cc.clientsPerContext {
 		if !cc.isProducerListFull(i) {
@@ -401,27 +412,28 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 	}
 
 	if clientResult == nil {
-		clientResult = newClient("go-stream-producer", leader)
-		chMeta := make(chan metaDataUpdateEvent, 1)
-		clientResult.metadataListener = chMeta
-		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
-			for metaDataUpdateEvent := range ch {
-				clientResult.maybeCleanProducers(metaDataUpdateEvent.StreamName)
-				cc.maybeCleanClients()
-				if !cl.socket.isOpen() {
-					return
-				}
-			}
-
-		}(chMeta, clientResult)
-
-		cc.nextId++
-		cc.clientsPerContext[cc.nextId] = clientResult
+		clientResult = cc.newClientForProducer(leader)
 	}
 
 	err := clientResult.connect()
 	if err != nil {
 		return nil, err
+	}
+
+	for clientResult.connectionProperties.host != leader.advHost {
+		logs.LogDebug("connectionProperties host %s doesn't mach with the advertised_host %s .. retry",
+			clientResult.connectionProperties.host,
+			leader.advHost)
+		err := clientResult.Close()
+		if err != nil {
+			return nil, err
+		}
+		clientResult = cc.newClientForProducer(leader)
+		err = clientResult.connect()
+		if err != nil {
+			return nil, err
+		}
+		time.Sleep(1 * time.Second)
 	}
 
 	producer, err := clientResult.DeclarePublisher(streamName, options)
@@ -433,11 +445,33 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 	return producer, nil
 }
 
+func (cc *environmentCoordinator) newClientForProducer(leader *Broker) *Client {
+	clientResult := newClient("go-stream-producer", leader)
+	chMeta := make(chan metaDataUpdateEvent, 1)
+	clientResult.metadataListener = chMeta
+	go func(ch <-chan metaDataUpdateEvent, cl *Client) {
+		for metaDataUpdateEvent := range ch {
+			clientResult.maybeCleanProducers(metaDataUpdateEvent.StreamName)
+			cc.maybeCleanClients()
+			if !cl.socket.isOpen() {
+				return
+			}
+		}
+
+	}(chMeta, clientResult)
+
+	cc.nextId++
+	cc.clientsPerContext[cc.nextId] = clientResult
+	return clientResult
+}
+
 func (cc *environmentCoordinator) newConsumer(leader *Broker,
 	streamName string, messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
+	cc.mutexContext.Lock()
+	defer cc.mutexContext.Unlock()
 	var clientResult *Client
 	for i, client := range cc.clientsPerContext {
 		if !cc.isConsumerListFull(i) {
@@ -479,7 +513,9 @@ func (cc *environmentCoordinator) newConsumer(leader *Broker,
 }
 
 func (cc *environmentCoordinator) close() error {
-	for _, client := range cc.getClientsPerContext() {
+	cc.mutexContext.Lock()
+	defer cc.mutexContext.Unlock()
+	for _, client := range cc.clientsPerContext {
 		err := client.Close()
 		if err != nil {
 			logs.LogWarn("Error during close the client, %s", err)
@@ -510,15 +546,16 @@ func newProducers(maxItemsForClient int) *producersEnvironment {
 }
 
 func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName string,
-	options *ProducerOptions) (*Producer, error) {
+	options *ProducerOptions, resolver *AddressResolver) (*Producer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 	leader, err := clientLocator.BrokerLeader(streamName)
 	if err != nil {
 		return nil, err
 	}
-	if ps.producersCoordinator[leader.hostPort()] == nil {
-		ps.producersCoordinator[leader.hostPort()] = &environmentCoordinator{
+	coordinatorKey := leader.hostPort()
+	if ps.producersCoordinator[coordinatorKey] == nil {
+		ps.producersCoordinator[coordinatorKey] = &environmentCoordinator{
 			clientsPerContext: map[int]*Client{},
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
@@ -526,9 +563,9 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 			nextId:            0,
 		}
 	}
-	leader.cloneFrom(clientLocator.broker)
+	leader.cloneFrom(clientLocator.broker, resolver)
 
-	producer, err := ps.producersCoordinator[leader.hostPort()].newProducer(leader, streamName,
+	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, streamName,
 		options)
 	if err != nil {
 		return nil, err
@@ -575,15 +612,16 @@ func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {
 
 func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName string,
 	messagesHandler MessagesHandler,
-	consumerOptions *ConsumerOptions) (*Consumer, error) {
+	consumerOptions *ConsumerOptions, resolver *AddressResolver) (*Consumer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 	consumerBroker, err := clientLocator.BrokerForConsumer(streamName)
 	if err != nil {
 		return nil, err
 	}
-	if ps.consumersCoordinator[consumerBroker.hostPort()] == nil {
-		ps.consumersCoordinator[consumerBroker.hostPort()] = &environmentCoordinator{
+	coordinatorKey := consumerBroker.hostPort()
+	if ps.consumersCoordinator[coordinatorKey] == nil {
+		ps.consumersCoordinator[coordinatorKey] = &environmentCoordinator{
 			clientsPerContext: map[int]*Client{},
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
@@ -591,8 +629,8 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 			nextId:            0,
 		}
 	}
-	consumerBroker.cloneFrom(clientLocator.broker)
-	consumer, err := ps.consumersCoordinator[consumerBroker.hostPort()].
+	consumerBroker.cloneFrom(clientLocator.broker, resolver)
+	consumer, err := ps.consumersCoordinator[coordinatorKey].
 		newConsumer(consumerBroker, streamName, messagesHandler, consumerOptions)
 	if err != nil {
 		return nil, err
