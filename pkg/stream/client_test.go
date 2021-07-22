@@ -74,10 +74,8 @@ var _ = Describe("Streaming testEnvironment", func() {
 		By("Client Test")
 		streamP := uuid.New().String()
 
-		err := testEnvironment.DeclareStream(streamP,
-			&StreamOptions{
-				MaxLengthBytes: ByteCapacity{}.From("not_a_valid_value"),
-			})
+		err := testEnvironment.DeclareStream(streamP, NewStreamOptions().
+			SetMaxLengthBytes(ByteCapacity{}.From("not_a_valid_value")))
 
 		Expect(fmt.Sprintf("%s", err)).
 			To(ContainSubstring("Invalid unit size format"))
@@ -111,10 +109,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 
 	It("Create Stream with parameter SetMaxAge", func() {
 		streamP := uuid.New().String()
-		err := testEnvironment.DeclareStream(streamP,
-			&StreamOptions{
-				MaxAge: 120 * time.Hour,
-			})
+		err := testEnvironment.DeclareStream(streamP, NewStreamOptions().SetMaxAge(120*time.Hour))
 		Expect(err).NotTo(HaveOccurred())
 		err = testEnvironment.DeleteStream(streamP)
 		Expect(err).NotTo(HaveOccurred())

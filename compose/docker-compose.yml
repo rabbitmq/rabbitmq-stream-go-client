@@ -8,9 +8,9 @@ services:
       - back
     hostname: node0
     image: pivotalrabbitmq/rabbitmq-stream
-#    ports:
-#      - "15672:15672"
-#      - "5552:5552"
+    ports:
+      - "5561:5551"
+      - "5562:5552"
     tty: true
     volumes:
      - ./conf/:/etc/rabbitmq/
@@ -23,9 +23,9 @@ services:
       - back
     hostname: node1
     image: pivotalrabbitmq/rabbitmq-stream
-#    ports:
-#      - "15673:15672"
-#      - "5553:5552"
+    ports:
+      - "5571:5551"
+      - "5572:5552"
     tty: true
     volumes:
       - ./conf/:/etc/rabbitmq/
@@ -39,7 +39,8 @@ services:
     hostname: node2
     image: pivotalrabbitmq/rabbitmq-stream
     ports:
-      - "5556:5551"
+      - "5581:5551"
+      - "5582:5552"
     tty: true
     volumes:
       - ./conf/:/etc/rabbitmq/

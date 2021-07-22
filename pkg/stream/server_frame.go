@@ -474,7 +474,7 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader
 	readProtocol.CorrelationId, _ = readUInt(r)
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	closeReason := readString(r)
-	logs.LogInfo("Received close from server, reason: %s %s %d", lookErrorCode(readProtocol.ResponseCode),
+	logs.LogDebug("Received close from server, reason: %s %s %d", lookErrorCode(readProtocol.ResponseCode),
 		closeReason, readProtocol.ResponseCode)
 
 	length := 2 + 2 + 4 + 2
