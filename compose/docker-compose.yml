@@ -3,7 +3,7 @@ services:
   rabbit_node0:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host localhost advertised_port 5552
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node0
     networks:
       - back
     hostname: node0
@@ -18,7 +18,7 @@ services:
   rabbit_node1:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host localhost advertised_port 5553
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node1
     networks:
       - back
     hostname: node1
@@ -33,7 +33,7 @@ services:
   rabbit_node2:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host localhost advertised_port 5554
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node2
     networks:
       - back
     hostname: node2

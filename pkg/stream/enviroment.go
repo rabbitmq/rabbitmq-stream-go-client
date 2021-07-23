@@ -420,10 +420,11 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 		return nil, err
 	}
 
-	for clientResult.connectionProperties.host != leader.advHost {
-		logs.LogDebug("connectionProperties host %s doesn't mach with the advertised_host %s .. retry",
+	for clientResult.connectionProperties.host != leader.advHost ||
+		clientResult.connectionProperties.port != leader.advPort {
+		logs.LogDebug("connectionProperties host %s doesn't mach with the advertised_host %s, advertised_port %d .. retry",
 			clientResult.connectionProperties.host,
-			leader.advHost)
+			leader.advHost, leader.advPort)
 		err := clientResult.Close()
 		if err != nil {
 			return nil, err
