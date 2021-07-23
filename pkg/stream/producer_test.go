@@ -108,7 +108,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		err = producer.BatchSend(CreateArrayMessagesForTesting(14))
 		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandDeletePublisher)))
@@ -285,11 +285,17 @@ var _ = Describe("Streaming Producers", func() {
 		})
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, NewProducerOptions().SetQueueSize(5000000))
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetQueueSize(5000000))
 		Expect(err).To(HaveOccurred())
 
 		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
 			BatchSize: 0,
+		})
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
+			BatchSize: 20_000,
 		})
 		Expect(err).To(HaveOccurred())
 

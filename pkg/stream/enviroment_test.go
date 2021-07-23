@@ -255,4 +255,29 @@ var _ = Describe("Environment test", func() {
 
 	})
 
+	Describe("Address Resolver", func() {
+		addressResolver := AddressResolver{
+			Host: "localhost",
+			Port: 5552,
+		}
+		env, err := NewEnvironment(
+			NewEnvironmentOptions().
+				SetHost("localhost").
+				SetPort(5552).
+				SetAddressResolver(addressResolver).
+				SetMaxProducersPerClient(1))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		err = env.DeclareStream(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = env.DeleteStream(streamName)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = env.Close()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 })

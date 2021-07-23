@@ -3,49 +3,57 @@ services:
   rabbit_node0:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host localhost advertised_port 5552
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node0
     networks:
       - back
     hostname: node0
     image: pivotalrabbitmq/rabbitmq-stream
     ports:
-      - "15672:15672"
-      - "5552:5552"
+      - "5561:5551"
+      - "5562:5552"
     tty: true
     volumes:
      - ./conf/:/etc/rabbitmq/
+     - "./tls-gen/basic/result/:/certs"
   rabbit_node1:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host localhost advertised_port 5553
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node1
     networks:
       - back
     hostname: node1
-    depends_on:
-      - rabbit_node_0
     image: pivotalrabbitmq/rabbitmq-stream
     ports:
-      - "15673:15672"
-      - "5553:5552"
+      - "5571:5551"
+      - "5572:5552"
     tty: true
     volumes:
       - ./conf/:/etc/rabbitmq/
+      - "./tls-gen/basic/result/:/certs"
   rabbit_node2:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host localhost advertised_port 5554
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node2
     networks:
       - back
     hostname: node2
-    depends_on:
-      - rabbit_node_1
     image: pivotalrabbitmq/rabbitmq-stream
     ports:
-      - "15674:15672"
-      - "5554:5552"
+      - "5581:5551"
+      - "5582:5552"
     tty: true
     volumes:
       - ./conf/:/etc/rabbitmq/
-
+      - "./tls-gen/basic/result/:/certs"
+  haproxy:
+    image: haproxy-rabbitmq-cluster
+#    container_name: haproxy
+    hostname: haproxy
+    ports:
+      - "5553:5552"
+      - "5554:5551"
+      - "15673:15672"
+    networks:
+      - back
 networks:
   back:

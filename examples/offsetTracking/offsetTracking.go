@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
@@ -18,14 +17,6 @@ func CheckErr(err error) {
 		fmt.Printf("%s ", err)
 		os.Exit(1)
 	}
-}
-
-func CreateArrayMessagesForTesting(bacthMessages int) []message.StreamMessage {
-	var arr []message.StreamMessage
-	for z := 0; z < bacthMessages; z++ {
-		arr = append(arr, amqp.NewMessage([]byte("hello_world_"+strconv.Itoa(z))))
-	}
-	return arr
 }
 
 func main() {
@@ -80,8 +71,8 @@ func main() {
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer").                         // set a consumer name
-			SetOffset(stream.OffsetSpecification{}.LastConsumed())) // start consuming from the beginning
+			SetConsumerName("my_consumer").                  // set a consumer name
+			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")

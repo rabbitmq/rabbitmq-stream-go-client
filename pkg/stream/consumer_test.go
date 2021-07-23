@@ -252,7 +252,7 @@ var _ = Describe("Streaming Consumers", func() {
 		var messagesCount int32 = 0
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
-				if atomic.AddInt32(&messagesCount, 1) >= 250 {
+				if atomic.AddInt32(&messagesCount, 1) >= 1 {
 					err := consumerContext.Consumer.Close()
 					if err != nil {
 						return

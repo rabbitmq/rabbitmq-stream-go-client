@@ -1,7 +1,6 @@
 package system_integration
 
 import (
-	"context"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,14 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 )
-
-func CreateArrayMessagesForTesting(numberOfMessages int) []*amqp.Message {
-	var arr []*amqp.Message
-	for z := 0; z < numberOfMessages; z++ {
-		arr = append(arr, amqp.NewMessage([]byte("test_"+strconv.Itoa(z))))
-	}
-	return arr
-}
 
 func getHttpPort(tcpPort string) string {
 	switch tcpPort {
@@ -34,27 +25,13 @@ func getHttpPort(tcpPort string) string {
 }
 
 var _ = Describe("Integration tests", func() {
-	ports := []string{"5552", "5553", "5554"}
-
 	addresses := []string{
-		"rabbitmq-stream://guest:guest@localhost:5552/%2f",
-		"rabbitmq-stream://guest:guest@localhost:5553/%2f",
-		"rabbitmq-stream://guest:guest@localhost:5554/%2f"}
-
-	//BeforeSuite(func() {
-	//	for _, port := range ports {
-	//		err := Operations{}.InstallTools(port)
-	//		Expect(err).NotTo(HaveOccurred())
-	//	}
-	//
-	//})
+		"rabbitmq-stream://guest:guest@localhost:5562/%2f",
+		"rabbitmq-stream://guest:guest@localhost:5572/%2f",
+		"rabbitmq-stream://guest:guest@localhost:5582/%2f"}
 
 	BeforeEach(func() {
 		time.Sleep(500 * time.Millisecond)
-		for _, port := range ports {
-			err := Operations{}.StartRabbitMQNode(port)
-			Expect(err).NotTo(HaveOccurred())
-		}
 
 	})
 	AfterEach(func() {
@@ -84,7 +61,6 @@ var _ = Describe("Integration tests", func() {
 			producer1, err := env.NewProducer(stream, nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = producer1.BatchSend(nil, CreateArrayMessagesForTesting(1000))
 			Expect(err).NotTo(HaveOccurred())
 		}
 
@@ -120,7 +96,6 @@ var _ = Describe("Integration tests", func() {
 			producer1, err := env.NewProducer(stream, nil)
 			producers = append(producers, producer1)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = producer1.BatchSend(nil, CreateArrayMessagesForTesting(1000))
 			Expect(err).NotTo(HaveOccurred())
 		}
 
@@ -160,7 +135,7 @@ var _ = Describe("Integration tests", func() {
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha-test")
+		rProducer, err := ha.NewHAProducer(env, streamName, stream.NewProducerOptions().SetProducerName("p1"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rProducer.IsOpen()).To(Equal(true))
@@ -168,7 +143,6 @@ var _ = Describe("Integration tests", func() {
 		data, err := env.StreamMetaData(streamName)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rProducer.GetBroker().Port).To(Equal(data.Leader.Port))
-		err = Operations{}.StopRabbitMQNode(data.Leader.Port)
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(10 * time.Second)
 		Expect(rProducer.IsOpen()).To(Equal(true))
@@ -202,7 +176,7 @@ var _ = Describe("Integration tests", func() {
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha-test")
+		rProducer, err := ha.NewHAProducer(env, streamName, stream.NewProducerOptions().SetProducerName("producer-ha-test"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rProducer.IsOpen()).To(Equal(true))
@@ -229,7 +203,7 @@ var _ = Describe("Integration tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(5 * time.Second)
 
-		rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha-test")
+		rProducer, err := ha.NewHAProducer(env, streamName, stream.NewProducerOptions().SetProducerName("producer-ha-test"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(err).NotTo(HaveOccurred())
 
@@ -260,7 +234,7 @@ var _ = Describe("Integration tests", func() {
 		streamName := uuid.New().String()
 		err = env.DeclareStream(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		rProducer, err := ha.NewHAProducer(env, streamName, "producer-ha-test")
+		rProducer, err := ha.NewHAProducer(env, streamName, stream.NewProducerOptions().SetProducerName("producer-ha-test"))
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := rProducer.NotifyPublishConfirmation()
 		var messagesNotConfirmed int32 = 0
@@ -278,7 +252,7 @@ var _ = Describe("Integration tests", func() {
 		Expect(rProducer.IsOpen()).To(Equal(true))
 		go func(p *ha.ReliableProducer) {
 			for i := 0; i < 100; i++ {
-				err1 := p.Send(CreateArrayMessagesForTesting(10))
+				err1 := p.Send(amqp.NewMessage([]byte("test_" + strconv.Itoa(i))))
 				Expect(err1).NotTo(HaveOccurred())
 				time.Sleep(100 * time.Millisecond)
 			}
@@ -299,7 +273,7 @@ var _ = Describe("Integration tests", func() {
 			atomic.AddInt32(&messagesCount, 1)
 		}
 
-		consumer, err2 := env.NewConsumer(context.TODO(), streamName,
+		consumer, err2 := env.NewConsumer(streamName,
 			handleMessages, stream.NewConsumerOptions().SetOffset(
 				stream.OffsetSpecification{}.First()))
 		Expect(err2).NotTo(HaveOccurred())

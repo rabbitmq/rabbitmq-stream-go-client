@@ -13,6 +13,7 @@ jobs:
           RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_stream  advertised_host localhost"
         ports:
           - 5552:5552
+          - 15672:15672
     steps:
       - name: Set up Go
         uses: actions/setup-go@v2
