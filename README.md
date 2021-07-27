@@ -9,23 +9,19 @@
 Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 </div>
 
-### Install
----
+### Installation
 
 ```
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.10-alpha
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.11-alpha
 ```
 
 ### Getting started
----
 See [Getting Started](./examples/getting_started.go) example
 
-### Examples
----
+#### Examples
 See [examples](./examples/) for more use cases
 
 ### Docker Image:
----
 Exercising a stream is very easy with Docker.
 Let's start the broker:
 ```shell 
