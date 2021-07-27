@@ -43,7 +43,6 @@ func main() {
 
 	CheckErr(err)
 
-
 	/// We create a few streams, in order to distribute the streams across the cluster
 	var streamsName []string
 	for i := 0; i < 3; i++ {
@@ -92,7 +91,7 @@ func main() {
 			streamName,
 			handleMessages,
 			stream.NewConsumerOptions().
-				SetConsumerName(uuid.New().String()). // set a random name
+				SetConsumerName(uuid.New().String()).            // set a random name
 				SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 		CheckErr(err)
 		consumers = append(consumers, consumer)
