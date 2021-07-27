@@ -66,10 +66,9 @@ func main() {
 			SetUser("guest").
 			SetPassword("guest").
 			IsTLS(true).
-			// default value is InsecureSkipVerify: true
-			// in case of InsecureSkipVerify: true
-			// this line is not necessary
-			SetTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+			// use tls.Config  to customize the TLS configuration
+			// for tests you may need InsecureSkipVerify: true
+			SetTLSConfig(&tls.Config{}),
 	)
 	CheckErr(err)
 	// Create a stream, you can create streams without any option like:

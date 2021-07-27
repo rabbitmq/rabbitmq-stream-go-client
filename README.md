@@ -1,91 +1,57 @@
-# GO stream client for RabbitMQ streaming queues
+<h1 align="center">RabbitMQ Stream GO Client</h1>
+
 ---
+<div align="center">
+
 ![Build](https://github.com/rabbitmq/rabbitmq-stream-go-client/workflows/Build/badge.svg)
 [![codecov](https://codecov.io/gh/rabbitmq/rabbitmq-stream-go-client/branch/main/graph/badge.svg?token=HZD4S71QIM)](https://codecov.io/gh/rabbitmq/rabbitmq-stream-go-client)
 
 Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
+</div>
 
-### Download
----
+### Installation
 
 ```
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.10-alpha
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.11-alpha
 ```
 
 ### Getting started
----
+See [Getting Started](./examples/getting_started.go) example
 
-Run RabbitMQ docker image with streaming:
-```
-docker run -it --rm --name rabbitmq -p 5552:5552 -p 5672:5672 -p 15672:15672 \
--e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
-pivotalrabbitmq/rabbitmq-stream
-```
-
-Run "getting started" example:
-```
-go run examples/getting_started.go
-```
-
+#### Examples
 See [examples](./examples/) for more use cases
 
-### Performance test tool is an easy way to do some test:
-
+### Docker Image:
+Exercising a stream is very easy with Docker.
+Let's start the broker:
+```shell 
+docker run -it --rm --name rabbitmq -p 5552:5552 -p 15672:15672\
+    -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS='-rabbitmq_stream advertised_host localhost -rabbit loopback_users "none"' \
+    rabbitmq:3.9-rc-management
 ```
-go run perfTest/perftest.go silent
-```
-
-### API
----
-
-The API are composed by mandatory and optional arguments.
-To set the optional parameters you can use builders:
-
-```golang
-env, err := stream.NewEnvironment(
-		stream.NewEnvironmentOptions().
-			SetHost("localhost").
-			SetPort(5552).
-			SetUser("guest").
-			SetPassword("guest"))
+The broker should start in a few seconds. When it’s ready, enable the `stream` plugin and `stream_management`:
+```shell
+docker exec rabbitmq rabbitmq-plugins enable rabbitmq_stream_management
 ```
 
-or standard way:
-```golang
-env, err := stream.NewEnvironment(
-            &stream.EnvironmentOptions{
-                    ConnectionParameters:  stream.Broker{
-                    Host:     "localhost",
-                    Port:     5552,
-                    User:     "guest",
-                    Password: "guest",
-                },
-                MaxProducersPerClient: 1,
-                MaxConsumersPerClient: 1,
-                },
-            )
-```
+### Documentation
 
-
-`nil` is also a valid value, default values will be provided:
-
-```golang
-env, err := stream.NewEnvironment(nil) 
-```
+The documentation is still work in progress
 
 ### Build from source
----
 
 ```shell
-make 
+make build
 ```
 
-You need a docker image running to execute the tests:
-
+to execute the tests you need a docker image:
+```shell
+make rabbitmq-server
 ```
- docker run -it --rm --name rabbitmq -p 5552:5552 \
-   -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
-   pivotalrabbitmq/rabbitmq-stream
+
+then
+```shell
+make test
 ```
 
 ### Project status
