@@ -49,9 +49,9 @@ type Producer struct {
 type ProducerOptions struct {
 	client     *Client
 	streamName string
-	Name       string
-	QueueSize  int
-	BatchSize  int
+	Name       string // Producer name, it is useful to handle deduplication messages
+	QueueSize  int // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
+	BatchSize  int // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
 }
 
 func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {

@@ -23,17 +23,16 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
         * [TLS](#tls)
     * [Streams](#streams)
     * [Publish messages](#publish-messages)
-        * [`Send` vs `BatchSend`](#send-batchsend)
+        * [`Send` vs `BatchSend`](#send-vs-batchsend)
         * [Publish Confirmation](#publish-confirmation)
         * [Publish Errors](#publish-errors)
         * [Deduplication](#deduplication)
-        * [HA producer - Experimental](#haproducer-experimental)
+        * [HA producer - Experimental](#ha-producer-experimental)
     * [Consume messages](#consume-messages)
-        * [Offset](#consume_offset)
         * [Track Offset](#track-offset)
     * [Handle Close](#handle-close)
-- [Perf test tool](#perftool)
-    * [Perf test tool Docker](#perftooldocker)
+- [Perfomance test tool](#perfomance-test-tool)
+    * [Perfomance test tool Docker](#perfomance-test-tool-docker)
 
 # Overview
 
@@ -57,7 +56,7 @@ You may need a server to test locally. Let's start the broker:
 ```shell 
 docker run -it --rm --name rabbitmq -p 5552:5552 -p 15672:15672\
     -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS='-rabbitmq_stream advertised_host localhost -rabbit loopback_users "none"' \
-    rabbitmq:3.9-rc-management
+    rabbitmq:3.9-management
 ```
 The broker should start in a few seconds. When it’s ready, enable the `stream` plugin and `stream_management`:
 ```shell
@@ -179,6 +178,20 @@ Note: The function `DeclareStream` returns `stream.StreamAlreadyExists` if a str
 
 # Publish messages
 
+To publish a message you need a `*stream.Producer` instance:
+```golang
+producer, err :=  env.NewProducer("my-stream", nil)
+```
+
+With `ProducerOptions` is possible to customize the Producer behaviour:
+```golang
+type ProducerOptions struct {
+	Name       string // Producer name, it is useful to handle deduplication messages
+	QueueSize  int // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
+	BatchSize  int // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
+}
+```
+
 The client provides two interfaces to send messages.
 `send`:
 ```golang
@@ -250,6 +263,13 @@ the client provides an interface to receive the errors:
 ```
 It is up to the user to decide what to do with error messages.
 
+# Deduplication
+
+The stream plugin can handle deduplication data, see this blog post for more details:
+https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/
+You can find an "Deduplication" example in the [examples](./examples/) directory.
+Run it more than time, the messages count will be always 10.
+
 # Consume messages
 
 In order to consume messages from a stream you need to use the `NewConsumer` interface, ex:
@@ -270,7 +290,67 @@ With `ConsumerOptions` it is possible to customize the consumer behaviour.
   SetConsumerName("my_consumer").                  // set a consumer name
   SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 ```
+See also "Offset Start" example in the [examples](./examples/) directory
 
+
+# Track Offset
+The server can store the offset given a consumer, in this way:
+```golang
+handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		if atomic.AddInt32(&count, 1)%1000 == 0 {
+			err := consumerContext.Consumer.StoreOffset()
+			....
+
+consumer, err := env.NewConsumer(
+..
+stream.NewConsumerOptions().
+			SetConsumerName("my_consumer"). <------ 
+```
+Note: *AVOID to store the offset for each single message, it will reduce the performances*
+
+See also "Offset Tracking" example in the [examples](./examples/) directory
+
+# Handle Close
+Client provides an interface to handle the producer/consumer close.
+
+```golang
+channelClose := consumer.NotifyClose()
+defer consumerClose(channelClose)
+func consumerClose(channelClose stream.ChannelClose) {
+	event := <-channelClose
+	fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", event.Name, event.StreamName, event.Reason)
+}
+```
+In this way it is possible to handle fail-over
+
+# Perfomance test tool
+
+With the client there is also a performace tool:
+```shell
+ bin/perfTest -h
+```
+It is usefull to execute some test. See also the [Java Performance](https://rabbitmq.github.io/rabbitmq-stream-java-client/stable/htmlsingle/#the-performance-tool) tool
+
+A docker image is available: `pivotalrabbitmq/go-stream-perf-test`, to test it:
+
+Run the server is host mode:
+```shell
+ docker run -it --rm --name rabbitmq --network host \
+    rabbitmq:3.9-management
+```
+enable the plugin:
+```
+ docker exec rabbitmq rabbitmq-plugins enable rabbitmq_stream
+```
+then run the docker image:
+```shell
+docker run -it --network host  pivotalrabbitmq/go-stream-perf-test silent
+```
+
+To see all the parameters:
+```shell
+docker run -it --network host  pivotalrabbitmq/go-stream-perf-test --help
+```
 
 
 ### Project status
