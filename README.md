@@ -33,12 +33,14 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
     * [Handle Close](#handle-close)
 - [Perfomance test tool](#perfomance-test-tool)
     * [Perfomance test tool Docker](#perfomance-test-tool-docker)
+- [Build form source](#build-from-source)
+- [Project status](#project-status)
 
-# Overview
+### Overview
 
 Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 
-# Installing
+### Installing
 
 ```shell
 go get -u github.com/rabbitmq/rabbitmq-stream-go-client
@@ -51,7 +53,8 @@ imports:
 "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message" // messages interface package, you may not need to import it directly
 ```
 
-# Run server with Docker
+### Run server with Docker
+---
 You may need a server to test locally. Let's start the broker:
 ```shell 
 docker run -it --rm --name rabbitmq -p 5552:5552 -p 15672:15672\
@@ -63,20 +66,20 @@ The broker should start in a few seconds. When it’s ready, enable the `stream`
 docker exec rabbitmq rabbitmq-plugins enable rabbitmq_stream_management
 ```
 
-management UI: http://localhost:15672/
-stream port: `rabbitmq-stream://guest:guest@localhost:5552`
+Management UI: http://localhost:15672/ </br>
+Stream uri: `rabbitmq-stream://guest:guest@localhost:5552`
 
-# Getting started for impatient
+### Getting started for impatient
 
 See [getting started](./examples/getting_started.go) example.
 
-# Examples
+### Examples
 
 See [examples](./examples/) directory for more use cases.
 
 # Usage
 
-# Connect
+### Connect
 
 Standard way to connect single node:
 ```golang
@@ -91,21 +94,21 @@ env, err := stream.NewEnvironment(
 
 you can define the number of producers per connections, the default value is 1:
 ```golang
-		stream.NewEnvironmentOptions().
-			SetMaxProducersPerClient(2))
+stream.NewEnvironmentOptions().
+SetMaxProducersPerClient(2))
 ```
 
 you can define the number of consumers per connections, the default value is 1:
 ```golang
-		stream.NewEnvironmentOptions().
-			SetMaxConsumersPerClient(2))
+stream.NewEnvironmentOptions().
+SetMaxConsumersPerClient(2))
 ```
 
 To have the best performance you should use the default values.
 Note about multiple consumers per connection:
 *The IO threads is shared across the consumers, so if one consumer is slow it could impact other consumers performances*
 
-# Multi hosts
+### Multi hosts
 
 It is possible to define multi hosts, in case one fails to connect the clients tries random another one.
 
@@ -115,11 +118,11 @@ addresses := []string{
 		"rabbitmq-stream://guest:guest@host2:5552/%2f",
 		"rabbitmq-stream://guest:guest@host3:5552/%2f"}
 
-		env, err := stream.NewEnvironment(
+env, err := stream.NewEnvironment(
 			stream.NewEnvironmentOptions().SetUris(addresses))
 ```
 
-# Load Balancer
+### Load Balancer
 
 The stream client is supposed to reach all the hostnames,
 in case of load balancer you can use the `stream.AddressResolver` parameter in this way:
@@ -129,7 +132,7 @@ addressResolver := stream.AddressResolver{
 		Host: "load-balancer-ip",
 		Port: 5552,
 	}
-	env, err := stream.NewEnvironment(
+env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("host").
 			SetPort(5552).
@@ -142,11 +145,11 @@ This [rabbitmq blog post](https://blog.rabbitmq.com/posts/2021/07/connecting-to-
 
 See also "Using a load balancer" example in the [examples](./examples/) directory
 
-# TLS
+### TLS
 
 To configure TLS you need to set the `IsTLS` parameter:
 ```golang
-	env, err := stream.NewEnvironment(
+env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
 			SetPort(5551). // standard TLS port
@@ -157,11 +160,11 @@ To configure TLS you need to set the `IsTLS` parameter:
 	)
 ```
 
-The `tls.Config` is the standard golang tls library https://pkg.go.dev/crypto/tls
+The `tls.Config` is the standard golang tls library https://pkg.go.dev/crypto/tls </br>
 See also "Getting started TLS" example in the [examples](./examples/) directory
 
 
-# Streams
+### Streams
 
 To define streams you need to use the the `enviroment` interfaces `DeclareStream` and `DeleteStream`.
 
@@ -176,7 +179,7 @@ err = env.DeclareStream(streamName,
 Note: The function `DeclareStream` returns `stream.StreamAlreadyExists` if a stream is already defined.
 
 
-# Publish messages
+### Publish messages
 
 To publish a message you need a `*stream.Producer` instance:
 ```golang
@@ -221,20 +224,20 @@ err = producer.BatchSend(messages)
 - accepts an array messages as parameter
 - is synchronous
 
-# `Send` vs `BatchSend`
+### `Send` vs `BatchSend`
 
 The `BatchSend` is the primitive to send the messages, `Send` introduces a smart layer to publish messages and internally uses `BatchSend`.
 
 The `Send` interface works in most of cases, In some condition is about 15/20 slower than `BatchSend`. See also this [thread](https://groups.google.com/g/rabbitmq-users/c/IO_9-BbCzgQ).
 
-# Publish Confirmation
+### Publish Confirmation
 
 For each publish the server sends back to the client the confirmation, the client provides an interface to receive the confirmation:
 
 ```golang
-	//optional publish confirmation channel
-	chPublishConfirm := producer.NotifyPublishConfirmation()
-	handlePublishConfirm(chPublishConfirm)
+//optional publish confirmation channel
+chPublishConfirm := producer.NotifyPublishConfirmation()
+handlePublishConfirm(chPublishConfirm)
 	
 func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
@@ -250,40 +253,40 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	}()
 }
 ```
-It is up to the user to decide what to do with confirmed and unconfirmed messages.
+It is up to the user to decide what to do with confirmed and unconfirmed messages. </br>
 See also "Getting started" example in the [examples](./examples/) directory
 
-# Publish Errors
+### Publish Errors
 
 In some case the server can send back to the client an error, for example the producer-id does not exist or permission problems.
 the client provides an interface to receive the errors:
 ```golang
-	chPublishError := producer.NotifyPublishError()
-	handlePublishError(chPublishError)
+chPublishError := producer.NotifyPublishError()
+handlePublishError(chPublishError)
 ```
 It is up to the user to decide what to do with error messages.
 
-# Deduplication
+### Deduplication
 
 The stream plugin can handle deduplication data, see this blog post for more details:
-https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/
-You can find an "Deduplication" example in the [examples](./examples/) directory.
+https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/ </br>
+You can find an "Deduplication" example in the [examples](./examples/) directory. </br>
 Run it more than time, the messages count will be always 10.
 
-# Consume messages
+### Consume messages
 
 In order to consume messages from a stream you need to use the `NewConsumer` interface, ex:
 ```golang
 handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
-	}
+	fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
+}
 
-	consumer, err := env.NewConsumer(
+consumer, err := env.NewConsumer(
 		"my-stream",
 		handleMessages,
 		....
 ```
-
+management UI
 With `ConsumerOptions` it is possible to customize the consumer behaviour.
 ```golang
   stream.NewConsumerOptions().
@@ -293,7 +296,7 @@ With `ConsumerOptions` it is possible to customize the consumer behaviour.
 See also "Offset Start" example in the [examples](./examples/) directory
 
 
-# Track Offset
+### Track Offset
 The server can store the offset given a consumer, in this way:
 ```golang
 handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
@@ -310,7 +313,7 @@ Note: *AVOID to store the offset for each single message, it will reduce the per
 
 See also "Offset Tracking" example in the [examples](./examples/) directory
 
-# Handle Close
+### Handle Close
 Client provides an interface to handle the producer/consumer close.
 
 ```golang
@@ -323,7 +326,7 @@ func consumerClose(channelClose stream.ChannelClose) {
 ```
 In this way it is possible to handle fail-over
 
-# Perfomance test tool
+### Perfomance test tool
 
 With the client there is also a performace tool:
 ```shell
@@ -331,6 +334,7 @@ With the client there is also a performace tool:
 ```
 It is usefull to execute some test. See also the [Java Performance](https://rabbitmq.github.io/rabbitmq-stream-java-client/stable/htmlsingle/#the-performance-tool) tool
 
+### Perfomance test tool Docker
 A docker image is available: `pivotalrabbitmq/go-stream-perf-test`, to test it:
 
 Run the server is host mode:
@@ -352,7 +356,21 @@ To see all the parameters:
 docker run -it --network host  pivotalrabbitmq/go-stream-perf-test --help
 ```
 
+### Build form source
+
+```shell
+make build
+```
+
+To execute the tests you need a docker image, you can use:
+```shell
+make rabbitmq-server
+```
+to run a ready rabbitmq-server with stream enabled for tests.
+
+then `make test`
 
 ### Project status
 ---
 The client is a work in progress, the API(s) could change
+management UI
