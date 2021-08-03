@@ -23,9 +23,9 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
         * [TLS](#tls)
     * [Streams](#streams)
     * [Publish messages](#publish-messages)
-        * [`Send` vs `BatchSend`] (#send-batchsend)
-        * [Confirmation](#confirmation)
-        * [Errors](#errors)
+        * [`Send` vs `BatchSend`](#send-batchsend)
+        * [Publish Confirmation](#publish-confirmation)
+        * [Publish Errors](#publish-errors)
         * [Deduplication](#deduplication)
         * [HA producer - Experimental](#haproducer-experimental)
     * [Consume messages](#consume-messages)
@@ -69,7 +69,11 @@ stream port: `rabbitmq-stream://guest:guest@localhost:5552`
 
 # Getting started for impatient
 
-See [getting started](./examples/getting_started.go) example
+See [getting started](./examples/getting_started.go) example.
+
+# Examples
+
+See [examples](./examples/) directory for more use cases.
 
 # Usage
 
@@ -209,6 +213,64 @@ err = producer.BatchSend(messages)
 The `BatchSend` is the primitive to send the messages, `Send` introduces a smart layer to publish messages and internally uses `BatchSend`.
 
 The `Send` interface works in most of cases, In some condition is about 15/20 slower than `BatchSend`. See also this [thread](https://groups.google.com/g/rabbitmq-users/c/IO_9-BbCzgQ).
+
+# Publish Confirmation
+
+For each publish the server sends back to the client the confirmation, the client provides an interface to receive the confirmation:
+
+```golang
+	//optional publish confirmation channel
+	chPublishConfirm := producer.NotifyPublishConfirmation()
+	handlePublishConfirm(chPublishConfirm)
+	
+func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
+	go func() {
+		for confirmed := range confirms {
+			for _, msg := range confirmed {
+				if msg.Confirmed {
+					fmt.Printf("message %s stored \n  ", msg.Message.GetData())
+				} else {
+					fmt.Printf("message %s failed \n  ", msg.Message.GetData())
+				}
+			}
+		}
+	}()
+}
+```
+It is up to the user to decide what to do with confirmed and unconfirmed messages.
+See also "Getting started" example in the [examples](./examples/) directory
+
+# Publish Errors
+
+In some case the server can send back to the client an error, for example the producer-id does not exist or permission problems.
+the client provides an interface to receive the errors:
+```golang
+	chPublishError := producer.NotifyPublishError()
+	handlePublishError(chPublishError)
+```
+It is up to the user to decide what to do with error messages.
+
+# Consume messages
+
+In order to consume messages from a stream you need to use the `NewConsumer` interface, ex:
+```golang
+handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
+	}
+
+	consumer, err := env.NewConsumer(
+		"my-stream",
+		handleMessages,
+		....
+```
+
+With `ConsumerOptions` it is possible to customize the consumer behaviour.
+```golang
+  stream.NewConsumerOptions().
+  SetConsumerName("my_consumer").                  // set a consumer name
+  SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
+```
+
 
 
 ### Project status
