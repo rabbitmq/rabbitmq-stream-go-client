@@ -103,14 +103,15 @@ var _ = Describe("Streaming Producers", func() {
 		chConfirm := producer.NotifyClose()
 		go func(ch ChannelClose) {
 			event := <-ch
-			atomic.AddInt32(&commandIdRecv, int32(event.Command))
+			atomic.StoreInt32(&commandIdRecv, int32(event.Command))
 		}(chConfirm)
 
-		err = producer.BatchSend(CreateArrayMessagesForTesting(14))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(2))
 		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(100 * time.Millisecond)
 		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandDeletePublisher)))
 	})
 
