@@ -236,7 +236,7 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("Smart Send send after", func() {
-		// this test is need to test the send after
+		// this test is need to test "send after"
 		// and the time check
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -268,6 +268,40 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("Smart Send send after BatchPublishingDelay", func() {
+		// this test is need to test "send after BatchPublishingDelay"
+		// and the time check
+		producer, err := testEnvironment.NewProducer(testProducerStream,
+			NewProducerOptions().SetBatchPublishingDelay(50))
+		Expect(err).NotTo(HaveOccurred())
+		var messagesCount int32
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for ids := range ch {
+				atomic.AddInt32(&messagesCount, int32(len(ids)))
+			}
+		}(chConfirm)
+
+		for z := 0; z < 5; z++ {
+			s := make([]byte, 50)
+			err = producer.Send(amqp.NewMessage(s))
+			Expect(err).NotTo(HaveOccurred())
+			time.Sleep(60 * time.Millisecond)
+		}
+
+		for z := 0; z < 5; z++ {
+			s := make([]byte, 50)
+			err = producer.Send(amqp.NewMessage(s))
+			Expect(err).NotTo(HaveOccurred())
+			time.Sleep(20 * time.Millisecond)
+		}
+
+		time.Sleep(400 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
+		err = producer.Close()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("Already Closed/Limits", func() {
 		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(5))
 		Expect(err).NotTo(HaveOccurred())
@@ -280,7 +314,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).To(Equal(AlreadyClosed))
 
 		/// validation limits
-		/// options.QueueSize and options.BatchSize
+		/// options.QueueSize, options.BatchSize and options.BatchPublishingDelay
 		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
 			QueueSize: 1,
 		})
@@ -301,7 +335,17 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).To(HaveOccurred())
 
 		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchSize: 5000000,
+			BatchSize: 5_000_000,
+		})
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
+			BatchPublishingDelay: 0,
+		})
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
+			BatchPublishingDelay: 600,
 		})
 		Expect(err).To(HaveOccurred())
 

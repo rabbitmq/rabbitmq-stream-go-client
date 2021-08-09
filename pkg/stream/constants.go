@@ -81,9 +81,14 @@ const (
 	minQueuePublisherSize     = 100
 	maxQueuePublisherSize     = 1_000_000
 
-	minBatchSize     = 1
-	maxBatchSize     = 10_000
-	defaultBatchSize = 100
+	minBatchSize = 1
+	maxBatchSize = 10_000
+
+	minBatchPublishingDelay = 50
+	maxBatchPublishingDelay = 500
+
+	defaultBatchSize            = 100
+	defaultBatchPublishingDelay = 100
 	//
 	ClientVersion = "0.11-alpha"
 

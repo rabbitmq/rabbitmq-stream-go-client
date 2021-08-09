@@ -463,12 +463,18 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 			minBatchSize, maxBatchSize)
 	}
 
+	if options.BatchPublishingDelay < minBatchPublishingDelay || options.BatchPublishingDelay > maxBatchPublishingDelay {
+		return nil, fmt.Errorf("BatchPublishingDelay values must be between %d and %d",
+			minBatchPublishingDelay, maxBatchPublishingDelay)
+	}
+
 	producer, err := c.coordinator.NewProducer(&ProducerOptions{
-		client:     c,
-		streamName: streamName,
-		Name:       options.Name,
-		QueueSize:  options.QueueSize,
-		BatchSize:  options.BatchSize,
+		client:               c,
+		streamName:           streamName,
+		Name:                 options.Name,
+		QueueSize:            options.QueueSize,
+		BatchSize:            options.BatchSize,
+		BatchPublishingDelay: options.BatchPublishingDelay,
 	})
 
 	if err != nil {
