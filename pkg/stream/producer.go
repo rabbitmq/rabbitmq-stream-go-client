@@ -47,11 +47,12 @@ type Producer struct {
 }
 
 type ProducerOptions struct {
-	client     *Client
-	streamName string
-	Name       string // Producer name, it is useful to handle deduplication messages
-	QueueSize  int    // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
-	BatchSize  int    // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
+	client               *Client
+	streamName           string
+	Name                 string // Producer name, it is useful to handle deduplication messages
+	QueueSize            int    // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
+	BatchSize            int    // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
+	BatchPublishingDelay int    // Period to send a batch of messages.
 }
 
 func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
@@ -69,10 +70,16 @@ func (po *ProducerOptions) SetBatchSize(size int) *ProducerOptions {
 	return po
 }
 
+func (po *ProducerOptions) SetBatchPublishingDelay(size int) *ProducerOptions {
+	po.BatchPublishingDelay = size
+	return po
+}
+
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{
-		QueueSize: defaultQueuePublisherSize,
-		BatchSize: defaultBatchSize,
+		QueueSize:            defaultQueuePublisherSize,
+		BatchSize:            defaultBatchSize,
+		BatchPublishingDelay: defaultBatchPublishingDelay,
 	}
 }
 
@@ -162,7 +169,7 @@ func (producer *Producer) sendBufferedMessages() {
 }
 func (producer *Producer) startPublishTask() {
 	go func(ch chan messageSequence) {
-		var ticker = time.NewTicker(200 * time.Millisecond)
+		var ticker = time.NewTicker(time.Duration(producer.options.BatchPublishingDelay) * time.Millisecond)
 		defer ticker.Stop()
 		for {
 
