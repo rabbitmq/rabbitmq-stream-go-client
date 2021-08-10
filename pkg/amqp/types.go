@@ -393,6 +393,7 @@ type Message struct {
 type AMQP10 struct {
 	publishingId int64
 	message      *Message
+	Properties   *MessageProperties
 }
 
 func NewMessage(data []byte) *AMQP10 {
@@ -411,6 +412,7 @@ func (amqp *AMQP10) GetPublishingId() int64 {
 }
 
 func (amqp *AMQP10) MarshalBinary() ([]byte, error) {
+	amqp.message.Properties = amqp.Properties
 	return amqp.message.MarshalBinary()
 }
 
@@ -420,6 +422,11 @@ func (amqp *AMQP10) UnmarshalBinary(data []byte) error {
 
 func (amqp *AMQP10) GetData() [][]byte {
 	return amqp.message.Data
+}
+
+func (amqp *AMQP10) Message() *Message {
+	return amqp.message
+
 }
 
 // NewMessage returns a *Message with data as the payload.

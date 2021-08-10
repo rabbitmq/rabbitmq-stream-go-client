@@ -266,6 +266,49 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
+	It("Message Properties", func() {
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		msg := amqp.NewMessage([]byte("message"))
+		msg.Properties = &amqp.MessageProperties{
+			MessageID:          nil,
+			UserID:             nil,
+			To:                 "ToTest",
+			Subject:            "SubjectTest",
+			ReplyTo:            "replyToTest",
+			CorrelationID:      nil,
+			ContentType:        "ContentTypeTest",
+			ContentEncoding:    "ContentEncodingTest",
+			AbsoluteExpiryTime: time.Time{},
+			CreationTime:       time.Time{},
+			GroupID:            "",
+			GroupSequence:      0,
+			ReplyToGroupID:     "",
+		}
+
+		err = producer.Send(msg)
+		Expect(err).NotTo(HaveOccurred())
+		defer func(producer *Producer) {
+			err := producer.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}(producer)
+
+		consumer, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				Expect(message.Properties.ReplyTo).To(Equal("replyToTest"))
+				Expect(message.Properties.Subject).To(Equal("SubjectTest"))
+				Expect(message.Properties.To).To(Equal("ToTest"))
+				Expect(message.Properties.ContentType).To(Equal("ContentTypeTest"))
+				Expect(message.Properties.ContentEncoding).To(Equal("ContentEncodingTest"))
+
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
+		err = consumer.Close()
+		Expect(err).NotTo(HaveOccurred())
+
+	})
+
 	It("Validation", func() {
 		_, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
