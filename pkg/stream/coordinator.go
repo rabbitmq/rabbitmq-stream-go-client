@@ -52,7 +52,7 @@ func (coordinator *Coordinator) NewProducer(
 	if err != nil {
 		return nil, err
 	}
-	var producer = &Producer{ID: lastId,
+	var producer = &Producer{id: lastId,
 		options:             parameters,
 		mutex:               &sync.Mutex{},
 		unConfirmedMessages: map[int64]*UnConfirmedMessage{},

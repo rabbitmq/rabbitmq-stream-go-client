@@ -25,8 +25,8 @@ var _ = Describe("Coordinator", func() {
 		It("Add/Remove Producers ", func() {
 			p, err := client.coordinator.NewProducer(nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(p.ID).To(Equal(uint8(0)))
-			err = client.coordinator.RemoveProducerById(p.ID, Event{
+			Expect(p.id).To(Equal(uint8(0)))
+			err = client.coordinator.RemoveProducerById(p.id, Event{
 				Command: 0,
 				Reason:  "UNIT_TEST",
 				Err:     nil,
@@ -47,7 +47,7 @@ var _ = Describe("Coordinator", func() {
 			var producersId []uint8
 			for i := 0; i < 100; i++ {
 				p, err := client.coordinator.NewProducer(nil)
-				producersId = append(producersId, p.ID)
+				producersId = append(producersId, p.id)
 				Expect(err).NotTo(HaveOccurred())
 			}
 			Expect(client.coordinator.ProducersCount()).To(Equal(100))
@@ -69,8 +69,8 @@ var _ = Describe("Coordinator", func() {
 			for i := 0; i < 250; i++ {
 				p, err := client.coordinator.NewProducer(nil)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(p.ID).To(Equal(uint8(i)))
-				err = client.coordinator.RemoveProducerById(p.ID, Event{
+				Expect(p.id).To(Equal(uint8(i)))
+				err = client.coordinator.RemoveProducerById(p.id, Event{
 					Command:    0,
 					StreamName: "",
 					Name:       "UNIT TEST",
@@ -91,7 +91,7 @@ var _ = Describe("Coordinator", func() {
 						To(ContainSubstring("No more items available"))
 				} else {
 					Expect(err).NotTo(HaveOccurred())
-					producersId = append(producersId, p.ID)
+					producersId = append(producersId, p.id)
 				}
 			}
 
@@ -112,7 +112,7 @@ var _ = Describe("Coordinator", func() {
 
 				p, err := client.coordinator.NewProducer(nil)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(p.ID).To(Equal(v))
+				Expect(p.id).To(Equal(v))
 			}
 
 			for _, pid := range producersId {
@@ -143,8 +143,8 @@ var _ = Describe("Coordinator", func() {
 		It("Add/Remove consumers ", func() {
 			p, err := client.coordinator.NewProducer(nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(p.ID).To(Equal(uint8(0)))
-			err = client.coordinator.RemoveProducerById(p.ID, Event{
+			Expect(p.id).To(Equal(uint8(0)))
+			err = client.coordinator.RemoveProducerById(p.id, Event{
 				Reason: "UNIT_TEST",
 			})
 			Expect(err).NotTo(HaveOccurred())

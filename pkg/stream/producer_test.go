@@ -115,29 +115,6 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandDeletePublisher)))
 	})
 
-	//It("Send Error", func() {
-	//	var messagesCount int32 = 0
-	//	producer, err := testEnvironment.NewProducer(testProducerStream, nil)
-	//	Expect(err).NotTo(HaveOccurred())
-	//	chPublishError := producer.NotifyPublishError()
-	//	go func(ch ChannelPublishError) {
-	//		<-ch
-	//		atomic.AddInt32(&messagesCount, 1)
-	//	}(chPublishError)
-	//
-	//	go func(p *Producer) {
-	//		for i := 0; i < 10; i++ {
-	//			err := p.Send(CreateArrayMessagesForTesting(2))
-	//			Expect(err).NotTo(HaveOccurred())
-	//		}
-	//	}(producer)
-	//
-	//	err = producer.Close()
-	//	Expect(err).NotTo(HaveOccurred())
-	//	time.Sleep(100 * time.Millisecond)
-	//	Expect(atomic.LoadInt32(&messagesCount)).NotTo(Equal(int32(0)))
-	//})
-
 	It("Pre Publisher errors / Frame too large / too many messages", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -351,6 +328,52 @@ var _ = Describe("Streaming Producers", func() {
 
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	// this test is needed to test publish error.
+	// In order to simulate the producer id not found I need to
+	// change manually the producer id.
+	// It works, but would be better to introduce some mock function
+	It("Publish  Error", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		prodErrorStream := uuid.New().String()
+		err = env.DeclareStream(prodErrorStream, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		var messagesCount int32 = 0
+		producer, err := testEnvironment.NewProducer(prodErrorStream, nil)
+		Expect(err).NotTo(HaveOccurred())
+		chPublishError := producer.NotifyPublishError()
+		go func(ch ChannelPublishError) {
+			<-ch
+			atomic.AddInt32(&messagesCount, 1)
+		}(chPublishError)
+
+		var messagesSequence = make([]messageSequence, 1)
+		msg := amqp.NewMessage([]byte("test"))
+		messageBytes, _ := msg.MarshalBinary()
+		messagesSequence[0] = messageSequence{
+			message:      msg,
+			size:         len(messageBytes),
+			publishingId: 1,
+		}
+		for _, producerC := range producer.options.client.coordinator.producers {
+			producerC.(*Producer).id = uint8(200)
+		}
+		producer.options.client.coordinator.producers[uint8(200)] = producer
+		// 200 producer ID doesn't exist
+		err = producer.internalBatchSendProdId(messagesSequence, 200)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = env.DeleteStream(prodErrorStream)
+		Expect(err).NotTo(HaveOccurred())
+		delete(producer.options.client.coordinator.producers, uint8(200))
+		delete(producer.options.client.coordinator.producers, uint8(0))
+		err = env.Close()
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).NotTo(Equal(int32(0)))
 	})
 
 })
