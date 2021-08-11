@@ -30,7 +30,7 @@ type messageSequence struct {
 }
 
 type Producer struct {
-	ID                  uint8
+	id                  uint8
 	options             *ProducerOptions
 	onClose             onInternalClose
 	unConfirmedMessages map[int64]*UnConfirmedMessage
@@ -125,7 +125,7 @@ func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
 }
 
 func (producer *Producer) NotifyPublishError() ChannelPublishError {
-	ch := make(chan PublishError)
+	ch := make(chan PublishError, 1)
 	producer.publishError = ch
 	return ch
 }
@@ -211,10 +211,10 @@ func (producer *Producer) Send(message message.StreamMessage) error {
 		return FrameTooLarge
 	}
 	sequence := producer.getPublishingID(message)
-	producer.addUnConfirmed(sequence, message, producer.ID)
+	producer.addUnConfirmed(sequence, message, producer.id)
 
 	if producer.getStatus() == closed {
-		return fmt.Errorf("producer id: %d  closed", producer.ID)
+		return fmt.Errorf("producer id: %d  closed", producer.id)
 	}
 
 	producer.messageSequenceCh <- messageSequence{
@@ -247,15 +247,24 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 			size:         len(messageBytes),
 			publishingId: sequence,
 		}
-		producer.addUnConfirmed(sequence, batchMessage, producer.ID)
+		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 	}
 
 	return producer.internalBatchSend(messagesSequence)
 }
 
+func (producer *Producer) GetID() uint8 {
+	return producer.id
+}
 func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) error {
+	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
+}
+
+/// the producer id is always the producer.GetID(). This function is needed only for testing
+// some condition, like simulate publish error, see
+func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequence, producerID uint8) error {
 	if producer.getStatus() == closed {
-		return fmt.Errorf("producer id: %d closed", producer.ID)
+		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
 	var msgLen int
@@ -265,10 +274,9 @@ func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) 
 
 	frameHeaderLength := initBufferPublishSize
 	length := frameHeaderLength + msgLen
-	publishId := producer.ID
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandPublish)
-	writeByte(b, publishId)
+	writeByte(b, producerID)
 	writeInt(b, len(messagesSequence)) //toExcluded - fromInclude
 
 	for _, msg := range messagesSequence {
@@ -317,7 +325,7 @@ func (producer *Producer) Close() error {
 		return fmt.Errorf("tcp connection is closed")
 	}
 
-	err := producer.options.client.deletePublisher(producer.ID)
+	err := producer.options.client.deletePublisher(producer.id)
 	if err != nil {
 		return err
 	}
@@ -330,7 +338,7 @@ func (producer *Producer) Close() error {
 
 	if producer.onClose != nil {
 		ch := make(chan uint8, 1)
-		ch <- producer.ID
+		ch <- producer.id
 		producer.onClose(ch)
 		close(ch)
 	}

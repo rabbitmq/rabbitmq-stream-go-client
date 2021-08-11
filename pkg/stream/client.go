@@ -382,7 +382,7 @@ func (c *Client) closeHartBeat() {
 func (c *Client) Close() error {
 
 	for _, p := range c.coordinator.Producers() {
-		err := c.coordinator.RemoveProducerById(p.(*Producer).ID, Event{
+		err := c.coordinator.RemoveProducerById(p.(*Producer).id, Event{
 			Command:    CommandClose,
 			StreamName: p.(*Producer).GetStreamName(),
 			Name:       p.(*Producer).GetName(),
@@ -437,9 +437,9 @@ func (c *Client) Close() error {
 
 func (c *Client) ReusePublisher(streamName string, existingProducer *Producer) (*Producer, error) {
 	existingProducer.options.client = c
-	_, err := c.coordinator.GetProducerById(existingProducer.ID)
+	_, err := c.coordinator.GetProducerById(existingProducer.id)
 	if err != nil {
-		c.coordinator.producers[existingProducer.ID] = existingProducer
+		c.coordinator.producers[existingProducer.id] = existingProducer
 	} else {
 		return nil, fmt.Errorf("can't reuse producer")
 	}
@@ -502,7 +502,7 @@ func (c *Client) internalDeclarePublisher(streamName string, producer *Producer)
 	writeProtocolHeader(b, length, commandDeclarePublisher,
 		correlationId)
 
-	writeByte(b, producer.ID)
+	writeByte(b, producer.id)
 	writeShort(b, int16(publisherReferenceSize))
 	if publisherReferenceSize > 0 {
 		writeBytes(b, []byte(producer.options.Name))
@@ -520,7 +520,7 @@ func (c *Client) internalDeclarePublisher(streamName string, producer *Producer)
 
 func (c *Client) metaData(streams ...string) *StreamsMetadata {
 
-	length := 2 + 2 + 4 + 4 // API code, version, correlation ID, size of array
+	length := 2 + 2 + 4 + 4 // API code, version, correlation id, size of array
 	for _, stream := range streams {
 		length += 2
 		length += len(stream)

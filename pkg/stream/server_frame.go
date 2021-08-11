@@ -398,16 +398,18 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 			logs.LogWarn("producer id %d not found, publish error :%s", publishingId, lookErrorCode(code))
 			producer = &Producer{unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
 		} else {
+			unConfirmedMessage := producer.getUnConfirmed(publishingId)
+
 			producer.mutex.Lock()
 			if producer.publishError != nil {
 				producer.publishError <- PublishError{
 					Code:               code,
 					Err:                lookErrorCode(code),
-					UnConfirmedMessage: producer.getUnConfirmed(publishingId),
+					UnConfirmedMessage: unConfirmedMessage,
 				}
 			}
-			producer.removeUnConfirmed(publishingId)
 			producer.mutex.Unlock()
+			producer.removeUnConfirmed(publishingId)
 		}
 		publishingErrorCount--
 	}

@@ -22,7 +22,7 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 10; i++ {
 			producer, err := env.NewProducer(streamName, nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(producer.ID).To(Equal(uint8(0)))
+			Expect(producer.id).To(Equal(uint8(0)))
 			producers = append(producers, producer)
 		}
 
@@ -52,7 +52,7 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 10; i++ {
 			producer, err := env.NewProducer(streamName, nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(producer.ID).To(Equal(uint8(i % 2)))
+			Expect(producer.id).To(Equal(uint8(i % 2)))
 		}
 
 		err = env.DeleteStream(streamName)
