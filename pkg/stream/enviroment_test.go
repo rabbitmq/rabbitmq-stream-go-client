@@ -188,6 +188,12 @@ var _ = Describe("Environment test", func() {
 			Expect(err).To(Equal(VirtualHostAccessFailure))
 		})
 
+
+		It("Connection Vhost not exist", func() {
+			_, err := NewEnvironment(NewEnvironmentOptions().SetVHost("VHOSTNOEXIST"))
+			Expect(err).To(Equal(VirtualHostAccessFailure))
+		})
+
 		It("Connection Vhost exists", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
 				SetUri("rabbitmq-stream://guest:guest@localhost:5552/" + testVhost))

@@ -262,6 +262,15 @@ func (envOptions *EnvironmentOptions) SetHost(host string) *EnvironmentOptions {
 	return envOptions
 }
 
+func (envOptions *EnvironmentOptions) SetVHost(vhost string) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Vhost: vhost})
+	} else {
+		envOptions.ConnectionParameters[0].Vhost = vhost
+	}
+	return envOptions
+}
+
 func (envOptions *EnvironmentOptions) SetTLSConfig(config *tls.Config) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
 		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{tlsConfig: config})
