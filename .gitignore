@@ -19,7 +19,6 @@ bin/
 examples/examples
 vet
 .DS_Store
-perfTest/
 .vagrant/
 local/
 tls-gen/

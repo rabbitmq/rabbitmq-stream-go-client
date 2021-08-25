@@ -309,13 +309,7 @@ func handleConsumerClose(channelClose stream.ChannelClose) {
 func startConsumer(consumerName string, streamName string) error {
 
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		//logError("consumerMessageCount StoreOffset: %s", consumerMessageCount)
-		if atomic.AddInt32(&consumerMessageCount, 1)%500 == 0 {
-			err := consumerContext.Consumer.StoreOffset()
-			if err != nil {
-				logError("Error StoreOffset: %s", err)
-			}
-		}
+		atomic.AddInt32(&consumerMessageCount, 1)
 	}
 	consumer, err := simulEnvironment.NewConsumer(
 		streamName,
