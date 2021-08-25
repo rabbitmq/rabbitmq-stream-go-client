@@ -31,7 +31,6 @@ var (
 	confirmedMessageCount    int32
 	notConfirmedMessageCount int32
 	consumersCloseCount      int32
-	producersCloseCount      int32
 	publishErrors            int32
 	//connections           []*stream.Client
 	simulEnvironment *stream.Environment
@@ -309,13 +308,15 @@ func handleConsumerClose(channelClose stream.ChannelClose) {
 func startConsumer(consumerName string, streamName string) error {
 
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		//logError("consumerMessageCount StoreOffset: %s", consumerMessageCount)
 		atomic.AddInt32(&consumerMessageCount, 1)
+
 	}
 	consumer, err := simulEnvironment.NewConsumer(
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName(consumerName))
+			SetConsumerName(consumerName).SetOffset(stream.OffsetSpecification{}.Last()))
 	if err != nil {
 		return err
 	}
