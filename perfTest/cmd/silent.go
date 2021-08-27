@@ -312,11 +312,23 @@ func startConsumer(consumerName string, streamName string) error {
 		atomic.AddInt32(&consumerMessageCount, 1)
 
 	}
+	offsetSpec := stream.OffsetSpecification{}.Last()
+	switch consumerOffest {
+	case "last":
+		offsetSpec = stream.OffsetSpecification{}.Last()
+	case "first":
+		offsetSpec = stream.OffsetSpecification{}.First()
+	case "next":
+		offsetSpec = stream.OffsetSpecification{}.Next()
+	}
+
+	logInfo("Starting consumer number: %s, form %s", consumerName, offsetSpec)
+
 	consumer, err := simulEnvironment.NewConsumer(
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName(consumerName).SetOffset(stream.OffsetSpecification{}.Last()))
+			SetConsumerName(consumerName).SetOffset(offsetSpec))
 	if err != nil {
 		return err
 	}
@@ -332,7 +344,6 @@ func startConsumers() error {
 	for _, streamName := range streams {
 		for i := 0; i < consumers; i++ {
 			randomSleep()
-			logInfo("Starting consumer number: %d", i)
 			err := startConsumer(fmt.Sprintf("%s-%d", streamName, i), streamName)
 			if err != nil {
 				logError("Error creating consumer: %s", err)

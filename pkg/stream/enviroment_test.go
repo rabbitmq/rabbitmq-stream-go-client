@@ -188,7 +188,6 @@ var _ = Describe("Environment test", func() {
 			Expect(err).To(Equal(VirtualHostAccessFailure))
 		})
 
-
 		It("Connection Vhost not exist", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().SetVHost("VHOSTNOEXIST"))
 			Expect(err).To(Equal(VirtualHostAccessFailure))

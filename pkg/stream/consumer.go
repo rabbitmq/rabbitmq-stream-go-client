@@ -271,3 +271,21 @@ func (o OffsetSpecification) LastConsumed() OffsetSpecification {
 	o.offset = -1
 	return o
 }
+
+func (o OffsetSpecification) String() string {
+	switch o.typeOfs {
+	case typeFirst:
+		return "first"
+	case typeNext:
+		return "next"
+	case typeLast:
+		return "last"
+	case typeLastConsumed:
+		return "last consumed"
+	case typeOffset:
+		return fmt.Sprintf("%s, value: %d", "offset", o.offset)
+	case typeTimestamp:
+		return fmt.Sprintf("%s, value: %d", "time-stamp", o.offset)
+	}
+	return ""
+}
