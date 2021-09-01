@@ -1,8 +1,8 @@
 package ha
 
 import (
-	"fmt"
 	"github.com/pkg/errors"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"sync"
@@ -114,7 +114,7 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 				return stream.FrameTooLarge
 			}
 		default:
-			fmt.Printf("Send error %s \n", errW.Error())
+			logs.LogError("[RProducer] - error during send %s",errW.Error())
 		}
 
 	}
@@ -127,10 +127,12 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 
 		}
 		if exists {
+			logs.LogDebug("[RProducer] - stream %s exists. Reconnecting the producer.",p.streamName)
 			time.Sleep(800 * time.Millisecond)
 			p.producer.FlushUnConfirmedMessages()
 			return p.newProducer()
 		} else {
+			logs.LogError("[RProducer] - stream %s does not exist. Closing..",p.streamName)
 			return stream.StreamDoesNotExist
 		}
 	}
