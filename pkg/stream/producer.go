@@ -201,7 +201,6 @@ func (producer *Producer) startPublishTask() {
 }
 
 func (producer *Producer) Send(message message.StreamMessage) error {
-
 	msgBytes, err := message.MarshalBinary()
 	if err != nil {
 		return err
@@ -239,7 +238,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 	for i, batchMessage := range batchMessages {
 		messageBytes, err := batchMessage.MarshalBinary()
 		if err != nil {
-			return nil
+			return err
 		}
 		sequence := producer.getPublishingID(batchMessage)
 		messagesSequence[i] = messageSequence{

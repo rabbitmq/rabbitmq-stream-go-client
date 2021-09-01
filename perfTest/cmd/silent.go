@@ -32,6 +32,7 @@ var (
 	notConfirmedMessageCount int32
 	consumersCloseCount      int32
 	publishErrors            int32
+	messagesSent             int64
 	//connections           []*stream.Client
 	simulEnvironment *stream.Environment
 )
@@ -48,8 +49,8 @@ func printStats() {
 					PMessagesPerSecond := int64(float64(atomic.LoadInt32(&publisherMessageCount)) / v)
 					CMessagesPerSecond := int64(float64(atomic.LoadInt32(&consumerMessageCount)) / v)
 					ConfirmedMessagesPerSecond := int64(float64(atomic.LoadInt32(&confirmedMessageCount)) / v)
-					logInfo("Published %8v msg/s   |   Confirmed %8v msg/s   |   Consumed %6v msg/s   |  Cons. closed %3v  |   Pub errors %3v  |   %3v  |  %3v  |",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, consumersCloseCount, publishErrors, decodeRate(), decodeBody())
+					logInfo("Published %8v msg/s   |   Confirmed %8v msg/s   |   Consumed %6v msg/s   |  Cons. closed %3v  |   Pub errors %3v  |   %3v  |  %3v  |  msg sent: %3v  |",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, consumersCloseCount, publishErrors, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent))
 					atomic.SwapInt32(&publisherMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
 					atomic.SwapInt32(&confirmedMessageCount, 0)
@@ -260,6 +261,7 @@ func startPublisher(streamName string) error {
 
 			atomic.AddInt32(&publisherMessageCount, int32(batchSize))
 			for _, streamMessage := range arr {
+				atomic.AddInt64(&messagesSent, 1)
 				err = prod.Send(streamMessage)
 				if err != nil {
 					logError("Error publishing: %s", err)
