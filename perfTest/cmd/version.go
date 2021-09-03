@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -22,8 +21,7 @@ var versionCmd = &cobra.Command{
 }
 
 func printVersion() {
-	fmt.Printf("%s version: %s\ngo version: %s\ncommit: %s\n",
-		rabbitmqBrokerUrl,
+	fmt.Printf("version: %s\ngo version: %s\ncommit: %s\n",
 		version,
 		goVersion,
 		commit,
