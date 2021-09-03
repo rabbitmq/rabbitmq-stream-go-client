@@ -10,16 +10,24 @@ import (
 	"github.com/spf13/cobra"
 	"math/rand"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 )
+
+var wg sync.WaitGroup
 
 func newSilent() *cobra.Command {
 	var silentCmd = &cobra.Command{
 		Use:   "silent",
 		Short: "NewProducer a silent simulation",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return startSimulation()
+			wg.Add(1)
+			err := startSimulation()
+			if err == nil {
+				wg.Wait()
+			}
+			return err
 		},
 	}
 	return silentCmd
