@@ -1,8 +1,8 @@
 package ha
 
 import (
-	"fmt"
 	"github.com/pkg/errors"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"sync"
@@ -16,22 +16,22 @@ const (
 	StatusStreamDoesNotExist = 3
 )
 
-func (r *ReliableProducer) handlePublishError(publishError stream.ChannelPublishError) {
+func (p *ReliableProducer) handlePublishError(publishError stream.ChannelPublishError) {
 	go func() {
 		for {
 			for err := range publishError {
-				r.channelPublishError <- err
+				p.channelPublishError <- err
 			}
 		}
 	}()
 
 }
 
-func (r *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
+func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for messagesIds := range confirms {
-			atomic.AddInt32(&r.count, int32(len(messagesIds)))
-			r.channelPublishConfirm <- messagesIds
+			atomic.AddInt32(&p.count, int32(len(messagesIds)))
+			p.channelPublishConfirm <- messagesIds
 		}
 	}()
 }
@@ -48,7 +48,6 @@ type ReliableProducer struct {
 	mutex       *sync.Mutex
 	mutexStatus *sync.Mutex
 	status      int
-	totalSent   int64
 }
 
 func NewHAProducer(env *stream.Environment, streamName string, producerOptions *stream.ProducerOptions) (*ReliableProducer, error) {
@@ -105,7 +104,6 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 	defer p.mutex.Unlock()
 
 	errW := p.producer.Send(message)
-	p.totalSent += 1
 
 	if errW != nil {
 		switch errW {
@@ -114,7 +112,7 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 				return stream.FrameTooLarge
 			}
 		default:
-			fmt.Printf("Send error %s \n", errW.Error())
+			logs.LogError("[RProducer] - error during send %s", errW.Error())
 		}
 
 	}
@@ -127,10 +125,12 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 
 		}
 		if exists {
+			logs.LogDebug("[RProducer] - stream %s exists. Reconnecting the producer.", p.streamName)
 			time.Sleep(800 * time.Millisecond)
 			p.producer.FlushUnConfirmedMessages()
 			return p.newProducer()
 		} else {
+			logs.LogError("[RProducer] - stream %s does not exist. Closing..", p.streamName)
 			return stream.StreamDoesNotExist
 		}
 	}
