@@ -249,7 +249,7 @@ var _ = Describe("Environment test", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(metaData.Leader.Host).To(Equal("localhost"))
 		Expect(metaData.Leader.Port).To(Equal("5552"))
-		Expect(len(metaData.replicas)).To(Equal(0))
+		Expect(len(metaData.Replicas)).To(Equal(0))
 		err = env.DeleteStream(stream)
 		Expect(err).NotTo(HaveOccurred())
 		exists, err = env.StreamExists(stream)

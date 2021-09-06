@@ -604,7 +604,7 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 	}
 	var brokers []*Broker
 	brokers = append(brokers, streamMetadata.Leader)
-	brokers = append(brokers, streamMetadata.replicas...)
+	brokers = append(brokers, streamMetadata.Replicas...)
 	rand.Seed(time.Now().UnixNano())
 	n := rand.Intn(len(brokers))
 	return brokers[n], nil

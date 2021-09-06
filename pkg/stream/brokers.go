@@ -132,13 +132,21 @@ type StreamMetadata struct {
 	stream       string
 	responseCode uint16
 	Leader       *Broker
-	replicas     []*Broker
+	Replicas     []*Broker
+}
+
+func (sm StreamMetadata) String() string {
+	replicas := ""
+	for _, replica := range sm.Replicas {
+		replicas += fmt.Sprintf("%s:%s", replica.Host, replica.Port)
+	}
+	return fmt.Sprintf("leader %s:%s, followers %s ", sm.Leader.Host, sm.Leader.Port, replicas)
 }
 
 func (StreamMetadata) New(stream string, responseCode uint16,
 	leader *Broker, replicas []*Broker) *StreamMetadata {
 	return &StreamMetadata{stream: stream, responseCode: responseCode,
-		Leader: leader, replicas: replicas}
+		Leader: leader, Replicas: replicas}
 }
 
 type StreamsMetadata struct {

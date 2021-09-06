@@ -156,6 +156,9 @@ func initStreams() error {
 	}
 
 	for _, streamName := range streams {
+		streamMetadata, err := env.StreamMetaData(streamName)
+		checkErr(err)
+		logInfo("stream %s, meta data: %s", streamName, streamMetadata)
 
 		err = env.DeclareStream(
 			streamName,
