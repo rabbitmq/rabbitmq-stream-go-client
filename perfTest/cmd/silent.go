@@ -250,12 +250,9 @@ func startPublisher(streamName string) error {
 	go func(prod *ha.ReliableProducer, messages []message.StreamMessage) {
 		for {
 			if rate > 0 {
-				var v1 float64
-				v1 = float64(rate) / float64(batchSize)
-
-				sleep := float64(100) / v1
-				sleep = sleep * 10
-				time.Sleep(time.Duration(sleep) * time.Millisecond)
+				rateWithBatchSize := float64(rate) / float64(batchSize)
+				sleepAfterMessage := float64(time.Second) / rateWithBatchSize
+				time.Sleep(time.Duration(sleepAfterMessage))
 			}
 
 			if variableRate > 0 {
