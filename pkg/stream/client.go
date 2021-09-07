@@ -453,6 +453,11 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		options = NewProducerOptions()
 	}
 
+	if options.SubEntrySize < minSubEntrySize {
+		return nil, fmt.Errorf("SubEntrySize value must be bigger than %d",
+			minSubEntrySize)
+	}
+
 	if options.QueueSize < minQueuePublisherSize || options.QueueSize > maxQueuePublisherSize {
 		return nil, fmt.Errorf("QueueSize values must be between %d and %d",
 			minQueuePublisherSize, maxQueuePublisherSize)

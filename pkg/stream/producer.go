@@ -24,7 +24,7 @@ type pendingMessagesSequence struct {
 }
 
 type messageSequence struct {
-	message      message.StreamMessage
+	message      []message.StreamMessage
 	size         int
 	publishingId int64
 }
@@ -53,6 +53,7 @@ type ProducerOptions struct {
 	QueueSize            int    // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
 	BatchSize            int    // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
 	BatchPublishingDelay int    // Period to send a batch of messages.
+	SubEntrySize         int    // Size of sub Entry, to aggregate more messages using one publishing id
 }
 
 func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
@@ -75,11 +76,17 @@ func (po *ProducerOptions) SetBatchPublishingDelay(size int) *ProducerOptions {
 	return po
 }
 
+func (po *ProducerOptions) SetSubEntrySize(size int) *ProducerOptions {
+	po.SubEntrySize = size
+	return po
+}
+
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{
 		QueueSize:            defaultQueuePublisherSize,
 		BatchSize:            defaultBatchSize,
 		BatchPublishingDelay: defaultBatchPublishingDelay,
+		SubEntrySize:         1,
 	}
 }
 
@@ -200,8 +207,8 @@ func (producer *Producer) startPublishTask() {
 
 }
 
-func (producer *Producer) Send(message message.StreamMessage) error {
-	msgBytes, err := message.MarshalBinary()
+func (producer *Producer) Send(streamMessage message.StreamMessage) error {
+	msgBytes, err := streamMessage.MarshalBinary()
 	if err != nil {
 		return err
 	}
@@ -209,15 +216,15 @@ func (producer *Producer) Send(message message.StreamMessage) error {
 	if len(msgBytes)+initBufferPublishSize > producer.options.client.getTuneState().requestedMaxFrameSize {
 		return FrameTooLarge
 	}
-	sequence := producer.getPublishingID(message)
-	producer.addUnConfirmed(sequence, message, producer.id)
+	sequence := producer.getPublishingID(streamMessage)
+	producer.addUnConfirmed(sequence, streamMessage, producer.id)
 
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d  closed", producer.id)
 	}
 
 	producer.messageSequenceCh <- messageSequence{
-		message:      message,
+		message:      []message.StreamMessage{streamMessage},
 		size:         len(msgBytes),
 		publishingId: sequence,
 	}
@@ -242,7 +249,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		}
 		sequence := producer.getPublishingID(batchMessage)
 		messagesSequence[i] = messageSequence{
-			message:      batchMessage,
+			message:      []message.StreamMessage{batchMessage},
 			size:         len(messageBytes),
 			publishingId: sequence,
 		}
@@ -279,10 +286,12 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	writeInt(b, len(messagesSequence)) //toExcluded - fromInclude
 
 	for _, msg := range messagesSequence {
-		r, _ := msg.message.MarshalBinary()
-		writeLong(b, msg.publishingId) // publishingId
-		writeInt(b, len(r))            // len
-		b.Write(r)
+		for _, streamMessage := range msg.message {
+			r, _ := streamMessage.MarshalBinary()
+			writeLong(b, msg.publishingId) // publishingId
+			writeInt(b, len(r))            // len
+			b.Write(r)
+		}
 	}
 
 	bufferToWrite := b.Bytes()

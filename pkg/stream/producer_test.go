@@ -326,6 +326,11 @@ var _ = Describe("Streaming Producers", func() {
 		})
 		Expect(err).To(HaveOccurred())
 
+		_, err = env.NewProducer(testProducerStream,
+			NewProducerOptions().SetSubEntrySize(0))
+
+		Expect(err).To(HaveOccurred())
+
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -354,7 +359,7 @@ var _ = Describe("Streaming Producers", func() {
 		msg := amqp.NewMessage([]byte("test"))
 		messageBytes, _ := msg.MarshalBinary()
 		messagesSequence[0] = messageSequence{
-			message:      msg,
+			message:      []message.StreamMessage{msg},
 			size:         len(messageBytes),
 			publishingId: 1,
 		}

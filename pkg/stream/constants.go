@@ -81,6 +81,8 @@ const (
 	minQueuePublisherSize     = 100
 	maxQueuePublisherSize     = 1_000_000
 
+	minSubEntrySize = 1
+
 	minBatchSize = 1
 	maxBatchSize = 10_000
 
