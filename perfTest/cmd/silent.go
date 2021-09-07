@@ -149,7 +149,10 @@ func randomSleep() {
 func initStreams() error {
 	logInfo("Declaring streams: %s", streams)
 	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUris(
-		rabbitmqBrokerUrl))
+		rabbitmqBrokerUrl).SetAddressResolver(stream.AddressResolver{
+		Host: rabbitmqBrokerUrl[0],
+		Port: 5552,
+	}))
 	if err != nil {
 		logError("Error init stream connection: %s", err)
 		return err
@@ -250,9 +253,18 @@ func startPublisher(streamName string) error {
 	go func(prod *ha.ReliableProducer, messages []message.StreamMessage) {
 		for {
 			if rate > 0 {
+				//if rate > batchSize {
 				rateWithBatchSize := float64(rate) / float64(batchSize)
 				sleepAfterMessage := float64(time.Second) / rateWithBatchSize
 				time.Sleep(time.Duration(sleepAfterMessage))
+				//} else
+				//{
+				//	rateWithBatchSize := float64(rate) / float64(100)
+				//	sleepAfterMessage := float64(time.Second) / rateWithBatchSize
+				//	time.Sleep(time.Duration(sleepAfterMessage))
+				//
+				//}
+
 			}
 
 			if variableRate > 0 {
@@ -267,7 +279,7 @@ func startPublisher(streamName string) error {
 				time.Sleep(time.Duration(sleep) * time.Millisecond)
 			}
 
-			atomic.AddInt32(&publisherMessageCount, int32(batchSize))
+			atomic.AddInt32(&publisherMessageCount, int32(len(arr)))
 			for _, streamMessage := range arr {
 				atomic.AddInt64(&messagesSent, 1)
 				err = prod.Send(streamMessage)
