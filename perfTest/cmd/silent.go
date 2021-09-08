@@ -48,22 +48,30 @@ var (
 func printStats() {
 	if printStatsV {
 		start := time.Now()
-		ticker := time.NewTicker(2 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		go func() {
 			for {
 				select {
 				case _ = <-ticker.C:
-					v := time.Now().Sub(start).Seconds()
-					PMessagesPerSecond := int64(float64(atomic.LoadInt32(&publisherMessageCount)) / v)
-					CMessagesPerSecond := int64(float64(atomic.LoadInt32(&consumerMessageCount)) / v)
-					ConfirmedMessagesPerSecond := int64(float64(atomic.LoadInt32(&confirmedMessageCount)) / v)
-					logInfo("Published %8v msg/s   |   Confirmed %8v msg/s   |   Consumed %6v msg/s   |  Cons. closed %3v  |   Pub errors %3v  |   %3v  |  %3v  |  msg sent: %3v  |",
+					v := time.Now().Sub(start).Milliseconds()
+					start = time.Now()
+
+					PMessagesPerSecond := float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
+					CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
+					ConfirmedMessagesPerSecond := float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
+
+					//if PMessagesPerSecond > 0 ||
+					//	ConfirmedMessagesPerSecond > 0 ||
+					//	CMessagesPerSecond > 0 ||
+					//	consumersCloseCount > 0 ||
+					//	publishErrors > 0 {
+					logInfo("Published %8.2f msg/s   |   Confirmed %8.2f msg/s   |   Consumed %8.2f msg/s   |  Cons. closed %3v  |   Pub errors %3v  |   %3v  |  %3v  |  msg sent: %3v  |",
 						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, consumersCloseCount, publishErrors, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent))
+					//}
 					atomic.SwapInt32(&publisherMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
 					atomic.SwapInt32(&confirmedMessageCount, 0)
 					atomic.SwapInt32(&notConfirmedMessageCount, 0)
-					start = time.Now()
 				}
 			}
 
@@ -109,6 +117,11 @@ func startSimulation() error {
 		os.Exit(1)
 	}
 
+	if rate > 0 && rate < batchSize {
+		batchSize = rate
+		logInfo("Rate lower than batch size, move batch size: %d", batchSize)
+	}
+
 	logInfo("Silent (%s) Simulation, url: %s publishers: %d consumers: %d streams: %s ", stream.ClientVersion, rabbitmqBrokerUrl, publishers, consumers, streams)
 
 	err := initStreams()
@@ -149,7 +162,10 @@ func randomSleep() {
 func initStreams() error {
 	logInfo("Declaring streams: %s", streams)
 	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUris(
-		rabbitmqBrokerUrl))
+		rabbitmqBrokerUrl).SetAddressResolver(stream.AddressResolver{
+		Host: rabbitmqBrokerUrl[0],
+		Port: 5552,
+	}))
 	if err != nil {
 		logError("Error init stream connection: %s", err)
 		return err
@@ -250,12 +266,10 @@ func startPublisher(streamName string) error {
 	go func(prod *ha.ReliableProducer, messages []message.StreamMessage) {
 		for {
 			if rate > 0 {
-				var v1 float64
-				v1 = float64(rate) / float64(batchSize)
+				rateWithBatchSize := float64(rate) / float64(batchSize)
+				sleepAfterMessage := float64(time.Second) / rateWithBatchSize
+				time.Sleep(time.Duration(sleepAfterMessage))
 
-				sleep := float64(100) / v1
-				sleep = sleep * 10
-				time.Sleep(time.Duration(sleep) * time.Millisecond)
 			}
 
 			if variableRate > 0 {
@@ -269,8 +283,8 @@ func startPublisher(streamName string) error {
 				}
 				time.Sleep(time.Duration(sleep) * time.Millisecond)
 			}
+			atomic.AddInt32(&publisherMessageCount, int32(len(arr)))
 
-			atomic.AddInt32(&publisherMessageCount, int32(batchSize))
 			for _, streamMessage := range arr {
 				atomic.AddInt64(&messagesSent, 1)
 				err = prod.Send(streamMessage)
