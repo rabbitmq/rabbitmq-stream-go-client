@@ -117,7 +117,7 @@ func startSimulation() error {
 		os.Exit(1)
 	}
 
-	if rate < batchSize {
+	if rate > 0 && rate < batchSize {
 		batchSize = rate
 		logInfo("Rate lower than batch size, move batch size: %d", batchSize)
 	}
