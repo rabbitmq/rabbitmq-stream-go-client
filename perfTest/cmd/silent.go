@@ -54,20 +54,24 @@ func printStats() {
 				select {
 				case _ = <-ticker.C:
 					v := time.Now().Sub(start).Milliseconds()
-					start = time.Now()
 
 					PMessagesPerSecond := float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
 					CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
 					ConfirmedMessagesPerSecond := float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
 
-					//if PMessagesPerSecond > 0 ||
-					//	ConfirmedMessagesPerSecond > 0 ||
-					//	CMessagesPerSecond > 0 ||
-					//	consumersCloseCount > 0 ||
-					//	publishErrors > 0 {
 					logInfo("Published %8.2f msg/s   |   Confirmed %8.2f msg/s   |   Consumed %8.2f msg/s   |  Cons. closed %3v  |   Pub errors %3v  |   %3v  |  %3v  |  msg sent: %3v  |",
 						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, consumersCloseCount, publishErrors, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent))
-					//}
+				}
+			}
+
+		}()
+		tickerReset := time.NewTicker(1 * time.Minute)
+		go func() {
+			for {
+				select {
+				case _ = <-tickerReset.C:
+					start = time.Now()
+
 					atomic.SwapInt32(&publisherMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
 					atomic.SwapInt32(&confirmedMessageCount, 0)
@@ -147,6 +151,7 @@ func startSimulation() error {
 
 func checkErr(err error) {
 	if err != nil {
+		logError("error: %s", err)
 		if exitOnError {
 			os.Exit(1)
 		}
@@ -172,10 +177,6 @@ func initStreams() error {
 	}
 
 	for _, streamName := range streams {
-		streamMetadata, err := env.StreamMetaData(streamName)
-		checkErr(err)
-		logInfo("stream %s, meta data: %s", streamName, streamMetadata)
-
 		err = env.DeclareStream(
 			streamName,
 			stream.NewStreamOptions().
@@ -195,6 +196,11 @@ func initStreams() error {
 				return err
 			}
 		}
+
+		streamMetadata, err := env.StreamMetaData(streamName)
+		checkErr(err)
+		logInfo("stream %s, meta data: %s", streamName, streamMetadata)
+
 	}
 	logInfo("End Init streams :%s\n", streams)
 	return env.Close()
@@ -242,7 +248,7 @@ func startPublisher(streamName string) error {
 	var arr []message.StreamMessage
 	var body string
 	for z := 0; z < batchSize; z++ {
-		body = fmt.Sprintf("simul_message")
+		body = fmt.Sprintf("1234567890")
 
 		if fixedBody > 0 {
 			body = ""

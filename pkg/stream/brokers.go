@@ -138,7 +138,7 @@ type StreamMetadata struct {
 func (sm StreamMetadata) String() string {
 	replicas := ""
 	for _, replica := range sm.Replicas {
-		replicas += fmt.Sprintf("%s:%s", replica.Host, replica.Port)
+		replicas += fmt.Sprintf(" - %s:%s", replica.Host, replica.Port)
 	}
 	return fmt.Sprintf("leader %s:%s, followers %s ", sm.Leader.Host, sm.Leader.Port, replicas)
 }
