@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
@@ -44,6 +45,25 @@ var (
 	//connections           []*stream.Client
 	simulEnvironment *stream.Environment
 )
+
+func checkTtl() {
+	if ttl > 0 {
+		start := time.Now()
+		ticker := time.NewTicker(1 * time.Minute)
+		go func() {
+			for {
+				select {
+				case _ = <-ticker.C:
+					v := time.Now().Sub(start).Minutes()
+					if v >= float64(ttl) {
+						logInfo("Closing due TTL")
+						os.Exit(1)
+					}
+				}
+			}
+		}()
+	}
+}
 
 func printStats() {
 	if printStatsV {
@@ -145,6 +165,7 @@ func startSimulation() error {
 		checkErr(err)
 	}
 	printStats()
+	checkTtl()
 
 	return err
 }
@@ -246,27 +267,22 @@ func startPublisher(streamName string) error {
 	handlePublishError(chPublishError)
 
 	var arr []message.StreamMessage
-	var body string
+	var body []byte
 	for z := 0; z < batchSize; z++ {
-		body = fmt.Sprintf("1234567890")
 
 		if fixedBody > 0 {
-			body = ""
-			for i := 0; i < fixedBody; i++ {
-				body += "s"
-			}
+			body = make([]byte, fixedBody)
 		} else {
 			if variableBody > 0 {
-				body = ""
 				rand.Seed(time.Now().UnixNano())
-				n := rand.Intn(variableBody)
-				for i := 0; i < n; i++ {
-					body += "s"
-				}
+				body = make([]byte, rand.Intn(variableBody))
 			}
 		}
-
-		arr = append(arr, amqp.NewMessage([]byte(body)))
+		n := time.Now().UnixNano()
+		var buff = make([]byte, 8)
+		binary.BigEndian.PutUint64(buff, uint64(n))
+		msg := amqp.NewMessage(append(buff, body...))
+		arr = append(arr, msg)
 	}
 
 	go func(prod *ha.ReliableProducer, messages []message.StreamMessage) {
@@ -341,18 +357,28 @@ func handleConsumerClose(channelClose stream.ChannelClose) {
 func startConsumer(consumerName string, streamName string) error {
 
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		//logError("consumerMessageCount StoreOffset: %s", consumerMessageCount)
 		atomic.AddInt32(&consumerMessageCount, 1)
 
 	}
 	offsetSpec := stream.OffsetSpecification{}.Last()
-	switch consumerOffest {
+	switch consumerOffset {
 	case "last":
 		offsetSpec = stream.OffsetSpecification{}.Last()
 	case "first":
 		offsetSpec = stream.OffsetSpecification{}.First()
 	case "next":
 		offsetSpec = stream.OffsetSpecification{}.Next()
+	case "random":
+		rand.Seed(time.Now().UnixNano())
+		n := rand.Intn(3)
+		switch n {
+		case 0:
+			offsetSpec = stream.OffsetSpecification{}.First()
+		case 1:
+			offsetSpec = stream.OffsetSpecification{}.Next()
+		case 2:
+			offsetSpec = stream.OffsetSpecification{}.Last()
+		}
 	}
 
 	logInfo("Starting consumer number: %s, form %s", consumerName, offsetSpec)
