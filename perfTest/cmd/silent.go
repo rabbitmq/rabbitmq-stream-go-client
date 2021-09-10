@@ -46,18 +46,18 @@ var (
 	simulEnvironment *stream.Environment
 )
 
-func checkTtl() {
-	if ttl > 0 {
+func checkRunDuration() {
+	if runDuration > 0 {
 		start := time.Now()
-		ticker := time.NewTicker(1 * time.Minute)
+		ticker := time.NewTicker(10 * time.Second)
 		go func() {
 			for {
 				select {
 				case _ = <-ticker.C:
-					v := time.Now().Sub(start).Minutes()
-					if v >= float64(ttl) {
-						logInfo("Closing due TTL")
-						os.Exit(1)
+					v := time.Now().Sub(start).Seconds()
+					if v >= float64(runDuration) {
+						logInfo("Stopping after %s seconds", runDuration)
+						os.Exit(0)
 					}
 				}
 			}
@@ -165,7 +165,7 @@ func startSimulation() error {
 		checkErr(err)
 	}
 	printStats()
-	checkTtl()
+	checkRunDuration()
 
 	return err
 }
