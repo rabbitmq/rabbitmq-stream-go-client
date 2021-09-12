@@ -43,7 +43,7 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
 ### Installing
 
 ```shell
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.12-alpha
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.1.0-beta
 ```
 
 imports:
@@ -327,15 +327,37 @@ func consumerClose(channelClose stream.ChannelClose) {
 ```
 In this way it is possible to handle fail-over
 
-### Perfomance test tool
+### Performance test tool
 
-With the client there is also a performace tool:
-```shell
- bin/perfTest -h
+Performance test tool it is useful to execute tests. 
+See also the [Java Performance](https://rabbitmq.github.io/rabbitmq-stream-java-client/stable/htmlsingle/#the-performance-tool) tool
+
+
+To install you can download the version from github:
+
+Mac:
 ```
-It is usefull to execute some test. See also the [Java Performance](https://rabbitmq.github.io/rabbitmq-stream-java-client/stable/htmlsingle/#the-performance-tool) tool
+https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/latest/download/stream-perf-test_darwin_amd64.tar.gz
+```
 
-### Perfomance test tool Docker
+Linux:
+```
+https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/latest/download/stream-perf-test_linux_amd64.tar.gz
+```
+
+Windows
+```
+https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/latest/download/stream-perf-test_windows_amd64.zip
+```
+
+execute `stream-perf-test --help` to see the parameters. By default it executes a test with one producer, one consumer.
+
+here an example:
+```shell
+stream-perf-test --publishers 3 --consumers 2 --streams my_stream --max-length-bytes 2GB --uris rabbitmq-stream://guest:guest@localhost:5552/  --fixed-body 400 --time 10
+```
+
+### Performance test tool Docker
 A docker image is available: `pivotalrabbitmq/go-stream-perf-test`, to test it:
 
 Run the server is host mode:
@@ -349,7 +371,7 @@ enable the plugin:
 ```
 then run the docker image:
 ```shell
-docker run -it --network host  pivotalrabbitmq/go-stream-perf-test silent
+docker run -it --network host  pivotalrabbitmq/go-stream-perf-test
 ```
 
 To see all the parameters:
