@@ -31,8 +31,8 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
     * [Consume messages](#consume-messages)
         * [Track Offset](#track-offset)
     * [Handle Close](#handle-close)
-- [Perfomance test tool](#perfomance-test-tool)
-    * [Perfomance test tool Docker](#perfomance-test-tool-docker)
+- [Performance test tool](#performance-test-tool)
+    * [Performance test tool Docker](#performance-test-tool-docker)
 - [Build form source](#build-from-source)
 - [Project status](#project-status)
 
