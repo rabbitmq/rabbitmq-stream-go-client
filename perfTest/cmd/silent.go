@@ -21,7 +21,8 @@ var wg sync.WaitGroup
 func newSilent() *cobra.Command {
 	var silentCmd = &cobra.Command{
 		Use:   "silent",
-		Short: "NewProducer a silent simulation",
+		Short: "Start the performance test (default command)",
+
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wg.Add(1)
 			err := startSimulation()
@@ -56,7 +57,7 @@ func checkRunDuration() {
 				case _ = <-ticker.C:
 					v := time.Now().Sub(start).Seconds()
 					if v >= float64(runDuration) {
-						logInfo("Stopping after %s seconds", runDuration)
+						logInfo("Stopping after %d seconds", runDuration)
 						os.Exit(0)
 					}
 				}
@@ -79,8 +80,8 @@ func printStats() {
 					CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
 					ConfirmedMessagesPerSecond := float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
 
-					logInfo("Published %8.2f msg/s   |   Confirmed %8.2f msg/s   |   Consumed %8.2f msg/s   |  Cons. closed %3v  |   Pub errors %3v  |   %3v  |  %3v  |  msg sent: %3v  |",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, consumersCloseCount, publishErrors, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent))
+					logInfo("Published %8.1f msg/s   |   Confirmed %8.1f msg/s   |   Consumed %8.1f msg/s  |  Pub errors %3v  |   %3v  |  %3v  |  msg sent: %3v  |",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, publishErrors, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent))
 				}
 			}
 

@@ -90,7 +90,7 @@ const (
 	defaultBatchSize            = 100
 	defaultBatchPublishingDelay = 100
 	//
-	ClientVersion = "0.13-alpha"
+	ClientVersion = "0.1.0-beta"
 
 	StreamTcpPort = "5552"
 )

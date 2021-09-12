@@ -45,7 +45,7 @@ perf-test-help: perf-test-build
 	go run perfTest/perftest.go help
 
 perf-test-build: vet fmt check
-	go build -ldflags=$(LDFLAGS) -o bin/perfTest perfTest/perftest.go
+	go build -ldflags=$(LDFLAGS) -o bin/stream-perf-test perfTest/perftest.go
 
 perf-test-docker-build: perf-test-build
 	docker build -t pivotalrabbitmq/go-stream-perf-test:$(VERSION) .

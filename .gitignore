@@ -22,5 +22,6 @@ vet
 .vagrant/
 local/
 tls-gen/
+dist/
 
 perfTest/perfTest
