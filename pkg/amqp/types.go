@@ -426,7 +426,6 @@ func (amqp *AMQP10) GetData() [][]byte {
 
 func (amqp *AMQP10) Message() *Message {
 	return amqp.message
-
 }
 
 // NewMessage returns a *Message with data as the payload.

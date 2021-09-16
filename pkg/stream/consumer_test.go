@@ -148,7 +148,7 @@ var _ = Describe("Streaming Consumers", func() {
 		time.Sleep(100 * time.Millisecond)
 	})
 
-	It("Subscribe/Unsubscribe count messages SetOffset", func() {
+	It("Subscribe/Unsubscribe count subEntry SetOffset", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -181,7 +181,7 @@ var _ = Describe("Streaming Consumers", func() {
 		}
 
 		// here we handle the deduplication so we must have only
-		// 10 messages on the stream, since we are using the
+		// 10 subEntry on the stream, since we are using the
 		// same SetPublishingId
 		for i := 0; i < 10; i++ {
 			err = producer.BatchSend(arr)
@@ -204,7 +204,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Subscribe/Unsubscribe count messages", func() {
+	It("Subscribe/Unsubscribe count subEntry", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 

@@ -310,7 +310,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	filter := offsetLimit != -1
 
-	//messages
+	//subEntry
 	var batchConsumingMessages []*amqp.Message
 	position := 0
 
@@ -339,7 +339,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				msg := &amqp.Message{}
 				err := msg.UnmarshalBinary(arrayMessage)
 				if err != nil {
-					logs.LogError("error unmarshal messages: %s", err)
+					logs.LogError("error unmarshal subEntry: %s", err)
 				}
 				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}

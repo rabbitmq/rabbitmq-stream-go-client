@@ -115,7 +115,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandDeletePublisher)))
 	})
 
-	It("Pre Publisher errors / Frame too large / too many messages", func() {
+	It("Pre Publisher errors / Frame too large / too many subEntry", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		var arr []message.StreamMessage
@@ -359,7 +359,7 @@ var _ = Describe("Streaming Producers", func() {
 		msg := amqp.NewMessage([]byte("test"))
 		messageBytes, _ := msg.MarshalBinary()
 		messagesSequence[0] = messageSequence{
-			message:      []message.StreamMessage{msg},
+			message:      msg,
 			size:         len(messageBytes),
 			publishingId: 1,
 		}
@@ -368,7 +368,8 @@ var _ = Describe("Streaming Producers", func() {
 		}
 		producer.options.client.coordinator.producers[uint8(200)] = producer
 		// 200 producer ID doesn't exist
-		err = producer.internalBatchSendProdId(messagesSequence, 200)
+		subEntryMessage := []subEntryMessage{{messages: messagesSequence}}
+		err = producer.internalBatchSendProdId(subEntryMessage, 200)
 		Expect(err).NotTo(HaveOccurred())
 
 		err = env.DeleteStream(prodErrorStream)

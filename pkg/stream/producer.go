@@ -18,13 +18,18 @@ type UnConfirmedMessage struct {
 	Err        error
 }
 
-type pendingMessagesSequence struct {
+type subEntryMessage struct {
 	messages []messageSequence
+	//size     int
+}
+
+type pendingMessagesSequence struct {
+	subEntry []subEntryMessage
 	size     int
 }
 
 type messageSequence struct {
-	message      []message.StreamMessage
+	message      message.StreamMessage
 	size         int
 	publishingId int64
 }
@@ -49,11 +54,11 @@ type Producer struct {
 type ProducerOptions struct {
 	client               *Client
 	streamName           string
-	Name                 string // Producer name, it is useful to handle deduplication messages
+	Name                 string // Producer name, it is useful to handle deduplication subEntry
 	QueueSize            int    // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
 	BatchSize            int    // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
-	BatchPublishingDelay int    // Period to send a batch of messages.
-	SubEntrySize         int    // Size of sub Entry, to aggregate more messages using one publishing id
+	BatchPublishingDelay int    // Period to send a batch of subEntry.
+	SubEntrySize         int    // Size of sub Entry, to aggregate more subEntry using one publishing id
 }
 
 func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
@@ -96,11 +101,11 @@ func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedMessage {
 	return producer.unConfirmedMessages
 }
 
-func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamMessage, producerID uint8) {
+func (producer *Producer) addUnConfirmed(sequence int64, streamMessage message.StreamMessage, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
 	producer.unConfirmedMessages[sequence] = &UnConfirmedMessage{
-		Message:    message,
+		Message:    streamMessage,
 		ProducerID: producerID,
 		SequenceID: sequence,
 		Confirmed:  false,
@@ -164,13 +169,12 @@ func (producer *Producer) getStatus() int {
 
 func (producer *Producer) sendBufferedMessages() {
 
-	if len(producer.pendingMessages.messages) > 0 {
-		//logs.LogInfo("len %d",  len(producer.pendingMessages.messages))
-		err := producer.internalBatchSend(producer.pendingMessages.messages)
+	if len(producer.pendingMessages.subEntry) > 0 {
+		err := producer.internalBatchSend(producer.pendingMessages.subEntry)
 		if err != nil {
 			return
 		}
-		producer.pendingMessages.messages = producer.pendingMessages.messages[:0]
+		producer.pendingMessages.subEntry = producer.pendingMessages.subEntry[:0]
 		producer.pendingMessages.size = initBufferPublishSize
 	}
 }
@@ -192,8 +196,12 @@ func (producer *Producer) startPublishTask() {
 					}
 
 					producer.pendingMessages.size += producer.pendingMessages.size + msg.size
-					producer.pendingMessages.messages = append(producer.pendingMessages.messages, msg)
-					if len(producer.pendingMessages.messages) >= producer.options.BatchSize {
+
+					producer.pendingMessages.subEntry = append(producer.pendingMessages.subEntry,
+						subEntryMessage{messages: make([]messageSequence, 1)})
+					producer.pendingMessages.subEntry[len(producer.pendingMessages.subEntry)-1].messages[0] = msg
+
+					if len(producer.pendingMessages.subEntry) >= producer.options.BatchSize {
 						producer.sendBufferedMessages()
 					}
 				}
@@ -224,7 +232,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	}
 
 	producer.messageSequenceCh <- messageSequence{
-		message:      []message.StreamMessage{streamMessage},
+		message:      streamMessage,
 		size:         len(msgBytes),
 		publishingId: sequence,
 	}
@@ -241,41 +249,47 @@ func (producer *Producer) getPublishingID(message message.StreamMessage) int64 {
 }
 
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
-	var messagesSequence = make([]messageSequence, len(batchMessages))
+	var subEntry = make([]subEntryMessage, len(batchMessages))
+
 	for i, batchMessage := range batchMessages {
 		messageBytes, err := batchMessage.MarshalBinary()
 		if err != nil {
 			return err
 		}
 		sequence := producer.getPublishingID(batchMessage)
-		messagesSequence[i] = messageSequence{
-			message:      []message.StreamMessage{batchMessage},
+		messageSeq := messageSequence{
+			message:      batchMessage,
 			size:         len(messageBytes),
 			publishingId: sequence,
 		}
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
+		subEntry[i] = subEntryMessage{messages: []messageSequence{messageSeq}}
 	}
 
-	return producer.internalBatchSend(messagesSequence)
+	return producer.internalBatchSend(subEntry)
 }
 
 func (producer *Producer) GetID() uint8 {
 	return producer.id
 }
-func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) error {
-	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
+func (producer *Producer) internalBatchSend(subEntry []subEntryMessage) error {
+	return producer.internalBatchSendProdId(subEntry, producer.GetID())
 }
 
 /// the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error, see
-func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequence, producerID uint8) error {
+func (producer *Producer) internalBatchSendProdId(subEntry []subEntryMessage, producerID uint8) error {
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
 	var msgLen int
-	for _, msg := range messagesSequence {
-		msgLen += msg.size + 8 + 4
+	var numberOfMessages = 0
+	for _, entryMessage := range subEntry {
+		numberOfMessages += len(entryMessage.messages)
+		for _, msg := range entryMessage.messages {
+			msgLen += msg.size + 8 + 4
+		}
 	}
 
 	frameHeaderLength := initBufferPublishSize
@@ -283,14 +297,15 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandPublish)
 	writeByte(b, producerID)
-	writeInt(b, len(messagesSequence)) //toExcluded - fromInclude
+	writeInt(b, numberOfMessages) //toExcluded - fromInclude
 
-	for _, msg := range messagesSequence {
-		for _, streamMessage := range msg.message {
-			r, _ := streamMessage.MarshalBinary()
+	for _, entryMessage := range subEntry {
+		for _, msg := range entryMessage.messages {
+			r, _ := msg.message.MarshalBinary()
 			writeLong(b, msg.publishingId) // publishingId
 			writeInt(b, len(r))            // len
 			b.Write(r)
+
 		}
 	}
 
@@ -302,7 +317,7 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	err := producer.options.client.socket.writeAndFlush(b.Bytes())
 	if err != nil {
 		// This sleep is need to wait the
-		// 800 milliseconds to flush all the pending messages
+		// 800 milliseconds to flush all the pending subEntry
 		time.Sleep(800 * time.Millisecond)
 		producer.setStatus(closed)
 		producer.FlushUnConfirmedMessages()
