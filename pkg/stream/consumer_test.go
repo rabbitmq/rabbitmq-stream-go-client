@@ -154,7 +154,6 @@ var _ = Describe("Streaming Consumers", func() {
 
 		err = producer.BatchSend(CreateArrayMessagesForTesting(100)) // batch send
 		Expect(err).NotTo(HaveOccurred())
-		// we can't close the subscribe until the publish is finished
 		time.Sleep(500 * time.Millisecond)
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
@@ -188,7 +187,7 @@ var _ = Describe("Streaming Consumers", func() {
 		}
 
 		Expect(err).NotTo(HaveOccurred())
-		// we can't close the subscribe until the publish is finished
+		// we can't close to subscribe until the publishing is finished
 		time.Sleep(500 * time.Millisecond)
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
@@ -204,7 +203,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Subscribe/Unsubscribe count subEntry", func() {
+	It("Subscribe/Unsubscribe count Messages", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -317,6 +316,32 @@ var _ = Describe("Streaming Consumers", func() {
 			})
 		Expect(err).To(HaveOccurred())
 
+	})
+
+	It("Consistent Messages", func() {
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		for z := 0; z < 200; z++ {
+			err := producer.Send(amqp.NewMessage([]byte("test_" + strconv.Itoa(z))))
+			Expect(err).NotTo(HaveOccurred())
+		}
+		time.Sleep(500 * time.Millisecond)
+		err = producer.Close()
+		Expect(err).NotTo(HaveOccurred())
+		var messagesValue []string
+		consumer, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				messagesValue = append(messagesValue, string(message.Data[0]))
+
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
+		for i := range messagesValue {
+			Expect(messagesValue[i]).To(Equal("test_" + strconv.Itoa(i)))
+		}
+		err = consumer.Close()
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 })

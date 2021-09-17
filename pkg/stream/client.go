@@ -479,6 +479,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		Name:                 options.Name,
 		QueueSize:            options.QueueSize,
 		BatchSize:            options.BatchSize,
+		SubEntrySize:         options.SubEntrySize,
 		BatchPublishingDelay: options.BatchPublishingDelay,
 	})
 

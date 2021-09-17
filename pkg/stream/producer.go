@@ -3,6 +3,7 @@ package stream
 import (
 	"bytes"
 	"fmt"
+	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
@@ -18,14 +19,39 @@ type UnConfirmedMessage struct {
 	Err        error
 }
 
+// subEntryMessage keeps the relation between the producer.options.SubEntrySize
+// and messages
 type subEntryMessage struct {
-	messages []messageSequence
-	//size     int
+	messages []*messageSequence
 }
 
+// the pendingMessagesSequence is meant to keep the structure sub-entry -> messages
+// in case of simple publish will be 1 sub entry 1 message
+// see the comment on (producer *Producer) startPublishTask()
 type pendingMessagesSequence struct {
 	subEntry []subEntryMessage
 	size     int
+}
+
+func (p *pendingMessagesSequence) maybeAddSubEntry(producerSubEntrySize int) {
+	if len(p.subEntry) == 0 {
+		p.subEntry = append(p.subEntry,
+			subEntryMessage{messages: make([]*messageSequence, 0)})
+	}
+
+	lastSub := p.subEntry[len(p.subEntry)-1]
+	if len(lastSub.messages) >= producerSubEntrySize {
+		p.subEntry = append(p.subEntry,
+			subEntryMessage{messages: make([]*messageSequence, 0)})
+	}
+}
+
+/// addMessage positions the message in the right position
+/// given the subEntry value. By default, the relation is 1 sub-entry 1 message
+func (p *pendingMessagesSequence) addMessage(producerSubEntrySize int, streamMessage *messageSequence) {
+	p.maybeAddSubEntry(producerSubEntrySize)
+	p.subEntry[len(p.subEntry)-1].messages = append(p.subEntry[len(p.subEntry)-1].messages, streamMessage)
+	p.size += streamMessage.size
 }
 
 type messageSequence struct {
@@ -191,16 +217,25 @@ func (producer *Producer) startPublishTask() {
 					if !running {
 						return
 					}
+					// Checks if with the next message the frame size is still valid
+					// else we send the buffered messages
 					if producer.pendingMessages.size+msg.size >= producer.options.client.getTuneState().requestedMaxFrameSize {
 						producer.sendBufferedMessages()
 					}
 
-					producer.pendingMessages.size += producer.pendingMessages.size + msg.size
+					// in case SubEntrySize = 1 means simple publish
+					// SubEntrySize > 0 means subBatch publish
+					// for example sub entry = 5 and batch size = 10
+					// batch size * sub entry = 50 messages 10 publishing id
 
-					producer.pendingMessages.subEntry = append(producer.pendingMessages.subEntry,
-						subEntryMessage{messages: make([]messageSequence, 1)})
-					producer.pendingMessages.subEntry[len(producer.pendingMessages.subEntry)-1].messages[0] = msg
+					// sub entry = 10.000 > Frame size raise an error can't split 10.000 5.000 5.000
+					// batch size = 5
+					// 10.000 * 5 = 50.0000 5 publishing
+					// the pendingMessagesSequence is meant to keep the structure sub-entry -> messages
+					// in case of simple publish will be 1 sub entry 1 message
+					producer.pendingMessages.addMessage(producer.options.SubEntrySize, &msg)
 
+					/// as batch size count the number of the subEntry
 					if len(producer.pendingMessages.subEntry) >= producer.options.BatchSize {
 						producer.sendBufferedMessages()
 					}
@@ -249,6 +284,9 @@ func (producer *Producer) getPublishingID(message message.StreamMessage) int64 {
 }
 
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
+	if producer.options.SubEntrySize > 1 {
+		return errors.New("Can't use BatchSend with SubEntrySize > 1")
+	}
 	var subEntry = make([]subEntryMessage, len(batchMessages))
 
 	for i, batchMessage := range batchMessages {
@@ -263,7 +301,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 			publishingId: sequence,
 		}
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
-		subEntry[i] = subEntryMessage{messages: []messageSequence{messageSeq}}
+		subEntry[i] = subEntryMessage{messages: []*messageSequence{&messageSeq}}
 	}
 
 	return producer.internalBatchSend(subEntry)
@@ -284,9 +322,8 @@ func (producer *Producer) internalBatchSendProdId(subEntry []subEntryMessage, pr
 	}
 
 	var msgLen int
-	var numberOfMessages = 0
+	var numberOfMessages = len(subEntry)
 	for _, entryMessage := range subEntry {
-		numberOfMessages += len(entryMessage.messages)
 		for _, msg := range entryMessage.messages {
 			msgLen += msg.size + 8 + 4
 		}
@@ -299,18 +336,14 @@ func (producer *Producer) internalBatchSendProdId(subEntry []subEntryMessage, pr
 	writeByte(b, producerID)
 	writeInt(b, numberOfMessages) //toExcluded - fromInclude
 
-	for _, entryMessage := range subEntry {
-		for _, msg := range entryMessage.messages {
-			r, _ := msg.message.MarshalBinary()
-			writeLong(b, msg.publishingId) // publishingId
-			writeInt(b, len(r))            // len
-			b.Write(r)
-
-		}
+	// SubEntrySize == 1 in this case the publishing is standard, no sub-batching
+	if producer.options.SubEntrySize == 1 {
+		producer.simpleAggregation(subEntry, b)
 	}
 
 	bufferToWrite := b.Bytes()
 	if len(bufferToWrite) > producer.options.client.getTuneState().requestedMaxFrameSize {
+		producer.FlushUnConfirmedMessages()
 		return lookErrorCode(responseCodeFrameTooLarge)
 	}
 
@@ -325,6 +358,18 @@ func (producer *Producer) internalBatchSendProdId(subEntry []subEntryMessage, pr
 		return err
 	}
 	return nil
+}
+
+func (producer *Producer) simpleAggregation(subEntry []subEntryMessage, b *bytes.Buffer) {
+	for _, entryMessage := range subEntry {
+		for _, msg := range entryMessage.messages {
+			r, _ := msg.message.MarshalBinary()
+			writeLong(b, msg.publishingId) // publishingId
+			writeInt(b, len(r))            // len
+			b.Write(r)
+
+		}
+	}
 }
 
 func (producer *Producer) FlushUnConfirmedMessages() {

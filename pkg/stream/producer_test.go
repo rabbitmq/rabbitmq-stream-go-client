@@ -13,7 +13,7 @@ import (
 
 var testProducerStream string
 
-var _ = Describe("Streaming Producers", func() {
+var _ = Describe("Stream Producers", func() {
 
 	BeforeEach(func() {
 		time.Sleep(200 * time.Millisecond)
@@ -43,8 +43,8 @@ var _ = Describe("Streaming Producers", func() {
 		err1 := producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch send
 		Expect(err1).NotTo(HaveOccurred())
 
-		// we can't close the subscribe until the publish is finished
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -60,8 +60,10 @@ var _ = Describe("Streaming Producers", func() {
 
 				err = producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch send
 				Expect(err).NotTo(HaveOccurred())
-				// we can't close the subscribe until the publish is finished
+				// we can't close to subscribe until the publishing is finished
 				time.Sleep(500 * time.Millisecond)
+				Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+
 				err = producer.Close()
 				Expect(err).NotTo(HaveOccurred())
 			}(&wg)
@@ -90,7 +92,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(200 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(14)))
-
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -109,13 +111,14 @@ var _ = Describe("Streaming Producers", func() {
 		err = producer.BatchSend(CreateArrayMessagesForTesting(2))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(100 * time.Millisecond)
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(100 * time.Millisecond)
 		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandDeletePublisher)))
 	})
 
-	It("Pre Publisher errors / Frame too large / too many subEntry", func() {
+	It("Pre Publisher errors / Frame too large / too many messages", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		var arr []message.StreamMessage
@@ -154,6 +157,7 @@ var _ = Describe("Streaming Producers", func() {
 		}
 		time.Sleep(400 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(100)))
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 		// in this case must raise an error since the producer is closed
@@ -184,6 +188,8 @@ var _ = Describe("Streaming Producers", func() {
 		s := make([]byte, 1148576)
 		err = producer.Send(amqp.NewMessage(s))
 		Expect(err).To(HaveOccurred())
+		time.Sleep(100 * time.Millisecond)
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -204,9 +210,9 @@ var _ = Describe("Streaming Producers", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		time.Sleep(800 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCountBatch)).To(Equal(int32(100)))
-
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -241,6 +247,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		time.Sleep(400 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -275,6 +282,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		time.Sleep(400 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -331,6 +339,12 @@ var _ = Describe("Streaming Producers", func() {
 
 		Expect(err).To(HaveOccurred())
 
+		producerBatch, err := env.NewProducer(testProducerStream,
+			NewProducerOptions().SetSubEntrySize(55))
+		Expect(err).NotTo(HaveOccurred())
+		err = producerBatch.BatchSend(CreateArrayMessagesForTesting(5))
+		Expect(err).To(HaveOccurred())
+
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -355,10 +369,10 @@ var _ = Describe("Streaming Producers", func() {
 			atomic.AddInt32(&messagesCount, 1)
 		}(chPublishError)
 
-		var messagesSequence = make([]messageSequence, 1)
+		var messagesSequence = make([]*messageSequence, 1)
 		msg := amqp.NewMessage([]byte("test"))
 		messageBytes, _ := msg.MarshalBinary()
-		messagesSequence[0] = messageSequence{
+		messagesSequence[0] = &messageSequence{
 			message:      msg,
 			size:         len(messageBytes),
 			publishingId: 1,

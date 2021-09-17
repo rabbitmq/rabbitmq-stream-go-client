@@ -398,18 +398,28 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 			logs.LogWarn("producer id %d not found, publish error :%s", publishingId, lookErrorCode(code))
 			producer = &Producer{unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
 		} else {
-			unConfirmedMessage := producer.getUnConfirmed(publishingId)
 
-			producer.mutex.Lock()
-			if producer.publishError != nil {
-				producer.publishError <- PublishError{
-					Code:               code,
-					Err:                lookErrorCode(code),
-					UnConfirmedMessage: unConfirmedMessage,
+			// in case of subBatch we use the last publishingId to store the messages
+			//  for example:
+			// SubEntrySize = 3 there are 3 messages with  publishingId = 1, 2, 3
+			// we use only the last one to aggregate the messages
+			// the unConfirmedMessages map still contains the flat version,
+			// so we receive the publishingId = 3 from the server
+			// and client side we confirm 1,2,3
+			for i := producer.options.SubEntrySize; i >= 0; i-- {
+				unConfirmedMessage := producer.getUnConfirmed(publishingId - int64(i))
+				producer.mutex.Lock()
+				if producer.publishError != nil {
+					producer.publishError <- PublishError{
+						Code:               code,
+						Err:                lookErrorCode(code),
+						UnConfirmedMessage: unConfirmedMessage,
+					}
 				}
+				producer.mutex.Unlock()
+				producer.removeUnConfirmed(publishingId)
 			}
-			producer.mutex.Unlock()
-			producer.removeUnConfirmed(publishingId)
+
 		}
 		publishingErrorCount--
 	}
