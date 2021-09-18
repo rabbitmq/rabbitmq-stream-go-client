@@ -406,15 +406,13 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 			// the unConfirmedMessages map still contains the flat version,
 			// so we receive the publishingId = 3 from the server
 			// and client side we confirm 1,2,3
-			for i := producer.options.SubEntrySize; i >= 0; i-- {
-				unConfirmedMessage := producer.getUnConfirmed(publishingId - int64(i))
-				producer.mutex.Lock()
-				if producer.publishError != nil {
-					producer.publishError <- PublishError{
-						Code:               code,
-						Err:                lookErrorCode(code),
-						UnConfirmedMessage: unConfirmedMessage,
-					}
+			unConfirmedMessage := producer.getUnConfirmed(publishingId)
+			producer.mutex.Lock()
+			if producer.publishError != nil {
+				producer.publishError <- PublishError{
+					Code:               code,
+					Err:                lookErrorCode(code),
+					UnConfirmedMessage: unConfirmedMessage,
 				}
 				producer.mutex.Unlock()
 				producer.removeUnConfirmed(publishingId)

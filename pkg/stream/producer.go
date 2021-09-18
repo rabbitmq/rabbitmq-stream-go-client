@@ -25,30 +25,48 @@ type subEntryMessage struct {
 	messages []*messageSequence
 }
 
-// the pendingMessagesSequence is meant to keep the structure sub-entry -> messages
+// the accumulatedEntity is meant to keep the structure sub-entry -> messages
 // in case of simple publish will be 1 sub entry 1 message
 // see the comment on (producer *Producer) startPublishTask()
-type pendingMessagesSequence struct {
+type accumulatedEntity struct {
 	subEntry []subEntryMessage
 	size     int
 }
 
-func (p *pendingMessagesSequence) maybeAddSubEntry(producerSubEntrySize int) {
+func (p *accumulatedEntity) batchSize(messages []*messageSequence) int {
+	return len(messages)
+}
+
+func (p *accumulatedEntity) uncompressedSizeInBytes(messages []*messageSequence) int {
+	result := 0
+	for _, sequence := range messages {
+		binary, err := sequence.message.MarshalBinary()
+		result += len(binary) + 4 // int to write to the buffer
+		if err != nil {
+			return 0
+		}
+
+	}
+	return result
+}
+
+func (p *accumulatedEntity) maybeAddSubEntry(producerSubEntrySize int) {
 	if len(p.subEntry) == 0 {
 		p.subEntry = append(p.subEntry,
 			subEntryMessage{messages: make([]*messageSequence, 0)})
-	}
 
-	lastSub := p.subEntry[len(p.subEntry)-1]
-	if len(lastSub.messages) >= producerSubEntrySize {
-		p.subEntry = append(p.subEntry,
-			subEntryMessage{messages: make([]*messageSequence, 0)})
+	} else {
+		lastSub := p.subEntry[len(p.subEntry)-1]
+		if len(lastSub.messages) >= producerSubEntrySize {
+			p.subEntry = append(p.subEntry,
+				subEntryMessage{messages: make([]*messageSequence, 0)})
+		}
 	}
 }
 
 /// addMessage positions the message in the right position
 /// given the subEntry value. By default, the relation is 1 sub-entry 1 message
-func (p *pendingMessagesSequence) addMessage(producerSubEntrySize int, streamMessage *messageSequence) {
+func (p *accumulatedEntity) addMessage(producerSubEntrySize int, streamMessage *messageSequence) {
 	p.maybeAddSubEntry(producerSubEntrySize)
 	p.subEntry[len(p.subEntry)-1].messages = append(p.subEntry[len(p.subEntry)-1].messages, streamMessage)
 	p.size += streamMessage.size
@@ -74,7 +92,7 @@ type Producer struct {
 
 	/// needed for the async publish
 	messageSequenceCh chan messageSequence
-	pendingMessages   pendingMessagesSequence
+	pendingMessages   accumulatedEntity
 }
 
 type ProducerOptions struct {
@@ -196,7 +214,7 @@ func (producer *Producer) getStatus() int {
 func (producer *Producer) sendBufferedMessages() {
 
 	if len(producer.pendingMessages.subEntry) > 0 {
-		err := producer.internalBatchSend(producer.pendingMessages.subEntry)
+		err := producer.internalBatchSend(producer.pendingMessages)
 		if err != nil {
 			return
 		}
@@ -231,7 +249,7 @@ func (producer *Producer) startPublishTask() {
 					// sub entry = 10.000 > Frame size raise an error can't split 10.000 5.000 5.000
 					// batch size = 5
 					// 10.000 * 5 = 50.0000 5 publishing
-					// the pendingMessagesSequence is meant to keep the structure sub-entry -> messages
+					// the accumulatedEntity is meant to keep the structure sub-entry -> messages
 					// in case of simple publish will be 1 sub entry 1 message
 					producer.pendingMessages.addMessage(producer.options.SubEntrySize, &msg)
 
@@ -303,29 +321,40 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 		subEntry[i] = subEntryMessage{messages: []*messageSequence{&messageSeq}}
 	}
-
-	return producer.internalBatchSend(subEntry)
+	messages := accumulatedEntity{
+		subEntry: subEntry,
+		size:     0,
+	}
+	return producer.internalBatchSend(messages)
 }
 
 func (producer *Producer) GetID() uint8 {
 	return producer.id
 }
-func (producer *Producer) internalBatchSend(subEntry []subEntryMessage) error {
-	return producer.internalBatchSendProdId(subEntry, producer.GetID())
+func (producer *Producer) internalBatchSend(pendingMessages accumulatedEntity) error {
+	return producer.internalBatchSendProdId(pendingMessages, producer.GetID())
 }
 
 /// the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error, see
-func (producer *Producer) internalBatchSendProdId(subEntry []subEntryMessage, producerID uint8) error {
+func (producer *Producer) internalBatchSendProdId(pendingMessages accumulatedEntity, producerID uint8) error {
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
 	var msgLen int
-	var numberOfMessages = len(subEntry)
-	for _, entryMessage := range subEntry {
+	var numberOfMessages = len(pendingMessages.subEntry)
+	for _, entryMessage := range pendingMessages.subEntry {
+		if producer.options.SubEntrySize > 1 {
+			msgLen += 8 + 1 + 2 + 4 + 4
+		}
 		for _, msg := range entryMessage.messages {
-			msgLen += msg.size + 8 + 4
+			if producer.options.SubEntrySize == 1 {
+				msgLen += msg.size + 8 + 4
+			}
+			if producer.options.SubEntrySize > 1 {
+				msgLen += msg.size + 4
+			}
 		}
 	}
 
@@ -335,10 +364,13 @@ func (producer *Producer) internalBatchSendProdId(subEntry []subEntryMessage, pr
 	writeProtocolHeader(b, length, commandPublish)
 	writeByte(b, producerID)
 	writeInt(b, numberOfMessages) //toExcluded - fromInclude
-
 	// SubEntrySize == 1 in this case the publishing is standard, no sub-batching
 	if producer.options.SubEntrySize == 1 {
-		producer.simpleAggregation(subEntry, b)
+		producer.simpleAggregation(pendingMessages, b)
+	}
+
+	if producer.options.SubEntrySize > 1 {
+		producer.subEntryAggregation(pendingMessages, b)
 	}
 
 	bufferToWrite := b.Bytes()
@@ -360,14 +392,37 @@ func (producer *Producer) internalBatchSendProdId(subEntry []subEntryMessage, pr
 	return nil
 }
 
-func (producer *Producer) simpleAggregation(subEntry []subEntryMessage, b *bytes.Buffer) {
-	for _, entryMessage := range subEntry {
+func (producer *Producer) simpleAggregation(pendingMessages accumulatedEntity, b *bytes.Buffer) {
+	for _, entryMessage := range pendingMessages.subEntry {
 		for _, msg := range entryMessage.messages {
 			r, _ := msg.message.MarshalBinary()
 			writeLong(b, msg.publishingId) // publishingId
 			writeInt(b, len(r))            // len
 			b.Write(r)
 
+		}
+	}
+}
+
+func (producer *Producer) subEntryAggregation(pendingMessages accumulatedEntity, b *bytes.Buffer) {
+
+	for _, entryMessage := range pendingMessages.subEntry {
+		//return batchToPublish.batchSize();
+		//batchToPublish.write(bb);
+		//bb.writeInt(batchToPublish.sizeInBytes());
+		//bb.writeInt(batchToPublish.uncompressedSizeInBytes());
+		//EncodedMessageBatch batchToPublish = (EncodedMessageBatch) entity;
+		writeLong(b, entryMessage.messages[0].publishingId)
+		writeByte(b, 0x80|0<<4) // 1=SubBatchEntryType:1,CompressionType:3,Reserved:4,
+		writeShort(b, int16(pendingMessages.batchSize(entryMessage.messages)))
+		sizeCompress := pendingMessages.uncompressedSizeInBytes(entryMessage.messages)
+		writeInt(b, sizeCompress)
+		writeInt(b, sizeCompress)
+
+		for _, msg := range entryMessage.messages {
+			r, _ := msg.message.MarshalBinary()
+			writeInt(b, len(r)) // len
+			b.Write(r)
 		}
 	}
 }

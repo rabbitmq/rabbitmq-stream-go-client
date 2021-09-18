@@ -58,9 +58,10 @@ func (coordinator *Coordinator) NewProducer(
 		unConfirmedMessages: map[int64]*UnConfirmedMessage{},
 		status:              open,
 		messageSequenceCh:   make(chan messageSequence, size),
-		pendingMessages: pendingMessagesSequence{
+		pendingMessages: accumulatedEntity{
 			subEntry: make([]subEntryMessage, 0),
 			size:     initBufferPublishSize,
+			/// the batch size is the value of the subentry
 		}}
 	coordinator.producers[lastId] = producer
 	return producer, err

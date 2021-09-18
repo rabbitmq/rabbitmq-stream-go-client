@@ -383,7 +383,8 @@ var _ = Describe("Stream Producers", func() {
 		producer.options.client.coordinator.producers[uint8(200)] = producer
 		// 200 producer ID doesn't exist
 		subEntryMessage := []subEntryMessage{{messages: messagesSequence}}
-		err = producer.internalBatchSendProdId(subEntryMessage, 200)
+		messages := accumulatedEntity{subEntry: subEntryMessage}
+		err = producer.internalBatchSendProdId(messages, 200)
 		Expect(err).NotTo(HaveOccurred())
 
 		err = env.DeleteStream(prodErrorStream)
