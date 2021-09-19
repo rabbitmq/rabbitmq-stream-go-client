@@ -241,8 +241,6 @@ func (producer *Producer) startPublishTask() {
 						producer.sendBufferedMessages()
 					}
 
-					sequence := producer.applyPublishingIdAsLong(&msg)
-					producer.addUnConfirmed(sequence, msg.message, producer.id)
 
 					// in case SubEntrySize = 1 means simple publish
 					// SubEntrySize > 0 means subBatch publish
@@ -285,11 +283,16 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return fmt.Errorf("producer id: %d  closed", producer.id)
 	}
 
-	producer.messageSequenceCh <- messageSequence{
+	msg := messageSequence{
 		message: streamMessage,
 		size:    len(msgBytes),
-		//publishingId: sequence,
 	}
+
+	sequence := producer.applyPublishingIdAsLong(&msg)
+	producer.addUnConfirmed(sequence, msg.message, producer.id)
+
+
+	producer.messageSequenceCh <- msg
 
 	return nil
 }
