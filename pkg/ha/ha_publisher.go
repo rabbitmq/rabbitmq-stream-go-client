@@ -126,7 +126,7 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		}
 		if exists {
 			logs.LogDebug("[RProducer] - stream %s exists. Reconnecting the producer.", p.streamName)
-			time.Sleep(800 * time.Millisecond)
+			time.Sleep(1 * time.Second)
 			p.producer.FlushUnConfirmedMessages()
 			return p.newProducer()
 		} else {
@@ -164,6 +164,7 @@ func (p *ReliableProducer) GetBroker() *stream.Broker {
 
 func (p *ReliableProducer) Close() error {
 	p.setStatus(StatusClosed)
+	p.producer.FlushUnConfirmedMessages()
 	err := p.producer.Close()
 	close(p.channelPublishConfirm)
 	close(p.channelPublishError)

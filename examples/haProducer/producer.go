@@ -104,13 +104,13 @@ func main() {
 			//mutex.Lock()
 			wg.Add(1)
 			//mutex.Unlock()
-			for i := 0; i < 100000; i++ {
+			for i := 0; i < 300000; i++ {
 				msg := amqp.NewMessage([]byte("ha"))
 				err := rProducer.Send(msg)
 				CheckErr(err)
-				err = rProducer1.Send(msg)
-				CheckErr(err)
-				if atomic.AddInt32(&sent, 2)%5000 == 0 {
+				//err = rProducer1.Send(msg)
+				//CheckErr(err)
+				if atomic.AddInt32(&sent, 1)%5000 == 0 {
 					time.Sleep(100 * time.Millisecond)
 					fmt.Printf("Sent..%d messages\n", atomic.LoadInt32(&sent))
 				}

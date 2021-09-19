@@ -241,7 +241,6 @@ func (producer *Producer) startPublishTask() {
 						producer.sendBufferedMessages()
 					}
 
-
 					// in case SubEntrySize = 1 means simple publish
 					// SubEntrySize > 0 means subBatch publish
 					// for example sub entry = 5 and batch size = 10
@@ -288,9 +287,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		size:    len(msgBytes),
 	}
 
-	sequence := producer.applyPublishingIdAsLong(&msg)
-	producer.addUnConfirmed(sequence, msg.message, producer.id)
-
+	producer.addUnConfirmed(producer.applyPublishingIdAsLong(&msg), streamMessage, producer.id)
 
 	producer.messageSequenceCh <- msg
 
