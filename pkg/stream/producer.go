@@ -241,6 +241,9 @@ func (producer *Producer) startPublishTask() {
 						producer.sendBufferedMessages()
 					}
 
+					sequence := producer.applyPublishingIdAsLong(&msg)
+					producer.addUnConfirmed(sequence, msg.message, producer.id)
+
 					// in case SubEntrySize = 1 means simple publish
 					// SubEntrySize > 0 means subBatch publish
 					// for example sub entry = 5 and batch size = 10
@@ -277,27 +280,27 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	if len(msgBytes)+initBufferPublishSize > producer.options.client.getTuneState().requestedMaxFrameSize {
 		return FrameTooLarge
 	}
-	sequence := producer.getPublishingID(streamMessage)
-	producer.addUnConfirmed(sequence, streamMessage, producer.id)
 
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d  closed", producer.id)
 	}
 
 	producer.messageSequenceCh <- messageSequence{
-		message:      streamMessage,
-		size:         len(msgBytes),
-		publishingId: sequence,
+		message: streamMessage,
+		size:    len(msgBytes),
+		//publishingId: sequence,
 	}
 
 	return nil
 }
 
-func (producer *Producer) getPublishingID(message message.StreamMessage) int64 {
-	sequence := message.GetPublishingId()
-	if message.GetPublishingId() < 0 {
+func (producer *Producer) applyPublishingIdAsLong(messageSequence *messageSequence) int64 {
+	sequence := messageSequence.message.GetPublishingId()
+	if messageSequence.message.GetPublishingId() < 0 {
 		sequence = atomic.AddInt64(&producer.sequence, 1)
 	}
+	messageSequence.publishingId = sequence
+
 	return sequence
 }
 
@@ -312,12 +315,12 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		if err != nil {
 			return err
 		}
-		sequence := producer.getPublishingID(batchMessage)
 		messageSeq := messageSequence{
-			message:      batchMessage,
-			size:         len(messageBytes),
-			publishingId: sequence,
+			message: batchMessage,
+			size:    len(messageBytes),
 		}
+		sequence := producer.applyPublishingIdAsLong(&messageSeq)
+
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 		subEntry[i] = subEntryMessage{messages: []*messageSequence{&messageSeq}}
 	}
