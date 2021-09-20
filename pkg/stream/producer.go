@@ -56,8 +56,7 @@ func (p *accumulatedEntity) maybeAddSubEntry(producerSubEntrySize int) {
 			subEntryMessage{messages: make([]*messageSequence, 0)})
 
 	} else {
-		lastSub := p.subEntry[len(p.subEntry)-1]
-		if len(lastSub.messages) >= producerSubEntrySize {
+		if len(p.subEntry[len(p.subEntry)-1].messages) >= producerSubEntrySize {
 			p.subEntry = append(p.subEntry,
 				subEntryMessage{messages: make([]*messageSequence, 0)})
 		}
@@ -68,7 +67,8 @@ func (p *accumulatedEntity) maybeAddSubEntry(producerSubEntrySize int) {
 /// given the subEntry value. By default, the relation is 1 sub-entry 1 message
 func (p *accumulatedEntity) addMessage(producerSubEntrySize int, streamMessage *messageSequence) {
 	p.maybeAddSubEntry(producerSubEntrySize)
-	p.subEntry[len(p.subEntry)-1].messages = append(p.subEntry[len(p.subEntry)-1].messages, streamMessage)
+	l := len(p.subEntry) - 1
+	p.subEntry[l].messages = append(p.subEntry[l].messages, streamMessage)
 	p.size += streamMessage.size
 }
 
@@ -148,6 +148,7 @@ func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedMessage {
 func (producer *Producer) addUnConfirmed(sequence int64, streamMessage message.StreamMessage, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
+
 	producer.unConfirmedMessages[sequence] = &UnConfirmedMessage{
 		Message:    streamMessage,
 		ProducerID: producerID,
@@ -252,6 +253,7 @@ func (producer *Producer) startPublishTask() {
 					// the accumulatedEntity is meant to keep the structure sub-entry -> messages
 					// in case of simple publish will be 1 sub entry 1 message
 					producer.pendingMessages.addMessage(producer.options.SubEntrySize, &msg)
+					producer.addUnConfirmed(producer.applyPublishingIdAsLong(&msg), msg.message, producer.id)
 
 					/// as batch size count the number of the subEntry
 					if len(producer.pendingMessages.subEntry) >= producer.options.BatchSize {
@@ -269,6 +271,7 @@ func (producer *Producer) startPublishTask() {
 }
 
 func (producer *Producer) Send(streamMessage message.StreamMessage) error {
+
 	msgBytes, err := streamMessage.MarshalBinary()
 	if err != nil {
 		return err
@@ -278,16 +281,25 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return FrameTooLarge
 	}
 
-	if producer.getStatus() == closed {
-		return fmt.Errorf("producer id: %d  closed", producer.id)
-	}
-
 	msg := messageSequence{
 		message: streamMessage,
 		size:    len(msgBytes),
 	}
 
-	producer.addUnConfirmed(producer.applyPublishingIdAsLong(&msg), streamMessage, producer.id)
+	if producer.getStatus() == closed {
+		if producer.publishConfirm != nil {
+			unConfirmedMessage := &UnConfirmedMessage{
+				Message:    streamMessage,
+				ProducerID: producer.id,
+				SequenceID: streamMessage.GetPublishingId(),
+				Confirmed:  false,
+				Err:        fmt.Errorf("producer id: %d  closed", producer.id),
+			}
+			producer.publishConfirm <- []*UnConfirmedMessage{unConfirmedMessage}
+		}
+
+		return fmt.Errorf("producer id: %d  closed", producer.id)
+	}
 
 	producer.messageSequenceCh <- msg
 

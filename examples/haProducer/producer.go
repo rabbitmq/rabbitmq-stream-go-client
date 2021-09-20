@@ -25,14 +25,13 @@ var totalMessagesPubError int32
 
 func handlePublishError(publishError stream.ChannelPublishError) {
 	go func() {
-		for {
-			<-publishError
+		for range publishError {
 			atomic.AddInt32(&totalMessagesPubError, 1)
 			//var data [][]byte
 			//if pError.UnConfirmedMessage != nil {
 			//	data = pError.UnConfirmedMessage.Message.GetData()
 			//}
-			////fmt.Printf("Error during publish, message:%s ,  error: %s. Total %d  \n", data, pError.Err, totalMessagesPubError)
+			//fmt.Printf("Error during publish, message:%s ,  error: %s. Total %d  \n", data, pError.Err, totalMessagesPubError)
 		}
 	}()
 
@@ -46,11 +45,11 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 		for messagesIds := range confirms {
 			for _, m := range messagesIds {
 				if m.Confirmed {
-					if atomic.AddInt32(&counter, 1)%5000 == 0 {
+					if atomic.AddInt32(&counter, 1)%50000 == 0 {
 						fmt.Printf("Confirmed %d messages\n", atomic.LoadInt32(&counter))
 					}
 				} else {
-					if atomic.AddInt32(&fail, 1)%1000 == 0 {
+					if atomic.AddInt32(&fail, 1)%10000 == 0 {
 						fmt.Printf("NOT Confirmed %d messages\n", atomic.LoadInt32(&fail))
 					}
 				}
@@ -93,28 +92,26 @@ func main() {
 	handlePublishError(chPublishErr)
 
 	handlePublishConfirm(rProducer1.NotifyPublishConfirmation())
-
 	handlePublishError(rProducer1.NotifyPublishError())
 
 	wg := sync.WaitGroup{}
 
 	var sent int32
-	for i := 0; i < 11; i++ {
+	for i := 0; i < 10; i++ {
 		go func(wg *sync.WaitGroup) {
-			//mutex.Lock()
 			wg.Add(1)
-			//mutex.Unlock()
 			for i := 0; i < 300000; i++ {
 				msg := amqp.NewMessage([]byte("ha"))
 				err := rProducer.Send(msg)
 				CheckErr(err)
-				//err = rProducer1.Send(msg)
-				//CheckErr(err)
-				if atomic.AddInt32(&sent, 1)%5000 == 0 {
+				err = rProducer1.Send(msg)
+				CheckErr(err)
+				if atomic.AddInt32(&sent, 2)%50000 == 0 {
 					time.Sleep(100 * time.Millisecond)
 					fmt.Printf("Sent..%d messages\n", atomic.LoadInt32(&sent))
 				}
 			}
+			time.Sleep(500 * time.Millisecond)
 			wg.Done()
 		}(&wg)
 	}
@@ -150,19 +147,21 @@ func main() {
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
+
+	err = rProducer.Close()
+	//CheckErr(err)
+	err = rProducer1.Close()
+	//CheckErr(err)
+
 	time.Sleep(200 * time.Millisecond)
 	fmt.Printf("[Report]\nSent:%d \nConfirmed:%d\nNot confirmed:%d\nPublish error:%d\nTotal messages handeld:%d \n",
 		sent, counter, fail, totalMessagesPubError, atomic.LoadInt32(&counter)+atomic.LoadInt32(&fail)+
 			atomic.LoadInt32(&totalMessagesPubError))
-
-	err = rProducer.Close()
-	CheckErr(err)
-	err = rProducer1.Close()
-	CheckErr(err)
 	err = consumer.Close()
 	CheckErr(err)
 	err = env.DeleteStream(streamName)
 	CheckErr(err)
 	err = env.Close()
 	CheckErr(err)
+
 }

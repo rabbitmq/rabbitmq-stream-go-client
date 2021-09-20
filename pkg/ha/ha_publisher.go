@@ -126,8 +126,10 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		}
 		if exists {
 			logs.LogDebug("[RProducer] - stream %s exists. Reconnecting the producer.", p.streamName)
-			time.Sleep(1 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 			p.producer.FlushUnConfirmedMessages()
+			_ = p.producer.Close()
+			time.Sleep(100 * time.Millisecond)
 			return p.newProducer()
 		} else {
 			logs.LogError("[RProducer] - stream %s does not exist. Closing..", p.streamName)
