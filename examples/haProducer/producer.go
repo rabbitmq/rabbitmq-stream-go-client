@@ -83,8 +83,8 @@ func main() {
 
 	rProducer, err := ha.NewHAProducer(env, streamName, nil)
 	CheckErr(err)
-	rProducer1, err := ha.NewHAProducer(env, streamName, nil)
-	CheckErr(err)
+	//rProducer1, err := ha.NewHAProducer(env, streamName, nil)
+	//CheckErr(err)
 
 	chPublishConfirm := rProducer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
@@ -92,28 +92,32 @@ func main() {
 	chPublishErr := rProducer.NotifyPublishError()
 	handlePublishError(chPublishErr)
 
-	handlePublishConfirm(rProducer1.NotifyPublishConfirmation())
-
-	handlePublishError(rProducer1.NotifyPublishError())
+	//handlePublishConfirm(rProducer1.NotifyPublishConfirmation())
+	//
+	//handlePublishError(rProducer1.NotifyPublishError())
 
 	wg := sync.WaitGroup{}
 
 	var sent int32
 	for i := 0; i < 11; i++ {
+		wg.Add(1)
 		go func(wg *sync.WaitGroup) {
 			//mutex.Lock()
-			wg.Add(1)
 			//mutex.Unlock()
 			for i := 0; i < 100000; i++ {
 				msg := amqp.NewMessage([]byte("ha"))
 				err := rProducer.Send(msg)
-				CheckErr(err)
-				err = rProducer1.Send(msg)
-				CheckErr(err)
+				//CheckErr(err)
+				//err = rProducer1.Send(msg)
+
 				if atomic.AddInt32(&sent, 2)%5000 == 0 {
 					time.Sleep(100 * time.Millisecond)
 					fmt.Printf("Sent..%d messages\n", atomic.LoadInt32(&sent))
 				}
+				if err != nil {
+					break
+				}
+
 			}
 			wg.Done()
 		}(&wg)
@@ -156,8 +160,8 @@ func main() {
 			atomic.LoadInt32(&totalMessagesPubError))
 
 	err = rProducer.Close()
-	CheckErr(err)
-	err = rProducer1.Close()
+	//CheckErr(err)
+	//err = rProducer1.Close()
 	CheckErr(err)
 	err = consumer.Close()
 	CheckErr(err)
