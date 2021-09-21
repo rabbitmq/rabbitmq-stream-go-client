@@ -105,7 +105,7 @@ func main() {
 	CheckErr(err)
 
 	// Define a consumer per stream, there are different offset options to define a consumer, default is
-	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.Message) {
+	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.subEntryMessage) {
 	//
 	//}, nil)
 	// if you need to track the offset you need a consumer name like:

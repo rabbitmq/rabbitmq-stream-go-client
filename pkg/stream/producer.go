@@ -11,6 +11,14 @@ import (
 	"time"
 )
 
+type UnConfirmedEntry struct {
+	subEntryMessage *subEntryMessage
+	ProducerID      uint8
+	SequenceID      int64
+	Confirmed       bool
+	Err             error
+}
+
 type UnConfirmedMessage struct {
 	Message    message.StreamMessage
 	ProducerID uint8
@@ -79,16 +87,16 @@ type messageSequence struct {
 }
 
 type Producer struct {
-	id                  uint8
-	options             *ProducerOptions
-	onClose             onInternalClose
-	unConfirmedMessages map[int64]*UnConfirmedMessage
-	sequence            int64
-	mutex               *sync.Mutex
-	publishConfirm      chan []*UnConfirmedMessage
-	publishError        chan PublishError
-	closeHandler        chan Event
-	status              int
+	id               uint8
+	options          *ProducerOptions
+	onClose          onInternalClose
+	unConfirmedEntry map[int64]*UnConfirmedEntry
+	sequence         int64
+	mutex            *sync.Mutex
+	publishConfirm   chan []*UnConfirmedMessage
+	publishError     chan PublishError
+	closeHandler     chan Event
+	status           int
 
 	/// needed for the async publish
 	messageSequenceCh chan messageSequence
@@ -139,44 +147,44 @@ func NewProducerOptions() *ProducerOptions {
 	}
 }
 
-func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedMessage {
+func (producer *Producer) GetUnConfirmed() map[int64]*UnConfirmedEntry {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
-	return producer.unConfirmedMessages
+	return producer.unConfirmedEntry
 }
 
-func (producer *Producer) addUnConfirmed(sequence int64, streamMessage message.StreamMessage, producerID uint8) {
+func (producer *Producer) addUnConfirmed(sequence int64, entryMessage *subEntryMessage, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
 
-	producer.unConfirmedMessages[sequence] = &UnConfirmedMessage{
-		Message:    streamMessage,
-		ProducerID: producerID,
-		SequenceID: sequence,
-		Confirmed:  false,
+	producer.unConfirmedEntry[sequence] = &UnConfirmedEntry{
+		subEntryMessage: entryMessage,
+		ProducerID:      producerID,
+		SequenceID:      sequence,
+		Confirmed:       false,
 	}
 }
 
 func (producer *Producer) removeUnConfirmed(sequence int64) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
-	delete(producer.unConfirmedMessages, sequence)
+	delete(producer.unConfirmedEntry, sequence)
 }
 
 func (producer *Producer) lenUnConfirmed() int {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
-	return len(producer.unConfirmedMessages)
+	return len(producer.unConfirmedEntry)
 }
 
-func (producer *Producer) getUnConfirmed(sequence int64) *UnConfirmedMessage {
+func (producer *Producer) getUnConfirmed(sequence int64) *UnConfirmedEntry {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
-	return producer.unConfirmedMessages[sequence]
+	return producer.unConfirmedEntry[sequence]
 }
 
 func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
-	ch := make(chan []*UnConfirmedMessage)
+	ch := make(chan []*UnConfirmedMessage, 0)
 	producer.publishConfirm = ch
 	return ch
 }
@@ -217,12 +225,32 @@ func (producer *Producer) sendBufferedMessages() {
 	if len(producer.pendingMessages.subEntry) > 0 {
 		err := producer.internalBatchSend(producer.pendingMessages)
 		if err != nil {
-			return
+
+			producer.mutex.Lock()
+			for _, entryMessage := range producer.pendingMessages.subEntry {
+				for _, streamMessage := range entryMessage.messages {
+
+					if producer.publishConfirm != nil {
+						unConfirmedMessage := &UnConfirmedMessage{
+							Message:    streamMessage.message,
+							ProducerID: 254,
+							SequenceID: streamMessage.message.GetPublishingId(),
+							Confirmed:  false,
+							Err:        fmt.Errorf("producer id: %d  closed", producer.id),
+						}
+						producer.publishConfirm <- []*UnConfirmedMessage{unConfirmedMessage}
+					}
+				}
+			}
+
+			producer.mutex.Unlock()
 		}
 		producer.pendingMessages.subEntry = producer.pendingMessages.subEntry[:0]
 		producer.pendingMessages.size = initBufferPublishSize
+
 	}
 }
+
 func (producer *Producer) startPublishTask() {
 	go func(ch chan messageSequence) {
 		var ticker = time.NewTicker(time.Duration(producer.options.BatchPublishingDelay) * time.Millisecond)
@@ -233,15 +261,26 @@ func (producer *Producer) startPublishTask() {
 
 			case msg, running := <-ch:
 				{
+
 					if !running {
+						//producer.FlushUnConfirmedMessages()
+						if producer.publishConfirm != nil {
+							close(producer.publishConfirm)
+							producer.publishConfirm = nil
+						}
+						if producer.closeHandler != nil {
+							close(producer.closeHandler)
+							producer.closeHandler = nil
+						}
+
 						return
 					}
+					//logs.LogInfo("send ch %s", msg.message.GetData())
 					// Checks if with the next message the frame size is still valid
 					// else we send the buffered messages
 					if producer.pendingMessages.size+msg.size >= producer.options.client.getTuneState().requestedMaxFrameSize {
 						producer.sendBufferedMessages()
 					}
-
 					// in case SubEntrySize = 1 means simple publish
 					// SubEntrySize > 0 means subBatch publish
 					// for example sub entry = 5 and batch size = 10
@@ -253,8 +292,6 @@ func (producer *Producer) startPublishTask() {
 					// the accumulatedEntity is meant to keep the structure sub-entry -> messages
 					// in case of simple publish will be 1 sub entry 1 message
 					producer.pendingMessages.addMessage(producer.options.SubEntrySize, &msg)
-					producer.addUnConfirmed(producer.applyPublishingIdAsLong(&msg), msg.message, producer.id)
-
 					/// as batch size count the number of the subEntry
 					if len(producer.pendingMessages.subEntry) >= producer.options.BatchSize {
 						producer.sendBufferedMessages()
@@ -269,6 +306,8 @@ func (producer *Producer) startPublishTask() {
 	}(producer.messageSequenceCh)
 
 }
+
+var x = 0
 
 func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 
@@ -285,20 +324,29 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		message: streamMessage,
 		size:    len(msgBytes),
 	}
-
 	if producer.getStatus() == closed {
+		producer.mutex.Lock()
+		defer producer.mutex.Unlock()
 		if producer.publishConfirm != nil {
 			unConfirmedMessage := &UnConfirmedMessage{
 				Message:    streamMessage,
-				ProducerID: producer.id,
+				ProducerID: 254,
 				SequenceID: streamMessage.GetPublishingId(),
 				Confirmed:  false,
 				Err:        fmt.Errorf("producer id: %d  closed", producer.id),
 			}
 			producer.publishConfirm <- []*UnConfirmedMessage{unConfirmedMessage}
+			logs.LogError("error  unc %s", streamMessage.GetData())
+		} else {
+			logs.LogError("error I am nil %s", streamMessage.GetData())
 		}
 
+		logs.LogError("error %s", streamMessage.GetData())
 		return fmt.Errorf("producer id: %d  closed", producer.id)
+	}
+	x += 1
+	if (x % 10) == 0 {
+		logs.LogInfo("info %d", x)
 	}
 
 	producer.messageSequenceCh <- msg
@@ -331,9 +379,6 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 			message: batchMessage,
 			size:    len(messageBytes),
 		}
-		sequence := producer.applyPublishingIdAsLong(&messageSeq)
-
-		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 		subEntry[i] = subEntryMessage{messages: []*messageSequence{&messageSeq}}
 	}
 	messages := accumulatedEntity{
@@ -353,10 +398,10 @@ func (producer *Producer) internalBatchSend(pendingMessages accumulatedEntity) e
 /// the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error, see
 func (producer *Producer) internalBatchSendProdId(pendingMessages accumulatedEntity, producerID uint8) error {
+
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
-
 	var msgLen int
 	var numberOfMessages = len(pendingMessages.subEntry)
 	for _, entryMessage := range pendingMessages.subEntry {
@@ -398,9 +443,11 @@ func (producer *Producer) internalBatchSendProdId(pendingMessages accumulatedEnt
 	if err != nil {
 		// This sleep is need to wait the
 		// 800 milliseconds to flush all the pending subEntry
-		time.Sleep(800 * time.Millisecond)
-		producer.setStatus(closed)
+		//time.Sleep(200 * time.Millisecond)
 		producer.FlushUnConfirmedMessages()
+		producer.setStatus(closed)
+		time.Sleep(800 * time.Millisecond)
+		producer.closeChannels()
 
 		return err
 	}
@@ -408,19 +455,20 @@ func (producer *Producer) internalBatchSendProdId(pendingMessages accumulatedEnt
 }
 
 func (producer *Producer) simpleAggregation(pendingMessages accumulatedEntity, b *bytes.Buffer) {
+
 	for _, entryMessage := range pendingMessages.subEntry {
 		for _, msg := range entryMessage.messages {
+			producer.addUnConfirmed(producer.applyPublishingIdAsLong(msg), &entryMessage, producer.id)
 			r, _ := msg.message.MarshalBinary()
 			writeLong(b, msg.publishingId) // publishingId
 			writeInt(b, len(r))            // len
 			b.Write(r)
-
 		}
 	}
+
 }
 
 func (producer *Producer) subEntryAggregation(pendingMessages accumulatedEntity, b *bytes.Buffer) {
-
 	for _, entryMessage := range pendingMessages.subEntry {
 		//return batchToPublish.batchSize();
 		//batchToPublish.write(bb);
@@ -444,11 +492,20 @@ func (producer *Producer) subEntryAggregation(pendingMessages accumulatedEntity,
 
 func (producer *Producer) FlushUnConfirmedMessages() {
 	producer.mutex.Lock()
-	if producer.publishConfirm != nil {
-		for _, msg := range producer.unConfirmedMessages {
-			msg.Confirmed = false
-			producer.publishConfirm <- []*UnConfirmedMessage{msg}
-			delete(producer.unConfirmedMessages, msg.SequenceID)
+	for _, msg := range producer.unConfirmedEntry {
+		msg.Confirmed = false
+		for _, sequence := range msg.subEntryMessage.messages {
+			if producer.publishConfirm != nil {
+				unConfirmedMessage := UnConfirmedMessage{
+					Message:    sequence.message,
+					ProducerID: producer.GetID(),
+					SequenceID: sequence.publishingId,
+					Confirmed:  false,
+					Err:        nil,
+				}
+				producer.publishConfirm <- []*UnConfirmedMessage{&unConfirmedMessage}
+			}
+			delete(producer.unConfirmedEntry, msg.SequenceID)
 		}
 	}
 	producer.mutex.Unlock()
@@ -481,20 +538,24 @@ func (producer *Producer) Close() error {
 		close(ch)
 	}
 
-	producer.mutex.Lock()
-	if producer.publishConfirm != nil {
-		close(producer.publishConfirm)
-		producer.publishConfirm = nil
-	}
-	if producer.closeHandler != nil {
-		close(producer.closeHandler)
-		producer.closeHandler = nil
-	}
-	close(producer.messageSequenceCh)
-
-	producer.mutex.Unlock()
+	producer.closeChannels()
 
 	return nil
+}
+
+func (producer *Producer) closeChannels() {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	close(producer.messageSequenceCh)
+
+	//if producer.closeHandler != nil {
+	//	close(producer.closeHandler)
+	//	producer.closeHandler = nil
+	//}
+	//if producer.publishConfirm != nil {
+	//	close(producer.publishConfirm)
+	//	producer.publishConfirm = nil
+	//}
 }
 
 func (producer *Producer) GetStreamName() string {

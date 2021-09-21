@@ -16,33 +16,23 @@ const (
 	StatusStreamDoesNotExist = 3
 )
 
-func (p *ReliableProducer) handlePublishError(publishError stream.ChannelPublishError) {
-	go func() {
-		for {
-			for err := range publishError {
-				p.channelPublishError <- err
-			}
-		}
-	}()
-
-}
-
 func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for messagesIds := range confirms {
 			atomic.AddInt32(&p.count, int32(len(messagesIds)))
-			p.channelPublishConfirm <- messagesIds
+			p.confirmMessageHandler(messagesIds)
 		}
 	}()
 }
 
 type ReliableProducer struct {
-	env                   *stream.Environment
-	producer              *stream.Producer
-	streamName            string
-	producerOptions       *stream.ProducerOptions
-	channelPublishConfirm stream.ChannelPublishConfirm
-	channelPublishError   stream.ChannelPublishError
+	env             *stream.Environment
+	producer        *stream.Producer
+	streamName      string
+	producerOptions *stream.ProducerOptions
+	//channelPublishConfirm *stream.ChannelPublishConfirm
+	//channelPublishError   stream.ChannelPublishError
+	confirmMessageHandler ConfirmMessageHandler
 	count                 int32
 
 	mutex       *sync.Mutex
@@ -50,7 +40,10 @@ type ReliableProducer struct {
 	status      int
 }
 
-func NewHAProducer(env *stream.Environment, streamName string, producerOptions *stream.ProducerOptions) (*ReliableProducer, error) {
+type ConfirmMessageHandler func(messageConfirm []*stream.UnConfirmedMessage)
+
+func NewHAProducer(env *stream.Environment, streamName string, producerOptions *stream.ProducerOptions,
+	confirmMessageHandler ConfirmMessageHandler) (*ReliableProducer, error) {
 	res := &ReliableProducer{
 		env:                   env,
 		producer:              nil,
@@ -59,8 +52,9 @@ func NewHAProducer(env *stream.Environment, streamName string, producerOptions *
 		producerOptions:       producerOptions,
 		mutex:                 &sync.Mutex{},
 		mutexStatus:           &sync.Mutex{},
-		channelPublishConfirm: make(chan []*stream.UnConfirmedMessage, 0),
-		channelPublishError:   make(chan stream.PublishError, 0),
+		confirmMessageHandler: confirmMessageHandler,
+		//channelPublishConfirm: make(chan []*stream.UnConfirmedMessage, 0),
+		//channelPublishError:   make(chan stream.PublishError, 0),
 	}
 	err := res.newProducer()
 	if err == nil {
@@ -76,21 +70,12 @@ func (p *ReliableProducer) newProducer() error {
 	if err != nil {
 		return err
 	}
-	channelPublishError := producer.NotifyPublishError()
-	p.handlePublishError(channelPublishError)
+	//channelPublishError := producer.NotifyPublishError()
+	//p.handlePublishError(channelPublishError)
+	p.producer = producer
 	channelPublishConfirm := producer.NotifyPublishConfirmation()
 	p.handlePublishConfirm(channelPublishConfirm)
-	p.producer = producer
 	return err
-}
-
-func (p *ReliableProducer) NotifyPublishError() stream.ChannelPublishError {
-	return p.channelPublishError
-}
-
-func (p *ReliableProducer) NotifyPublishConfirmation() stream.ChannelPublishConfirm {
-	return p.channelPublishConfirm
-
 }
 
 func (p *ReliableProducer) Send(message message.StreamMessage) error {
@@ -102,7 +87,6 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 	}
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-
 	errW := p.producer.Send(message)
 
 	if errW != nil {
@@ -125,11 +109,11 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 
 		}
 		if exists {
-			logs.LogDebug("[RProducer] - stream %s exists. Reconnecting the producer.", p.streamName)
+			logs.LogError("[RProducer] - stream %s exists. Reconnecting the producer. %s", p.streamName, message.GetData())
 			time.Sleep(500 * time.Millisecond)
 			p.producer.FlushUnConfirmedMessages()
-			_ = p.producer.Close()
-			time.Sleep(100 * time.Millisecond)
+			//time.Sleep(900 * time.Millisecond)
+
 			return p.newProducer()
 		} else {
 			logs.LogError("[RProducer] - stream %s does not exist. Closing..", p.streamName)
@@ -168,8 +152,8 @@ func (p *ReliableProducer) Close() error {
 	p.setStatus(StatusClosed)
 	p.producer.FlushUnConfirmedMessages()
 	err := p.producer.Close()
-	close(p.channelPublishConfirm)
-	close(p.channelPublishError)
+	//close(p.channelPublishConfirm)
+	//close(p.channelPublishError)
 
 	if err != nil {
 		return err

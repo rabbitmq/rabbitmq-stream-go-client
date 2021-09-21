@@ -265,7 +265,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
-	It("Message Properties", func() {
+	It("subEntryMessage Properties", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 		msg := amqp.NewMessage([]byte("message"))
@@ -321,7 +321,7 @@ var _ = Describe("Streaming Consumers", func() {
 	It("Consistent Messages", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		for z := 0; z < 200; z++ {
+		for z := 0; z < 5000; z++ {
 			err := producer.Send(amqp.NewMessage([]byte("test_" + strconv.Itoa(z))))
 			Expect(err).NotTo(HaveOccurred())
 		}

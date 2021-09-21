@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,7 +45,7 @@ var _ = Describe("Stream Producers", func() {
 		Expect(err1).NotTo(HaveOccurred())
 
 		time.Sleep(100 * time.Millisecond)
-		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(len(producer.unConfirmedEntry)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -62,7 +63,7 @@ var _ = Describe("Stream Producers", func() {
 				Expect(err).NotTo(HaveOccurred())
 				// we can't close to subscribe until the publishing is finished
 				time.Sleep(500 * time.Millisecond)
-				Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+				Expect(len(producer.unConfirmedEntry)).To(Equal(0))
 
 				err = producer.Close()
 				Expect(err).NotTo(HaveOccurred())
@@ -84,15 +85,21 @@ var _ = Describe("Stream Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
-			ids := <-ch
-			atomic.AddInt32(&messagesCount, int32(len(ids)))
+			for ids := range ch {
+				atomic.AddInt32(&messagesCount, int32(len(ids)))
+			}
 		}(chConfirm)
 
 		err = producer.BatchSend(CreateArrayMessagesForTesting(14))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(200 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(14)))
-		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		for z := 0; z < 100; z++ {
+			err := producer.Send(amqp.NewMessage([]byte("test_" + strconv.Itoa(z))))
+			Expect(err).NotTo(HaveOccurred())
+		}
+		time.Sleep(500 * time.Millisecond)
+		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(100 + 14)))
+		Expect(len(producer.unConfirmedEntry)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -111,7 +118,7 @@ var _ = Describe("Stream Producers", func() {
 		err = producer.BatchSend(CreateArrayMessagesForTesting(2))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(100 * time.Millisecond)
-		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(len(producer.unConfirmedEntry)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(100 * time.Millisecond)
@@ -157,7 +164,7 @@ var _ = Describe("Stream Producers", func() {
 		}
 		time.Sleep(400 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(100)))
-		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(len(producer.unConfirmedEntry)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 		// in this case must raise an error since the producer is closed
@@ -189,7 +196,7 @@ var _ = Describe("Stream Producers", func() {
 		err = producer.Send(amqp.NewMessage(s))
 		Expect(err).To(HaveOccurred())
 		time.Sleep(100 * time.Millisecond)
-		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(len(producer.unConfirmedEntry)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -212,7 +219,7 @@ var _ = Describe("Stream Producers", func() {
 
 		time.Sleep(500 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCountBatch)).To(Equal(int32(100)))
-		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(len(producer.unConfirmedEntry)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -247,7 +254,7 @@ var _ = Describe("Stream Producers", func() {
 
 		time.Sleep(400 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
-		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(len(producer.unConfirmedEntry)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -282,7 +289,7 @@ var _ = Describe("Stream Producers", func() {
 
 		time.Sleep(400 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
-		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(len(producer.unConfirmedEntry)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})

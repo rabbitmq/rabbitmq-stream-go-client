@@ -242,7 +242,16 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		m := producer.getUnConfirmed(readInt64(r))
 		if m != nil {
 			m.Confirmed = true
-			unConfirmed = append(unConfirmed, m)
+			for _, sequence := range m.subEntryMessage.messages {
+				unConfirmedMessage := UnConfirmedMessage{
+					Message:    sequence.message,
+					ProducerID: producer.GetID(),
+					SequenceID: sequence.publishingId,
+					Confirmed:  true,
+					Err:        nil,
+				}
+				unConfirmed = append(unConfirmed, &unConfirmedMessage)
+			}
 			producer.removeUnConfirmed(m.SequenceID)
 		}
 		publishingIdCount--
@@ -396,24 +405,34 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		producer, err := c.coordinator.GetProducerById(publisherId)
 		if err != nil {
 			logs.LogWarn("producer id %d not found, publish error :%s", publisherId, lookErrorCode(code))
-			producer = &Producer{unConfirmedMessages: map[int64]*UnConfirmedMessage{}}
+			producer = &Producer{unConfirmedEntry: map[int64]*UnConfirmedEntry{}}
 		} else {
 
 			// in case of subBatch we use the last publishingId to store the messages
 			//  for example:
 			// SubEntrySize = 3 there are 3 messages with  publishingId = 1, 2, 3
 			// we use only the last one to aggregate the messages
-			// the unConfirmedMessages map still contains the flat version,
+			// the unConfirmedEntry map still contains the flat version,
 			// so we receive the publishingId = 3 from the server
 			// and client side we confirm 1,2,3
 			unConfirmedMessage := producer.getUnConfirmed(publishingId)
 			producer.mutex.Lock()
 			if producer.publishError != nil {
-				producer.publishError <- PublishError{
-					Code:               code,
-					Err:                lookErrorCode(code),
-					UnConfirmedMessage: unConfirmedMessage,
+				for _, sequence := range unConfirmedMessage.subEntryMessage.messages {
+					unConfirmedMessage := UnConfirmedMessage{
+						Message:    sequence.message,
+						ProducerID: producer.GetID(),
+						SequenceID: sequence.publishingId,
+						Confirmed:  false,
+						Err:        nil,
+					}
+					producer.publishError <- PublishError{
+						Code:               code,
+						Err:                lookErrorCode(code),
+						UnConfirmedMessage: &unConfirmedMessage,
+					}
 				}
+
 				producer.mutex.Unlock()
 				producer.removeUnConfirmed(publishingId)
 			}

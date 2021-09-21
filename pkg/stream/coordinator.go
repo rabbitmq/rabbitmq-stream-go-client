@@ -53,11 +53,11 @@ func (coordinator *Coordinator) NewProducer(
 		return nil, err
 	}
 	var producer = &Producer{id: lastId,
-		options:             parameters,
-		mutex:               &sync.Mutex{},
-		unConfirmedMessages: map[int64]*UnConfirmedMessage{},
-		status:              open,
-		messageSequenceCh:   make(chan messageSequence, size),
+		options:           parameters,
+		mutex:             &sync.Mutex{},
+		unConfirmedEntry:  map[int64]*UnConfirmedEntry{},
+		status:            open,
+		messageSequenceCh: make(chan messageSequence, size),
 		pendingMessages: accumulatedEntity{
 			subEntry: make([]subEntryMessage, 0),
 			size:     initBufferPublishSize,
