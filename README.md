@@ -134,8 +134,8 @@ addressResolver := stream.AddressResolver{
 	}
 env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
-			SetHost("host").
-			SetPort(5552).
+			SetHost(addressResolver.Host).
+			SetPort(addressResolver.Port).
 			SetAddressResolver(addressResolver).
 ```
 
