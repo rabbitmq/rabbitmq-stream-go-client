@@ -21,40 +21,22 @@ func CheckErr(err error) {
 	}
 }
 
-var totalMessagesPubError int32
-
-func handlePublishError(publishError stream.ChannelPublishError) {
-	go func() {
-		for {
-			<-publishError
-			atomic.AddInt32(&totalMessagesPubError, 1)
-			//var data [][]byte
-			//if pError.UnConfirmedMessage != nil {
-			//	data = pError.UnConfirmedMessage.Message.GetData()
-			//}
-			////fmt.Printf("Error during publish, message:%s ,  error: %s. Total %d  \n", data, pError.Err, totalMessagesPubError)
-		}
-	}()
-
-}
-
 var counter int32 = 0
 var fail int32 = 0
 
-func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
+func handlePublishConfirm(messageConfirm []*stream.UnConfirmedMessage) {
 	go func() {
-		for messagesIds := range confirms {
-			for _, m := range messagesIds {
-				if m.Confirmed {
-					if atomic.AddInt32(&counter, 1)%5000 == 0 {
-						fmt.Printf("Confirmed %d messages\n", atomic.LoadInt32(&counter))
-					}
-				} else {
-					if atomic.AddInt32(&fail, 1)%1000 == 0 {
-						fmt.Printf("NOT Confirmed %d messages\n", atomic.LoadInt32(&fail))
-					}
+		for _, m := range messageConfirm {
+			if m.Confirmed {
+				if atomic.AddInt32(&counter, 1)%20000 == 0 {
+					fmt.Printf("Confirmed %d messages\n", atomic.LoadInt32(&counter))
+				}
+			} else {
+				if atomic.AddInt32(&fail, 1)%20000 == 0 {
+					fmt.Printf("NOT Confirmed %d messages\n", atomic.LoadInt32(&fail))
 				}
 			}
+
 		}
 	}()
 }
@@ -74,96 +56,75 @@ func main() {
 		stream.NewEnvironmentOptions().SetUris(addresses))
 	CheckErr(err)
 
-	streamName := "test"
+	streamName := uuid.New().String()
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
 			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
 		},
 	)
 
-	rProducer, err := ha.NewHAProducer(env, streamName, nil)
+	rProducer, err := ha.NewHAProducer(env, streamName, nil, handlePublishConfirm)
 	CheckErr(err)
-	//rProducer1, err := ha.NewHAProducer(env, streamName, nil)
-	//CheckErr(err)
-
-	chPublishConfirm := rProducer.NotifyPublishConfirmation()
-	handlePublishConfirm(chPublishConfirm)
-
-	chPublishErr := rProducer.NotifyPublishError()
-	handlePublishError(chPublishErr)
-
-	//handlePublishConfirm(rProducer1.NotifyPublishConfirmation())
-	//
-	//handlePublishError(rProducer1.NotifyPublishError())
+	rProducer1, err := ha.NewHAProducer(env, streamName, nil, handlePublishConfirm)
+	CheckErr(err)
 
 	wg := sync.WaitGroup{}
 
 	var sent int32
-	for i := 0; i < 11; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup) {
-			//mutex.Lock()
-			//mutex.Unlock()
-			for i := 0; i < 100000; i++ {
+			for i := 0; i < 500000; i++ {
 				msg := amqp.NewMessage([]byte("ha"))
 				err := rProducer.Send(msg)
-				//CheckErr(err)
-				//err = rProducer1.Send(msg)
+				CheckErr(err)
+				err = rProducer1.Send(msg)
 
-				if atomic.AddInt32(&sent, 2)%5000 == 0 {
+				if atomic.AddInt32(&sent, 2)%20000 == 0 {
 					time.Sleep(100 * time.Millisecond)
 					fmt.Printf("Sent..%d messages\n", atomic.LoadInt32(&sent))
 				}
 				if err != nil {
 					break
 				}
-
 			}
 			wg.Done()
 		}(&wg)
 	}
+	isActive := true
 	go func() {
-
-		for {
-
+		for isActive {
 			coo, err := http.Connections("15672")
 			if err != nil {
 				return
 			}
 
 			for _, connection := range coo {
-				http.DropConnection(connection.Name, "15672")
+				_ = http.DropConnection(connection.Name, "15672")
 			}
-
-			time.Sleep(3 * time.Second)
+			time.Sleep(2 * time.Second)
 		}
-
 	}()
 
 	wg.Wait()
+	isActive = false
+	time.Sleep(2 * time.Second)
 
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-
-	}
-
-	consumer, err := env.NewConsumer(streamName,
-		handleMessages,
-		stream.NewConsumerOptions().SetOffset(stream.OffsetSpecification{}.Last()).
-			SetConsumerName(uuid.New().String()))
-	CheckErr(err)
-
-	fmt.Println("Press any key to stop ")
+	fmt.Println("Terminated. Press any key to see the report. ")
 	_, _ = reader.ReadString('\n')
 	time.Sleep(200 * time.Millisecond)
-	fmt.Printf("[Report]\nSent:%d \nConfirmed:%d\nNot confirmed:%d\nPublish error:%d\nTotal messages handeld:%d \n",
-		sent, counter, fail, totalMessagesPubError, atomic.LoadInt32(&counter)+atomic.LoadInt32(&fail)+
-			atomic.LoadInt32(&totalMessagesPubError))
+	totalHandled := atomic.LoadInt32(&counter) + atomic.LoadInt32(&fail)
+	fmt.Printf("[Report]\n - Sent:%d \n - Confirmed:%d\n - Not confirmed:%d\n - Total messages handeld:%d \n",
+		sent, counter, fail, totalHandled)
+	if sent == totalHandled {
+		fmt.Printf(" - Messages sent %d match with handled: %d! yea! \n\n", sent, totalHandled)
+	} else {
+		fmt.Printf(" - Messages sent %d don't match with handled: %d! that's not good!\n\n", sent, totalHandled)
+	}
 
 	err = rProducer.Close()
-	//CheckErr(err)
-	//err = rProducer1.Close()
 	CheckErr(err)
-	err = consumer.Close()
+	err = rProducer1.Close()
 	CheckErr(err)
 	err = env.DeleteStream(streamName)
 	CheckErr(err)

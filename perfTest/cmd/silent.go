@@ -261,12 +261,6 @@ func startPublisher(streamName string) error {
 		return err
 	}
 
-	chPublishConfirm := rPublisher.NotifyPublishConfirmation()
-	handlePublishConfirms(chPublishConfirm)
-
-	chPublishError := rPublisher.NotifyPublishError()
-	handlePublishError(chPublishError)
-
 	var arr []message.StreamMessage
 	var body []byte
 	for z := 0; z < batchSize; z++ {

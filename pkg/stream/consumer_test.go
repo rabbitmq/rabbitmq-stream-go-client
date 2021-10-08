@@ -309,6 +309,32 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
+	It("Consistent Messages", func() {
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		for z := 0; z < 5000; z++ {
+			err := producer.Send(amqp.NewMessage([]byte("test_" + strconv.Itoa(z))))
+			Expect(err).NotTo(HaveOccurred())
+		}
+		time.Sleep(500 * time.Millisecond)
+		err = producer.Close()
+		Expect(err).NotTo(HaveOccurred())
+		var messagesValue []string
+		consumer, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				messagesValue = append(messagesValue, string(message.Data[0]))
+
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(500 * time.Millisecond)
+		for i := range messagesValue {
+			Expect(messagesValue[i]).To(Equal("test_" + strconv.Itoa(i)))
+		}
+		err = consumer.Close()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("Validation", func() {
 		_, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {

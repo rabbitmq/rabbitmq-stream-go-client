@@ -90,7 +90,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(200 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(14)))
-
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -154,6 +154,7 @@ var _ = Describe("Streaming Producers", func() {
 		}
 		time.Sleep(400 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(100)))
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 		// in this case must raise an error since the producer is closed
@@ -184,6 +185,7 @@ var _ = Describe("Streaming Producers", func() {
 		s := make([]byte, 1148576)
 		err = producer.Send(amqp.NewMessage(s))
 		Expect(err).To(HaveOccurred())
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -206,7 +208,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		time.Sleep(800 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCountBatch)).To(Equal(int32(100)))
-
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -241,6 +243,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		time.Sleep(400 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -275,6 +278,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		time.Sleep(400 * time.Millisecond)
 		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
