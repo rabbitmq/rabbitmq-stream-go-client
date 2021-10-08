@@ -1,5 +1,9 @@
 package main
 
+// The ha producer provides a way to auto-reconnect in case of connection problems
+// the function handlePublishConfirm is mandatory
+// in case of problems the messages have the message.Confirmed == false
+
 import (
 	"bufio"
 	"fmt"
@@ -26,8 +30,8 @@ var fail int32 = 0
 
 func handlePublishConfirm(messageConfirm []*stream.UnConfirmedMessage) {
 	go func() {
-		for _, m := range messageConfirm {
-			if m.Confirmed {
+		for _, message := range messageConfirm {
+			if message.Confirmed {
 				if atomic.AddInt32(&counter, 1)%20000 == 0 {
 					fmt.Printf("Confirmed %d messages\n", atomic.LoadInt32(&counter))
 				}

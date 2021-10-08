@@ -1,6 +1,7 @@
 package ha
 
 import (
+	"fmt"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
@@ -39,14 +40,11 @@ func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishCo
 }
 
 type ReliableProducer struct {
-	env             *stream.Environment
-	producer        *stream.Producer
-	streamName      string
-	producerOptions *stream.ProducerOptions
-	//channelPublishConfirm stream.ChannelPublishConfirm
-	//channelPublishError   stream.ChannelPublishError
-	count int32
-
+	env                   *stream.Environment
+	producer              *stream.Producer
+	streamName            string
+	producerOptions       *stream.ProducerOptions
+	count                 int32
 	confirmMessageHandler ConfirmMessageHandler
 	mutex                 *sync.Mutex
 	mutexStatus           *sync.Mutex
@@ -67,6 +65,10 @@ func NewHAProducer(env *stream.Environment, streamName string, producerOptions *
 		mutexStatus:           &sync.Mutex{},
 		confirmMessageHandler: confirmMessageHandler,
 	}
+	if confirmMessageHandler == nil {
+		return nil, fmt.Errorf("the confirmation message handler is mandatory")
+	}
+
 	err := res.newProducer()
 	if err == nil {
 		res.setStatus(StatusOpen)

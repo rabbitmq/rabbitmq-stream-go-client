@@ -228,34 +228,22 @@ func initStreams() error {
 	return env.Close()
 }
 
-func handlePublishConfirms(confirms stream.ChannelPublishConfirm) {
+func handlePublishConfirms(messageConfirm []*stream.UnConfirmedMessage) {
 	go func() {
-		for ids := range confirms {
-			for _, msg := range ids {
-				if msg.Confirmed {
-					atomic.AddInt32(&confirmedMessageCount, 1)
-				} else {
-					atomic.AddInt32(&notConfirmedMessageCount, 1)
-				}
-
+		for _, msg := range messageConfirm {
+			if msg.Confirmed {
+				atomic.AddInt32(&confirmedMessageCount, 1)
+			} else {
+				atomic.AddInt32(&notConfirmedMessageCount, 1)
 			}
-
 		}
 	}()
-}
-
-func handlePublishError(publishError stream.ChannelPublishError) {
-	go func() {
-		for range publishError {
-			atomic.AddInt32(&publishErrors, 1)
-		}
-	}()
-
 }
 
 func startPublisher(streamName string) error {
 
-	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName, nil)
+	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName, nil,
+		handlePublishConfirms)
 	if err != nil {
 		logError("Error create publisher: %s", err)
 		return err
