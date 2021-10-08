@@ -41,7 +41,6 @@ var (
 	confirmedMessageCount    int32
 	notConfirmedMessageCount int32
 	consumersCloseCount      int32
-	publishErrors            int32
 	messagesSent             int64
 	//connections           []*stream.Client
 	simulEnvironment *stream.Environment
@@ -79,9 +78,8 @@ func printStats() {
 					PMessagesPerSecond := float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
 					CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
 					ConfirmedMessagesPerSecond := float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
-
-					logInfo("Published %8.1f msg/s   |   Confirmed %8.1f msg/s   |   Consumed %8.1f msg/s  |  Pub errors %3v  |   %3v  |  %3v  |  msg sent: %3v  |",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, publishErrors, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent))
+					logInfo("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent))
 				}
 			}
 
