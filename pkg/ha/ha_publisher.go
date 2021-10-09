@@ -53,7 +53,8 @@ type ReliableProducer struct {
 
 type ConfirmMessageHandler func(messageConfirm []*stream.UnConfirmedMessage)
 
-func NewHAProducer(env *stream.Environment, streamName string, producerOptions *stream.ProducerOptions,
+func NewHAProducer(env *stream.Environment, streamName string,
+	producerOptions *stream.ProducerOptions,
 	confirmMessageHandler ConfirmMessageHandler) (*ReliableProducer, error) {
 	res := &ReliableProducer{
 		env:                   env,

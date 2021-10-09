@@ -282,6 +282,14 @@ Features:
 
 You can find a "HA producer" example in the [examples](./examples/) directory. </br>
 
+```golang
+haproducer := NewHAProducer(
+	env *stream.Environment, // mandatory
+	streamName string, // mandatory
+	producerOptions *stream.ProducerOptions, //optional 
+	confirmMessageHandler ConfirmMessageHandler // mandatory
+	)
+```
 
 ### Consume messages
 
