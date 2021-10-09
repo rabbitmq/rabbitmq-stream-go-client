@@ -9,5 +9,5 @@ Stream examples
  - [Deduplication](./deduplication/deduplication.go). deduplication example, run it more than one time, and the records <br />
    won't change, since the server will handle the deduplication.
  - [Using a load balancer](./proxy/proxy.go). An example how to use the client with a TLS load balancer.<br />
-   To run the example run the [RabbitMQ TLS cluster](../compose). <br />
+   Use the [RabbitMQ TLS cluster](../compose) to run a TLS and no TLS cluster. <br />
    For more details: https://blog.rabbitmq.com/posts/2021/07/connecting-to-streams/

@@ -21,7 +21,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
         * [Multi hosts](#multi-hosts)
         * [Load Balancer](#load-balancer)
         * [TLS](#tls)
-    * [Streams](#streams)
+      * [Streams](#streams)
     * [Publish messages](#publish-messages)
         * [`Send` vs `BatchSend`](#send-vs-batchsend)
         * [Publish Confirmation](#publish-confirmation)
@@ -33,7 +33,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
     * [Handle Close](#handle-close)
 - [Performance test tool](#performance-test-tool)
     * [Performance test tool Docker](#performance-test-tool-docker)
-- [Build form source](#build-from-source)
+- [Build form source](#build-form-source)
 - [Project status](#project-status)
 
 ### Overview
@@ -229,7 +229,7 @@ err = producer.BatchSend(messages)
 
 The `BatchSend` is the primitive to send the messages, `Send` introduces a smart layer to publish messages and internally uses `BatchSend`.
 
-The `Send` interface works in most of cases, In some condition is about 15/20 slower than `BatchSend`. See also this [thread](https://groups.google.com/g/rabbitmq-users/c/IO_9-BbCzgQ).
+The `Send` interface works in most of the cases, In some condition is about 15/20 slower than `BatchSend`. See also this [thread](https://groups.google.com/g/rabbitmq-users/c/IO_9-BbCzgQ).
 
 ### Publish Confirmation
 
@@ -411,6 +411,4 @@ to run a ready rabbitmq-server with stream enabled for tests.
 then `make test`
 
 ### Project status
----
 The client is a work in progress, the API(s) could change
-management UI
