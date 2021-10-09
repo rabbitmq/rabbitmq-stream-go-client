@@ -271,8 +271,17 @@ It is up to the user to decide what to do with error messages.
 
 The stream plugin can handle deduplication data, see this blog post for more details:
 https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/ </br>
-You can find an "Deduplication" example in the [examples](./examples/) directory. </br>
+You can find a "Deduplication" example in the [examples](./examples/) directory. </br>
 Run it more than time, the messages count will be always 10.
+
+### Ha Producer Experimental
+The ha producer is built up the standard producer. </br>
+Features: 
+ - auto-reconnect in case of disconnection
+ - handle the unconfirmed messages automatically in case of fail.
+
+You can find a "HA producer" example in the [examples](./examples/) directory. </br>
+
 
 ### Consume messages
 
