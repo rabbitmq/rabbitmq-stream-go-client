@@ -34,8 +34,8 @@ func main() {
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
-			SetHost("localhost").
-			SetPort(5554).
+			SetHost(addressResolver.Host).
+			SetPort(addressResolver.Port).
 			IsTLS(true).
 			SetTLSConfig(conf).
 			SetAddressResolver(addressResolver).
