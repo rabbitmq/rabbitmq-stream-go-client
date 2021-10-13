@@ -114,7 +114,7 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		}
 
 	}
-	// tls e non tls  connections have different error message
+
 	if errW != nil {
 		time.Sleep(200 * time.Millisecond)
 		exists, errS := p.env.StreamExists(p.streamName)
@@ -124,7 +124,6 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		}
 		if exists {
 			logs.LogDebug("[RProducer] - stream %s exists. Reconnecting the producer.", p.streamName)
-			time.Sleep(800 * time.Millisecond)
 			p.producer.FlushUnConfirmedMessages()
 			return p.newProducer()
 		} else {

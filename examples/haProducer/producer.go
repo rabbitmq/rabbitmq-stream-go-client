@@ -78,12 +78,11 @@ func main() {
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup) {
-			for i := 0; i < 500000; i++ {
+			for i := 0; i < 1200000; i++ {
 				msg := amqp.NewMessage([]byte("ha"))
 				err := rProducer.Send(msg)
 				CheckErr(err)
 				err = rProducer1.Send(msg)
-
 				if atomic.AddInt32(&sent, 2)%20000 == 0 {
 					time.Sleep(100 * time.Millisecond)
 					fmt.Printf("Sent..%d messages\n", atomic.LoadInt32(&sent))
@@ -122,8 +121,14 @@ func main() {
 		sent, counter, fail, totalHandled)
 	if sent == totalHandled {
 		fmt.Printf(" - Messages sent %d match with handled: %d! yea! \n\n", sent, totalHandled)
-	} else {
-		fmt.Printf(" - Messages sent %d don't match with handled: %d! that's not good!\n\n", sent, totalHandled)
+	}
+
+	if totalHandled > sent {
+		fmt.Printf(" - Messages sent %d are lower than handled: %d! some duplication, can happens ! \n\n", sent, totalHandled)
+	}
+
+	if sent > totalHandled {
+		fmt.Printf(" - Messages handled %d are lower than send: %d! that's not good!\n\n", totalHandled, sent)
 	}
 
 	err = rProducer.Close()

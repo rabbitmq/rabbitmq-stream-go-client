@@ -16,6 +16,7 @@ type UnConfirmedMessage struct {
 	SequenceID int64
 	Confirmed  bool
 	Err        error
+	LinkedTo   []*UnConfirmedMessage
 }
 
 type pendingMessagesSequence struct {
@@ -24,9 +25,8 @@ type pendingMessagesSequence struct {
 }
 
 type messageSequence struct {
-	message      message.StreamMessage
-	size         int
-	publishingId int64
+	message message.StreamMessage
+	size    int
 }
 
 type Producer struct {
@@ -53,6 +53,7 @@ type ProducerOptions struct {
 	QueueSize            int    // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
 	BatchSize            int    // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
 	BatchPublishingDelay int    // Period to send a batch of messages.
+	SubEntrySize         int    // Size of sub Entry, to aggregate more subEntry using one publishing id
 }
 
 func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
@@ -75,11 +76,17 @@ func (po *ProducerOptions) SetBatchPublishingDelay(size int) *ProducerOptions {
 	return po
 }
 
+func (po *ProducerOptions) SetSubEntrySize(size int) *ProducerOptions {
+	po.SubEntrySize = size
+	return po
+}
+
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{
 		QueueSize:            defaultQueuePublisherSize,
 		BatchSize:            defaultBatchSize,
 		BatchPublishingDelay: defaultBatchPublishingDelay,
+		SubEntrySize:         1,
 	}
 }
 
@@ -178,9 +185,19 @@ func (producer *Producer) startPublishTask() {
 			case msg, running := <-ch:
 				{
 					if !running {
+						producer.FlushUnConfirmedMessages()
+						if producer.publishConfirm != nil {
+							close(producer.publishConfirm)
+							producer.publishConfirm = nil
+						}
+						if producer.closeHandler != nil {
+							close(producer.closeHandler)
+							producer.closeHandler = nil
+						}
 						return
 					}
-					if producer.pendingMessages.size+msg.size >= producer.options.client.getTuneState().requestedMaxFrameSize {
+					if producer.pendingMessages.size+msg.size >= producer.options.client.getTuneState().
+						requestedMaxFrameSize {
 						producer.sendBufferedMessages()
 					}
 
@@ -210,16 +227,16 @@ func (producer *Producer) Send(message message.StreamMessage) error {
 		return FrameTooLarge
 	}
 	sequence := producer.getPublishingID(message)
+	message.SetPublishingId(sequence)
 	producer.addUnConfirmed(sequence, message, producer.id)
 
-	if producer.getStatus() == closed {
+	if producer.getStatus() == open {
+		producer.messageSequenceCh <- messageSequence{
+			message: message,
+			size:    len(msgBytes),
+		}
+	} else {
 		return fmt.Errorf("producer id: %d  closed", producer.id)
-	}
-
-	producer.messageSequenceCh <- messageSequence{
-		message:      message,
-		size:         len(msgBytes),
-		publishingId: sequence,
 	}
 
 	return nil
@@ -241,10 +258,10 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 			return err
 		}
 		sequence := producer.getPublishingID(batchMessage)
+		batchMessage.SetPublishingId(sequence)
 		messagesSequence[i] = messageSequence{
-			message:      batchMessage,
-			size:         len(messageBytes),
-			publishingId: sequence,
+			message: batchMessage,
+			size:    len(messageBytes),
 		}
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 	}
@@ -280,8 +297,8 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 
 	for _, msg := range messagesSequence {
 		r, _ := msg.message.MarshalBinary()
-		writeLong(b, msg.publishingId) // publishingId
-		writeInt(b, len(r))            // len
+		writeLong(b, msg.message.GetPublishingId()) // publishingId
+		writeInt(b, len(r))                         // len
 		b.Write(r)
 	}
 
@@ -294,10 +311,10 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	if err != nil {
 		// This sleep is need to wait the
 		// 800 milliseconds to flush all the pending messages
-		time.Sleep(800 * time.Millisecond)
+
 		producer.setStatus(closed)
 		producer.FlushUnConfirmedMessages()
-
+		//time.Sleep(800 * time.Millisecond)
 		return err
 	}
 	return nil
@@ -326,12 +343,12 @@ func (producer *Producer) Close() error {
 
 	err := producer.options.client.deletePublisher(producer.id)
 	if err != nil {
-		return err
+		logs.LogError("error delete Publisher on closing: %s", err)
 	}
 	if producer.options.client.coordinator.ProducersCount() == 0 {
 		err := producer.options.client.Close()
 		if err != nil {
-			return err
+			logs.LogError("error during closing client: %s", err)
 		}
 	}
 
@@ -342,18 +359,7 @@ func (producer *Producer) Close() error {
 		close(ch)
 	}
 
-	producer.mutex.Lock()
-	if producer.publishConfirm != nil {
-		close(producer.publishConfirm)
-		producer.publishConfirm = nil
-	}
-	if producer.closeHandler != nil {
-		close(producer.closeHandler)
-		producer.closeHandler = nil
-	}
 	close(producer.messageSequenceCh)
-
-	producer.mutex.Unlock()
 
 	return nil
 }

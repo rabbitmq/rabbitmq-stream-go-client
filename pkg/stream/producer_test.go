@@ -100,11 +100,11 @@ var _ = Describe("Streaming Producers", func() {
 
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		chConfirm := producer.NotifyClose()
+		chClose := producer.NotifyClose()
 		go func(ch ChannelClose) {
 			event := <-ch
 			atomic.StoreInt32(&commandIdRecv, int32(event.Command))
-		}(chConfirm)
+		}(chClose)
 
 		err = producer.BatchSend(CreateArrayMessagesForTesting(2))
 		Expect(err).NotTo(HaveOccurred())
@@ -356,11 +356,11 @@ var _ = Describe("Streaming Producers", func() {
 
 		var messagesSequence = make([]messageSequence, 1)
 		msg := amqp.NewMessage([]byte("test"))
+		msg.SetPublishingId(1)
 		messageBytes, _ := msg.MarshalBinary()
 		messagesSequence[0] = messageSequence{
-			message:      msg,
-			size:         len(messageBytes),
-			publishingId: 1,
+			message: msg,
+			size:    len(messageBytes),
 		}
 		for _, producerC := range producer.options.client.coordinator.producers {
 			producerC.(*Producer).id = uint8(200)
