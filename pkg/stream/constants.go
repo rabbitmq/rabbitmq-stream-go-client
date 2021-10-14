@@ -18,6 +18,8 @@ const (
 const initBufferPublishSize = 2 + 2 + 1 + 4
 
 const (
+	ClientVersion = "0.1.1-beta"
+
 	commandDeclarePublisher       = 1
 	commandPublish                = 2
 	commandPublishConfirm         = 3
@@ -84,13 +86,15 @@ const (
 	minBatchSize = 1
 	maxBatchSize = 10_000
 
+	minSubEntrySize = 1
+
 	minBatchPublishingDelay = 50
 	maxBatchPublishingDelay = 500
 
 	defaultBatchSize            = 100
 	defaultBatchPublishingDelay = 100
 	//
-	ClientVersion = "0.1.0-beta"
+
 
 	StreamTcpPort = "5552"
 )

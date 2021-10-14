@@ -25,8 +25,9 @@ type pendingMessagesSequence struct {
 }
 
 type messageSequence struct {
-	message message.StreamMessage
-	size    int
+	message      message.StreamMessage
+	size         int
+	publishingId int64
 }
 
 type Producer struct {
@@ -165,7 +166,6 @@ func (producer *Producer) getStatus() int {
 func (producer *Producer) sendBufferedMessages() {
 
 	if len(producer.pendingMessages.messages) > 0 {
-		//logs.LogInfo("len %d",  len(producer.pendingMessages.messages))
 		err := producer.internalBatchSend(producer.pendingMessages.messages)
 		if err != nil {
 			return
@@ -201,9 +201,9 @@ func (producer *Producer) startPublishTask() {
 						producer.sendBufferedMessages()
 					}
 
-					producer.pendingMessages.size += producer.pendingMessages.size + msg.size
+					producer.pendingMessages.size += msg.size
 					producer.pendingMessages.messages = append(producer.pendingMessages.messages, msg)
-					if len(producer.pendingMessages.messages) >= producer.options.BatchSize {
+					if len(producer.pendingMessages.messages) >= (producer.options.BatchSize) {
 						producer.sendBufferedMessages()
 					}
 				}
@@ -217,8 +217,8 @@ func (producer *Producer) startPublishTask() {
 
 }
 
-func (producer *Producer) Send(message message.StreamMessage) error {
-	msgBytes, err := message.MarshalBinary()
+func (producer *Producer) Send(streamMessage message.StreamMessage) error {
+	msgBytes, err := streamMessage.MarshalBinary()
 	if err != nil {
 		return err
 	}
@@ -226,14 +226,15 @@ func (producer *Producer) Send(message message.StreamMessage) error {
 	if len(msgBytes)+initBufferPublishSize > producer.options.client.getTuneState().requestedMaxFrameSize {
 		return FrameTooLarge
 	}
-	sequence := producer.getPublishingID(message)
-	message.SetPublishingId(sequence)
-	producer.addUnConfirmed(sequence, message, producer.id)
+
+	sequence := producer.getPublishingID(streamMessage)
+	producer.addUnConfirmed(sequence, streamMessage, producer.id)
 
 	if producer.getStatus() == open {
 		producer.messageSequenceCh <- messageSequence{
-			message: message,
-			size:    len(msgBytes),
+			message:      streamMessage,
+			size:         len(msgBytes),
+			publishingId: sequence,
 		}
 	} else {
 		return fmt.Errorf("producer id: %d  closed", producer.id)
@@ -258,10 +259,10 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 			return err
 		}
 		sequence := producer.getPublishingID(batchMessage)
-		batchMessage.SetPublishingId(sequence)
 		messagesSequence[i] = messageSequence{
-			message: batchMessage,
-			size:    len(messageBytes),
+			message:      batchMessage,
+			size:         len(messageBytes),
+			publishingId: sequence,
 		}
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 	}
@@ -276,6 +277,68 @@ func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) 
 	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
 }
 
+type subEntry struct {
+	messages         []messageSequence
+	publishingId     int64
+	unCompressedSize int
+}
+type subEntries = []*subEntry
+
+func (producer *Producer) simpleAggregation(messagesSequence []messageSequence, b *bytes.Buffer) {
+	for _, msg := range messagesSequence {
+		r, _ := msg.message.MarshalBinary()
+		writeLong(b, msg.publishingId) // publishingId
+		writeInt(b, len(r))            // len
+		b.Write(r)
+	}
+}
+
+//unit test for reuse message
+//unit test for sub bacthing
+func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bytes.Buffer) {
+	for _, entry := range aggregation {
+		writeLong(b, entry.publishingId)
+		writeByte(b, 0x80|0<<4) // 1=SubBatchEntryType:1,CompressionType:3,Reserved:4,
+		writeShort(b, int16(len(entry.messages)))
+		writeInt(b, entry.unCompressedSize)
+		writeInt(b, entry.unCompressedSize)
+
+		for _, msg := range entry.messages {
+			r, _ := msg.message.MarshalBinary()
+			writeInt(b, len(r)) // len
+			b.Write(r)
+		}
+	}
+}
+
+func (producer *Producer) getSubEntries(msgs []messageSequence, size int) (subEntries, error) {
+	aggregation := subEntries{}
+
+	var sub *subEntry
+	for _, msg := range msgs {
+		if len(aggregation) == 0 || len(sub.messages) >= size {
+			sub = &subEntry{}
+			sub.publishingId = -1
+			aggregation = append(aggregation, sub)
+		}
+		if sub.publishingId < 0 {
+			sub.publishingId = msg.publishingId
+		}
+		sub.messages = append(sub.messages, msg)
+		binary, err := msg.message.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		sub.unCompressedSize += len(binary) + 4
+		if sub.publishingId != msg.publishingId {
+			producer.getUnConfirmed(sub.publishingId).LinkedTo =
+				append(producer.getUnConfirmed(sub.publishingId).LinkedTo,
+					producer.getUnConfirmed(msg.publishingId))
+		}
+	}
+	return aggregation, nil
+}
+
 /// the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error, see
 func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequence, producerID uint8) error {
@@ -284,8 +347,24 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	}
 
 	var msgLen int
+	var aggregation subEntries
+
+	if producer.options.SubEntrySize > 1 {
+		var err error
+		aggregation, err = producer.getSubEntries(messagesSequence, producer.options.SubEntrySize)
+		if err != nil {
+			return err
+		}
+		msgLen += (8 + 1 + 2 + 4 + 4) * len(aggregation)
+	}
+
 	for _, msg := range messagesSequence {
-		msgLen += msg.size + 8 + 4
+		if producer.options.SubEntrySize == 1 {
+			msgLen += msg.size + 8 + 4
+		}
+		if producer.options.SubEntrySize > 1 {
+			msgLen += msg.size + 4
+		}
 	}
 
 	frameHeaderLength := initBufferPublishSize
@@ -293,13 +372,19 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandPublish)
 	writeByte(b, producerID)
-	writeInt(b, len(messagesSequence)) //toExcluded - fromInclude
+	numberOfMessages := len(messagesSequence)
+	numberOfMessages = numberOfMessages / producer.options.SubEntrySize
+	if len(messagesSequence)%producer.options.SubEntrySize != 0 {
+		numberOfMessages += 1
+	}
 
-	for _, msg := range messagesSequence {
-		r, _ := msg.message.MarshalBinary()
-		writeLong(b, msg.message.GetPublishingId()) // publishingId
-		writeInt(b, len(r))                         // len
-		b.Write(r)
+	writeInt(b, numberOfMessages) //toExcluded - fromInclude
+	if producer.options.SubEntrySize == 1 {
+		producer.simpleAggregation(messagesSequence, b)
+	}
+
+	if producer.options.SubEntrySize > 1 {
+		producer.subEntryAggregation(aggregation, b)
 	}
 
 	bufferToWrite := b.Bytes()

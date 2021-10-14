@@ -305,29 +305,28 @@ var _ = Describe("Streaming Producers", func() {
 			SetQueueSize(5000000))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchSize: 0,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchSize(0))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchSize: 20_000,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchSize(20_000))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchSize: 5_000_000,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchSize(5_000_000))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchPublishingDelay: 0,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchPublishingDelay(0))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchPublishingDelay: 600,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchPublishingDelay(600))
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetSubEntrySize(0))
 		Expect(err).To(HaveOccurred())
 
 		err = env.Close()

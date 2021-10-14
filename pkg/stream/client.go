@@ -468,6 +468,11 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 			minBatchPublishingDelay, maxBatchPublishingDelay)
 	}
 
+	if options.SubEntrySize < minSubEntrySize {
+		return nil, fmt.Errorf("SubEntrySize value must be bigger than %d",
+			minSubEntrySize)
+	}
+
 	producer, err := c.coordinator.NewProducer(&ProducerOptions{
 		client:               c,
 		streamName:           streamName,
@@ -475,6 +480,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		QueueSize:            options.QueueSize,
 		BatchSize:            options.BatchSize,
 		BatchPublishingDelay: options.BatchPublishingDelay,
+		SubEntrySize:         options.SubEntrySize,
 	})
 
 	if err != nil {

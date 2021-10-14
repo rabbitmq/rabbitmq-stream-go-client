@@ -240,7 +240,8 @@ func handlePublishConfirms(messageConfirm []*stream.UnConfirmedMessage) {
 
 func startPublisher(streamName string) error {
 
-	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName, nil,
+	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName,
+		nil,
 		handlePublishConfirms)
 	if err != nil {
 		logError("Error create publisher: %s", err)
@@ -296,7 +297,6 @@ func startPublisher(streamName string) error {
 				}
 			}
 			checkErr(err)
-
 		}
 	}(rPublisher, arr)
 

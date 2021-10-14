@@ -239,11 +239,19 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	}
 	var unConfirmed []*UnConfirmedMessage
 	for publishingIdCount != 0 {
-		m := producer.getUnConfirmed(readInt64(r))
+		seq := readInt64(r)
+
+		m := producer.getUnConfirmed(seq)
 		if m != nil {
 			m.Confirmed = true
 			unConfirmed = append(unConfirmed, m)
 			producer.removeUnConfirmed(m.SequenceID)
+
+			for _, message := range m.LinkedTo {
+				message.Confirmed = true
+				unConfirmed = append(unConfirmed, message)
+				producer.removeUnConfirmed(message.SequenceID)
+			}
 		}
 		publishingIdCount--
 	}
