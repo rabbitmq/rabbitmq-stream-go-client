@@ -95,7 +95,6 @@ const (
 	defaultBatchPublishingDelay = 100
 	//
 
-
 	StreamTcpPort = "5552"
 )
 

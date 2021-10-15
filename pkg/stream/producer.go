@@ -25,7 +25,7 @@ type pendingMessagesSequence struct {
 }
 
 type messageSequence struct {
-	message      message.StreamMessage
+	messageBytes []byte
 	size         int
 	publishingId int64
 }
@@ -232,7 +232,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 
 	if producer.getStatus() == open {
 		producer.messageSequenceCh <- messageSequence{
-			message:      streamMessage,
+			messageBytes: msgBytes,
 			size:         len(msgBytes),
 			publishingId: sequence,
 		}
@@ -260,7 +260,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		}
 		sequence := producer.getPublishingID(batchMessage)
 		messagesSequence[i] = messageSequence{
-			message:      batchMessage,
+			messageBytes: messageBytes,
 			size:         len(messageBytes),
 			publishingId: sequence,
 		}
@@ -286,7 +286,7 @@ type subEntries = []*subEntry
 
 func (producer *Producer) simpleAggregation(messagesSequence []messageSequence, b *bytes.Buffer) {
 	for _, msg := range messagesSequence {
-		r, _ := msg.message.MarshalBinary()
+		r := msg.messageBytes
 		writeLong(b, msg.publishingId) // publishingId
 		writeInt(b, len(r))            // len
 		b.Write(r)
@@ -304,7 +304,7 @@ func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bytes.B
 		writeInt(b, entry.unCompressedSize)
 
 		for _, msg := range entry.messages {
-			r, _ := msg.message.MarshalBinary()
+			r := msg.messageBytes
 			writeInt(b, len(r)) // len
 			b.Write(r)
 		}
@@ -325,15 +325,15 @@ func (producer *Producer) getSubEntries(msgs []messageSequence, size int) (subEn
 			sub.publishingId = msg.publishingId
 		}
 		sub.messages = append(sub.messages, msg)
-		binary, err := msg.message.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
+		binary := msg.messageBytes
 		sub.unCompressedSize += len(binary) + 4
 		if sub.publishingId != msg.publishingId {
-			producer.getUnConfirmed(sub.publishingId).LinkedTo =
-				append(producer.getUnConfirmed(sub.publishingId).LinkedTo,
-					producer.getUnConfirmed(msg.publishingId))
+			unConfirmed := producer.getUnConfirmed(sub.publishingId)
+			if unConfirmed != nil {
+				unConfirmed.LinkedTo =
+					append(producer.getUnConfirmed(sub.publishingId).LinkedTo,
+						producer.getUnConfirmed(msg.publishingId))
+			}
 		}
 	}
 	return aggregation, nil

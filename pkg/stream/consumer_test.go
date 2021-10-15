@@ -180,15 +180,16 @@ var _ = Describe("Streaming Consumers", func() {
 			arr = append(arr, m)
 		}
 
-		// here we handle the deduplication so we must have only
+		// here we handle the deduplication, so we must have only
 		// 10 messages on the stream, since we are using the
 		// same SetPublishingId
+		// even we publish the same array more times
 		for i := 0; i < 10; i++ {
 			err = producer.BatchSend(arr)
 		}
 
 		Expect(err).NotTo(HaveOccurred())
-		// we can't close the subscribe until the publish is finished
+		// we can't close. The subscriber until the publishing is finished
 		time.Sleep(500 * time.Millisecond)
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
