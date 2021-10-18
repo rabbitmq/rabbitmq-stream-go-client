@@ -267,8 +267,8 @@ var _ = Describe("Environment test", func() {
 		}
 		env, err := NewEnvironment(
 			NewEnvironmentOptions().
-				SetHost("localhost").
-				SetPort(5552).
+				SetHost(addressResolver.Host).
+				SetPort(addressResolver.Port).
 				SetAddressResolver(addressResolver).
 				SetMaxProducersPerClient(1))
 		Expect(err).NotTo(HaveOccurred())

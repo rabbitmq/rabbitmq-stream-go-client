@@ -280,7 +280,6 @@ func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- sequence
 }
-
 func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	subscriptionId := readByte(r)
@@ -335,30 +334,41 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			}
 		}
 		if (entryType & 0x80) == 0 {
-			sizeMessage, _ := readUInt(r)
-			binary.BigEndian.PutUint32(c.plainCRCBuffer[position:], sizeMessage)
-			position = position + 4
-			arrayMessage := readUint8Array(r, sizeMessage)
-
-			copy(c.plainCRCBuffer[position:], arrayMessage)
-			position = position + int(sizeMessage)
-
-			if filter && (offset < offsetLimit) {
-				/// TODO set recordset as filtered
-			} else {
-				msg := &amqp.Message{}
-				err := msg.UnmarshalBinary(arrayMessage)
-				if err != nil {
-					logs.LogError("error unmarshal messages: %s", err)
+			position, batchConsumingMessages = c.decodeMessage(r, position, filter, offset, offsetLimit, batchConsumingMessages)
+			numRecords--
+			offset++
+		} else {
+			entryType, err := readByteError(r)
+			if err != nil {
+				if err == io.EOF {
+					logs.LogDebug("EOF reading entryType %s ", err)
+					return
+				} else {
+					logs.LogWarn("error reading entryType %s ", err)
 				}
-				batchConsumingMessages = append(batchConsumingMessages, msg)
 			}
 
-		} else {
-			logs.LogWarn("entryType Not Handled %d", entryType)
+			c.plainCRCBuffer[position] = entryType
+			position = position + 1
+			// sub-batch case.
+			_ = (entryType & 0x70) >> 4 //compression
+			numRecordsInBatch := readUShort(r)
+			binary.BigEndian.PutUint16(c.plainCRCBuffer[position:], numRecordsInBatch)
+			position = position + 2
+			un, _ := readUInt(r) //uncompressedDataSize
+			binary.BigEndian.PutUint32(c.plainCRCBuffer[position:], un)
+			position = position + 4
+			ds, _ := readUInt(r) //datasize
+			binary.BigEndian.PutUint32(c.plainCRCBuffer[position:], ds)
+			position = position + 4
+			numRecords -= uint32(numRecordsInBatch)
+			for numRecordsInBatch != 0 {
+				position, batchConsumingMessages = c.decodeMessage(r, position, filter, offset, offsetLimit, batchConsumingMessages)
+				numRecordsInBatch--
+				offset++
+			}
 		}
-		numRecords--
-		offset++
+
 	}
 
 	checkSum := crc32.ChecksumIEEE(c.plainCRCBuffer[0:dataLength])
@@ -367,7 +377,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
 		panic("Error during CRC")
 	} /// ???
-	//
+
 	if consumer.getStatus() == open {
 		consumer.response.data <- offset
 		consumer.response.messages <- batchConsumingMessages
@@ -375,14 +385,36 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 }
 
-func (c *Client) creditNotificationFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+func (c *Client) decodeMessage(r *bufio.Reader, position int, filter bool, offset int64, offsetLimit int64, batchConsumingMessages []*amqp.Message) (int, []*amqp.Message) {
+	sizeMessage, _ := readUInt(r)
+	binary.BigEndian.PutUint32(c.plainCRCBuffer[position:], sizeMessage)
+	position = position + 4
+	arrayMessage := readUint8Array(r, sizeMessage)
+	copy(c.plainCRCBuffer[position:], arrayMessage)
+	position = position + int(sizeMessage)
+	if filter && (offset < offsetLimit) {
+		/// TODO set recordset as filtered
+	} else {
+		msg := &amqp.Message{}
+		err := msg.UnmarshalBinary(arrayMessage)
+		if err != nil {
+			logs.LogError("error unmarshal messages: %s", err)
+		}
+		batchConsumingMessages = append(batchConsumingMessages, msg)
+	}
+	return position, batchConsumingMessages
+}
+
+func (c *Client) creditNotificationFrameHandler(readProtocol *ReaderProtocol,
+	r *bufio.Reader) {
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	//subscriptionId := readByte(r)
 	_ = readByte(r)
 	// TODO ASK WHAT TO DO HERE
 }
 
-func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol,
+	r *bufio.Reader) {
 	c.handleGenericResponse(readProtocol, r)
 	offset := readInt64(r)
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
@@ -444,7 +476,8 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 	}
 }
 
-func (c *Client) metadataFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+func (c *Client) metadataFrameHandler(readProtocol *ReaderProtocol,
+	r *bufio.Reader) {
 	readProtocol.CorrelationId, _ = readUInt(r)
 	readProtocol.ResponseCode = responseCodeOk
 	brokers := newBrokers()
@@ -482,7 +515,8 @@ func (c *Client) metadataFrameHandler(readProtocol *ReaderProtocol, r *bufio.Rea
 	res.data <- streamsMetadata
 }
 
-func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
+func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol,
+	r *bufio.Reader) {
 	readProtocol.CorrelationId, _ = readUInt(r)
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	closeReason := readString(r)

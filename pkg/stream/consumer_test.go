@@ -8,6 +8,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -314,24 +315,29 @@ var _ = Describe("Streaming Consumers", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 		for z := 0; z < 5000; z++ {
-			err := producer.Send(amqp.NewMessage([]byte("test_" + strconv.Itoa(z))))
+			err := producer.Send(amqp.NewMessage([]byte("t_" + strconv.Itoa(z))))
 			Expect(err).NotTo(HaveOccurred())
 		}
 		time.Sleep(500 * time.Millisecond)
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
+		mt := &sync.Mutex{}
 		var messagesValue []string
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
+				mt.Lock()
+				defer mt.Unlock()
 				messagesValue = append(messagesValue, string(message.Data[0]))
 
 			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).
 				SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(500 * time.Millisecond)
+
+		mt.Lock()
 		for i := range messagesValue {
 			Expect(messagesValue[i]).To(Equal("test_" + strconv.Itoa(i)))
 		}
+		mt.Unlock()
 		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
