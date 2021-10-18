@@ -15,8 +15,7 @@ var _ = Describe("Environment test", func() {
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
-		err = env.DeclareStream(streamName, nil)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
 		var producers []*Producer
 
 		for i := 0; i < 10; i++ {
@@ -31,23 +30,21 @@ var _ = Describe("Environment test", func() {
 			getClientsPerContext())).To(Equal(10))
 
 		for _, producer := range producers {
-			err = producer.Close()
-			Expect(err).NotTo(HaveOccurred())
+			Expect(producer.Close()).NotTo(HaveOccurred())
 		}
 
 		Expect(len(env.producers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
 
-		err = env.DeleteStream(streamName)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
 	})
 
 	It("Multi Producers per client", func() {
 		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(2))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
-		err = env.DeclareStream(streamName, nil)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeclareStream(streamName, nil)).
+			NotTo(HaveOccurred())
 
 		for i := 0; i < 10; i++ {
 			producer, err := env.NewProducer(streamName, nil)
@@ -55,8 +52,7 @@ var _ = Describe("Environment test", func() {
 			Expect(producer.id).To(Equal(uint8(i % 2)))
 		}
 
-		err = env.DeleteStream(streamName)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
 
 		time.Sleep(500 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators()["localhost:5552"].
@@ -68,8 +64,8 @@ var _ = Describe("Environment test", func() {
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
-		err = env.DeclareStream(streamName, nil)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeclareStream(streamName, nil)).
+			NotTo(HaveOccurred())
 		wg := &sync.WaitGroup{}
 
 		for i := 0; i < 5; i++ {
@@ -78,8 +74,7 @@ var _ = Describe("Environment test", func() {
 				producer, err := env.NewProducer(streamName, nil)
 				Expect(err).NotTo(HaveOccurred())
 				time.Sleep(20 * time.Millisecond)
-				err = producer.Close()
-				Expect(err).NotTo(HaveOccurred())
+				Expect(producer.Close()).NotTo(HaveOccurred())
 				wg.Done()
 			}(wg)
 		}
@@ -87,8 +82,7 @@ var _ = Describe("Environment test", func() {
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
 		Expect(len(env.producers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).To(Equal(0))
-		err = env.DeleteStream(streamName)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
 	})
 
 	It("Meta handler delete consistency threads", func() {
@@ -98,12 +92,11 @@ var _ = Describe("Environment test", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 		streamNameWillBeDelete := uuid.New().String()
-		err = env.DeclareStream(streamNameWillBeDelete, nil)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeclareStream(streamNameWillBeDelete, nil)).NotTo(HaveOccurred())
 
 		streamNameWillBeDeleteAfter := uuid.New().String()
-		err = env.DeclareStream(streamNameWillBeDeleteAfter, nil)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeclareStream(streamNameWillBeDeleteAfter, nil)).
+			NotTo(HaveOccurred())
 
 		wg := &sync.WaitGroup{}
 
@@ -120,8 +113,7 @@ var _ = Describe("Environment test", func() {
 		}
 		wg.Wait()
 		time.Sleep(500 * time.Millisecond)
-		err = env.DeleteStream(streamNameWillBeDelete)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeleteStream(streamNameWillBeDelete)).NotTo(HaveOccurred())
 		time.Sleep(200 * time.Millisecond)
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
 		time.Sleep(200 * time.Millisecond)
@@ -130,8 +122,7 @@ var _ = Describe("Environment test", func() {
 			getClientsPerContext())).To(Equal(0))
 		Expect(err).NotTo(HaveOccurred())
 
-		err = env.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
 	It("Meta handler delete consistency sync", func() {
@@ -145,8 +136,8 @@ var _ = Describe("Environment test", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		streamNameWillBeDeleteAfter := uuid.New().String()
-		err = env.DeclareStream(streamNameWillBeDeleteAfter, nil)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeclareStream(streamNameWillBeDeleteAfter, nil)).
+			NotTo(HaveOccurred())
 
 		for i := 0; i < 25; i++ {
 			_, errProd := env.NewProducer(streamNameWillBeDelete, nil)
@@ -156,8 +147,7 @@ var _ = Describe("Environment test", func() {
 		}
 
 		time.Sleep(500 * time.Millisecond)
-		err = env.DeleteStream(streamNameWillBeDelete)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeleteStream(streamNameWillBeDelete)).NotTo(HaveOccurred())
 		time.Sleep(200 * time.Millisecond)
 		Expect(len(env.producers.getCoordinators())).To(Equal(1))
 		Expect(len(env.producers.getCoordinators()["localhost:5552"].
@@ -170,8 +160,7 @@ var _ = Describe("Environment test", func() {
 			getClientsPerContext())).To(Equal(0))
 		Expect(err).NotTo(HaveOccurred())
 
-		err = env.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
 	Describe("Environment Authentication/Validation", func() {
@@ -228,8 +217,7 @@ var _ = Describe("Environment test", func() {
 			env2, err := NewEnvironment(NewEnvironmentOptions().SetHost("").
 				SetUser("").SetPassword("").SetPort(0))
 			Expect(err).NotTo(HaveOccurred())
-			err = env2.Close()
-			Expect(err).NotTo(HaveOccurred())
+			Expect(env2.Close()).NotTo(HaveOccurred())
 		})
 	})
 
@@ -250,13 +238,11 @@ var _ = Describe("Environment test", func() {
 		Expect(metaData.Leader.Host).To(Equal("localhost"))
 		Expect(metaData.Leader.Port).To(Equal("5552"))
 		Expect(len(metaData.Replicas)).To(Equal(0))
-		err = env.DeleteStream(stream)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeleteStream(stream)).NotTo(HaveOccurred())
 		exists, err = env.StreamExists(stream)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exists).To(Equal(false))
-		err = env.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
 
 	})
 
@@ -273,16 +259,11 @@ var _ = Describe("Environment test", func() {
 				SetMaxProducersPerClient(1))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
-		err = env.DeclareStream(streamName, nil)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
 		_, err = env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-
-		err = env.DeleteStream(streamName)
-		Expect(err).NotTo(HaveOccurred())
-
-		err = env.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
 })
