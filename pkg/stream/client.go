@@ -481,6 +481,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		BatchSize:            options.BatchSize,
 		BatchPublishingDelay: options.BatchPublishingDelay,
 		SubEntrySize:         options.SubEntrySize,
+		Compression:          options.Compression,
 	})
 
 	if err != nil {

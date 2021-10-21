@@ -403,15 +403,6 @@ func NewMessage(data []byte) *AMQP10 {
 	}
 }
 
-func NewMessageDefault() *AMQP10 {
-	return &AMQP10{
-		message: &Message{
-			doneSignal: make(chan struct{}),
-		},
-		publishingId: -1,
-	}
-}
-
 func (amqp *AMQP10) SetPublishingId(id int64) {
 	amqp.publishingId = id
 }

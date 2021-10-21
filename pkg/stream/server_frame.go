@@ -334,7 +334,12 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			}
 		}
 		if (entryType & 0x80) == 0 {
-			position, batchConsumingMessages = c.decodeMessage(r, position, filter, offset, offsetLimit, batchConsumingMessages)
+			position, batchConsumingMessages = c.decodeMessage(r,
+				position,
+				filter,
+				offset,
+				offsetLimit,
+				batchConsumingMessages)
 			numRecords--
 			offset++
 		} else {
@@ -363,7 +368,12 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			position = position + 4
 			numRecords -= uint32(numRecordsInBatch)
 			for numRecordsInBatch != 0 {
-				position, batchConsumingMessages = c.decodeMessage(r, position, filter, offset, offsetLimit, batchConsumingMessages)
+				position, batchConsumingMessages = c.decodeMessage(r,
+					position,
+					filter,
+					offset,
+					offsetLimit,
+					batchConsumingMessages)
 				numRecordsInBatch--
 				offset++
 			}

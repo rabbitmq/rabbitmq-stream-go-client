@@ -358,8 +358,8 @@ var _ = Describe("Streaming Producers", func() {
 		msg.SetPublishingId(1)
 		messageBytes, _ := msg.MarshalBinary()
 		messagesSequence[0] = messageSequence{
-			messageBytes: messageBytes,
-			size:         len(messageBytes),
+			messageBytes:     messageBytes,
+			unCompressedSize: len(messageBytes),
 		}
 		for _, producerC := range producer.options.client.coordinator.producers {
 			producerC.(*Producer).id = uint8(200)
@@ -437,29 +437,38 @@ var _ = Describe("Streaming Producers", func() {
 				SetSubEntrySize(77))
 		Expect(err).NotTo(HaveOccurred())
 		messagesSequence := make([]messageSequence, 201)
-		entries, err := producer.getSubEntries(messagesSequence, producer.options.SubEntrySize)
+		entries, err := producer.getSubEntries(messagesSequence,
+			producer.options.SubEntrySize,
+			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(entries)).To(Equal(3))
+		Expect(len(entries.items)).To(Equal(3))
 
 		messagesSequence = make([]messageSequence, 100)
-		entries, err = producer.getSubEntries(messagesSequence, producer.options.SubEntrySize)
+		entries, err = producer.getSubEntries(messagesSequence,
+			producer.options.SubEntrySize,
+			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(entries)).To(Equal(2))
+		Expect(len(entries.items)).To(Equal(2))
 
 		messagesSequence = make([]messageSequence, 1)
-		entries, err = producer.getSubEntries(messagesSequence, producer.options.SubEntrySize)
+		entries, err = producer.getSubEntries(messagesSequence,
+			producer.options.SubEntrySize,
+			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(entries)).To(Equal(1))
+		Expect(len(entries.items)).To(Equal(1))
 
 		messagesSequence = make([]messageSequence, 1000)
-		entries, err = producer.getSubEntries(messagesSequence, producer.options.SubEntrySize)
+		entries, err = producer.getSubEntries(messagesSequence,
+			producer.options.SubEntrySize,
+			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(entries)).To(Equal(13))
+		Expect(len(entries.items)).To(Equal(13))
 
 		messagesSequence = make([]messageSequence, 14)
-		entries, err = producer.getSubEntries(messagesSequence, 13)
+		entries, err = producer.getSubEntries(messagesSequence, 13,
+			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(entries)).To(Equal(2))
+		Expect(len(entries.items)).To(Equal(2))
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 

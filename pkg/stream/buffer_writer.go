@@ -40,6 +40,11 @@ func writeUInt(inputBuff *bytes.Buffer, value uint32) {
 	inputBuff.Write(buff)
 }
 
+func bytesFromInt(value uint32) []byte {
+	var buff = make([]byte, 4)
+	binary.BigEndian.PutUint32(buff, value)
+	return buff
+}
 func writeString(inputBuff *bytes.Buffer, value string) {
 	writeUShort(inputBuff, uint16(len(value)))
 	inputBuff.Write([]byte(value))

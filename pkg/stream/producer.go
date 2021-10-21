@@ -25,9 +25,9 @@ type pendingMessagesSequence struct {
 }
 
 type messageSequence struct {
-	messageBytes []byte
-	size         int
-	publishingId int64
+	messageBytes     []byte
+	unCompressedSize int
+	publishingId     int64
 }
 
 type Producer struct {
@@ -50,11 +50,12 @@ type Producer struct {
 type ProducerOptions struct {
 	client               *Client
 	streamName           string
-	Name                 string // Producer name, it is useful to handle deduplication messages
-	QueueSize            int    // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
-	BatchSize            int    // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
-	BatchPublishingDelay int    // Period to send a batch of messages.
-	SubEntrySize         int    // Size of sub Entry, to aggregate more subEntry using one publishing id
+	Name                 string      // Producer name, it is useful to handle deduplication messages
+	QueueSize            int         // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
+	BatchSize            int         // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput
+	BatchPublishingDelay int         // Period to send a batch of messages.
+	SubEntrySize         int         // Size of sub Entry, to aggregate more subEntry using one publishing id
+	Compression          Compression // Compression type, it is valid only if SubEntrySize > 1
 }
 
 func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
@@ -82,12 +83,18 @@ func (po *ProducerOptions) SetSubEntrySize(size int) *ProducerOptions {
 	return po
 }
 
+func (po *ProducerOptions) SetCompression(compression Compression) *ProducerOptions {
+	po.Compression = compression
+	return po
+}
+
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{
 		QueueSize:            defaultQueuePublisherSize,
 		BatchSize:            defaultBatchSize,
 		BatchPublishingDelay: defaultBatchPublishingDelay,
 		SubEntrySize:         1,
+		Compression:          Compression{}.None(),
 	}
 }
 
@@ -196,12 +203,12 @@ func (producer *Producer) startPublishTask() {
 						}
 						return
 					}
-					if producer.pendingMessages.size+msg.size >= producer.options.client.getTuneState().
+					if producer.pendingMessages.size+msg.unCompressedSize >= producer.options.client.getTuneState().
 						requestedMaxFrameSize {
 						producer.sendBufferedMessages()
 					}
 
-					producer.pendingMessages.size += msg.size
+					producer.pendingMessages.size += msg.unCompressedSize
 					producer.pendingMessages.messages = append(producer.pendingMessages.messages, msg)
 					if len(producer.pendingMessages.messages) >= (producer.options.BatchSize) {
 						producer.sendBufferedMessages()
@@ -232,9 +239,9 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 
 	if producer.getStatus() == open {
 		producer.messageSequenceCh <- messageSequence{
-			messageBytes: msgBytes,
-			size:         len(msgBytes),
-			publishingId: sequence,
+			messageBytes:     msgBytes,
+			unCompressedSize: len(msgBytes),
+			publishingId:     sequence,
 		}
 	} else {
 		return fmt.Errorf("producer id: %d  closed", producer.id)
@@ -260,9 +267,9 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		}
 		sequence := producer.getPublishingID(batchMessage)
 		messagesSequence[i] = messageSequence{
-			messageBytes: messageBytes,
-			size:         len(messageBytes),
-			publishingId: sequence,
+			messageBytes:     messageBytes,
+			unCompressedSize: len(messageBytes),
+			publishingId:     sequence,
 		}
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 	}
@@ -277,13 +284,6 @@ func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) 
 	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
 }
 
-type subEntry struct {
-	messages         []messageSequence
-	publishingId     int64
-	unCompressedSize int
-}
-type subEntries = []*subEntry
-
 func (producer *Producer) simpleAggregation(messagesSequence []messageSequence, b *bytes.Buffer) {
 	for _, msg := range messagesSequence {
 		r := msg.messageBytes
@@ -295,48 +295,49 @@ func (producer *Producer) simpleAggregation(messagesSequence []messageSequence, 
 
 //unit test for reuse message
 //unit test for sub bacthing
-func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bytes.Buffer) {
-	for _, entry := range aggregation {
+func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bytes.Buffer, compression Compression) {
+	for _, entry := range aggregation.items {
 		writeLong(b, entry.publishingId)
-		writeByte(b, 0x80|0<<4) // 1=SubBatchEntryType:1,CompressionType:3,Reserved:4,
+		writeByte(b, 0x80|
+			compression.value<<4) // 1=SubBatchEntryType:1,CompressionType:3,Reserved:4,
 		writeShort(b, int16(len(entry.messages)))
 		writeInt(b, entry.unCompressedSize)
-		writeInt(b, entry.unCompressedSize)
-
-		for _, msg := range entry.messages {
-			r := msg.messageBytes
-			writeInt(b, len(r)) // len
-			b.Write(r)
-		}
+		writeInt(b, entry.sizeInBytes)
+		b.Write(entry.dataInBytes)
 	}
 }
 
-func (producer *Producer) getSubEntries(msgs []messageSequence, size int) (subEntries, error) {
-	aggregation := subEntries{}
+func (producer *Producer) getSubEntries(msgs []messageSequence, size int, compression Compression) (subEntries, error) {
+	subEntries := subEntries{}
 
-	var sub *subEntry
+	var entry *subEntry
 	for _, msg := range msgs {
-		if len(aggregation) == 0 || len(sub.messages) >= size {
-			sub = &subEntry{}
-			sub.publishingId = -1
-			aggregation = append(aggregation, sub)
+		if len(subEntries.items) == 0 || len(entry.messages) >= size {
+			entry = &subEntry{}
+			entry.publishingId = -1
+			subEntries.items = append(subEntries.items, entry)
 		}
-		if sub.publishingId < 0 {
-			sub.publishingId = msg.publishingId
-		}
-		sub.messages = append(sub.messages, msg)
+		// in case of subEntry one
+		entry.messages = append(entry.messages, msg)
 		binary := msg.messageBytes
-		sub.unCompressedSize += len(binary) + 4
-		if sub.publishingId != msg.publishingId {
-			unConfirmed := producer.getUnConfirmed(sub.publishingId)
+		entry.unCompressedSize += len(binary) + 4
+
+		if entry.publishingId < 0 {
+			entry.publishingId = msg.publishingId
+		}
+
+		if entry.publishingId != msg.publishingId {
+			unConfirmed := producer.getUnConfirmed(entry.publishingId)
 			if unConfirmed != nil {
 				unConfirmed.LinkedTo =
-					append(producer.getUnConfirmed(sub.publishingId).LinkedTo,
+					append(unConfirmed.LinkedTo,
 						producer.getUnConfirmed(msg.publishingId))
 			}
 		}
 	}
-	return aggregation, nil
+	compressByType(compression).Compress(&subEntries)
+
+	return subEntries, nil
 }
 
 /// the producer id is always the producer.GetID(). This function is needed only for testing
@@ -351,19 +352,17 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 
 	if producer.options.SubEntrySize > 1 {
 		var err error
-		aggregation, err = producer.getSubEntries(messagesSequence, producer.options.SubEntrySize)
+		aggregation, err = producer.getSubEntries(messagesSequence, producer.options.SubEntrySize,
+			producer.options.Compression)
 		if err != nil {
 			return err
 		}
-		msgLen += (8 + 1 + 2 + 4 + 4) * len(aggregation)
+		msgLen += ((8 + 1 + 2 + 4 + 4) * len(aggregation.items)) + aggregation.totalSizeInBytes
 	}
 
-	for _, msg := range messagesSequence {
-		if producer.options.SubEntrySize == 1 {
-			msgLen += msg.size + 8 + 4
-		}
-		if producer.options.SubEntrySize > 1 {
-			msgLen += msg.size + 4
+	if producer.options.SubEntrySize == 1 {
+		for _, msg := range messagesSequence {
+			msgLen += msg.unCompressedSize + 8 + 4
 		}
 	}
 
@@ -384,7 +383,7 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	}
 
 	if producer.options.SubEntrySize > 1 {
-		producer.subEntryAggregation(aggregation, b)
+		producer.subEntryAggregation(aggregation, b, producer.options.Compression)
 	}
 
 	bufferToWrite := b.Bytes()

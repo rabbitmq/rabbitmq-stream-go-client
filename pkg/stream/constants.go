@@ -170,3 +170,32 @@ func lookUpCommand(command uint16) string {
 
 	return constLookup[command]
 }
+
+const (
+	None   = byte(0)
+	GZIP   = byte(1)
+	SNAPPY = byte(2)
+	LZ4    = byte(3)
+	ZSTD   = byte(4)
+)
+
+type Compression struct {
+	value byte
+}
+
+func (compression Compression) None() Compression {
+	return Compression{value: None}
+}
+
+func (compression Compression) Gzip() Compression {
+	return Compression{value: GZIP}
+}
+func (compression Compression) Snappy() Compression {
+	return Compression{value: SNAPPY}
+}
+func (compression Compression) Lz4() Compression {
+	return Compression{value: LZ4}
+}
+func (compression Compression) Zstd() Compression {
+	return Compression{value: ZSTD}
+}
