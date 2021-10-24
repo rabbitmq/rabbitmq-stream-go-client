@@ -3,7 +3,6 @@ package stream
 import (
 	"bufio"
 	"bytes"
-	"encoding/binary"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"hash/crc32"
@@ -247,6 +246,9 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 			unConfirmed = append(unConfirmed, m)
 			producer.removeUnConfirmed(m.SequenceID)
 
+			// in case of sub-batch entry the client receives only
+			// one publishingId (or sequence)
+			// so the other messages are confirmed using the LinkedTo
 			for _, message := range m.LinkedTo {
 				message.Confirmed = true
 				unConfirmed = append(unConfirmed, message)
@@ -305,10 +307,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
 
-	if len(c.plainCRCBuffer) < int(dataLength) {
-		c.plainCRCBuffer = make([]byte, dataLength)
-	}
-
 	c.credit(subscriptionId, 1)
 
 	var offsetLimit int64 = -1
@@ -321,10 +319,27 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	//messages
 	var batchConsumingMessages []*amqp.Message
-	position := 0
+
+	var bytesBuffer = make([]byte, int(dataLength))
+
+	_, err = io.ReadFull(r, bytesBuffer)
+	if err != nil {
+		return
+	}
+
+	checkSum1 := crc32.ChecksumIEEE(bytesBuffer)
+
+	if crc != checkSum1 {
+		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum1)
+		panic("Error during CRC")
+	} /// ???
+
+	bufferReader := bytes.NewReader(bytesBuffer)
+	dataReader := bufio.NewReader(bufferReader)
 
 	for numRecords != 0 {
-		entryType, err := peekByte(r)
+		entryType, err := peekByte(dataReader)
+
 		if err != nil {
 			if err == io.EOF {
 				logs.LogDebug("EOF reading entryType %s ", err)
@@ -334,8 +349,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			}
 		}
 		if (entryType & 0x80) == 0 {
-			position, batchConsumingMessages = c.decodeMessage(r,
-				position,
+			batchConsumingMessages = c.decodeMessage(dataReader,
 				filter,
 				offset,
 				offsetLimit,
@@ -343,33 +357,19 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			numRecords--
 			offset++
 		} else {
-			entryType, err := readByteError(r)
-			if err != nil {
-				if err == io.EOF {
-					logs.LogDebug("EOF reading entryType %s ", err)
-					return
-				} else {
-					logs.LogWarn("error reading entryType %s ", err)
-				}
-			}
-
-			c.plainCRCBuffer[position] = entryType
-			position = position + 1
+			entryType, _ := readByteError(dataReader)
 			// sub-batch case.
-			_ = (entryType & 0x70) >> 4 //compression
-			numRecordsInBatch := readUShort(r)
-			binary.BigEndian.PutUint16(c.plainCRCBuffer[position:], numRecordsInBatch)
-			position = position + 2
-			un, _ := readUInt(r) //uncompressedDataSize
-			binary.BigEndian.PutUint32(c.plainCRCBuffer[position:], un)
-			position = position + 4
-			ds, _ := readUInt(r) //datasize
-			binary.BigEndian.PutUint32(c.plainCRCBuffer[position:], ds)
-			position = position + 4
+			numRecordsInBatch := readUShort(dataReader)
+			uncompressedDataSize, _ := readUInt(dataReader) //uncompressedDataSize
+			dataSize, _ := readUInt(dataReader)
 			numRecords -= uint32(numRecordsInBatch)
+			compression := (entryType & 0x70) >> 4 //compression
+			uncompressedReader := compressByValue(compression).UnCompress(dataReader,
+				dataSize,
+				uncompressedDataSize)
+
 			for numRecordsInBatch != 0 {
-				position, batchConsumingMessages = c.decodeMessage(r,
-					position,
+				batchConsumingMessages = c.decodeMessage(uncompressedReader,
 					filter,
 					offset,
 					offsetLimit,
@@ -377,16 +377,9 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				numRecordsInBatch--
 				offset++
 			}
+
 		}
-
 	}
-
-	checkSum := crc32.ChecksumIEEE(c.plainCRCBuffer[0:dataLength])
-
-	if crc != checkSum {
-		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
-		panic("Error during CRC")
-	} /// ???
 
 	if consumer.getStatus() == open {
 		consumer.response.data <- offset
@@ -395,13 +388,9 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 }
 
-func (c *Client) decodeMessage(r *bufio.Reader, position int, filter bool, offset int64, offsetLimit int64, batchConsumingMessages []*amqp.Message) (int, []*amqp.Message) {
+func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offsetLimit int64, batchConsumingMessages []*amqp.Message) []*amqp.Message {
 	sizeMessage, _ := readUInt(r)
-	binary.BigEndian.PutUint32(c.plainCRCBuffer[position:], sizeMessage)
-	position = position + 4
 	arrayMessage := readUint8Array(r, sizeMessage)
-	copy(c.plainCRCBuffer[position:], arrayMessage)
-	position = position + int(sizeMessage)
 	if filter && (offset < offsetLimit) {
 		/// TODO set recordset as filtered
 	} else {
@@ -412,7 +401,7 @@ func (c *Client) decodeMessage(r *bufio.Reader, position int, filter bool, offse
 		}
 		batchConsumingMessages = append(batchConsumingMessages, msg)
 	}
-	return position, batchConsumingMessages
+	return batchConsumingMessages
 }
 
 func (c *Client) creditNotificationFrameHandler(readProtocol *ReaderProtocol,

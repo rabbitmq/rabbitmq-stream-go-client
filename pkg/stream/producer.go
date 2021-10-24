@@ -94,7 +94,7 @@ func NewProducerOptions() *ProducerOptions {
 		BatchSize:            defaultBatchSize,
 		BatchPublishingDelay: defaultBatchPublishingDelay,
 		SubEntrySize:         1,
-		Compression:          Compression{}.None(),
+		Compression:          Compression{},
 	}
 }
 
@@ -113,6 +113,10 @@ func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamM
 		SequenceID: sequence,
 		Confirmed:  false,
 	}
+}
+
+func (po *ProducerOptions) isSubEntriesBatching() bool {
+	return po.SubEntrySize > 1
 }
 
 func (producer *Producer) removeUnConfirmed(sequence int64) {
@@ -252,7 +256,8 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 
 func (producer *Producer) getPublishingID(message message.StreamMessage) int64 {
 	sequence := message.GetPublishingId()
-	if message.GetPublishingId() < 0 {
+	// in case of sub entry the deduplication is disabled
+	if message.GetPublishingId() < 0 || producer.options.isSubEntriesBatching() {
 		sequence = atomic.AddInt64(&producer.sequence, 1)
 	}
 	return sequence
@@ -307,7 +312,7 @@ func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bytes.B
 	}
 }
 
-func (producer *Producer) getSubEntries(msgs []messageSequence, size int, compression Compression) (subEntries, error) {
+func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, compression Compression) (subEntries, error) {
 	subEntries := subEntries{}
 
 	var entry *subEntry
@@ -317,15 +322,21 @@ func (producer *Producer) getSubEntries(msgs []messageSequence, size int, compre
 			entry.publishingId = -1
 			subEntries.items = append(subEntries.items, entry)
 		}
-		// in case of subEntry one
 		entry.messages = append(entry.messages, msg)
 		binary := msg.messageBytes
 		entry.unCompressedSize += len(binary) + 4
 
+		// in case of subEntry we need to pick only one publishingId
+		// we peek the first one of the entries
 		if entry.publishingId < 0 {
 			entry.publishingId = msg.publishingId
 		}
 
+		/// since there is only one publishingId
+		// the others publishingId(s) are linked
+		// so the client confirms all the messages
+		//when the client receives the confirmation form the server
+		// see: server_frame:handleConfirm/2
 		if entry.publishingId != msg.publishingId {
 			unConfirmed := producer.getUnConfirmed(entry.publishingId)
 			if unConfirmed != nil {
@@ -335,7 +346,7 @@ func (producer *Producer) getSubEntries(msgs []messageSequence, size int, compre
 			}
 		}
 	}
-	compressByType(compression).Compress(&subEntries)
+	compressByValue(compression.value).Compress(&subEntries)
 
 	return subEntries, nil
 }
@@ -350,9 +361,9 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	var msgLen int
 	var aggregation subEntries
 
-	if producer.options.SubEntrySize > 1 {
+	if producer.options.isSubEntriesBatching() {
 		var err error
-		aggregation, err = producer.getSubEntries(messagesSequence, producer.options.SubEntrySize,
+		aggregation, err = producer.aggregateEntities(messagesSequence, producer.options.SubEntrySize,
 			producer.options.Compression)
 		if err != nil {
 			return err
@@ -360,7 +371,7 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 		msgLen += ((8 + 1 + 2 + 4 + 4) * len(aggregation.items)) + aggregation.totalSizeInBytes
 	}
 
-	if producer.options.SubEntrySize == 1 {
+	if !producer.options.isSubEntriesBatching() {
 		for _, msg := range messagesSequence {
 			msgLen += msg.unCompressedSize + 8 + 4
 		}
@@ -378,12 +389,13 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	}
 
 	writeInt(b, numberOfMessages) //toExcluded - fromInclude
-	if producer.options.SubEntrySize == 1 {
-		producer.simpleAggregation(messagesSequence, b)
+
+	if producer.options.isSubEntriesBatching() {
+		producer.subEntryAggregation(aggregation, b, producer.options.Compression)
 	}
 
-	if producer.options.SubEntrySize > 1 {
-		producer.subEntryAggregation(aggregation, b, producer.options.Compression)
+	if !producer.options.isSubEntriesBatching() {
+		producer.simpleAggregation(messagesSequence, b)
 	}
 
 	bufferToWrite := b.Bytes()

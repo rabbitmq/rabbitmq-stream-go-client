@@ -41,7 +41,6 @@ type Client struct {
 	tuneState            TuneState
 	coordinator          *Coordinator
 	broker               *Broker
-	plainCRCBuffer       []byte
 
 	mutex            *sync.Mutex
 	metadataListener metadataListener
@@ -61,7 +60,6 @@ func newClient(connectionName string, broker *Broker) *Client {
 		mutex:                &sync.Mutex{},
 		clientProperties:     ClientProperties{items: make(map[string]string)},
 		connectionProperties: ConnectionProperties{},
-		plainCRCBuffer:       make([]byte, 4096),
 		lastHeartBeat: HeartBeat{
 			value: time.Now(),
 		},
@@ -469,8 +467,20 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	}
 
 	if options.SubEntrySize < minSubEntrySize {
-		return nil, fmt.Errorf("SubEntrySize value must be bigger than %d",
+		return nil, fmt.Errorf("SubEntrySize value must equal or bigger than %d",
 			minSubEntrySize)
+	}
+
+	if !options.isSubEntriesBatching() {
+		if options.Compression.enabled {
+			return nil, fmt.Errorf("sub-entry batching must be enabled to enable compression")
+		}
+	}
+
+	if !options.isSubEntriesBatching() {
+		if options.Compression.value != None && options.Compression.value != GZIP {
+			return nil, fmt.Errorf("compression values valid are: %d (None) %d (Gzip)", None, GZIP)
+		}
 	}
 
 	producer, err := c.coordinator.NewProducer(&ProducerOptions{

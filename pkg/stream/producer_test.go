@@ -329,6 +329,10 @@ var _ = Describe("Streaming Producers", func() {
 			SetSubEntrySize(0))
 		Expect(err).To(HaveOccurred())
 
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetSubEntrySize(1).SetCompression(Compression{}.Gzip()))
+		Expect(err).To(HaveOccurred())
+
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -429,43 +433,43 @@ var _ = Describe("Streaming Producers", func() {
 
 	})
 
-	//// SubSize
+	////  sub-entry batching
 
-	It("SubSize test Aggregation", func() {
+	It(" sub-entry batching test Aggregation", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchPublishingDelay(100).
 				SetSubEntrySize(77))
 		Expect(err).NotTo(HaveOccurred())
 		messagesSequence := make([]messageSequence, 201)
-		entries, err := producer.getSubEntries(messagesSequence,
+		entries, err := producer.aggregateEntities(messagesSequence,
 			producer.options.SubEntrySize,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(entries.items)).To(Equal(3))
 
 		messagesSequence = make([]messageSequence, 100)
-		entries, err = producer.getSubEntries(messagesSequence,
+		entries, err = producer.aggregateEntities(messagesSequence,
 			producer.options.SubEntrySize,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(entries.items)).To(Equal(2))
 
 		messagesSequence = make([]messageSequence, 1)
-		entries, err = producer.getSubEntries(messagesSequence,
+		entries, err = producer.aggregateEntities(messagesSequence,
 			producer.options.SubEntrySize,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(entries.items)).To(Equal(1))
 
 		messagesSequence = make([]messageSequence, 1000)
-		entries, err = producer.getSubEntries(messagesSequence,
+		entries, err = producer.aggregateEntities(messagesSequence,
 			producer.options.SubEntrySize,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(entries.items)).To(Equal(13))
 
 		messagesSequence = make([]messageSequence, 14)
-		entries, err = producer.getSubEntries(messagesSequence, 13,
+		entries, err = producer.aggregateEntities(messagesSequence, 13,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(entries.items)).To(Equal(2))
@@ -507,6 +511,46 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesConfirmed)
 		}, 5*time.Second).Should(Equal(int32(501*5)),
+			"confirm should receive same messages send by producer")
+
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(producer.Close()).NotTo(HaveOccurred())
+	})
+
+	It("Sub Size Publish GZIP Confirm/Send", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream,
+			NewProducerOptions().SetBatchPublishingDelay(100).
+				SetSubEntrySize(33).SetCompression(Compression{}.Gzip()))
+		Expect(err).NotTo(HaveOccurred())
+		var messagesConfirmed int32
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for ids := range ch {
+				atomic.AddInt32(&messagesConfirmed, int32(len(ids)))
+			}
+		}(chConfirm)
+
+		for z := 0; z < 457; z++ {
+			msg := amqp.NewMessage(make([]byte, 50))
+			Expect(producer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(457)),
+			"confirm should receive same messages send by producer")
+
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		atomic.StoreInt32(&messagesConfirmed, 0)
+
+		for z := 0; z < 457; z++ {
+			Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).
+				NotTo(HaveOccurred())
+		}
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(457*5)),
 			"confirm should receive same messages send by producer")
 
 		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
