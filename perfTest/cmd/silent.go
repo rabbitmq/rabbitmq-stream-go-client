@@ -240,8 +240,21 @@ func handlePublishConfirms(messageConfirm []*stream.UnConfirmedMessage) {
 
 func startPublisher(streamName string) error {
 
-	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName,
-		nil,
+	producerOptions := stream.NewProducerOptions()
+
+	if subEntrySize > 1 {
+		cp := stream.Compression{}.None()
+		if compression == "gzip" {
+			cp = stream.Compression{}.Gzip()
+		}
+		producerOptions.SetSubEntrySize(subEntrySize).SetCompression(cp)
+
+		logInfo("Enable SubEntrySize: %d, compression: %s", subEntrySize, cp)
+	}
+
+	rPublisher, err := ha.NewHAProducer(simulEnvironment,
+		streamName,
+		producerOptions,
 		handlePublishConfirms)
 	if err != nil {
 		logError("Error create publisher: %s", err)
@@ -289,12 +302,10 @@ func startPublisher(streamName string) error {
 			}
 			atomic.AddInt32(&publisherMessageCount, int32(len(arr)))
 
-			for _, streamMessage := range arr {
-				atomic.AddInt64(&messagesSent, 1)
-				err = prod.Send(streamMessage)
-				if err != nil {
-					logError("Error publishing: %s", err)
-				}
+			atomic.AddInt64(&messagesSent, int64(len(arr)))
+			err = prod.BatchSend(arr)
+			if err != nil {
+				logError("Error publishing: %s", err)
 			}
 			checkErr(err)
 		}

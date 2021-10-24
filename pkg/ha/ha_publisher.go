@@ -116,23 +116,65 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 	}
 
 	if errW != nil {
-		time.Sleep(200 * time.Millisecond)
-		exists, errS := p.env.StreamExists(p.streamName)
-		if errS != nil {
-			return errS
-
-		}
-		if exists {
-			logs.LogDebug("[RProducer] - stream %s exists. Reconnecting the producer.", p.streamName)
-			p.producer.FlushUnConfirmedMessages()
-			return p.newProducer()
-		} else {
-			logs.LogError("[RProducer] - stream %s does not exist. Closing..", p.streamName)
-			return stream.StreamDoesNotExist
+		err, done := p.retry()
+		if done {
+			return err
 		}
 	}
 
 	return nil
+}
+
+
+func (p *ReliableProducer) BatchSend(messages []message.StreamMessage) error {
+	if p.getStatus() == StatusStreamDoesNotExist {
+		return stream.StreamDoesNotExist
+	}
+	if p.getStatus() == StatusClosed {
+		return errors.New("Producer is closed")
+	}
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	errW := p.producer.BatchSend(messages)
+
+	if errW != nil {
+		switch errW {
+		case stream.FrameTooLarge:
+			{
+				return stream.FrameTooLarge
+			}
+		default:
+			logs.LogError("[RProducer] - error during send %s", errW.Error())
+		}
+
+	}
+
+	if errW != nil {
+		err, done := p.retry()
+		if done {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (p *ReliableProducer) retry() (error, bool) {
+	time.Sleep(200 * time.Millisecond)
+	exists, errS := p.env.StreamExists(p.streamName)
+	if errS != nil {
+		return errS, true
+
+	}
+	if exists {
+		logs.LogDebug("[RProducer] - stream %s exists. Reconnecting the producer.", p.streamName)
+		p.producer.FlushUnConfirmedMessages()
+		return p.newProducer(), true
+	} else {
+		logs.LogError("[RProducer] - stream %s does not exist. Closing..", p.streamName)
+		return stream.StreamDoesNotExist, true
+	}
 }
 
 func (p *ReliableProducer) IsOpen() bool {

@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"math/rand"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -191,9 +192,6 @@ var _ = Describe("Streaming Consumers", func() {
 			Expect(producer.BatchSend(arr)).NotTo(HaveOccurred())
 		}
 
-		// we can't close. The subscriber until the publishing is finished
-		time.Sleep(500 * time.Millisecond)
-		Expect(producer.Close()).NotTo(HaveOccurred())
 		var messagesReceived int32 = 0
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
@@ -204,8 +202,8 @@ var _ = Describe("Streaming Consumers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(10)),
-			"consumer should receive same messages send by producer")
-
+			"consumer should receive only 10 messages")
+		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 
@@ -350,7 +348,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("Sub Batch consumer with different publishers", func() {
+	It("Sub Batch consumer with different publishers GZIP and Not", func() {
 		producer1, err := env.NewProducer(streamName,
 			NewProducerOptions().SetBatchPublishingDelay(100).
 				SetSubEntrySize(35))
@@ -365,15 +363,43 @@ var _ = Describe("Streaming Consumers", func() {
 
 		producer4, err := env.NewProducer(streamName,
 			NewProducerOptions().SetBatchPublishingDelay(50).
-				SetSubEntrySize(37))
+				SetSubEntrySize(2).
+				SetCompression(Compression{}.Gzip()))
 		Expect(err).NotTo(HaveOccurred())
 
-		for i := 0; i < 5000; i++ {
+		producer5, err := env.NewProducer(streamName,
+			NewProducerOptions().SetBatchPublishingDelay(500).
+				SetSubEntrySize(56).SetCompression(Compression{}.Gzip()))
+		Expect(err).NotTo(HaveOccurred())
+
+		producer6Batch, err := env.NewProducer(streamName,
+			NewProducerOptions().SetBatchPublishingDelay(500).
+				SetSubEntrySize(56).SetCompression(Compression{}.Gzip()))
+		Expect(err).NotTo(HaveOccurred())
+
+		var batchMessages []message.StreamMessage
+		for i := 0; i < 20; i++ {
+			v := ""
+			min := 2
+			max := 100
+			for i := 0; i < rand.Intn(max-min)+min; i++ {
+				v += "T"
+			}
+			msg := amqp.NewMessage([]byte(v))
+			batchMessages = append(batchMessages, msg)
+		}
+
+		for i := 0; i < 2000; i++ {
 			msg := amqp.NewMessage(make([]byte, 50))
 			Expect(producer1.Send(msg)).NotTo(HaveOccurred())
 			Expect(producer2.Send(msg)).NotTo(HaveOccurred())
 			Expect(producer3.Send(msg)).NotTo(HaveOccurred())
 			Expect(producer4.Send(msg)).NotTo(HaveOccurred())
+			Expect(producer5.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		for i := 0; i < 50; i++ {
+			Expect(producer6Batch.BatchSend(batchMessages)).NotTo(HaveOccurred())
 		}
 
 		var messagesReceived int32
@@ -387,15 +413,52 @@ var _ = Describe("Streaming Consumers", func() {
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 5*time.Second).Should(Equal(int32(5000*4)),
+		}, 9*time.Second).Should(Equal(int32((2000*5)+(50*len(batchMessages)))),
 			"consumer should be the same sent from different publishers settings")
 
 		Expect(producer1.Close()).NotTo(HaveOccurred())
 		Expect(producer2.Close()).NotTo(HaveOccurred())
 		Expect(producer3.Close()).NotTo(HaveOccurred())
 		Expect(producer4.Close()).NotTo(HaveOccurred())
+		Expect(producer5.Close()).NotTo(HaveOccurred())
+		Expect(producer6Batch.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
+	})
 
+	It("Deduplication in Sub Batch", func() {
+		producer, err := env.NewProducer(streamName,
+			NewProducerOptions().
+				SetProducerName("producer-ded-sub").
+				SetSubEntrySize(3).
+				SetCompression(Compression{}.Gzip()))
+		Expect(err).NotTo(HaveOccurred())
+		var arr []message.StreamMessage
+		for z := 0; z < 10; z++ {
+			m := amqp.NewMessage([]byte("test_" + strconv.Itoa(z)))
+			m.SetPublishingId(int64(z * 10))
+			arr = append(arr, m)
+		}
+
+		// deduplication is disabled on sub-batching
+		// so, even we set the SetPublishingId
+		// it will be ignored
+		for i := 0; i < 10; i++ {
+			Expect(producer.BatchSend(arr)).NotTo(HaveOccurred())
+		}
+
+		var messagesReceived int32 = 0
+		consumer, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				atomic.AddInt32(&messagesReceived, 1)
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()))
+		Expect(err).NotTo(HaveOccurred())
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesReceived)
+		}, 5*time.Second).Should(Equal(int32(10*10)),
+			"consumer should receive same messages send by producer")
+		Expect(producer.Close()).NotTo(HaveOccurred())
+		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 
 })

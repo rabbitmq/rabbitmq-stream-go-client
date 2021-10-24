@@ -254,9 +254,10 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 				unConfirmed = append(unConfirmed, message)
 				producer.removeUnConfirmed(message.SequenceID)
 			}
-		} else {
-			logs.LogWarn("Message %d not found in confirmation", seq)
 		}
+		//} else {
+		//logs.LogWarn("Message %d not found in confirmation", seq)
+		//}
 		publishingIdCount--
 	}
 

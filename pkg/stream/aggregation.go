@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"io"
+	"io/ioutil"
 )
 
 const (
@@ -20,6 +22,11 @@ const (
 type Compression struct {
 	enabled bool
 	value   byte
+}
+
+func (compression Compression) String() string {
+	return fmt.Sprintf("value %d (enable: %t)", compression.value,
+		compression.enabled)
 }
 
 func (compression Compression) None() Compression {
@@ -123,24 +130,23 @@ func (es compressGZIP) Compress(subEntries *subEntries) {
 func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
 
 	var zipperBuffer = make([]byte, dataSize)
-	_, err := source.Read(zipperBuffer)
+	_, err := io.ReadFull(source,zipperBuffer)
 	if err != nil {
 		logs.LogError("GZIP Error during reading buffer %s", err)
 	}
-	reader, _ := gzip.NewReader(bytes.NewBuffer(zipperBuffer))
-
-	// Empty byte slice.
-	result := make([]byte, uncompressedDataSize)
+	reader, err := gzip.NewReader(bytes.NewBuffer(zipperBuffer))
+	if err != nil {
+		logs.LogError("Error creating GZIP NewReader  %s", err)
+	}
 
 	// Read in data.
-	count, err := io.ReadFull(reader, result)
+	uncompressedReader, err := ioutil.ReadAll(reader)
 	if err != nil {
 		logs.LogError("Error during reading buffer %s", err)
 	}
-	if uint32(count) != uncompressedDataSize {
+	if uint32(len(uncompressedReader)) != uncompressedDataSize {
 		panic("uncompressedDataSize != count")
 	}
 	reader.Close()
-	uncompressedReader := bytes.NewReader(result)
-	return bufio.NewReader(uncompressedReader)
+	return bufio.NewReader(bytes.NewReader(uncompressedReader))
 }
