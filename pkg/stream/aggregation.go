@@ -130,14 +130,21 @@ func (es compressGZIP) Compress(subEntries *subEntries) {
 func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
 
 	var zipperBuffer = make([]byte, dataSize)
+	/// empty
 	_, err := io.ReadFull(source, zipperBuffer)
+	/// array of compress data
+
 	if err != nil {
 		logs.LogError("GZIP Error during reading buffer %s", err)
 	}
+
 	reader, err := gzip.NewReader(bytes.NewBuffer(zipperBuffer))
+
 	if err != nil {
 		logs.LogError("Error creating GZIP NewReader  %s", err)
 	}
+	defer reader.Close()
+	/// headers ---> payload --> headers --> payload (compressed)
 
 	// Read in data.
 	uncompressedReader, err := ioutil.ReadAll(reader)
@@ -147,6 +154,8 @@ func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDa
 	if uint32(len(uncompressedReader)) != uncompressedDataSize {
 		panic("uncompressedDataSize != count")
 	}
-	reader.Close()
+
+	/// headers ---> payload --> headers --> payload (compressed) --> uncompressed payload
+
 	return bufio.NewReader(bytes.NewReader(uncompressedReader))
 }

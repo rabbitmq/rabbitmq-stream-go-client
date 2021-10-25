@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
@@ -276,6 +277,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 			unCompressedSize: len(messageBytes),
 			publishingId:     sequence,
 		}
+
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 	}
 
@@ -289,25 +291,25 @@ func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) 
 	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
 }
 
-func (producer *Producer) simpleAggregation(messagesSequence []messageSequence, b *bytes.Buffer) {
+func (producer *Producer) simpleAggregation(messagesSequence []messageSequence, b *bufio.Writer) {
 	for _, msg := range messagesSequence {
 		r := msg.messageBytes
-		writeLong(b, msg.publishingId) // publishingId
-		writeInt(b, len(r))            // len
+		writeBLong(b, msg.publishingId) // publishingId
+		writeBInt(b, len(r))            // len
 		b.Write(r)
 	}
 }
 
-//unit test for reuse message
-//unit test for sub bacthing
-func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bytes.Buffer, compression Compression) {
+func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bufio.Writer, compression Compression) {
+	/// 51 messages
+	// aggregation.items == (5 --> [10] messages) + (1 --> [1]message)
 	for _, entry := range aggregation.items {
-		writeLong(b, entry.publishingId)
-		writeByte(b, 0x80|
+		writeBLong(b, entry.publishingId)
+		writeBByte(b, 0x80|
 			compression.value<<4) // 1=SubBatchEntryType:1,CompressionType:3,Reserved:4,
-		writeShort(b, int16(len(entry.messages)))
-		writeInt(b, entry.unCompressedSize)
-		writeInt(b, entry.sizeInBytes)
+		writeBShort(b, int16(len(entry.messages)))
+		writeBInt(b, entry.unCompressedSize)
+		writeBInt(b, entry.sizeInBytes)
 		b.Write(entry.dataInBytes)
 	}
 }
@@ -328,6 +330,7 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 
 		// in case of subEntry we need to pick only one publishingId
 		// we peek the first one of the entries
+		// suppose you have 10 messages with publishingId [5..15]
 		if entry.publishingId < 0 {
 			entry.publishingId = msg.publishingId
 		}
@@ -337,6 +340,9 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 		// so the client confirms all the messages
 		//when the client receives the confirmation form the server
 		// see: server_frame:handleConfirm/2
+		// suppose you have 10 messages with publishingId [5..15]
+		// the message 5 is linked to 6,7,8,9..15
+
 		if entry.publishingId != msg.publishingId {
 			unConfirmed := producer.getUnConfirmed(entry.publishingId)
 			if unConfirmed != nil {
@@ -346,6 +352,7 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 			}
 		}
 	}
+
 	compressByValue(compression.value).Compress(&subEntries)
 
 	return subEntries, nil
@@ -354,6 +361,8 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 /// the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error, see
 func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequence, producerID uint8) error {
+	producer.options.client.socket.mutex.Lock()
+	defer producer.options.client.socket.mutex.Unlock()
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
@@ -379,31 +388,29 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 
 	frameHeaderLength := initBufferPublishSize
 	length := frameHeaderLength + msgLen
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandPublish)
-	writeByte(b, producerID)
+	//var b = bytes.NewBuffer(make([]byte, 0, length+4))
+
+	writeBProtocolHeader(producer.options.client.socket.writer, length, commandPublish)
+	writeBByte(producer.options.client.socket.writer, producerID)
 	numberOfMessages := len(messagesSequence)
 	numberOfMessages = numberOfMessages / producer.options.SubEntrySize
 	if len(messagesSequence)%producer.options.SubEntrySize != 0 {
 		numberOfMessages += 1
 	}
 
-	writeInt(b, numberOfMessages) //toExcluded - fromInclude
+	writeBInt(producer.options.client.socket.writer, numberOfMessages) //toExcluded - fromInclude
 
 	if producer.options.isSubEntriesBatching() {
-		producer.subEntryAggregation(aggregation, b, producer.options.Compression)
+		producer.subEntryAggregation(aggregation, producer.options.client.socket.writer, producer.options.Compression)
 	}
 
 	if !producer.options.isSubEntriesBatching() {
-		producer.simpleAggregation(messagesSequence, b)
+		producer.simpleAggregation(messagesSequence, producer.options.client.socket.writer)
 	}
 
-	bufferToWrite := b.Bytes()
-	if len(bufferToWrite) > producer.options.client.getTuneState().requestedMaxFrameSize {
-		return lookErrorCode(responseCodeFrameTooLarge)
-	}
 
-	err := producer.options.client.socket.writeAndFlush(b.Bytes())
+
+	err := producer.options.client.socket.writer.Flush() //writeAndFlush(b.Bytes())
 	if err != nil {
 		// This sleep is need to wait the
 		// 800 milliseconds to flush all the pending messages

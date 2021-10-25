@@ -124,8 +124,6 @@ func (c *Client) connect() error {
 			Control: controlFunc,
 		}
 
-		var connection net.Conn
-		var errorConnection error
 		if c.broker.isTLS() {
 			conf := &tls.Config{}
 
@@ -138,21 +136,27 @@ func (c *Client) connect() error {
 				Config:    conf,
 			}
 
-			connection, errorConnection = tlsDial.Dial("tcp", net.JoinHostPort(host, port))
+			connection, errorConnection := tlsDial.Dial("tcp", net.JoinHostPort(host, port))
 			if errorConnection != nil {
 				logs.LogDebug("TLS error connection %s", errorConnection)
 				return errorConnection
 			}
+			c.setSocketConnection(connection)
 
 		} else {
-			connection, errorConnection = dialer.Dial("tcp", net.JoinHostPort(host, port))
+			servAddr := net.JoinHostPort(host, port)
+			tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
+			connection, errorConnection := net.DialTCP("tcp", nil, tcpAddr)
+			connection.SetWriteBuffer(100000)
+			connection.SetNoDelay(false)
 			if errorConnection != nil {
 				logs.LogDebug("%s", errorConnection)
 				return errorConnection
 			}
+			c.setSocketConnection(connection)
+
 		}
 
-		c.setSocketConnection(connection)
 		c.socket.setOpen()
 
 		go c.handleResponse()

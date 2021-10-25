@@ -320,18 +320,18 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	//messages
 	var batchConsumingMessages []*amqp.Message
-
 	var bytesBuffer = make([]byte, int(dataLength))
-
 	_, err = io.ReadFull(r, bytesBuffer)
 	if err != nil {
 		return
 	}
 
-	checkSum1 := crc32.ChecksumIEEE(bytesBuffer)
+	/// headers ---> payload -> messages
 
-	if crc != checkSum1 {
-		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum1)
+	checkSum := crc32.ChecksumIEEE(bytesBuffer)
+
+	if crc != checkSum {
+		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
 		panic("Error during CRC")
 	} /// ???
 
