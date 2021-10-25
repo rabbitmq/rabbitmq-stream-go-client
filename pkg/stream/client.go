@@ -147,12 +147,18 @@ func (c *Client) connect() error {
 			servAddr := net.JoinHostPort(host, port)
 			tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
 			connection, errorConnection := net.DialTCP("tcp", nil, tcpAddr)
-			connection.SetWriteBuffer(100000)
-			connection.SetNoDelay(false)
+
+
+
 			if errorConnection != nil {
 				logs.LogDebug("%s", errorConnection)
 				return errorConnection
 			}
+
+			connection.SetWriteBuffer(8192)
+			connection.SetReadBuffer(65536)
+			connection.SetNoDelay(false)
+
 			c.setSocketConnection(connection)
 
 		}
