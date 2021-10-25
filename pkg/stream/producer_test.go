@@ -368,14 +368,19 @@ var _ = Describe("Streaming Producers", func() {
 		for _, producerC := range producer.options.client.coordinator.producers {
 			producerC.(*Producer).id = uint8(200)
 		}
+		producer.options.client.coordinator.mutex.Lock()
 		producer.options.client.coordinator.producers[uint8(200)] = producer
+		producer.options.client.coordinator.mutex.Unlock()
 		// 200 producer ID doesn't exist
 		Expect(producer.internalBatchSendProdId(messagesSequence, 200)).
 			NotTo(HaveOccurred())
 
 		Expect(env.DeleteStream(prodErrorStream)).NotTo(HaveOccurred())
+
+		producer.options.client.coordinator.mutex.Lock()
 		delete(producer.options.client.coordinator.producers, uint8(200))
 		delete(producer.options.client.coordinator.producers, uint8(0))
+		producer.options.client.coordinator.mutex.Unlock()
 		Expect(env.Close()).NotTo(HaveOccurred())
 
 		Eventually(func() int32 {
