@@ -314,7 +314,7 @@ var _ = Describe("Streaming Consumers", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 		for z := 0; z < 2034; z++ {
-			err := producer.Send(amqp.NewMessage([]byte("t_" + strconv.Itoa(z))))
+			err := producer.Send(amqp.NewMessage([]byte("test_" + strconv.Itoa(z))))
 			Expect(err).NotTo(HaveOccurred())
 		}
 		time.Sleep(200 * time.Millisecond)

@@ -125,7 +125,6 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 	return nil
 }
 
-
 func (p *ReliableProducer) BatchSend(messages []message.StreamMessage) error {
 	if p.getStatus() == StatusStreamDoesNotExist {
 		return stream.StreamDoesNotExist

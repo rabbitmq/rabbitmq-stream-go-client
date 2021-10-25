@@ -130,7 +130,7 @@ func (es compressGZIP) Compress(subEntries *subEntries) {
 func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
 
 	var zipperBuffer = make([]byte, dataSize)
-	_, err := io.ReadFull(source,zipperBuffer)
+	_, err := io.ReadFull(source, zipperBuffer)
 	if err != nil {
 		logs.LogError("GZIP Error during reading buffer %s", err)
 	}
