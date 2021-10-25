@@ -266,12 +266,14 @@ func (producer *Producer) getPublishingID(message message.StreamMessage) int64 {
 
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
 	var messagesSequence = make([]messageSequence, len(batchMessages))
+	totalBufferToSend := 0
 	for i, batchMessage := range batchMessages {
 		messageBytes, err := batchMessage.MarshalBinary()
 		if err != nil {
 			return err
 		}
 		sequence := producer.getPublishingID(batchMessage)
+		totalBufferToSend += len(messageBytes)
 		messagesSequence[i] = messageSequence{
 			messageBytes:     messageBytes,
 			unCompressedSize: len(messageBytes),
@@ -279,6 +281,26 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		}
 
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
+	}
+
+	if totalBufferToSend+initBufferPublishSize > producer.options.client.tuneState.requestedMaxFrameSize {
+		for _, msg := range messagesSequence {
+
+			unConfirmedMessage := producer.getUnConfirmed(msg.publishingId)
+
+			//producer.mutex.Lock()
+			if producer.publishError != nil {
+				producer.publishError <- PublishError{
+					Code:               responseCodeFrameTooLarge,
+					Err:                lookErrorCode(responseCodeFrameTooLarge),
+					UnConfirmedMessage: unConfirmedMessage,
+				}
+			}
+			//producer.mutex.Unlock()
+			producer.removeUnConfirmed(msg.publishingId)
+		}
+
+		return FrameTooLarge
 	}
 
 	return producer.internalBatchSend(messagesSequence)
@@ -407,8 +429,6 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	if !producer.options.isSubEntriesBatching() {
 		producer.simpleAggregation(messagesSequence, producer.options.client.socket.writer)
 	}
-
-
 
 	err := producer.options.client.socket.writer.Flush() //writeAndFlush(b.Bytes())
 	if err != nil {

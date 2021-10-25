@@ -147,9 +147,6 @@ func (c *Client) connect() error {
 			servAddr := net.JoinHostPort(host, port)
 			tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
 			connection, errorConnection := net.DialTCP("tcp", nil, tcpAddr)
-
-
-
 			if errorConnection != nil {
 				logs.LogDebug("%s", errorConnection)
 				return errorConnection

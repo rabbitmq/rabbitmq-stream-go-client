@@ -78,7 +78,8 @@ const (
 	LocalhostUriConnection = "rabbitmq-stream://guest:guest@localhost:5552/%2f"
 
 	///
-	defaultSocketBuffer       = 4096
+	defaultWriteSocketBuffer  = 8092
+	defaultReadSocketBuffer   = 65536
 	defaultQueuePublisherSize = 10000
 	minQueuePublisherSize     = 100
 	maxQueuePublisherSize     = 1_000_000

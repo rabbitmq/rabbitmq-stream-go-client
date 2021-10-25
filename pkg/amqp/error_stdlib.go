@@ -1,3 +1,4 @@
+//go:build !pkgerrors
 // +build !pkgerrors
 
 package amqp
