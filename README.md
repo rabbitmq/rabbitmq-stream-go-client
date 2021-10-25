@@ -279,10 +279,10 @@ Run it more than time, the messages count will be always 10.
 
 The number of messages to put in a sub-entry. A sub-entry is one "slot" in a publishing frame, 
 meaning outbound messages are not only batched in publishing frames, but in sub-entries as well. 
-Use this feature to increase throughput at the cost of increased latency.
+Use this feature to increase throughput at the cost of increased latency. </br>
 You can find a "Sub Entries Batching" example in the [examples](./examples/) directory. </br>
 
-Default compression is `None`, you can define also `gzip` compression.
+Default compression is `None`, you can define also `gzip` compression. </br>
 Compression is valid only is `SubEntrySize > 1`
 
 ```golang
