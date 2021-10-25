@@ -11,3 +11,4 @@ Stream examples
  - [Using a load balancer](./proxy/proxy.go). An example how to use the client with a TLS load balancer.<br />
    Use the [RabbitMQ TLS cluster](../compose) to run a TLS and no TLS cluster. <br />
    For more details: https://blog.rabbitmq.com/posts/2021/07/connecting-to-streams/
+ - [Sub Entries Batching](./sub-entries-batching/sub_entries_batching.go). Sub Entries Batching example

@@ -27,6 +27,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
         * [Publish Confirmation](#publish-confirmation)
         * [Publish Errors](#publish-errors)
         * [Deduplication](#deduplication)
+        * [Sub Entries Batching](#sub-entries-batching)
         * [HA producer - Experimental](#ha-producer-experimental)
     * [Consume messages](#consume-messages)
         * [Track Offset](#track-offset)
@@ -273,6 +274,22 @@ The stream plugin can handle deduplication data, see this blog post for more det
 https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/ </br>
 You can find a "Deduplication" example in the [examples](./examples/) directory. </br>
 Run it more than time, the messages count will be always 10.
+
+### Sub Entries Batching
+
+The number of messages to put in a sub-entry. A sub-entry is one "slot" in a publishing frame, 
+meaning outbound messages are not only batched in publishing frames, but in sub-entries as well. 
+Use this feature to increase throughput at the cost of increased latency.
+You can find a "Sub Entries Batching" example in the [examples](./examples/) directory. </br>
+
+Default compression is `None`, you can define also `gzip` compression.
+Compression is valid only is `SubEntrySize > 1`
+
+```golang
+producer, err := env.NewProducer(streamName, stream.NewProducerOptions().
+		SetSubEntrySize(100).
+		SetCompression(stream.Compression{}.Gzip()))
+```
 
 ### Ha Producer Experimental
 The ha producer is built up the standard producer. </br>
