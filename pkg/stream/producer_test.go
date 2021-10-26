@@ -711,20 +711,27 @@ func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *
 
 func sendAsynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
+		fmt.Printf("[%d] Sending %d messages asynchronoulsy", goRoutingIndex, totalMessageCountPerThread)
 		messagePrefix := fmt.Sprintf("test_%d_", goRoutingIndex)
 		for i := 0; i < totalMessageCountPerThread; i++ {
 			Expect(producer.Send(CreateMessageForTesting(messagePrefix, i))).NotTo(HaveOccurred())
 		}
+		fmt.Printf("[%d] Sent %d messages", goRoutingIndex, totalMessageCountPerThread)
+
 	})
 }
 
 func sendSynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int, batchSize int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
 		totalBatchCount := totalMessageCountPerThread / batchSize
+		fmt.Printf("[%d] Sending %d messages in batches of %d (total batch:%d) synchronously", goRoutingIndex,
+			totalMessageCountPerThread, batchSize, totalBatchCount)
 		for batchIndex := 0; batchIndex < totalBatchCount; batchIndex++ {
 			messagePrefix := fmt.Sprintf("test_%d_%d_", goRoutingIndex, batchIndex)
 			Expect(producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))).NotTo(HaveOccurred())
 		}
+		fmt.Printf("[%d] Sent %d messages", goRoutingIndex, totalMessageCountPerThread)
+
 	})
 }
 
