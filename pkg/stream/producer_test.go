@@ -70,10 +70,10 @@ var _ = Describe("Streaming Producers", func() {
 			messagesReceived int32 = 0
 		)
 		const (
-			ThreadCount                = 3
+			ThreadCount                = 1
 			BatchSize                  = 100
 			SubEntrySize               = 100
-			TotalMessageCountPerThread = 1000
+			TotalMessageCountPerThread = 10
 		)
 
 		When("No batching, nor sub-entry. nor compression", func() {
@@ -703,6 +703,7 @@ func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *
 	chConfirm := producer.NotifyPublishConfirmation()
 	go func(ch ChannelPublishConfirm) {
 		ids := <-ch
+		fmt.Printf("Confirmed %d messages\n", len(ids))
 		atomic.AddInt32(messagesReceived, int32(len(ids)))
 	}(chConfirm)
 
@@ -711,12 +712,12 @@ func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *
 
 func sendAsynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
-		fmt.Printf("[%d] Sending %d messages asynchronoulsy", goRoutingIndex, totalMessageCountPerThread)
+		fmt.Printf("[%d] Sending %d messages asynchronoulsy\n", goRoutingIndex, totalMessageCountPerThread)
 		messagePrefix := fmt.Sprintf("test_%d_", goRoutingIndex)
 		for i := 0; i < totalMessageCountPerThread; i++ {
 			Expect(producer.Send(CreateMessageForTesting(messagePrefix, i))).NotTo(HaveOccurred())
 		}
-		fmt.Printf("[%d] Sent %d messages", goRoutingIndex, totalMessageCountPerThread)
+		fmt.Printf("[%d] Sent %d messages\n", goRoutingIndex, totalMessageCountPerThread)
 
 	})
 }
@@ -724,28 +725,25 @@ func sendAsynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup,
 func sendSynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int, batchSize int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
 		totalBatchCount := totalMessageCountPerThread / batchSize
-		fmt.Printf("[%d] Sending %d messages in batches of %d (total batch:%d) synchronously", goRoutingIndex,
+		fmt.Printf("[%d] Sending %d messages in batches of %d (total batch:%d) synchronously\n", goRoutingIndex,
 			totalMessageCountPerThread, batchSize, totalBatchCount)
 		for batchIndex := 0; batchIndex < totalBatchCount; batchIndex++ {
 			messagePrefix := fmt.Sprintf("test_%d_%d_", goRoutingIndex, batchIndex)
 			Expect(producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))).NotTo(HaveOccurred())
 		}
-		fmt.Printf("[%d] Sent %d messages", goRoutingIndex, totalMessageCountPerThread)
+		fmt.Printf("[%d] Sent %d messages\n", goRoutingIndex, totalMessageCountPerThread)
 
 	})
 }
 
-func verifyProducerSent(producer *Producer, messageReceived *int32, messageSent int) {
-	verifyMessageWereConfirmed(messageReceived, messageSent)
-	Expect(len(producer.unConfirmedMessages)).To(Equal(0))
-}
-
-func verifyMessageWereConfirmed(actualMessageCount *int32, expectedMessageCount int) {
-
+func verifyProducerSent(producer *Producer, confirmationReceived *int32, messageSent int) {
+	fmt.Printf("Waiting for %d confirmations ...\n", messageSent)
 	Eventually(func() int32 {
-		return atomic.LoadInt32(actualMessageCount)
-	}, 5*time.Second).Should(Equal(int32(expectedMessageCount)),
+		return atomic.LoadInt32(confirmationReceived)
+	}, 5*time.Second, 1*time.Second).Should(Equal(int32(messageSent)),
 		"confirm should receive same messages send by producer")
+
+	Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 }
 
 func runConcurrentlyAndWaitTillAllDone(threadCount int, wg *sync.WaitGroup, runner func(int)) {
@@ -756,4 +754,5 @@ func runConcurrentlyAndWaitTillAllDone(threadCount int, wg *sync.WaitGroup, runn
 		}(index)
 	}
 	wg.Wait()
+	fmt.Printf("Finished running concurrently with %d threads\n", threadCount)
 }
