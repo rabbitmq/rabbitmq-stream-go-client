@@ -63,7 +63,7 @@ var _ = Describe("Streaming Producers", func() {
 		wg.Wait()
 	})
 
-	FContext("Sending messages via a single stream producer concurrently (from many threads)", func() {
+	Context("Sending messages via a single stream producer concurrently (from many threads)", func() {
 		var (
 			producer         *Producer
 			wg               sync.WaitGroup
