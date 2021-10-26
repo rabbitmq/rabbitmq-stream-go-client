@@ -41,7 +41,6 @@ type Client struct {
 	tuneState            TuneState
 	coordinator          *Coordinator
 	broker               *Broker
-	plainCRCBuffer       []byte
 
 	mutex            *sync.Mutex
 	metadataListener metadataListener
@@ -61,7 +60,6 @@ func newClient(connectionName string, broker *Broker) *Client {
 		mutex:                &sync.Mutex{},
 		clientProperties:     ClientProperties{items: make(map[string]string)},
 		connectionProperties: ConnectionProperties{},
-		plainCRCBuffer:       make([]byte, 4096),
 		lastHeartBeat: HeartBeat{
 			value: time.Now(),
 		},
@@ -126,8 +124,6 @@ func (c *Client) connect() error {
 			Control: controlFunc,
 		}
 
-		var connection net.Conn
-		var errorConnection error
 		if c.broker.isTLS() {
 			conf := &tls.Config{}
 
@@ -140,21 +136,30 @@ func (c *Client) connect() error {
 				Config:    conf,
 			}
 
-			connection, errorConnection = tlsDial.Dial("tcp", net.JoinHostPort(host, port))
+			connection, errorConnection := tlsDial.Dial("tcp", net.JoinHostPort(host, port))
 			if errorConnection != nil {
 				logs.LogDebug("TLS error connection %s", errorConnection)
 				return errorConnection
 			}
+			c.setSocketConnection(connection)
 
 		} else {
-			connection, errorConnection = dialer.Dial("tcp", net.JoinHostPort(host, port))
+			servAddr := net.JoinHostPort(host, port)
+			tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
+			connection, errorConnection := net.DialTCP("tcp", nil, tcpAddr)
 			if errorConnection != nil {
 				logs.LogDebug("%s", errorConnection)
 				return errorConnection
 			}
+
+			connection.SetWriteBuffer(8192)
+			connection.SetReadBuffer(65536)
+			connection.SetNoDelay(false)
+
+			c.setSocketConnection(connection)
+
 		}
 
-		c.setSocketConnection(connection)
 		c.socket.setOpen()
 
 		go c.handleResponse()
@@ -468,6 +473,23 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 			minBatchPublishingDelay, maxBatchPublishingDelay)
 	}
 
+	if options.SubEntrySize < minSubEntrySize {
+		return nil, fmt.Errorf("SubEntrySize value must equal or bigger than %d",
+			minSubEntrySize)
+	}
+
+	if !options.isSubEntriesBatching() {
+		if options.Compression.enabled {
+			return nil, fmt.Errorf("sub-entry batching must be enabled to enable compression")
+		}
+	}
+
+	if !options.isSubEntriesBatching() {
+		if options.Compression.value != None && options.Compression.value != GZIP {
+			return nil, fmt.Errorf("compression values valid are: %d (None) %d (Gzip)", None, GZIP)
+		}
+	}
+
 	producer, err := c.coordinator.NewProducer(&ProducerOptions{
 		client:               c,
 		streamName:           streamName,
@@ -475,6 +497,8 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		QueueSize:            options.QueueSize,
 		BatchSize:            options.BatchSize,
 		BatchPublishingDelay: options.BatchPublishingDelay,
+		SubEntrySize:         options.SubEntrySize,
+		Compression:          options.Compression,
 	})
 
 	if err != nil {

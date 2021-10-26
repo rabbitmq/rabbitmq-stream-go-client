@@ -29,16 +29,10 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 var _ = SynchronizedAfterSuite(func() {
 	time.Sleep(400 * time.Millisecond)
-	err := testEnvironment.Close()
-	Expect(err).NotTo(HaveOccurred())
+	Expect(testEnvironment.Close()).NotTo(HaveOccurred())
 	time.Sleep(100 * time.Millisecond)
-
-	//Expect(testEnvironment.Coordinators()[0].ProducersCount()).To(Equal(0))
-	//Expect(testEnvironment.clientLocator.coordinator.ResponsesCount()).To(Equal(0))
-	//Expect(testEnvironment.clientLocator.coordinator.ConsumersCount()).To(Equal(0))
 }, func() {
-	err := deleteVhost(testVhost)
-	Expect(err).NotTo(HaveOccurred())
+	Expect(deleteVhost(testVhost)).NotTo(HaveOccurred())
 })
 
 var _ = Describe("Streaming testEnvironment", func() {
@@ -50,23 +44,25 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Create Stream", func() {
-		err := testEnvironment.DeclareStream(testStreamName, nil)
-		Expect(err).NotTo(HaveOccurred())
-		err = testEnvironment.DeleteStream(testStreamName)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(testEnvironment.DeclareStream(testStreamName, nil)).
+			NotTo(HaveOccurred())
+		Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
 	})
 
-	It("Create Stream with parameter SetMaxLengthBytes", func() {
+	It("Create Stream with parameter SetMaxLengthBytes and SetMaxSegmentSizeBytes", func() {
 		streamP := uuid.New().String()
-
-		err := testEnvironment.DeclareStream(streamP,
+		Expect(testEnvironment.DeclareStream(streamP,
 			&StreamOptions{
 				MaxLengthBytes: ByteCapacity{}.GB(2),
 			},
-		)
-		Expect(err).NotTo(HaveOccurred())
-		err = testEnvironment.DeleteStream(streamP)
-		Expect(err).NotTo(HaveOccurred())
+		)).NotTo(HaveOccurred())
+		Expect(testEnvironment.DeleteStream(streamP)).
+			NotTo(HaveOccurred())
+
+		Expect(testEnvironment.DeclareStream(streamP, NewStreamOptions().
+			SetMaxSegmentSizeBytes(ByteCapacity{}.KB(500)))).NotTo(HaveOccurred())
+		Expect(testEnvironment.DeleteStream(streamP)).
+			NotTo(HaveOccurred())
 
 	})
 
@@ -117,27 +113,23 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Create two times Stream", func() {
+		Expect(testEnvironment.DeclareStream(testStreamName, nil)).NotTo(HaveOccurred())
 		err := testEnvironment.DeclareStream(testStreamName, nil)
-		Expect(err).NotTo(HaveOccurred())
-		err = testEnvironment.DeclareStream(testStreamName, nil)
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(Equal(StreamAlreadyExists))
-		err = testEnvironment.DeleteStream(testStreamName)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
 	})
 
 	It("Create two times Stream precondition fail", func() {
-		err := testEnvironment.DeclareStream(testStreamName, nil)
-		Expect(err).NotTo(HaveOccurred())
-		err = testEnvironment.DeclareStream(testStreamName,
+		Expect(testEnvironment.DeclareStream(testStreamName, nil)).NotTo(HaveOccurred())
+		err := testEnvironment.DeclareStream(testStreamName,
 			&StreamOptions{
 				MaxAge:         0,
 				MaxLengthBytes: ByteCapacity{}.MB(100),
 			})
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(Equal(PreconditionFailed))
-		err = testEnvironment.DeleteStream(testStreamName)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
 	})
 
 	It("Create empty Stream  fail", func() {

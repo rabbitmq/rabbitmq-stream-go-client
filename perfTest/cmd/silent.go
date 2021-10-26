@@ -89,12 +89,12 @@ func printStats() {
 			for {
 				select {
 				case _ = <-tickerReset.C:
-					start = time.Now()
 
 					atomic.SwapInt32(&publisherMessageCount, 0)
 					atomic.SwapInt32(&consumerMessageCount, 0)
 					atomic.SwapInt32(&confirmedMessageCount, 0)
 					atomic.SwapInt32(&notConfirmedMessageCount, 0)
+					start = time.Now()
 				}
 			}
 
@@ -104,13 +104,14 @@ func printStats() {
 
 func decodeBody() string {
 	if publishers > 0 {
+
 		if fixedBody > 0 {
-			return fmt.Sprintf("Fixed Body: %d", fixedBody)
+			return fmt.Sprintf("Fixed Body: %d", fixedBody+8)
 		}
 		if variableBody > 0 {
 			return fmt.Sprintf("Variable Body: %d", variableBody)
 		}
-		return fmt.Sprintf("Fixed Body: %d", len("simul_message"))
+		return fmt.Sprintf("Fixed Body: %d", len("simul_message")+8)
 	} else {
 		return "ND"
 	}
@@ -240,7 +241,21 @@ func handlePublishConfirms(messageConfirm []*stream.UnConfirmedMessage) {
 
 func startPublisher(streamName string) error {
 
-	rPublisher, err := ha.NewHAProducer(simulEnvironment, streamName, nil,
+	producerOptions := stream.NewProducerOptions()
+
+	if subEntrySize > 1 {
+		cp := stream.Compression{}.None()
+		if compression == "gzip" {
+			cp = stream.Compression{}.Gzip()
+		}
+		producerOptions.SetSubEntrySize(subEntrySize).SetCompression(cp)
+
+		logInfo("Enable SubEntrySize: %d, compression: %s", subEntrySize, cp)
+	}
+
+	rPublisher, err := ha.NewHAProducer(simulEnvironment,
+		streamName,
+		producerOptions,
 		handlePublishConfirms)
 	if err != nil {
 		logError("Error create publisher: %s", err)
@@ -262,6 +277,7 @@ func startPublisher(streamName string) error {
 		n := time.Now().UnixNano()
 		var buff = make([]byte, 8)
 		binary.BigEndian.PutUint64(buff, uint64(n))
+		/// added to calculate the latency
 		msg := amqp.NewMessage(append(buff, body...))
 		arr = append(arr, msg)
 	}
@@ -286,15 +302,10 @@ func startPublisher(streamName string) error {
 				}
 				time.Sleep(time.Duration(sleep) * time.Millisecond)
 			}
-			atomic.AddInt32(&publisherMessageCount, int32(len(arr)))
 
-			for _, streamMessage := range arr {
-				atomic.AddInt64(&messagesSent, 1)
-				err = prod.Send(streamMessage)
-				if err != nil {
-					logError("Error publishing: %s", err)
-				}
-			}
+			atomic.AddInt64(&messagesSent, int64(len(arr)))
+			err = prod.BatchSend(arr)
+			atomic.AddInt32(&publisherMessageCount, int32(len(arr)))
 			checkErr(err)
 
 		}

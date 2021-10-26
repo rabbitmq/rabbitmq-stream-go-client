@@ -18,6 +18,8 @@ const (
 const initBufferPublishSize = 2 + 2 + 1 + 4
 
 const (
+	ClientVersion = "0.1.1-beta"
+
 	commandDeclarePublisher       = 1
 	commandPublish                = 2
 	commandPublishConfirm         = 3
@@ -76,7 +78,8 @@ const (
 	LocalhostUriConnection = "rabbitmq-stream://guest:guest@localhost:5552/%2f"
 
 	///
-	defaultSocketBuffer       = 4096
+	defaultWriteSocketBuffer  = 8092
+	defaultReadSocketBuffer   = 65536
 	defaultQueuePublisherSize = 10000
 	minQueuePublisherSize     = 100
 	maxQueuePublisherSize     = 1_000_000
@@ -84,13 +87,14 @@ const (
 	minBatchSize = 1
 	maxBatchSize = 10_000
 
+	minSubEntrySize = 1
+
 	minBatchPublishingDelay = 50
 	maxBatchPublishingDelay = 500
 
 	defaultBatchSize            = 100
 	defaultBatchPublishingDelay = 100
 	//
-	ClientVersion = "0.1.0-beta"
 
 	StreamTcpPort = "5552"
 )

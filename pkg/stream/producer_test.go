@@ -18,35 +18,29 @@ var _ = Describe("Streaming Producers", func() {
 	BeforeEach(func() {
 		time.Sleep(200 * time.Millisecond)
 		testProducerStream = uuid.New().String()
-		err := testEnvironment.DeclareStream(testProducerStream, nil)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(testEnvironment.DeclareStream(testProducerStream, nil)).
+			NotTo(HaveOccurred())
 
 	})
 	AfterEach(func() {
 		time.Sleep(200 * time.Millisecond)
-		err := testEnvironment.DeleteStream(testProducerStream)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(testEnvironment.DeleteStream(testProducerStream)).NotTo(HaveOccurred())
 
 	})
 
 	It("NewProducer/Close Publisher", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
 	It("NewProducer/Send/Close Publisher", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-
-		err1 := producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch send
-		Expect(err1).NotTo(HaveOccurred())
-
+		Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).NotTo(HaveOccurred())
 		// we can't close the subscribe until the publish is finished
-		time.Sleep(500 * time.Millisecond)
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(200 * time.Millisecond)
+		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
 	It("Multi-thread newProducer/Send", func() {
@@ -58,10 +52,9 @@ var _ = Describe("Streaming Producers", func() {
 				producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				err = producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch send
-				Expect(err).NotTo(HaveOccurred())
+				Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).NotTo(HaveOccurred())
 				// we can't close the subscribe until the publish is finished
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(200 * time.Millisecond)
 				err = producer.Close()
 				Expect(err).NotTo(HaveOccurred())
 			}(&wg)
@@ -76,23 +69,26 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("Send Confirmation", func() {
-		var messagesCount int32 = 0
+		var messagesReceived int32 = 0
 
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
 			ids := <-ch
-			atomic.AddInt32(&messagesCount, int32(len(ids)))
+			atomic.AddInt32(&messagesReceived, int32(len(ids)))
 		}(chConfirm)
 
-		err = producer.BatchSend(CreateArrayMessagesForTesting(14))
-		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(200 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(14)))
+		Expect(producer.BatchSend(CreateArrayMessagesForTesting(14))).
+			NotTo(HaveOccurred())
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesReceived)
+		}, 5*time.Second).Should(Equal(int32(14)),
+			"confirm should receive same messages send by producer")
+
 		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
 	It("Handle close", func() {
@@ -100,117 +96,127 @@ var _ = Describe("Streaming Producers", func() {
 
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		chConfirm := producer.NotifyClose()
+		chClose := producer.NotifyClose()
 		go func(ch ChannelClose) {
 			event := <-ch
 			atomic.StoreInt32(&commandIdRecv, int32(event.Command))
-		}(chConfirm)
+		}(chClose)
 
-		err = producer.BatchSend(CreateArrayMessagesForTesting(2))
-		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.BatchSend(CreateArrayMessagesForTesting(2))).
+			NotTo(HaveOccurred())
 		time.Sleep(100 * time.Millisecond)
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(100 * time.Millisecond)
-		Expect(atomic.LoadInt32(&commandIdRecv)).To(Equal(int32(CommandDeletePublisher)))
+		Expect(producer.Close()).NotTo(HaveOccurred())
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&commandIdRecv)
+		}, 5*time.Second).Should(Equal(int32(CommandDeletePublisher)),
+			"ChannelClose should receive CommandDeletePublisher command")
+
 	})
 
-	It("Pre Publisher errors / Frame too large / too many messages", func() {
+	It("Pre Publisher errors / Frame too large ", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
+		var messagesError int32
+		chPublishError := producer.NotifyPublishError()
+		go func(ch ChannelPublishError) {
+			for range ch {
+				atomic.AddInt32(&messagesError, 1)
+			}
+		}(chPublishError)
 		Expect(err).NotTo(HaveOccurred())
 		var arr []message.StreamMessage
-		for z := 0; z < 100; z++ {
+		for z := 0; z < 101; z++ {
 			s := make([]byte, 15000)
 			arr = append(arr, amqp.NewMessage(s))
 		}
-		err = producer.BatchSend(arr)
-		Expect(err).To(Equal(FrameTooLarge))
+		Expect(producer.BatchSend(arr)).To(Equal(FrameTooLarge))
 
-		for z := 0; z < 901; z++ {
-			s := make([]byte, 0)
-			arr = append(arr, amqp.NewMessage(s))
-		}
-		err = producer.BatchSend(arr)
-		Expect(err).To(HaveOccurred())
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesError)
+		}, 5*time.Second).Should(Equal(int32(101)),
+			"invalidate all the messages sent in the batch")
+
+		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
 	It("Smart Send/Close", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		var messagesCount int32
+		var messagesReceived int32
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
 			for ids := range ch {
-				atomic.AddInt32(&messagesCount, int32(len(ids)))
+				atomic.AddInt32(&messagesReceived, int32(len(ids)))
 			}
 		}(chConfirm)
 
-		for z := 0; z < 100; z++ {
+		for z := 0; z < 101; z++ {
 			s := make([]byte, 50)
-			err = producer.Send(amqp.NewMessage(s))
-			Expect(err).NotTo(HaveOccurred())
+			Expect(producer.Send(amqp.NewMessage(s))).NotTo(HaveOccurred())
 		}
-		time.Sleep(400 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(100)))
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesReceived)
+		}, 5*time.Second).Should(Equal(int32(101)),
+			"confirm should receive same messages send by producer")
+
 		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
 		// in this case must raise an error since the producer is closed
-		err = producer.Close()
-		Expect(err).To(HaveOccurred())
+		Expect(producer.Close()).To(HaveOccurred())
 	})
 
 	It("Smart Send Split frame/BatchSize", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchSize(50))
 		Expect(err).NotTo(HaveOccurred())
-		var messagesCount int32
+		var messagesReceived int32
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
 			for ids := range ch {
-				atomic.AddInt32(&messagesCount, int32(len(ids)))
+				atomic.AddInt32(&messagesReceived, int32(len(ids)))
 			}
 		}(chConfirm)
 
 		for z := 0; z < 2; z++ {
 			s := make([]byte, 1048000)
-			err = producer.Send(amqp.NewMessage(s))
-			Expect(err).NotTo(HaveOccurred())
+			Expect(producer.Send(amqp.NewMessage(s))).NotTo(HaveOccurred())
 		}
-		time.Sleep(800 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(2)))
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesReceived)
+		}, 5*time.Second).Should(Equal(int32(2)),
+			"confirm should receive same messages send by producer")
+
 		By("Max frame Error")
 		s := make([]byte, 1148576)
-		err = producer.Send(amqp.NewMessage(s))
-		Expect(err).To(HaveOccurred())
+		Expect(producer.Send(amqp.NewMessage(s))).To(HaveOccurred())
 		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
 
 		producer, err = testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchSize(2))
 		Expect(err).NotTo(HaveOccurred())
-		var messagesCountBatch int32
+		var messagesConfirmed int32
 		chConfirmBatch := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
 			for ids := range ch {
-				atomic.AddInt32(&messagesCountBatch, int32(len(ids)))
+				atomic.AddInt32(&messagesConfirmed, int32(len(ids)))
 			}
 		}(chConfirmBatch)
 
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 101; i++ {
 			s := make([]byte, 11)
 			err = producer.Send(amqp.NewMessage(s))
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		time.Sleep(800 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCountBatch)).To(Equal(int32(100)))
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(101)),
+			"confirm should receive same messages send by producer")
+
 		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
 
 	})
 
@@ -219,33 +225,31 @@ var _ = Describe("Streaming Producers", func() {
 		// and the time check
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		var messagesCount int32
+		var messagesConfirmed int32
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
 			for ids := range ch {
-				atomic.AddInt32(&messagesCount, int32(len(ids)))
+				atomic.AddInt32(&messagesConfirmed, int32(len(ids)))
 			}
 		}(chConfirm)
 
 		for z := 0; z < 5; z++ {
 			s := make([]byte, 50)
-			err = producer.Send(amqp.NewMessage(s))
-			Expect(err).NotTo(HaveOccurred())
-			time.Sleep(300)
+			Expect(producer.Send(amqp.NewMessage(s))).NotTo(HaveOccurred())
 		}
 
 		for z := 0; z < 5; z++ {
 			s := make([]byte, 50)
-			err = producer.Send(amqp.NewMessage(s))
-			Expect(err).NotTo(HaveOccurred())
-			time.Sleep(50 * time.Millisecond)
+			Expect(producer.Send(amqp.NewMessage(s))).NotTo(HaveOccurred())
 		}
 
-		time.Sleep(400 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(10)),
+			"confirm should receive same messages send by producer")
+
 		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
-		err = producer.Close()
-		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
 	It("Smart Send send after BatchPublishingDelay", func() {
@@ -254,11 +258,11 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchPublishingDelay(50))
 		Expect(err).NotTo(HaveOccurred())
-		var messagesCount int32
+		var messagesReceived int32
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
 			for ids := range ch {
-				atomic.AddInt32(&messagesCount, int32(len(ids)))
+				atomic.AddInt32(&messagesReceived, int32(len(ids)))
 			}
 		}(chConfirm)
 
@@ -276,8 +280,11 @@ var _ = Describe("Streaming Producers", func() {
 			time.Sleep(20 * time.Millisecond)
 		}
 
-		time.Sleep(400 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).To(Equal(int32(10)))
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesReceived)
+		}, 5*time.Second).Should(Equal(int32(10)),
+			"confirm should receive same messages send by producer")
+
 		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		err = producer.Close()
 		Expect(err).NotTo(HaveOccurred())
@@ -305,29 +312,32 @@ var _ = Describe("Streaming Producers", func() {
 			SetQueueSize(5000000))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchSize: 0,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchSize(0))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchSize: 20_000,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchSize(20_000))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchSize: 5_000_000,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchSize(5_000_000))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchPublishingDelay: 0,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchPublishingDelay(0))
 		Expect(err).To(HaveOccurred())
 
-		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
-			BatchPublishingDelay: 600,
-		})
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetBatchPublishingDelay(600))
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetSubEntrySize(0))
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewProducer(testProducerStream, NewProducerOptions().
+			SetSubEntrySize(1).SetCompression(Compression{}.Gzip()))
 		Expect(err).To(HaveOccurred())
 
 		err = env.Close()
@@ -345,39 +355,219 @@ var _ = Describe("Streaming Producers", func() {
 		err = env.DeclareStream(prodErrorStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		var messagesCount int32 = 0
+		var messagesConfirmed int32 = 0
 		producer, err := testEnvironment.NewProducer(prodErrorStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		chPublishError := producer.NotifyPublishError()
 		go func(ch ChannelPublishError) {
-			<-ch
-			atomic.AddInt32(&messagesCount, 1)
+			for range ch {
+				atomic.AddInt32(&messagesConfirmed, 1)
+			}
 		}(chPublishError)
 
 		var messagesSequence = make([]messageSequence, 1)
 		msg := amqp.NewMessage([]byte("test"))
+		msg.SetPublishingId(1)
 		messageBytes, _ := msg.MarshalBinary()
 		messagesSequence[0] = messageSequence{
-			message:      msg,
-			size:         len(messageBytes),
-			publishingId: 1,
+			messageBytes:     messageBytes,
+			unCompressedSize: len(messageBytes),
 		}
 		for _, producerC := range producer.options.client.coordinator.producers {
 			producerC.(*Producer).id = uint8(200)
 		}
+		producer.options.client.coordinator.mutex.Lock()
 		producer.options.client.coordinator.producers[uint8(200)] = producer
+		producer.options.client.coordinator.mutex.Unlock()
 		// 200 producer ID doesn't exist
-		err = producer.internalBatchSendProdId(messagesSequence, 200)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.internalBatchSendProdId(messagesSequence, 200)).
+			NotTo(HaveOccurred())
 
-		err = env.DeleteStream(prodErrorStream)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(env.DeleteStream(prodErrorStream)).NotTo(HaveOccurred())
+
+		producer.options.client.coordinator.mutex.Lock()
 		delete(producer.options.client.coordinator.producers, uint8(200))
 		delete(producer.options.client.coordinator.producers, uint8(0))
-		err = env.Close()
+		producer.options.client.coordinator.mutex.Unlock()
+		Expect(env.Close()).NotTo(HaveOccurred())
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).ShouldNot(Equal(0),
+			"it should receive some message")
+	})
+
+	It("Publish Confirm/Send reuse the same message", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream,
+			NewProducerOptions().
+				SetSubEntrySize(1))
 		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(500 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesCount)).NotTo(Equal(int32(0)))
+		var messagesConfirmed int32
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for ids := range ch {
+				atomic.AddInt32(&messagesConfirmed, int32(len(ids)))
+			}
+		}(chConfirm)
+
+		// this test is needed to test if sending the same message
+		// there are the different sequences, so send and confirmed
+		// must be the same
+		msg := amqp.NewMessage(make([]byte, 50))
+		for z := 0; z < 232; z++ {
+			Expect(producer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(232)),
+			"confirm should receive same messages send by producer")
+
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+
+		// same test above but using batch send
+		var arr []message.StreamMessage
+		for i := 0; i < 20; i++ {
+			arr = append(arr, amqp.NewMessage(make([]byte, 50)))
+		}
+		atomic.StoreInt32(&messagesConfirmed, 0)
+		for z := 0; z < 12; z++ {
+			Expect(producer.BatchSend(arr)).NotTo(HaveOccurred())
+		}
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(12*20)),
+			"confirm should receive same messages send by producer")
+
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+
+		Expect(producer.Close()).NotTo(HaveOccurred())
+
+	})
+
+	////  sub-entry batching
+
+	It(" sub-entry batching test Aggregation", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream,
+			NewProducerOptions().SetBatchPublishingDelay(100).
+				SetSubEntrySize(77))
+		Expect(err).NotTo(HaveOccurred())
+		messagesSequence := make([]messageSequence, 201)
+		entries, err := producer.aggregateEntities(messagesSequence,
+			producer.options.SubEntrySize,
+			producer.options.Compression)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(entries.items)).To(Equal(3))
+
+		messagesSequence = make([]messageSequence, 100)
+		entries, err = producer.aggregateEntities(messagesSequence,
+			producer.options.SubEntrySize,
+			producer.options.Compression)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(entries.items)).To(Equal(2))
+
+		messagesSequence = make([]messageSequence, 1)
+		entries, err = producer.aggregateEntities(messagesSequence,
+			producer.options.SubEntrySize,
+			producer.options.Compression)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(entries.items)).To(Equal(1))
+
+		messagesSequence = make([]messageSequence, 1000)
+		entries, err = producer.aggregateEntities(messagesSequence,
+			producer.options.SubEntrySize,
+			producer.options.Compression)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(entries.items)).To(Equal(13))
+
+		messagesSequence = make([]messageSequence, 14)
+		entries, err = producer.aggregateEntities(messagesSequence, 13,
+			producer.options.Compression)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(entries.items)).To(Equal(2))
+
+		Expect(producer.Close()).NotTo(HaveOccurred())
+
+	})
+	It("Sub Size Publish Confirm/Send", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream,
+			NewProducerOptions().SetBatchPublishingDelay(100).
+				SetSubEntrySize(77))
+		Expect(err).NotTo(HaveOccurred())
+		var messagesConfirmed int32
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for ids := range ch {
+				atomic.AddInt32(&messagesConfirmed, int32(len(ids)))
+			}
+		}(chConfirm)
+
+		for z := 0; z < 501; z++ {
+			msg := amqp.NewMessage(make([]byte, 50))
+			Expect(producer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(501)),
+			"confirm should receive same messages send by producer")
+
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		atomic.StoreInt32(&messagesConfirmed, 0)
+
+		for z := 0; z < 501; z++ {
+			Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).
+				NotTo(HaveOccurred())
+		}
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(501*5)),
+			"confirm should receive same messages send by producer")
+
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(producer.Close()).NotTo(HaveOccurred())
+	})
+
+	It("Sub Size Publish GZIP Confirm/Send", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream,
+			NewProducerOptions().SetBatchPublishingDelay(100).
+				SetSubEntrySize(33).SetCompression(Compression{}.Gzip()))
+		Expect(err).NotTo(HaveOccurred())
+		var messagesConfirmed int32
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for ids := range ch {
+				atomic.AddInt32(&messagesConfirmed, int32(len(ids)))
+			}
+		}(chConfirm)
+
+		for z := 0; z < 457; z++ {
+			msg := amqp.NewMessage(make([]byte, 50))
+			Expect(producer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(457)),
+			"confirm should receive same messages send by producer")
+
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		atomic.StoreInt32(&messagesConfirmed, 0)
+
+		for z := 0; z < 457; z++ {
+			Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).
+				NotTo(HaveOccurred())
+		}
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesConfirmed)
+		}, 5*time.Second).Should(Equal(int32(457*5)),
+			"confirm should receive same messages send by producer")
+
+		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
 })
