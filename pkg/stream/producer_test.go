@@ -63,26 +63,24 @@ var _ = Describe("Streaming Producers", func() {
 		wg.Wait()
 	})
 
-	Context("Sending messages via a single stream producer concurrently (from many threads)", func() {
+	FContext("Sending messages via a single stream producer concurrently (from many threads)", func() {
 		var (
 			producer         *Producer
 			wg               sync.WaitGroup
 			messagesReceived int32 = 0
 		)
 		const (
-			ThreadCount                = 1
+			ThreadCount                = 3
 			BatchSize                  = 100
 			SubEntrySize               = 100
-			TotalMessageCountPerThread = 10
+			TotalMessageCountPerThread = 1000
 		)
 
 		When("No batching, nor sub-entry. nor compression", func() {
 
 			BeforeEach(func() {
-				producer = createProducer(
-					NewProducerOptions().SetBatchSize(1).SetSubEntrySize(1),
+				producer = createProducer(NewProducerOptions().SetBatchSize(1).SetSubEntrySize(1),
 					&messagesReceived)
-
 				wg.Add(ThreadCount)
 			})
 
@@ -91,7 +89,7 @@ var _ = Describe("Streaming Producers", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			FIt("Send plain messages synchronously", func() {
+			It("Send plain messages synchronously", func() {
 				sendConcurrentlyAndSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, 1)
 				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
 
@@ -105,10 +103,8 @@ var _ = Describe("Streaming Producers", func() {
 		When("Batching enabled, but without sub-entry and compression", func() {
 
 			BeforeEach(func() {
-				producer = createProducer(
-					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(1),
+				producer = createProducer(NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(1),
 					&messagesReceived)
-
 				wg.Add(ThreadCount)
 			})
 
@@ -134,7 +130,6 @@ var _ = Describe("Streaming Producers", func() {
 				producer = createProducer(
 					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(SubEntrySize).SetCompression(Compression{}.None()),
 					&messagesReceived)
-
 				wg.Add(ThreadCount)
 			})
 
@@ -693,14 +688,19 @@ var _ = Describe("Streaming Producers", func() {
 
 func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *Producer {
 	var err error
+
+	atomic.StoreInt32(messagesReceived, 0)
+
 	producer, err := testEnvironment.NewProducer(testProducerStream, producerOptions)
 	Expect(err).NotTo(HaveOccurred())
 
 	chConfirm := producer.NotifyPublishConfirmation()
 	go func(ch ChannelPublishConfirm) {
-		ids := <-ch
-		fmt.Printf("Confirmed %d messages\n", len(ids))
-		atomic.AddInt32(messagesReceived, int32(len(ids)))
+		//ids := <-ch
+		for ids := range ch {
+			//fmt.Printf("Confirmed %d messages\n", len(ids))
+			atomic.AddInt32(messagesReceived, int32(len(ids)))
+		}
 	}(chConfirm)
 
 	return producer
@@ -736,7 +736,7 @@ func verifyProducerSent(producer *Producer, confirmationReceived *int32, message
 	fmt.Printf("Waiting for %d confirmations ...\n", messageSent)
 	Eventually(func() int32 {
 		return atomic.LoadInt32(confirmationReceived)
-	}, 5*time.Second, 1*time.Second).Should(Equal(int32(messageSent)),
+	}, 10*time.Second, 1*time.Second).Should(Equal(int32(messageSent)),
 		"confirm should receive same messages send by producer")
 
 	Expect(len(producer.unConfirmedMessages)).To(Equal(0))
