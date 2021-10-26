@@ -120,44 +120,26 @@ func (c *Client) connect() error {
 		c.tuneState.requestedHeartbeat = 60
 		c.tuneState.requestedMaxFrameSize = 1048576
 
-		var dialer = &net.Dialer{
-			Control: controlFunc,
+		servAddr := net.JoinHostPort(host, port)
+		tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
+		connection, errorConnection := net.DialTCP("tcp", nil, tcpAddr)
+		if errorConnection != nil {
+			logs.LogDebug("%s", errorConnection)
+			return errorConnection
 		}
+
+		connection.SetWriteBuffer(8192)
+		connection.SetReadBuffer(65536)
+		connection.SetNoDelay(false)
 
 		if c.broker.isTLS() {
 			conf := &tls.Config{}
-
 			if c.broker.tlsConfig != nil {
 				conf = c.broker.tlsConfig
 			}
-
-			var tlsDial = &tls.Dialer{
-				NetDialer: dialer,
-				Config:    conf,
-			}
-
-			connection, errorConnection := tlsDial.Dial("tcp", net.JoinHostPort(host, port))
-			if errorConnection != nil {
-				logs.LogDebug("TLS error connection %s", errorConnection)
-				return errorConnection
-			}
-			c.setSocketConnection(connection)
-
+			c.setSocketConnection(tls.Client(connection, conf))
 		} else {
-			servAddr := net.JoinHostPort(host, port)
-			tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
-			connection, errorConnection := net.DialTCP("tcp", nil, tcpAddr)
-			if errorConnection != nil {
-				logs.LogDebug("%s", errorConnection)
-				return errorConnection
-			}
-
-			connection.SetWriteBuffer(8192)
-			connection.SetReadBuffer(65536)
-			connection.SetNoDelay(false)
-
 			c.setSocketConnection(connection)
-
 		}
 
 		c.socket.setOpen()
