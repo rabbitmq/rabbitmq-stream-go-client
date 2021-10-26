@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"fmt"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -60,6 +61,128 @@ var _ = Describe("Streaming Producers", func() {
 			}(&wg)
 		}
 		wg.Wait()
+	})
+
+	Context("Sending messages via a single stream producer concurrently (from many threads)", func() {
+		var (
+			producer         *Producer
+			wg               sync.WaitGroup
+			messagesReceived int32 = 0
+		)
+		const (
+			ThreadCount                = 3
+			BatchSize                  = 100
+			SubEntrySize               = 100
+			TotalMessageCountPerThread = 1000
+		)
+
+		When("No batching, nor sub-entry. nor compression", func() {
+
+			BeforeEach(func() {
+				producer = createProducer(
+					// batching (100), no sub-entry and hence no compression
+					NewProducerOptions().SetBatchSize(1).SetSubEntrySize(1),
+					&messagesReceived)
+
+				wg.Add(ThreadCount)
+			})
+
+			AfterEach(func() {
+				err := producer.Close()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			FIt("Send plain messages synchronously", func() {
+				sendSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, 1)
+				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
+
+			})
+			It("Send plain messages asynchronously", func() {
+				sendAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
+				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
+			})
+
+		})
+		When("Batching enabled, but without sub-entry and compression", func() {
+
+			BeforeEach(func() {
+				producer = createProducer(
+					// batching (100), no sub-entry and hence no compression
+					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(1),
+					&messagesReceived)
+
+				wg.Add(ThreadCount)
+			})
+
+			AfterEach(func() {
+				err := producer.Close()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("Send batched messages synchronously", func() {
+				sendSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, BatchSize)
+				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
+			})
+
+			It("Send batched messages asynchronously", func() {
+				sendAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
+				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
+			})
+		})
+
+		When("Batching and sub-entry enabled without compression", func() {
+
+			BeforeEach(func() {
+				producer = createProducer(
+					// batching (100), sub-entry (100) and no compression
+					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(SubEntrySize).SetCompression(Compression{}.None()),
+					&messagesReceived)
+
+				wg.Add(ThreadCount)
+			})
+
+			AfterEach(func() {
+				err := producer.Close()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("Send batched and subentry messages synchronously", func() {
+				sendSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, BatchSize)
+				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
+			})
+
+			It("Send batched messages asynchronously", func() {
+				sendAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
+				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
+			})
+		})
+
+		When("Batching and sub-entry enabled with GZIP compression", func() {
+
+			BeforeEach(func() {
+				producer = createProducer(
+					// batching (100), sub-entry (100) and no compression
+					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(SubEntrySize).SetCompression(Compression{}.Gzip()),
+					&messagesReceived)
+
+				wg.Add(ThreadCount)
+			})
+
+			AfterEach(func() {
+				err := producer.Close()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("Send batched and subentry messages synchronously", func() {
+				sendSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, BatchSize)
+				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
+			})
+
+			It("Send batched messages asynchronously", func() {
+				sendAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
+				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
+			})
+		})
 	})
 
 	It("Not found NotExistingStream", func() {
@@ -571,3 +694,59 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 })
+
+func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *Producer {
+	var err error
+	producer, err := testEnvironment.NewProducer(testProducerStream, producerOptions)
+	Expect(err).NotTo(HaveOccurred())
+
+	chConfirm := producer.NotifyPublishConfirmation()
+	go func(ch ChannelPublishConfirm) {
+		ids := <-ch
+		atomic.AddInt32(messagesReceived, int32(len(ids)))
+	}(chConfirm)
+
+	return producer
+}
+
+func sendAsynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int) {
+	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
+		messagePrefix := fmt.Sprintf("test_%d_", goRoutingIndex)
+		for i := 0; i < totalMessageCountPerThread; i++ {
+			Expect(producer.Send(CreateMessageForTesting(messagePrefix, i))).NotTo(HaveOccurred())
+		}
+	})
+}
+
+func sendSynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int, batchSize int) {
+	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
+		totalBatchCount := totalMessageCountPerThread / batchSize
+		for batchIndex := 0; batchIndex < totalBatchCount; batchIndex++ {
+			messagePrefix := fmt.Sprintf("test_%d_%d_", goRoutingIndex, batchIndex)
+			Expect(producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))).NotTo(HaveOccurred())
+		}
+	})
+}
+
+func verifyProducerSent(producer *Producer, messageReceived *int32, messageSent int) {
+	verifyMessageWereConfirmed(messageReceived, messageSent)
+	Expect(len(producer.unConfirmedMessages)).To(Equal(0))
+}
+
+func verifyMessageWereConfirmed(actualMessageCount *int32, expectedMessageCount int) {
+
+	Eventually(func() int32 {
+		return atomic.LoadInt32(actualMessageCount)
+	}, 5*time.Second).Should(Equal(int32(expectedMessageCount)),
+		"confirm should receive same messages send by producer")
+}
+
+func runConcurrentlyAndWaitTillAllDone(threadCount int, wg *sync.WaitGroup, runner func(int)) {
+	for index := 0; index < threadCount; index++ {
+		go func(i int) {
+			defer wg.Done()
+			runner(i)
+		}(index)
+	}
+	wg.Wait()
+}
