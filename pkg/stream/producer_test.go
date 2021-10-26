@@ -80,7 +80,6 @@ var _ = Describe("Streaming Producers", func() {
 
 			BeforeEach(func() {
 				producer = createProducer(
-					// batching (100), no sub-entry and hence no compression
 					NewProducerOptions().SetBatchSize(1).SetSubEntrySize(1),
 					&messagesReceived)
 
@@ -93,12 +92,12 @@ var _ = Describe("Streaming Producers", func() {
 			})
 
 			FIt("Send plain messages synchronously", func() {
-				sendSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, 1)
+				sendConcurrentlyAndSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, 1)
 				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
 
 			})
 			It("Send plain messages asynchronously", func() {
-				sendAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
+				sendConcurrentlyAndAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
 				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
 			})
 
@@ -107,7 +106,6 @@ var _ = Describe("Streaming Producers", func() {
 
 			BeforeEach(func() {
 				producer = createProducer(
-					// batching (100), no sub-entry and hence no compression
 					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(1),
 					&messagesReceived)
 
@@ -120,12 +118,12 @@ var _ = Describe("Streaming Producers", func() {
 			})
 
 			It("Send batched messages synchronously", func() {
-				sendSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, BatchSize)
+				sendConcurrentlyAndSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, BatchSize)
 				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
 			})
 
 			It("Send batched messages asynchronously", func() {
-				sendAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
+				sendConcurrentlyAndAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
 				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
 			})
 		})
@@ -134,7 +132,6 @@ var _ = Describe("Streaming Producers", func() {
 
 			BeforeEach(func() {
 				producer = createProducer(
-					// batching (100), sub-entry (100) and no compression
 					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(SubEntrySize).SetCompression(Compression{}.None()),
 					&messagesReceived)
 
@@ -147,12 +144,12 @@ var _ = Describe("Streaming Producers", func() {
 			})
 
 			It("Send batched and subentry messages synchronously", func() {
-				sendSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, BatchSize)
+				sendConcurrentlyAndSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, BatchSize)
 				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
 			})
 
 			It("Send batched messages asynchronously", func() {
-				sendAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
+				sendConcurrentlyAndAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
 				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
 			})
 		})
@@ -161,7 +158,6 @@ var _ = Describe("Streaming Producers", func() {
 
 			BeforeEach(func() {
 				producer = createProducer(
-					// batching (100), sub-entry (100) and no compression
 					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(SubEntrySize).SetCompression(Compression{}.Gzip()),
 					&messagesReceived)
 
@@ -174,12 +170,12 @@ var _ = Describe("Streaming Producers", func() {
 			})
 
 			It("Send batched and subentry messages synchronously", func() {
-				sendSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, BatchSize)
+				sendConcurrentlyAndSynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread, BatchSize)
 				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
 			})
 
 			It("Send batched messages asynchronously", func() {
-				sendAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
+				sendConcurrentlyAndAsynchronously(producer, ThreadCount, &wg, TotalMessageCountPerThread)
 				verifyProducerSent(producer, &messagesReceived, TotalMessageCountPerThread*ThreadCount)
 			})
 		})
@@ -710,7 +706,7 @@ func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *
 	return producer
 }
 
-func sendAsynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int) {
+func sendConcurrentlyAndAsynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
 		fmt.Printf("[%d] Sending %d messages asynchronoulsy\n", goRoutingIndex, totalMessageCountPerThread)
 		messagePrefix := fmt.Sprintf("test_%d_", goRoutingIndex)
@@ -722,7 +718,7 @@ func sendAsynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup,
 	})
 }
 
-func sendSynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int, batchSize int) {
+func sendConcurrentlyAndSynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int, batchSize int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
 		totalBatchCount := totalMessageCountPerThread / batchSize
 		fmt.Printf("[%d] Sending %d messages in batches of %d (total batch:%d) synchronously\n", goRoutingIndex,
