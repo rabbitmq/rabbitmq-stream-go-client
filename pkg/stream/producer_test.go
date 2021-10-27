@@ -696,9 +696,7 @@ func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *
 
 	chConfirm := producer.NotifyPublishConfirmation()
 	go func(ch ChannelPublishConfirm) {
-		//ids := <-ch
 		for ids := range ch {
-			//fmt.Printf("Confirmed %d messages\n", len(ids))
 			atomic.AddInt32(messagesReceived, int32(len(ids)))
 		}
 	}(chConfirm)
