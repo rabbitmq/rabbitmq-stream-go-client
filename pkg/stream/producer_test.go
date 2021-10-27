@@ -198,8 +198,7 @@ var _ = Describe("Streaming Producers", func() {
 					Expect(msg.GetPublishingIdAssigned()).To(Equal(int64(i + 1)))
 					Expect(msg.IsConfirmed()).To(Equal(true))
 					Expect(msg.message.GetPublishingId()).To(Equal(int64(-1)))
-					body := fmt.Sprintf("%s", msg.message.GetData()[0])
-					Expect(body).To(Equal("test_" + strconv.Itoa(i)))
+					Expect(msg.message.GetData()[0]).To(Equal("test_" + strconv.Itoa(i)))
 				}
 			}
 		}(chConfirm, producer)
