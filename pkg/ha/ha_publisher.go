@@ -17,19 +17,6 @@ const (
 	StatusStreamDoesNotExist = 3
 )
 
-func (p *ReliableProducer) handlePublishError(publishError stream.ChannelPublishError) {
-	go func() {
-		for {
-			for err := range publishError {
-				errMessage := err.UnConfirmedMessage
-				errMessage.Err = err.Err
-				errMessage.Confirmed = false
-				p.confirmMessageHandler([]*stream.UnConfirmedMessage{errMessage})
-			}
-		}
-	}()
-}
-
 func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for messagesIds := range confirms {
@@ -51,7 +38,7 @@ type ReliableProducer struct {
 	status                int
 }
 
-type ConfirmMessageHandler func(messageConfirm []*stream.UnConfirmedMessage)
+type ConfirmMessageHandler func(messageConfirm []*stream.ConfirmationStatus)
 
 func NewHAProducer(env *stream.Environment, streamName string,
 	producerOptions *stream.ProducerOptions,
@@ -83,8 +70,6 @@ func (p *ReliableProducer) newProducer() error {
 	if err != nil {
 		return err
 	}
-	channelPublishError := producer.NotifyPublishError()
-	p.handlePublishError(channelPublishError)
 	channelPublishConfirm := producer.NotifyPublishConfirmation()
 	p.handlePublishConfirm(channelPublishConfirm)
 	p.producer = producer

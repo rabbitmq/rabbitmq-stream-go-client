@@ -230,12 +230,19 @@ var _ = Describe("Streaming Producers", func() {
 	It("Pre Publisher errors / Frame too large ", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		var messagesError int32
-		chPublishError := producer.NotifyPublishError()
-		go func(ch ChannelPublishError) {
-			for range ch {
-				atomic.AddInt32(&messagesError, 1)
+
+		chPublishConfirmation := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for msgs := range ch {
+				for _, msg := range msgs {
+					if !msg.IsConfirmed() {
+						Expect(msg.GetError()).To(Equal(FrameTooLarge))
+						atomic.AddInt32(&messagesError, 1)
+					}
+				}
 			}
-		}(chPublishError)
+		}(chPublishConfirmation)
+
 		Expect(err).NotTo(HaveOccurred())
 		var arr []message.StreamMessage
 		for z := 0; z < 101; z++ {
@@ -472,10 +479,15 @@ var _ = Describe("Streaming Producers", func() {
 		var messagesConfirmed int32 = 0
 		producer, err := testEnvironment.NewProducer(prodErrorStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		chPublishError := producer.NotifyPublishError()
-		go func(ch ChannelPublishError) {
-			for range ch {
-				atomic.AddInt32(&messagesConfirmed, 1)
+		chPublishError := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for msgs := range ch {
+				for _, msg := range msgs {
+					if !msg.IsConfirmed() {
+						Expect(msg.GetError()).To(Equal(PublisherDoesNotExist))
+						atomic.AddInt32(&messagesConfirmed, 1)
+					}
+				}
 			}
 		}(chPublishError)
 

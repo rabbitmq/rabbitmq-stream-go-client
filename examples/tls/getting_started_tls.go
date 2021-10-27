@@ -24,10 +24,10 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for confirmed := range confirms {
 			for _, msg := range confirmed {
-				if msg.Confirmed {
-					fmt.Printf("message %s stored \n  ", msg.Message.GetData())
+				if msg.IsConfirmed() {
+					fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
 				} else {
-					fmt.Printf("message %s failed \n  ", msg.Message.GetData())
+					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
 				}
 
 			}
@@ -96,7 +96,7 @@ func main() {
 	CheckErr(err)
 
 	// Define a consumer per stream, there are different offset options to define a consumer, default is
-	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.Message) {
+	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.message) {
 	//
 	//}, nil)
 	// if you need to track the offset you need a consumer name like:

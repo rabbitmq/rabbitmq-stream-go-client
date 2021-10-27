@@ -270,7 +270,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
-	It("Message Properties", func() {
+	It("message Properties", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 		msg := amqp.NewMessage([]byte("message"))
