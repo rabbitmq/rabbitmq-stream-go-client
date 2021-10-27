@@ -70,7 +70,7 @@ const (
 	responseCodePublisherDoesNotExist         = uint16(18)
 
 	/// responses out of protocol
-	closeChannel          = uint16(60)
+	closeChannel         = uint16(60)
 	connectionCloseError = uint16(61)
 	///
 	defaultSocketCallTimeout = 10 * time.Second
