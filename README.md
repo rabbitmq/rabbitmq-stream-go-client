@@ -25,7 +25,6 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
     * [Publish messages](#publish-messages)
         * [`Send` vs `BatchSend`](#send-vs-batchsend)
         * [Publish Confirmation](#publish-confirmation)
-        * [Publish Errors](#publish-errors)
         * [Deduplication](#deduplication)
         * [Sub Entries Batching](#sub-entries-batching)
         * [HA producer - Experimental](#ha-producer-experimental)
@@ -234,7 +233,8 @@ The `Send` interface works in most of the cases, In some condition is about 15/2
 
 ### Publish Confirmation
 
-For each publish the server sends back to the client the confirmation, the client provides an interface to receive the confirmation:
+For each publish the server sends back to the client the confirmation or an error. 
+The client provides an interface to receive the confirmation:
 
 ```golang
 //optional publish confirmation channel
@@ -245,10 +245,10 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for confirmed := range confirms {
 			for _, msg := range confirmed {
-				if msg.Confirmed {
-					fmt.Printf("message %s stored \n  ", msg.Message.GetData())
+				if msg.isConfirmed() {
+					fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
 				} else {
-					fmt.Printf("message %s failed \n  ", msg.Message.GetData())
+					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
 				}
 			}
 		}
@@ -257,16 +257,6 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 ```
 It is up to the user to decide what to do with confirmed and unconfirmed messages. </br>
 See also "Getting started" example in the [examples](./examples/) directory
-
-### Publish Errors
-
-In some case the server can send back to the client an error, for example the producer-id does not exist or permission problems.
-the client provides an interface to receive the errors:
-```golang
-chPublishError := producer.NotifyPublishError()
-handlePublishError(chPublishError)
-```
-It is up to the user to decide what to do with error messages.
 
 ### Deduplication
 
