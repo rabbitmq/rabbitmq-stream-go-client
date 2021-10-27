@@ -369,19 +369,19 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 		binary := msg.messageBytes
 		entry.unCompressedSize += len(binary) + 4
 
-		// in case of subEntry we need to pick only one publishingIdAssigned
+		// in case of subEntry we need to pick only one publishingId
 		// we peek the first one of the entries
-		// suppose you have 10 messages with publishingIdAssigned [5..15]
+		// suppose you have 10 messages with publishingId [5..15]
 		if entry.publishingId < 0 {
 			entry.publishingId = msg.publishingId
 		}
 
-		/// since there is only one publishingIdAssigned
-		// the others publishingIdAssigned(s) are linked
+		/// since there is only one publishingId
+		// the others publishingId(s) are linked
 		// so the client confirms all the messages
 		//when the client receives the confirmation form the server
 		// see: server_frame:handleConfirm/2
-		// suppose you have 10 messages with publishingIdAssigned [5..15]
+		// suppose you have 10 messages with publishingId [5..15]
 		// the message 5 is linked to 6,7,8,9..15
 
 		if entry.publishingId != msg.publishingId {

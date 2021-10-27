@@ -247,7 +247,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 			producer.removeUnConfirmed(m.publishingIdAssigned)
 
 			// in case of sub-batch entry the client receives only
-			// one publishingIdAssigned (or sequence)
+			// one publishingId (or sequence)
 			// so the other messages are confirmed using the linkedTo
 			for _, message := range m.linkedTo {
 				message.confirmed = true
