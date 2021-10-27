@@ -41,10 +41,14 @@ func main() {
 
 	chConfirm := producer.NotifyPublishConfirmation()
 	go func(ch stream.ChannelPublishConfirm, p *stream.Producer) {
-		for ids := range ch {
-			for _, msg := range ids {
-				if msg.IsConfirmed() {
-					fmt.Printf("Confirmed: %s \n", msg.GetMessage().GetData()[0])
+		for messagesStatus := range ch {
+			for _, messageStatus := range messagesStatus {
+				if messageStatus.IsConfirmed() {
+					fmt.Printf("publishingId: %d - Confirmed: %s \n",
+						/// In this case the PublishingId is the one provided by the user
+						messageStatus.GetMessage().GetPublishingId(),
+
+						messageStatus.GetMessage().GetData()[0])
 				}
 			}
 		}

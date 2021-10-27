@@ -255,8 +255,31 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	}()
 }
 ```
-It is up to the user to decide what to do with confirmed and unconfirmed messages. </br>
+
+In the MessageStatus struct you can find two `publishingId`:  
+```golang
+//first one
+messageStatus.GetMessage().GetPublishingId()
+// second one
+messageStatus.GetPublishingIdAssigned()
+```
+
+The first one is provided by the user for special cases like Deduplication.
+The second one is assigned automatically by the client.
+In case the user specifies the `publishingId` with:
+```golang
+msg = amqp.NewMessage([]byte("mymessage"))
+msg.SetPublishingId(18) // <---  
+```
+
+
+The filed: `messageStatus.GetMessage().HasPublishingId()` is true and </br>
+the values `messageStatus.GetMessage().GetPublishingId()` and `messageStatus.GetPublishingIdAssigned()` are the same. 
+
+
 See also "Getting started" example in the [examples](./examples/) directory
+
+
 
 ### Deduplication
 

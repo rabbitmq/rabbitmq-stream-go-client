@@ -5,5 +5,6 @@ type StreamMessage interface {
 	UnmarshalBinary(data []byte) error
 	SetPublishingId(id int64)
 	GetPublishingId() int64
+	HasPublishingId() bool
 	GetData() [][]byte
 }

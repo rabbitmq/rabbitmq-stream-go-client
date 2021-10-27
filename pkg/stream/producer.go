@@ -260,7 +260,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return FrameTooLarge
 	}
 
-	sequence := producer.getPublishingID(streamMessage)
+	sequence := producer.assignPublishingID(streamMessage)
 	producer.addUnConfirmed(sequence, streamMessage, producer.id)
 
 	if producer.getStatus() == open {
@@ -276,10 +276,10 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	return nil
 }
 
-func (producer *Producer) getPublishingID(message message.StreamMessage) int64 {
+func (producer *Producer) assignPublishingID(message message.StreamMessage) int64 {
 	sequence := message.GetPublishingId()
 	// in case of sub entry the deduplication is disabled
-	if message.GetPublishingId() < 0 || producer.options.isSubEntriesBatching() {
+	if !message.HasPublishingId() || producer.options.isSubEntriesBatching() {
 		sequence = atomic.AddInt64(&producer.sequence, 1)
 	}
 	return sequence
@@ -293,7 +293,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		if err != nil {
 			return err
 		}
-		sequence := producer.getPublishingID(batchMessage)
+		sequence := producer.assignPublishingID(batchMessage)
 		totalBufferToSend += len(messageBytes)
 		messagesSequence[i] = messageSequence{
 			messageBytes:     messageBytes,
