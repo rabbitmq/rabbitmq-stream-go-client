@@ -184,6 +184,18 @@ var _ = Describe("Streaming Consumers", func() {
 			arr = append(arr, m)
 		}
 
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm, p *Producer) {
+			for ids := range ch {
+				for _, msg := range ids {
+					Expect(msg.GetError()).NotTo(HaveOccurred())
+					Expect(msg.GetProducerID()).To(Equal(p.id))
+					Expect(msg.IsConfirmed()).To(Equal(true))
+					Expect(msg.message.GetPublishingId()).To(Equal(msg.GetPublishingIdAssigned()))
+				}
+			}
+		}(chConfirm, producer)
+
 		// here we handle the deduplication, so we must have only
 		// 10 messages on the stream, since we are using the
 		// same SetPublishingId

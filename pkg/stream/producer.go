@@ -12,13 +12,13 @@ import (
 )
 
 type ConfirmationStatus struct {
-	message      message.StreamMessage
-	producerID   uint8
-	publishingId int64
-	confirmed    bool
-	err          error
-	errorCode    uint16
-	linkedTo     []*ConfirmationStatus
+	message              message.StreamMessage
+	producerID           uint8
+	publishingIdAssigned int64
+	confirmed            bool
+	err                  error
+	errorCode            uint16
+	linkedTo             []*ConfirmationStatus
 }
 
 func (cs *ConfirmationStatus) IsConfirmed() bool {
@@ -29,8 +29,8 @@ func (cs *ConfirmationStatus) GetProducerID() uint8 {
 	return cs.producerID
 }
 
-func (cs *ConfirmationStatus) GetPublishingId() int64 {
-	return cs.publishingId
+func (cs *ConfirmationStatus) GetPublishingIdAssigned() int64 {
+	return cs.publishingIdAssigned
 }
 
 func (cs *ConfirmationStatus) GetError() error {
@@ -137,10 +137,10 @@ func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamM
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
 	producer.unConfirmedMessages[sequence] = &ConfirmationStatus{
-		message:      message,
-		producerID:   producerID,
-		publishingId: sequence,
-		confirmed:    false,
+		message:              message,
+		producerID:           producerID,
+		publishingIdAssigned: sequence,
+		confirmed:            false,
 	}
 }
 
@@ -335,7 +335,7 @@ func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) 
 func (producer *Producer) simpleAggregation(messagesSequence []messageSequence, b *bufio.Writer) {
 	for _, msg := range messagesSequence {
 		r := msg.messageBytes
-		writeBLong(b, msg.publishingId) // publishingId
+		writeBLong(b, msg.publishingId) // publishingIdAssigned
 		writeBInt(b, len(r))            // len
 		b.Write(r)
 	}
@@ -369,19 +369,19 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 		binary := msg.messageBytes
 		entry.unCompressedSize += len(binary) + 4
 
-		// in case of subEntry we need to pick only one publishingId
+		// in case of subEntry we need to pick only one publishingIdAssigned
 		// we peek the first one of the entries
-		// suppose you have 10 messages with publishingId [5..15]
+		// suppose you have 10 messages with publishingIdAssigned [5..15]
 		if entry.publishingId < 0 {
 			entry.publishingId = msg.publishingId
 		}
 
-		/// since there is only one publishingId
-		// the others publishingId(s) are linked
+		/// since there is only one publishingIdAssigned
+		// the others publishingIdAssigned(s) are linked
 		// so the client confirms all the messages
 		//when the client receives the confirmation form the server
 		// see: server_frame:handleConfirm/2
-		// suppose you have 10 messages with publishingId [5..15]
+		// suppose you have 10 messages with publishingIdAssigned [5..15]
 		// the message 5 is linked to 6,7,8,9..15
 
 		if entry.publishingId != msg.publishingId {
@@ -467,8 +467,10 @@ func (producer *Producer) FlushUnConfirmedMessages() {
 	if producer.publishConfirm != nil {
 		for _, msg := range producer.unConfirmedMessages {
 			msg.confirmed = false
+			msg.err = ConnectionClosed
+			msg.errorCode = connectionCloseError
 			producer.publishConfirm <- []*ConfirmationStatus{msg}
-			delete(producer.unConfirmedMessages, msg.publishingId)
+			delete(producer.unConfirmedMessages, msg.publishingIdAssigned)
 		}
 	}
 	producer.mutex.Unlock()

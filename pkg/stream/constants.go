@@ -70,7 +70,8 @@ const (
 	responseCodePublisherDoesNotExist         = uint16(18)
 
 	/// responses out of protocol
-	closeChannel = uint16(60)
+	closeChannel          = uint16(60)
+	connectionCloseError = uint16(61)
 	///
 	defaultSocketCallTimeout = 10 * time.Second
 
@@ -110,6 +111,7 @@ var SubscriptionIdDoesNotExist = errors.New("Subscription Id Does Not Exist")
 var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
 var FrameTooLarge = errors.New("Frame Too Large, the buffer is too big")
 var CodeAccessRefused = errors.New("Resources Access Refused")
+var ConnectionClosed = errors.New("Can't send the message, connection closed")
 
 func lookErrorCode(errorCode uint16) error {
 	switch errorCode {

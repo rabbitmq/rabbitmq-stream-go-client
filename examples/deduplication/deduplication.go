@@ -39,7 +39,19 @@ func main() {
 
 	CheckErr(err)
 
-	data := make(map[int64]string)
+	chConfirm := producer.NotifyPublishConfirmation()
+	go func(ch stream.ChannelPublishConfirm, p *stream.Producer) {
+		for ids := range ch {
+			for _, msg := range ids {
+				if msg.IsConfirmed() {
+					fmt.Printf("Confirmed: %s \n", msg.GetMessage().GetData()[0])
+				}
+			}
+		}
+	}(chConfirm, producer)
+
+	data := make(map[int]string)
+	data[0] = "Piaggio"
 	data[1] = "Ferrari"
 	data[2] = "Ducati"
 	data[3] = "Maserati"
@@ -49,11 +61,10 @@ func main() {
 	data[7] = "Alfa Romeo"
 	data[8] = "Aprilia"
 	data[9] = "Benelli"
-	data[10] = "Piaggio"
 
 	for i := 0; i < len(data); i++ {
 		var msg message.StreamMessage
-		msg = amqp.NewMessage([]byte(data[int64(i)]))
+		msg = amqp.NewMessage([]byte(data[i]))
 		msg.SetPublishingId(int64(i)) // mandatory to handle the deduplication
 		err := producer.Send(msg)
 		CheckErr(err)
@@ -62,5 +73,7 @@ func main() {
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	err = producer.Close()
+	CheckErr(err)
+	err = env.DeleteStream(streamName)
 	CheckErr(err)
 }

@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -188,10 +189,20 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := producer.NotifyPublishConfirmation()
-		go func(ch ChannelPublishConfirm) {
-			ids := <-ch
-			atomic.AddInt32(&messagesReceived, int32(len(ids)))
-		}(chConfirm)
+		go func(ch ChannelPublishConfirm, p *Producer) {
+			for ids := range ch {
+				atomic.AddInt32(&messagesReceived, int32(len(ids)))
+				for i, msg := range ids {
+					Expect(msg.GetError()).NotTo(HaveOccurred())
+					Expect(msg.GetProducerID()).To(Equal(p.id))
+					Expect(msg.GetPublishingIdAssigned()).To(Equal(int64(i + 1)))
+					Expect(msg.IsConfirmed()).To(Equal(true))
+					Expect(msg.message.GetPublishingId()).To(Equal(int64(-1)))
+					body := fmt.Sprintf("%s", msg.message.GetData()[0])
+					Expect(body).To(Equal("test_" + strconv.Itoa(i)))
+				}
+			}
+		}(chConfirm, producer)
 
 		Expect(producer.BatchSend(CreateArrayMessagesForTesting(14))).
 			NotTo(HaveOccurred())
@@ -732,7 +743,7 @@ func sendConcurrentlyAndSynchronously(producer *Producer, threadCount int, wg *s
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
 		totalBatchCount := totalMessageCountPerThread / batchSize
 		//fmt.Printf("[%d] Sending %d messages in batches of %d (total batch:%d) synchronously\n", goRoutingIndex,
-//			totalMessageCountPerThread, batchSize, totalBatchCount)
+		//			totalMessageCountPerThread, batchSize, totalBatchCount)
 		for batchIndex := 0; batchIndex < totalBatchCount; batchIndex++ {
 			messagePrefix := fmt.Sprintf("test_%d_%d_", goRoutingIndex, batchIndex)
 			Expect(producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))).NotTo(HaveOccurred())
