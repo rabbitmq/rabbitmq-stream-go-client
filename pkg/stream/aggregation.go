@@ -5,16 +5,17 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"github.com/golang/snappy"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"io"
 	"io/ioutil"
 )
 
 const (
-	None = byte(0)
-	GZIP = byte(1)
+	None   = byte(0)
+	GZIP   = byte(1)
+	SNAPPY = byte(2)
 	// Not implemented yet
-	//SNAPPY = byte(2)
 	//LZ4    = byte(3)
 	//ZSTD   = byte(4)
 )
@@ -37,10 +38,11 @@ func (compression Compression) Gzip() Compression {
 	return Compression{value: GZIP, enabled: true}
 }
 
+func (compression Compression) Snappy() Compression {
+	return Compression{value: SNAPPY}
+}
+
 // Not implemented yet
-//func (compression Compression) Snappy() Compression {
-//	return Compression{value: SNAPPY}
-//}
 //func (compression Compression) Lz4() Compression {
 //	return Compression{value: LZ4}
 //}
@@ -77,7 +79,8 @@ func compressByValue(value byte) iCompress {
 	switch value {
 	case GZIP:
 		return compressGZIP{}
-
+	case SNAPPY:
+		return compressSnappy{}
 	}
 
 	return compressNONE{}
@@ -158,4 +161,69 @@ func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDa
 	/// headers ---> payload --> headers --> payload (compressed) --> uncompressed payload
 
 	return bufio.NewReader(bytes.NewReader(uncompressedReader))
+}
+
+type compressSnappy struct {
+}
+
+func (es compressSnappy) Compress(subEntries *subEntries) {
+	for _, entry := range subEntries.items {
+		var tmp bytes.Buffer
+		w := snappy.NewBufferedWriter(&tmp)
+		for _, msg := range entry.messages {
+			size := len(msg.messageBytes)
+			if _, err := w.Write(bytesFromInt(uint32(size))); err != nil {
+				logs.LogError("Error compressing with Snappy %v", err)
+				//return err  // TODO we should return error if we cannot compress
+			}
+			if _, err := w.Write(msg.messageBytes); err != nil {
+				logs.LogError("Error compressing with Snappy %v", err)
+				//return err  // TODO we should return error if we cannot compress
+			}
+		}
+		if err := w.Flush(); err != nil {
+			logs.LogError("Error compressing with Snappy %v", err)
+			//return err  // TODO we should return error if we cannot compress
+		}
+		if err := w.Close(); err != nil {
+			logs.LogError("Error compressing with Snappy %v", err)
+			//return err  // TODO we should return error if we cannot compress
+		}
+		entry.sizeInBytes += len(tmp.Bytes())
+		entry.dataInBytes = tmp.Bytes()
+		subEntries.totalSizeInBytes += len(tmp.Bytes())
+	}
+}
+
+func (es compressSnappy) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
+
+	var zipperBuffer = make([]byte, dataSize)
+	/// empty
+	_, err := io.ReadFull(source, zipperBuffer)
+	/// array of compress data
+
+	if err != nil {
+		logs.LogError("SNAPPY Error during reading buffer %s", err)
+	}
+
+	reader := snappy.NewReader(bytes.NewBuffer(zipperBuffer))
+	if err != nil {
+		logs.LogError("Error creating SNAPPY NewReader  %s", err)
+	}
+	defer reader.Reset(nil)
+	/// headers ---> payload --> headers --> payload (compressed)
+
+	// Read in data.
+	uncompressedReader, err := ioutil.ReadAll(reader)
+	if err != nil {
+		logs.LogError("Error during reading buffer %s", err)
+	}
+	if uint32(len(uncompressedReader)) != uncompressedDataSize {
+		panic("uncompressedDataSize != count")
+	}
+
+	/// headers ---> payload --> headers --> payload (compressed) --> uncompressed payload
+
+	return bufio.NewReader(bytes.NewReader(uncompressedReader))
+
 }
