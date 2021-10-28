@@ -14,18 +14,8 @@ type AddressResolver struct {
 	Port int
 }
 
-type Broker struct {
-	Host      string
-	Port      string
-	User      string
-	Vhost     string
-	Uri       string
-	Password  string
-	Scheme    string
-	tlsConfig *tls.Config
-	advHost   string
-	advPort   string
-
+type ProtocolParameters struct {
+	tlsConfig             *tls.Config
 	RequestedHeartbeat    time.Duration
 	RequestedMaxFrameSize int
 	WriteBuffer           int
@@ -33,14 +23,32 @@ type Broker struct {
 	NoDelay               bool
 }
 
+type Broker struct {
+	Host     string
+	Port     string
+	User     string
+	Vhost    string
+	Uri      string
+	Password string
+	Scheme   string
+
+	advHost string
+	advPort string
+}
+
 func newBrokerDefault() *Broker {
 	return &Broker{
-		Scheme:                "rabbitmq-stream",
-		Host:                  "localhost",
-		Port:                  StreamTcpPort,
-		User:                  "guest",
-		Password:              "guest",
-		Vhost:                 "/",
+		Scheme:   "rabbitmq-stream",
+		Host:     "localhost",
+		Port:     StreamTcpPort,
+		User:     "guest",
+		Password: "guest",
+		Vhost:    "/",
+	}
+}
+
+func newProtocolParameterDefault() *ProtocolParameters {
+	return &ProtocolParameters{
 		RequestedHeartbeat:    60 * time.Second,
 		RequestedMaxFrameSize: 1048576,
 		WriteBuffer:           8192,
@@ -78,10 +86,6 @@ func (br *Broker) mergeWithDefault() {
 		br.Scheme = broker.Scheme
 	}
 
-	if br.tlsConfig == nil {
-		br.tlsConfig = broker.tlsConfig
-	}
-
 }
 
 func (br *Broker) cloneFrom(broker *Broker, resolver *AddressResolver) {
@@ -89,16 +93,10 @@ func (br *Broker) cloneFrom(broker *Broker, resolver *AddressResolver) {
 	br.Password = broker.Password
 	br.Vhost = broker.Vhost
 	br.Scheme = broker.Scheme
-	br.tlsConfig = broker.tlsConfig
 	if resolver != nil {
 		br.Host = resolver.Host
 		br.Port = strconv.Itoa(resolver.Port)
 	}
-	br.NoDelay = broker.NoDelay
-	br.WriteBuffer = broker.WriteBuffer
-	br.ReadBuffer = broker.ReadBuffer
-	br.RequestedMaxFrameSize = broker.RequestedMaxFrameSize
-	br.RequestedHeartbeat = broker.RequestedHeartbeat
 }
 
 func (br *Broker) GetUri() string {
