@@ -233,15 +233,15 @@ var _ = Describe("Environment test", func() {
 		It("ReadBuffer and WriteBuffer defaulted to non-zero values", func() {
 			env, err := NewEnvironment(NewEnvironmentOptions())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(env.options.ConnectionParameters[0].ReadBuffer).NotTo(BeZero())
-			Expect(env.options.ConnectionParameters[0].WriteBuffer).NotTo(BeZero())
+			Expect(env.options.ProtocolParameters.ReadBuffer).NotTo(BeZero())
+			Expect(env.options.ProtocolParameters.WriteBuffer).NotTo(BeZero())
 		})
 
 		It("RequestedHeartbeat and RequestFrameSize defaulted to non-zero values", func() {
 			env, err := NewEnvironment(NewEnvironmentOptions())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(env.options.ConnectionParameters[0].RequestedHeartbeat).NotTo(BeZero())
-			Expect(env.options.ConnectionParameters[0].RequestedMaxFrameSize).NotTo(BeZero())
+			Expect(env.options.ProtocolParameters.RequestedHeartbeat).NotTo(BeZero())
+			Expect(env.options.ProtocolParameters.RequestedMaxFrameSize).NotTo(BeZero())
 		})
 
 	})

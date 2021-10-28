@@ -41,21 +41,26 @@ type Client struct {
 	tuneState            TuneState
 	coordinator          *Coordinator
 	broker               *Broker
+	protocolParameters   *ProtocolParameters
 
 	mutex            *sync.Mutex
 	metadataListener metadataListener
 	lastHeartBeat    HeartBeat
 }
 
-func newClient(connectionName string, broker *Broker) *Client {
+func newClient(connectionName string, broker *Broker, protocolParameters *ProtocolParameters) *Client {
 	var clientBroker = broker
 	if broker == nil {
 		clientBroker = newBrokerDefault()
+	}
+	if protocolParameters == nil {
+		protocolParameters = newProtocolParameterDefault()
 	}
 
 	c := &Client{
 		coordinator:          NewCoordinator(),
 		broker:               clientBroker,
+		protocolParameters:   protocolParameters,
 		destructor:           &sync.Once{},
 		mutex:                &sync.Mutex{},
 		clientProperties:     ClientProperties{items: make(map[string]string)},
@@ -70,11 +75,6 @@ func newClient(connectionName string, broker *Broker) *Client {
 	}
 	c.setConnectionName(connectionName)
 	return c
-}
-
-func NewDirectClient(broker *Broker) (*Client, error) {
-	client := newClient("direct-connection", broker)
-	return client, client.connect()
 }
 
 func (c *Client) getSocket() *socket {
@@ -117,8 +117,8 @@ func (c *Client) connect() error {
 			return err
 		}
 		host, port := u.Hostname(), u.Port()
-		c.tuneState.requestedMaxFrameSize = c.broker.RequestedMaxFrameSize
-		c.tuneState.requestedHeartbeat = int(c.broker.RequestedHeartbeat.Seconds())
+		c.tuneState.requestedMaxFrameSize = c.protocolParameters.RequestedMaxFrameSize
+		c.tuneState.requestedHeartbeat = int(c.protocolParameters.RequestedHeartbeat.Seconds())
 
 		servAddr := net.JoinHostPort(host, port)
 		tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
@@ -128,23 +128,23 @@ func (c *Client) connect() error {
 			return errorConnection
 		}
 
-		if err = connection.SetWriteBuffer(c.broker.WriteBuffer); err != nil {
-			logs.LogError("Failed to SetWriteBuffer to %d due to %v", c.broker.WriteBuffer, err)
+		if err = connection.SetWriteBuffer(c.protocolParameters.WriteBuffer); err != nil {
+			logs.LogError("Failed to SetWriteBuffer to %d due to %v", c.protocolParameters.WriteBuffer, err)
 			return err
 		}
-		if err = connection.SetReadBuffer(c.broker.ReadBuffer); err != nil {
-			logs.LogError("Failed to SetReadBuffer to %d due to %v", c.broker.ReadBuffer, err)
+		if err = connection.SetReadBuffer(c.protocolParameters.ReadBuffer); err != nil {
+			logs.LogError("Failed to SetReadBuffer to %d due to %v", c.protocolParameters.ReadBuffer, err)
 			return err
 		}
-		if err = connection.SetNoDelay(c.broker.NoDelay); err != nil {
-			logs.LogError("Failed to SetNoDelay to %b due to %v", c.broker.NoDelay, err)
+		if err = connection.SetNoDelay(c.protocolParameters.NoDelay); err != nil {
+			logs.LogError("Failed to SetNoDelay to %b due to %v", c.protocolParameters.NoDelay, err)
 			return err
 		}
 
 		if c.broker.isTLS() {
 			conf := &tls.Config{}
-			if c.broker.tlsConfig != nil {
-				conf = c.broker.tlsConfig
+			if c.protocolParameters.tlsConfig != nil {
+				conf = c.protocolParameters.tlsConfig
 			}
 			c.setSocketConnection(tls.Client(connection, conf))
 		} else {
