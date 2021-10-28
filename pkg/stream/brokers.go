@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type AddressResolver struct {
@@ -24,16 +25,27 @@ type Broker struct {
 	tlsConfig *tls.Config
 	advHost   string
 	advPort   string
+
+	RequestedHeartbeat    time.Duration
+	RequestedMaxFrameSize int
+	WriteBuffer           int
+	ReadBuffer            int
+	NoDelay               bool
 }
 
 func newBrokerDefault() *Broker {
 	return &Broker{
-		Scheme:   "rabbitmq-stream",
-		Host:     "localhost",
-		Port:     StreamTcpPort,
-		User:     "guest",
-		Password: "guest",
-		Vhost:    "/",
+		Scheme:                "rabbitmq-stream",
+		Host:                  "localhost",
+		Port:                  StreamTcpPort,
+		User:                  "guest",
+		Password:              "guest",
+		Vhost:                 "/",
+		RequestedHeartbeat:    60 * time.Second,
+		RequestedMaxFrameSize: 1048576,
+		WriteBuffer:           8192,
+		ReadBuffer:            65536,
+		NoDelay:               false,
 	}
 }
 
