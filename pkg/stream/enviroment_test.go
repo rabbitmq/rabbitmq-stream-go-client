@@ -219,10 +219,14 @@ var _ = Describe("Environment test", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(env2.Close()).NotTo(HaveOccurred())
 		})
-
+/*
 		It("Apply default connection related settings", func() {
-
+			env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(1))
+			Expect(err).To(Not(HaveOccurred()))
+			Expect(env.options.ConnectionParameters[0].RequestedHeartbeat).Should(Not(BeNil()))
 		})
+*/
+
 	})
 
 	Describe("Stream Existing/Meta data", func() {
