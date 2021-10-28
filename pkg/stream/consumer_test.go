@@ -192,7 +192,7 @@ var _ = Describe("Streaming Consumers", func() {
 					Expect(msg.GetProducerID()).To(Equal(p.id))
 					Expect(msg.GetMessage().HasPublishingId()).To(Equal(true))
 					Expect(msg.IsConfirmed()).To(Equal(true))
-					Expect(msg.message.GetPublishingId()).To(Equal(msg.GetPublishingIdAssigned()))
+					Expect(msg.message.GetPublishingId()).To(Equal(msg.GetPublishingId()))
 				}
 			}
 		}(chConfirm, producer)

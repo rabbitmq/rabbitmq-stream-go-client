@@ -12,13 +12,13 @@ import (
 )
 
 type ConfirmationStatus struct {
-	message              message.StreamMessage
-	producerID           uint8
-	publishingIdAssigned int64
-	confirmed            bool
-	err                  error
-	errorCode            uint16
-	linkedTo             []*ConfirmationStatus
+	message      message.StreamMessage
+	producerID   uint8
+	publishingId int64
+	confirmed    bool
+	err          error
+	errorCode    uint16
+	linkedTo     []*ConfirmationStatus
 }
 
 func (cs *ConfirmationStatus) IsConfirmed() bool {
@@ -29,8 +29,8 @@ func (cs *ConfirmationStatus) GetProducerID() uint8 {
 	return cs.producerID
 }
 
-func (cs *ConfirmationStatus) GetPublishingIdAssigned() int64 {
-	return cs.publishingIdAssigned
+func (cs *ConfirmationStatus) GetPublishingId() int64 {
+	return cs.publishingId
 }
 
 func (cs *ConfirmationStatus) GetError() error {
@@ -137,10 +137,10 @@ func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamM
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
 	producer.unConfirmedMessages[sequence] = &ConfirmationStatus{
-		message:              message,
-		producerID:           producerID,
-		publishingIdAssigned: sequence,
-		confirmed:            false,
+		message:      message,
+		producerID:   producerID,
+		publishingId: sequence,
+		confirmed:    false,
 	}
 }
 
@@ -335,7 +335,7 @@ func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) 
 func (producer *Producer) simpleAggregation(messagesSequence []messageSequence, b *bufio.Writer) {
 	for _, msg := range messagesSequence {
 		r := msg.messageBytes
-		writeBLong(b, msg.publishingId) // publishingIdAssigned
+		writeBLong(b, msg.publishingId) // publishingId
 		writeBInt(b, len(r))            // len
 		b.Write(r)
 	}
@@ -470,7 +470,7 @@ func (producer *Producer) FlushUnConfirmedMessages() {
 			msg.err = ConnectionClosed
 			msg.errorCode = connectionCloseError
 			producer.publishConfirm <- []*ConfirmationStatus{msg}
-			delete(producer.unConfirmedMessages, msg.publishingIdAssigned)
+			delete(producer.unConfirmedMessages, msg.publishingId)
 		}
 	}
 	producer.mutex.Unlock()

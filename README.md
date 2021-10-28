@@ -261,7 +261,7 @@ In the MessageStatus struct you can find two `publishingId`:
 //first one
 messageStatus.GetMessage().GetPublishingId()
 // second one
-messageStatus.GetPublishingIdAssigned()
+messageStatus.GetPublishingId()
 ```
 
 The first one is provided by the user for special cases like Deduplication.
@@ -274,7 +274,7 @@ msg.SetPublishingId(18) // <---
 
 
 The filed: `messageStatus.GetMessage().HasPublishingId()` is true and </br>
-the values `messageStatus.GetMessage().GetPublishingId()` and `messageStatus.GetPublishingIdAssigned()` are the same. 
+the values `messageStatus.GetMessage().GetPublishingId()` and `messageStatus.GetPublishingId()` are the same. 
 
 
 See also "Getting started" example in the [examples](./examples/) directory

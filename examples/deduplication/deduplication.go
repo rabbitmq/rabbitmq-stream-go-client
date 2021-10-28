@@ -47,7 +47,6 @@ func main() {
 					fmt.Printf("publishingId: %d - Confirmed: %s \n",
 						/// In this case the PublishingId is the one provided by the user
 						messageStatus.GetMessage().GetPublishingId(),
-
 						messageStatus.GetMessage().GetData()[0])
 				}
 			}
