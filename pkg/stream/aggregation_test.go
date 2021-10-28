@@ -1,6 +1,8 @@
 package stream
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -32,9 +34,9 @@ var _ = FDescribe("Compression algorithms", func() {
 		}
 		compressNONE{}.Compress(subEntries)
 
-		Expect(subEntries.items[0].sizeInBytes).To(SatisfyAll(BeNumerically("<", len(messagePayload))))
-		Expect(subEntries.items[0].sizeInBytes).To(SatisfyAll(BeNumerically("<", subEntries.items[0].unCompressedSize)))
-		//Expect(subEntries.totalSizeInBytes).To(SatisfyAll(BeNumerically("<", )))
+		Expect(subEntries.totalSizeInBytes).To(Equal(subEntries.items[0].sizeInBytes))
+		Expect(subEntries.totalSizeInBytes).To(Equal(subEntries.items[0].unCompressedSize))
+
 	})
 
 	It("GZIP", func() {
@@ -61,14 +63,15 @@ var _ = FDescribe("Compression algorithms", func() {
 			}},
 			totalSizeInBytes: 0,
 		}
-		compressGZIP{}.Compress(subEntries)
+		gzip := compressGZIP{}
+		gzip.Compress(subEntries)
 
-		Expect(subEntries.items[0].sizeInBytes).To(SatisfyAll(BeNumerically("<", len(messagePayload))))
-		Expect(subEntries.items[0].sizeInBytes).To(SatisfyAll(BeNumerically("<", subEntries.items[0].unCompressedSize)))
-		//Expect(subEntries.totalSizeInBytes).To(SatisfyAll(BeNumerically("<", )))
+		verifyCompression(gzip, subEntries)
+
 	})
 
-	FIt("SNAPPY", func() {
+
+	It("SNAPPY", func() {
 		messagePayload := make([]byte, 4096)
 		for i := range messagePayload {
 			messagePayload[i] = 1
@@ -90,11 +93,22 @@ var _ = FDescribe("Compression algorithms", func() {
 			}},
 			totalSizeInBytes: 0,
 		}
-		compressSnappy{}.Compress(subEntries)
 
-		Expect(subEntries.items[0].sizeInBytes).To(SatisfyAll(BeNumerically("<", len(messagePayload))))
-		Expect(subEntries.items[0].sizeInBytes).To(SatisfyAll(BeNumerically("<", subEntries.items[0].unCompressedSize)))
+		gzip := compressSnappy{}
+		gzip.Compress(subEntries)
+
+		verifyCompression(gzip, subEntries)
 
 	})
 
 })
+func verifyCompression(algo iCompress, subEntries *subEntries) {
+
+	Expect(subEntries.totalSizeInBytes).To(SatisfyAll(BeNumerically("<", subEntries.items[0].unCompressedSize)))
+	Expect(subEntries.totalSizeInBytes).To(Equal(subEntries.items[0].sizeInBytes))
+
+	bufferReader := bytes.NewReader(subEntries.items[0].dataInBytes)
+	algo.UnCompress(bufio.NewReader(bufferReader),
+		uint32(subEntries.totalSizeInBytes), uint32(subEntries.items[0].unCompressedSize))
+
+}
