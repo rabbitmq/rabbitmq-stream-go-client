@@ -77,7 +77,6 @@ func compressByValue(value byte) iCompress {
 	switch value {
 	case GZIP:
 		return compressGZIP{}
-
 	}
 
 	return compressNONE{}

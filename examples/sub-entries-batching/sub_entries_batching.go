@@ -22,10 +22,10 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for confirmed := range confirms {
 			for _, msg := range confirmed {
-				if msg.Confirmed {
-					fmt.Printf("message %s stored \n  ", msg.Message.GetData())
+				if msg.IsConfirmed() {
+					fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
 				} else {
-					fmt.Printf("message %s failed \n  ", msg.Message.GetData())
+					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
 				}
 
 			}

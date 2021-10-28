@@ -63,7 +63,6 @@ var _ = Describe("Coordinator", func() {
 		})
 
 		It("Get next publisher id ", func() {
-			// publisher id are always a publishingId
 			// until reach 255 then start reusing the old
 			// unused ids
 			for i := 0; i < 250; i++ {

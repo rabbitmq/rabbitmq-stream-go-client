@@ -391,20 +391,27 @@ type Message struct {
 }
 
 type AMQP10 struct {
-	publishingId int64
-	message      *Message
-	Properties   *MessageProperties
+	publishingId    int64
+	hasPublishingId bool
+	message         *Message
+	Properties      *MessageProperties
 }
 
 func NewMessage(data []byte) *AMQP10 {
 	return &AMQP10{
-		message:      newMessage(data),
-		publishingId: -1,
+		message:         newMessage(data),
+		publishingId:    0,
+		hasPublishingId: false,
 	}
 }
 
 func (amqp *AMQP10) SetPublishingId(id int64) {
+	amqp.hasPublishingId = true
 	amqp.publishingId = id
+}
+
+func (amqp *AMQP10) HasPublishingId() bool {
+	return amqp.hasPublishingId
 }
 
 func (amqp *AMQP10) GetPublishingId() int64 {

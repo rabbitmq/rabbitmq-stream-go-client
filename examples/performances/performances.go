@@ -25,7 +25,7 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for confirmed := range confirms {
 			for _, msg := range confirmed {
-				if msg.Confirmed {
+				if msg.IsConfirmed() {
 					atomic.AddInt32(&messagesConfirmed, 1)
 				}
 			}

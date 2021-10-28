@@ -608,7 +608,6 @@ type consumersEnvironment struct {
 	mutex                *sync.Mutex
 	consumersCoordinator map[string]*environmentCoordinator
 	maxItemsForClient    int
-	PublishErrorListener ChannelPublishError
 }
 
 func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {

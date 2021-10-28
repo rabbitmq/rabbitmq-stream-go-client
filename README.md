@@ -25,7 +25,6 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
     * [Publish messages](#publish-messages)
         * [`Send` vs `BatchSend`](#send-vs-batchsend)
         * [Publish Confirmation](#publish-confirmation)
-        * [Publish Errors](#publish-errors)
         * [Deduplication](#deduplication)
         * [Sub Entries Batching](#sub-entries-batching)
         * [HA producer - Experimental](#ha-producer-experimental)
@@ -234,7 +233,8 @@ The `Send` interface works in most of the cases, In some condition is about 15/2
 
 ### Publish Confirmation
 
-For each publish the server sends back to the client the confirmation, the client provides an interface to receive the confirmation:
+For each publish the server sends back to the client the confirmation or an error. 
+The client provides an interface to receive the confirmation:
 
 ```golang
 //optional publish confirmation channel
@@ -245,28 +245,41 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for confirmed := range confirms {
 			for _, msg := range confirmed {
-				if msg.Confirmed {
-					fmt.Printf("message %s stored \n  ", msg.Message.GetData())
+				if msg.isConfirmed() {
+					fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
 				} else {
-					fmt.Printf("message %s failed \n  ", msg.Message.GetData())
+					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
 				}
 			}
 		}
 	}()
 }
 ```
-It is up to the user to decide what to do with confirmed and unconfirmed messages. </br>
+
+In the MessageStatus struct you can find two `publishingId`:  
+```golang
+//first one
+messageStatus.GetMessage().GetPublishingId()
+// second one
+messageStatus.GetPublishingId()
+```
+
+The first one is provided by the user for special cases like Deduplication.
+The second one is assigned automatically by the client.
+In case the user specifies the `publishingId` with:
+```golang
+msg = amqp.NewMessage([]byte("mymessage"))
+msg.SetPublishingId(18) // <---  
+```
+
+
+The filed: `messageStatus.GetMessage().HasPublishingId()` is true and </br>
+the values `messageStatus.GetMessage().GetPublishingId()` and `messageStatus.GetPublishingId()` are the same. 
+
+
 See also "Getting started" example in the [examples](./examples/) directory
 
-### Publish Errors
 
-In some case the server can send back to the client an error, for example the producer-id does not exist or permission problems.
-the client provides an interface to receive the errors:
-```golang
-chPublishError := producer.NotifyPublishError()
-handlePublishError(chPublishError)
-```
-It is up to the user to decide what to do with error messages.
 
 ### Deduplication
 

@@ -55,7 +55,7 @@ func (coordinator *Coordinator) NewProducer(
 	var producer = &Producer{id: lastId,
 		options:             parameters,
 		mutex:               &sync.Mutex{},
-		unConfirmedMessages: map[int64]*UnConfirmedMessage{},
+		unConfirmedMessages: map[int64]*ConfirmationStatus{},
 		status:              open,
 		messageSequenceCh:   make(chan messageSequence, size),
 		pendingMessages: pendingMessagesSequence{

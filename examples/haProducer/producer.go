@@ -11,6 +11,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/examples/haProducer/http"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"sync"
@@ -28,10 +29,11 @@ func CheckErr(err error) {
 var counter int32 = 0
 var fail int32 = 0
 
-func handlePublishConfirm(messageConfirm []*stream.UnConfirmedMessage) {
+func handlePublishConfirm(messageStatus []*stream.ConfirmationStatus) {
 	go func() {
-		for _, message := range messageConfirm {
-			if message.Confirmed {
+		for _, message := range messageStatus {
+			if message.IsConfirmed() {
+
 				if atomic.AddInt32(&counter, 1)%20000 == 0 {
 					fmt.Printf("Confirmed %d messages\n", atomic.LoadInt32(&counter))
 				}
@@ -57,7 +59,8 @@ func main() {
 		"rabbitmq-stream://guest:guest@localhost:5552/%2f"}
 
 	env, err := stream.NewEnvironment(
-		stream.NewEnvironmentOptions().SetUris(addresses))
+		stream.NewEnvironmentOptions().
+			SetUris(addresses))
 	CheckErr(err)
 
 	streamName := uuid.New().String()
@@ -78,11 +81,11 @@ func main() {
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup) {
-			for i := 0; i < 1200000; i++ {
+			for i := 0; i < 100000; i++ {
 				msg := amqp.NewMessage([]byte("ha"))
 				err := rProducer.Send(msg)
 				CheckErr(err)
-				err = rProducer1.Send(msg)
+				err = rProducer1.BatchSend([]message.StreamMessage{msg})
 				if atomic.AddInt32(&sent, 2)%20000 == 0 {
 					time.Sleep(100 * time.Millisecond)
 					fmt.Printf("Sent..%d messages\n", atomic.LoadInt32(&sent))

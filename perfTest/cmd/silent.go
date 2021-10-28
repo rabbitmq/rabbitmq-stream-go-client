@@ -227,10 +227,10 @@ func initStreams() error {
 	return env.Close()
 }
 
-func handlePublishConfirms(messageConfirm []*stream.UnConfirmedMessage) {
+func handlePublishConfirms(messageConfirm []*stream.ConfirmationStatus) {
 	go func() {
 		for _, msg := range messageConfirm {
-			if msg.Confirmed {
+			if msg.IsConfirmed() {
 				atomic.AddInt32(&confirmedMessageCount, 1)
 			} else {
 				atomic.AddInt32(&notConfirmedMessageCount, 1)

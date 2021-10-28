@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -188,10 +189,21 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := producer.NotifyPublishConfirmation()
-		go func(ch ChannelPublishConfirm) {
-			ids := <-ch
-			atomic.AddInt32(&messagesReceived, int32(len(ids)))
-		}(chConfirm)
+		go func(ch ChannelPublishConfirm, p *Producer) {
+			for ids := range ch {
+				atomic.AddInt32(&messagesReceived, int32(len(ids)))
+				for i, msg := range ids {
+					Expect(msg.GetError()).NotTo(HaveOccurred())
+					Expect(msg.GetProducerID()).To(Equal(p.id))
+					Expect(msg.GetPublishingId()).To(Equal(int64(i + 1)))
+					Expect(msg.IsConfirmed()).To(Equal(true))
+					Expect(msg.message.GetPublishingId()).To(Equal(int64(0)))
+					Expect(msg.message.HasPublishingId()).To(Equal(false))
+					body := string(msg.message.GetData()[0][:])
+					Expect(body).To(Equal("test_" + strconv.Itoa(i)))
+				}
+			}
+		}(chConfirm, producer)
 
 		Expect(producer.BatchSend(CreateArrayMessagesForTesting(14))).
 			NotTo(HaveOccurred())
@@ -230,12 +242,19 @@ var _ = Describe("Streaming Producers", func() {
 	It("Pre Publisher errors / Frame too large ", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		var messagesError int32
-		chPublishError := producer.NotifyPublishError()
-		go func(ch ChannelPublishError) {
-			for range ch {
-				atomic.AddInt32(&messagesError, 1)
+
+		chPublishConfirmation := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for msgs := range ch {
+				for _, msg := range msgs {
+					if !msg.IsConfirmed() {
+						Expect(msg.GetError()).To(Equal(FrameTooLarge))
+						atomic.AddInt32(&messagesError, 1)
+					}
+				}
 			}
-		}(chPublishError)
+		}(chPublishConfirmation)
+
 		Expect(err).NotTo(HaveOccurred())
 		var arr []message.StreamMessage
 		for z := 0; z < 101; z++ {
@@ -472,10 +491,15 @@ var _ = Describe("Streaming Producers", func() {
 		var messagesConfirmed int32 = 0
 		producer, err := testEnvironment.NewProducer(prodErrorStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		chPublishError := producer.NotifyPublishError()
-		go func(ch ChannelPublishError) {
-			for range ch {
-				atomic.AddInt32(&messagesConfirmed, 1)
+		chPublishError := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			for msgs := range ch {
+				for _, msg := range msgs {
+					if !msg.IsConfirmed() {
+						Expect(msg.GetError()).To(Equal(PublisherDoesNotExist))
+						atomic.AddInt32(&messagesConfirmed, 1)
+					}
+				}
 			}
 		}(chPublishError)
 
@@ -720,7 +744,7 @@ func sendConcurrentlyAndSynchronously(producer *Producer, threadCount int, wg *s
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
 		totalBatchCount := totalMessageCountPerThread / batchSize
 		//fmt.Printf("[%d] Sending %d messages in batches of %d (total batch:%d) synchronously\n", goRoutingIndex,
-//			totalMessageCountPerThread, batchSize, totalBatchCount)
+		//			totalMessageCountPerThread, batchSize, totalBatchCount)
 		for batchIndex := 0; batchIndex < totalBatchCount; batchIndex++ {
 			messagePrefix := fmt.Sprintf("test_%d_%d_", goRoutingIndex, batchIndex)
 			Expect(producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))).NotTo(HaveOccurred())
