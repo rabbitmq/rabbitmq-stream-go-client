@@ -54,14 +54,10 @@ func newClient(connectionName string, broker *Broker) *Client {
 	}
 
 	c := &Client{
-		coordinator: NewCoordinator(),
-		broker:      clientBroker,
-		destructor:  &sync.Once{},
-		mutex:       &sync.Mutex{},
-		tuneState: TuneState{
-			requestedMaxFrameSize: clientBroker.RequestedMaxFrameSize,
-			requestedHeartbeat:    int(clientBroker.RequestedHeartbeat.Seconds()),
-		},
+		coordinator:          NewCoordinator(),
+		broker:               clientBroker,
+		destructor:           &sync.Once{},
+		mutex:                &sync.Mutex{},
 		clientProperties:     ClientProperties{items: make(map[string]string)},
 		connectionProperties: ConnectionProperties{},
 		lastHeartBeat: HeartBeat{
@@ -121,6 +117,8 @@ func (c *Client) connect() error {
 			return err
 		}
 		host, port := u.Hostname(), u.Port()
+		c.tuneState.requestedMaxFrameSize = c.broker.RequestedMaxFrameSize
+		c.tuneState.requestedHeartbeat = int(c.broker.RequestedHeartbeat.Seconds())
 
 		servAddr := net.JoinHostPort(host, port)
 		tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
@@ -130,16 +128,16 @@ func (c *Client) connect() error {
 			return errorConnection
 		}
 
-		err = connection.SetWriteBuffer(c.broker.WriteBuffer)
-		if err != nil {
+		if err = connection.SetWriteBuffer(c.broker.WriteBuffer); err != nil {
+			logs.LogError("Failed to SetWriteBuffer to %d due to %v", c.broker.WriteBuffer, err)
 			return err
 		}
-		err = connection.SetReadBuffer(c.broker.ReadBuffer)
-		if err != nil {
+		if err = connection.SetReadBuffer(c.broker.ReadBuffer); err != nil {
+			logs.LogError("Failed to SetReadBuffer to %d due to %v", c.broker.ReadBuffer, err)
 			return err
 		}
-		err = connection.SetNoDelay(c.broker.NoDelay)
-		if err != nil {
+		if err = connection.SetNoDelay(c.broker.NoDelay); err != nil {
+			logs.LogError("Failed to SetNoDelay to %b due to %v", c.broker.NoDelay, err)
 			return err
 		}
 

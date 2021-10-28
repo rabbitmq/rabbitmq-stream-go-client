@@ -238,7 +238,9 @@ func (envOptions *EnvironmentOptions) SetMaxConsumersPerClient(maxConsumersPerCl
 
 func (envOptions *EnvironmentOptions) SetUri(uri string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Uri: uri})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.Uri = uri
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		envOptions.ConnectionParameters[0].Uri = uri
 	}
@@ -248,14 +250,18 @@ func (envOptions *EnvironmentOptions) SetUri(uri string) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetUris(uris []string) *EnvironmentOptions {
 	for _, s := range uris {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Uri: s})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.Uri = s
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	}
 	return envOptions
 }
 
 func (envOptions *EnvironmentOptions) SetHost(host string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Host: host})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.Host = host
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		envOptions.ConnectionParameters[0].Host = host
 	}
@@ -264,7 +270,9 @@ func (envOptions *EnvironmentOptions) SetHost(host string) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetVHost(vhost string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Vhost: vhost})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.Vhost = vhost
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		envOptions.ConnectionParameters[0].Vhost = vhost
 	}
@@ -273,7 +281,9 @@ func (envOptions *EnvironmentOptions) SetVHost(vhost string) *EnvironmentOptions
 
 func (envOptions *EnvironmentOptions) SetTLSConfig(config *tls.Config) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{tlsConfig: config})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.tlsConfig = config
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		for _, parameter := range envOptions.ConnectionParameters {
 			parameter.tlsConfig = config
@@ -286,7 +296,9 @@ func (envOptions *EnvironmentOptions) SetTLSConfig(config *tls.Config) *Environm
 func (envOptions *EnvironmentOptions) IsTLS(val bool) *EnvironmentOptions {
 	if val {
 		if len(envOptions.ConnectionParameters) == 0 {
-			envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Scheme: "rabbitmq-stream+tls"})
+			brokerOptions := newBrokerDefault()
+			brokerOptions.Scheme = "rabbitmq-stream+tls"
+			envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 		} else {
 			for _, parameter := range envOptions.ConnectionParameters {
 				parameter.Scheme = "rabbitmq-stream+tls"
@@ -298,7 +310,9 @@ func (envOptions *EnvironmentOptions) IsTLS(val bool) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Port: strconv.Itoa(port)})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.Port = strconv.Itoa(port)
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		envOptions.ConnectionParameters[0].Port = strconv.Itoa(port)
 	}
@@ -308,7 +322,9 @@ func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{User: user})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.User = user
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		envOptions.ConnectionParameters[0].User = user
 	}
@@ -318,7 +334,9 @@ func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Password: password})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.Password = password
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		envOptions.ConnectionParameters[0].Password = password
 	}
@@ -328,7 +346,9 @@ func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentO
 
 func (envOptions *EnvironmentOptions) SetRequestedHeartbeat(requestedHeartbeat time.Duration) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{RequestedHeartbeat: requestedHeartbeat})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.RequestedHeartbeat = requestedHeartbeat
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		for _, parameter := range envOptions.ConnectionParameters {
 			parameter.RequestedHeartbeat = requestedHeartbeat
@@ -339,7 +359,9 @@ func (envOptions *EnvironmentOptions) SetRequestedHeartbeat(requestedHeartbeat t
 
 func (envOptions *EnvironmentOptions) SetRequestedMaxFrameSize(requestedMaxFrameSize int) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{RequestedMaxFrameSize: requestedMaxFrameSize})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.RequestedMaxFrameSize = requestedMaxFrameSize
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		for _, parameter := range envOptions.ConnectionParameters {
 			parameter.RequestedMaxFrameSize = requestedMaxFrameSize
@@ -350,7 +372,9 @@ func (envOptions *EnvironmentOptions) SetRequestedMaxFrameSize(requestedMaxFrame
 
 func (envOptions *EnvironmentOptions) SetWriteBuffer(writeBuffer int) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{WriteBuffer: writeBuffer})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.WriteBuffer = writeBuffer
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		for _, parameter := range envOptions.ConnectionParameters {
 			parameter.WriteBuffer = writeBuffer
@@ -361,7 +385,9 @@ func (envOptions *EnvironmentOptions) SetWriteBuffer(writeBuffer int) *Environme
 
 func (envOptions *EnvironmentOptions) SetReadBuffer(readBuffer int) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{ReadBuffer: readBuffer})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.ReadBuffer = readBuffer
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		for _, parameter := range envOptions.ConnectionParameters {
 			parameter.ReadBuffer = readBuffer
@@ -372,7 +398,9 @@ func (envOptions *EnvironmentOptions) SetReadBuffer(readBuffer int) *Environment
 
 func (envOptions *EnvironmentOptions) SetNoDelay(noDelay bool) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{NoDelay: noDelay})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.NoDelay = noDelay
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		for _, parameter := range envOptions.ConnectionParameters {
 			parameter.NoDelay = noDelay
