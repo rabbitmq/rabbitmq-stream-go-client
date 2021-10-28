@@ -94,6 +94,11 @@ func (br *Broker) cloneFrom(broker *Broker, resolver *AddressResolver) {
 		br.Host = resolver.Host
 		br.Port = strconv.Itoa(resolver.Port)
 	}
+	br.NoDelay = broker.NoDelay
+	br.WriteBuffer = broker.WriteBuffer
+	br.ReadBuffer = broker.ReadBuffer
+	br.RequestedMaxFrameSize = broker.RequestedMaxFrameSize
+	br.RequestedHeartbeat = broker.RequestedHeartbeat
 }
 
 func (br *Broker) GetUri() string {
