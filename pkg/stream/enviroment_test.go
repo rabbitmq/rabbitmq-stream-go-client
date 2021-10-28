@@ -220,11 +220,28 @@ var _ = Describe("Environment test", func() {
 			Expect(env2.Close()).NotTo(HaveOccurred())
 		})
 
-		It("Apply default connection related settings", func() {
-			/*
-			TODO
+		It("ReadBuffer cannot be zero", func() {
+			_, err := NewEnvironment(NewEnvironmentOptions().SetReadBuffer(0))
+			Expect(err).To(HaveOccurred())
+		})
 
-			*/
+		It("WriteBuffer cannot be zero", func() {
+			_, err := NewEnvironment(NewEnvironmentOptions().SetWriteBuffer(0))
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("ReadBuffer and WriteBuffer defaulted to non-zero values", func() {
+			env, err := NewEnvironment(NewEnvironmentOptions())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(env.options.ConnectionParameters[0].ReadBuffer).NotTo(BeZero())
+			Expect(env.options.ConnectionParameters[0].WriteBuffer).NotTo(BeZero())
+		})
+
+		It("RequestedHeartbeat and RequestFrameSize defaulted to non-zero values", func() {
+			env, err := NewEnvironment(NewEnvironmentOptions())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(env.options.ConnectionParameters[0].RequestedHeartbeat).NotTo(BeZero())
+			Expect(env.options.ConnectionParameters[0].RequestedMaxFrameSize).NotTo(BeZero())
 		})
 
 	})
