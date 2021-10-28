@@ -3,18 +3,19 @@ package stream
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"math/rand"
 )
 
 var _ = FDescribe("Compression algorithms", func() {
 
-	It("NONE", func() {
+	var entries *subEntries
+
+	BeforeEach(func() {
 		messagePayload := make([]byte, 4096)
-		n, err := rand.Read(messagePayload)
-		fmt.Printf("n: %d , err:%v", n, err)
+		for i := range messagePayload {
+			messagePayload[i] = 99
+		}
 
 		message := messageSequence{
 			messageBytes:     messagePayload,
@@ -22,7 +23,7 @@ var _ = FDescribe("Compression algorithms", func() {
 			publishingId:     0,
 		}
 
-		subEntries := &subEntries{
+		entries = &subEntries{
 			items: []*subEntry{{
 				messages:         []messageSequence{message},
 				publishingId:     0,
@@ -32,76 +33,40 @@ var _ = FDescribe("Compression algorithms", func() {
 			}},
 			totalSizeInBytes: 0,
 		}
-		compressNONE{}.Compress(subEntries)
+	})
 
-		Expect(subEntries.totalSizeInBytes).To(Equal(subEntries.items[0].sizeInBytes))
-		Expect(subEntries.totalSizeInBytes).To(Equal(subEntries.items[0].unCompressedSize))
+	It("NONE", func() {
+		compressNONE{}.Compress(entries)
+		Expect(entries.totalSizeInBytes).To(Equal(entries.items[0].sizeInBytes))
+		Expect(entries.totalSizeInBytes).To(Equal(entries.items[0].unCompressedSize))
 
 	})
 
 	It("GZIP", func() {
-		messagePayload := make([]byte, 4096)
-		n, err := rand.Read(messagePayload)
-		for i := range messagePayload {
-			messagePayload[i] = 1
-		}
-		fmt.Printf("n: %d , err:%v", n, err)
-
-		message := messageSequence{
-			messageBytes:     messagePayload,
-			unCompressedSize: len(messagePayload),
-			publishingId:     0,
-		}
-
-		subEntries := &subEntries{
-			items: []*subEntry{{
-				messages:         []messageSequence{message},
-				publishingId:     0,
-				unCompressedSize: len(messagePayload) + 4,
-				sizeInBytes:      0,
-				dataInBytes:      nil,
-			}},
-			totalSizeInBytes: 0,
-		}
 		gzip := compressGZIP{}
-		gzip.Compress(subEntries)
-
-		verifyCompression(gzip, subEntries)
+		gzip.Compress(entries)
+		verifyCompression(gzip, entries)
 
 	})
 
-
 	It("SNAPPY", func() {
-		messagePayload := make([]byte, 4096)
-		for i := range messagePayload {
-			messagePayload[i] = 1
-		}
+		snappy := compressSnappy{}
+		snappy.Compress(entries)
 
-		message := messageSequence{
-			messageBytes:     messagePayload,
-			unCompressedSize: len(messagePayload),
-			publishingId:     0,
-		}
+		verifyCompression(snappy, entries)
 
-		subEntries := &subEntries{
-			items: []*subEntry{{
-				messages:         []messageSequence{message},
-				publishingId:     0,
-				unCompressedSize: len(messagePayload) + 4,
-				sizeInBytes:      0,
-				dataInBytes:      nil,
-			}},
-			totalSizeInBytes: 0,
-		}
+	})
 
-		gzip := compressSnappy{}
-		gzip.Compress(subEntries)
+	It("LZ4", func() {
+		lz4 := compressLZ4{}
+		lz4.Compress(entries)
 
-		verifyCompression(gzip, subEntries)
+		verifyCompression(lz4, entries)
 
 	})
 
 })
+
 func verifyCompression(algo iCompress, subEntries *subEntries) {
 
 	Expect(subEntries.totalSizeInBytes).To(SatisfyAll(BeNumerically("<", subEntries.items[0].unCompressedSize)))

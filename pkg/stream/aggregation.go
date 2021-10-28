@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"github.com/golang/snappy"
+	"github.com/pierrec/lz4"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"io"
 	"io/ioutil"
@@ -15,8 +16,9 @@ const (
 	None   = byte(0)
 	GZIP   = byte(1)
 	SNAPPY = byte(2)
+	LZ4    = byte(3)
+
 	// Not implemented yet
-	//LZ4    = byte(3)
 	//ZSTD   = byte(4)
 )
 
@@ -81,6 +83,8 @@ func compressByValue(value byte) iCompress {
 		return compressGZIP{}
 	case SNAPPY:
 		return compressSnappy{}
+	case LZ4:
+		return compressLZ4{}
 	}
 
 	return compressNONE{}
@@ -209,6 +213,71 @@ func (es compressSnappy) UnCompress(source *bufio.Reader, dataSize, uncompressed
 	reader := snappy.NewReader(bytes.NewBuffer(zipperBuffer))
 	if err != nil {
 		logs.LogError("Error creating SNAPPY NewReader  %s", err)
+	}
+	defer reader.Reset(nil)
+	/// headers ---> payload --> headers --> payload (compressed)
+
+	// Read in data.
+	uncompressedReader, err := ioutil.ReadAll(reader)
+	if err != nil {
+		logs.LogError("Error during reading buffer %s", err)
+	}
+	if uint32(len(uncompressedReader)) != uncompressedDataSize {
+		panic("uncompressedDataSize != count")
+	}
+
+	/// headers ---> payload --> headers --> payload (compressed) --> uncompressed payload
+
+	return bufio.NewReader(bytes.NewReader(uncompressedReader))
+
+}
+
+type compressLZ4 struct {
+}
+
+func (es compressLZ4) Compress(subEntries *subEntries) {
+	for _, entry := range subEntries.items {
+		var tmp bytes.Buffer
+		w := lz4.NewWriter(&tmp)
+		for _, msg := range entry.messages {
+			size := len(msg.messageBytes)
+			if _, err := w.Write(bytesFromInt(uint32(size))); err != nil {
+				logs.LogError("Error compressing with LZ4 %v", err)
+				//return err  // TODO we should return error if we cannot compress
+			}
+			if _, err := w.Write(msg.messageBytes); err != nil {
+				logs.LogError("Error compressing with LZ4 %v", err)
+				//return err  // TODO we should return error if we cannot compress
+			}
+		}
+		if err := w.Flush(); err != nil {
+			logs.LogError("Error compressing with LZ4 %v", err)
+			//return err  // TODO we should return error if we cannot compress
+		}
+		if err := w.Close(); err != nil {
+			logs.LogError("Error compressing with LZ4 %v", err)
+			//return err  // TODO we should return error if we cannot compress
+		}
+		entry.sizeInBytes += len(tmp.Bytes())
+		entry.dataInBytes = tmp.Bytes()
+		subEntries.totalSizeInBytes += len(tmp.Bytes())
+	}
+}
+
+func (es compressLZ4) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
+
+	var zipperBuffer = make([]byte, dataSize)
+	/// empty
+	_, err := io.ReadFull(source, zipperBuffer)
+	/// array of compress data
+
+	if err != nil {
+		logs.LogError("LZ4 Error during reading buffer %s", err)
+	}
+
+	reader := lz4.NewReader(bytes.NewBuffer(zipperBuffer))
+	if err != nil {
+		logs.LogError("Error creating LZ4 NewReader  %s", err)
 	}
 	defer reader.Reset(nil)
 	/// headers ---> payload --> headers --> payload (compressed)
