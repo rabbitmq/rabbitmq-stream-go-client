@@ -326,6 +326,61 @@ func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentO
 
 }
 
+func (envOptions *EnvironmentOptions) SetRequestedHeartbeat(requestedHeartbeat time.Duration) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{RequestedHeartbeat: requestedHeartbeat})
+	} else {
+		for _, parameter := range envOptions.ConnectionParameters {
+			parameter.RequestedHeartbeat = requestedHeartbeat
+		}
+	}
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetRequestedMaxFrameSize(requestedMaxFrameSize int) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{RequestedMaxFrameSize: requestedMaxFrameSize})
+	} else {
+		for _, parameter := range envOptions.ConnectionParameters {
+			parameter.RequestedMaxFrameSize = requestedMaxFrameSize
+		}
+	}
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetWriteBuffer(writeBuffer int) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{WriteBuffer: writeBuffer})
+	} else {
+		for _, parameter := range envOptions.ConnectionParameters {
+			parameter.WriteBuffer = writeBuffer
+		}
+	}
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetReadBuffer(readBuffer int) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{ReadBuffer: readBuffer})
+	} else {
+		for _, parameter := range envOptions.ConnectionParameters {
+			parameter.ReadBuffer = readBuffer
+		}
+	}
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetNoDelay(noDelay bool) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{NoDelay: noDelay})
+	} else {
+		for _, parameter := range envOptions.ConnectionParameters {
+			parameter.NoDelay = noDelay
+		}
+	}
+	return envOptions
+}
+
 type environmentCoordinator struct {
 	mutex             *sync.Mutex
 	mutexContext      *sync.RWMutex

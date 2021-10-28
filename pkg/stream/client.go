@@ -54,10 +54,14 @@ func newClient(connectionName string, broker *Broker) *Client {
 	}
 
 	c := &Client{
-		coordinator:          NewCoordinator(),
-		broker:               clientBroker,
-		destructor:           &sync.Once{},
-		mutex:                &sync.Mutex{},
+		coordinator: NewCoordinator(),
+		broker:      clientBroker,
+		destructor:  &sync.Once{},
+		mutex:       &sync.Mutex{},
+		tuneState: TuneState{
+			requestedMaxFrameSize: clientBroker.RequestedMaxFrameSize,
+			requestedHeartbeat:    int(clientBroker.RequestedHeartbeat.Seconds()),
+		},
 		clientProperties:     ClientProperties{items: make(map[string]string)},
 		connectionProperties: ConnectionProperties{},
 		lastHeartBeat: HeartBeat{
@@ -117,8 +121,6 @@ func (c *Client) connect() error {
 			return err
 		}
 		host, port := u.Hostname(), u.Port()
-		c.tuneState.requestedHeartbeat = 60
-		c.tuneState.requestedMaxFrameSize = 1048576
 
 		servAddr := net.JoinHostPort(host, port)
 		tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
@@ -128,9 +130,18 @@ func (c *Client) connect() error {
 			return errorConnection
 		}
 
-		connection.SetWriteBuffer(8192)
-		connection.SetReadBuffer(65536)
-		connection.SetNoDelay(false)
+		err = connection.SetWriteBuffer(c.broker.WriteBuffer)
+		if err != nil {
+			return err
+		}
+		err = connection.SetReadBuffer(c.broker.ReadBuffer)
+		if err != nil {
+			return err
+		}
+		err = connection.SetNoDelay(c.broker.NoDelay)
+		if err != nil {
+			return err
+		}
 
 		if c.broker.isTLS() {
 			conf := &tls.Config{}
