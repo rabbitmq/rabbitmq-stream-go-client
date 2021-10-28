@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("Compression algorithms", func() {
+var _ = Describe("Compression algorithms", func() {
 
 	var entries *subEntries
 
@@ -52,17 +52,19 @@ var _ = FDescribe("Compression algorithms", func() {
 	It("SNAPPY", func() {
 		snappy := compressSnappy{}
 		snappy.Compress(entries)
-
 		verifyCompression(snappy, entries)
-
 	})
 
 	It("LZ4", func() {
 		lz4 := compressLZ4{}
 		lz4.Compress(entries)
-
 		verifyCompression(lz4, entries)
+	})
 
+	It("ZSTD", func() {
+		zstd := compressZSTD{}
+		zstd.Compress(entries)
+		verifyCompression(zstd, entries)
 	})
 
 })
