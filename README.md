@@ -295,7 +295,7 @@ meaning outbound messages are not only batched in publishing frames, but in sub-
 Use this feature to increase throughput at the cost of increased latency. </br>
 You can find a "Sub Entries Batching" example in the [examples](./examples/) directory. </br>
 
-Default compression is `None`, you can define also `gzip` compression. </br>
+Default compression is `None` (no compression) but you can define different kind of compressions: `GZIP`,`SNAPPY`,`LZ4`,`ZSTD` </br>
 Compression is valid only is `SubEntrySize > 1`
 
 ```golang

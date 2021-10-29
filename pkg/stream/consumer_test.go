@@ -368,7 +368,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		producer2, err := env.NewProducer(streamName,
 			NewProducerOptions().SetBatchPublishingDelay(50).
-				SetSubEntrySize(1055))
+				SetSubEntrySize(1055).SetCompression(Compression{}.Zstd()))
 		Expect(err).NotTo(HaveOccurred())
 		producer3, err := env.NewProducer(streamName,
 			NewProducerOptions().SetBatchPublishingDelay(50))
@@ -377,12 +377,12 @@ var _ = Describe("Streaming Consumers", func() {
 		producer4, err := env.NewProducer(streamName,
 			NewProducerOptions().SetBatchPublishingDelay(50).
 				SetSubEntrySize(2).
-				SetCompression(Compression{}.Gzip()))
+				SetCompression(Compression{}.Lz4()))
 		Expect(err).NotTo(HaveOccurred())
 
 		producer5, err := env.NewProducer(streamName,
 			NewProducerOptions().SetBatchPublishingDelay(500).
-				SetSubEntrySize(56).SetCompression(Compression{}.Gzip()))
+				SetSubEntrySize(56).SetCompression(Compression{}.Snappy()))
 		Expect(err).NotTo(HaveOccurred())
 
 		producer6Batch, err := env.NewProducer(streamName,
