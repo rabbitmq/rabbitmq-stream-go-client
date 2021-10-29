@@ -24,7 +24,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if options == nil {
 		options = NewEnvironmentOptions()
 	}
-	client := newClient("go-stream-locator", nil, options.ProtocolParameters)
+	client := newClient("go-stream-locator", nil, options.TCPParameters)
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
@@ -74,7 +74,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 }
 func (env *Environment) newReconnectClient() (*Client, error) {
 	broker := env.options.ConnectionParameters[0]
-	client := newClient("go-stream-locator", broker, env.options.ProtocolParameters)
+	client := newClient("go-stream-locator", broker, env.options.TCPParameters)
 
 	err := client.connect()
 	tentatives := 1
@@ -84,7 +84,7 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 		time.Sleep(time.Duration(tentatives) * time.Second)
 		rand.Seed(time.Now().UnixNano())
 		n := rand.Intn(len(env.options.ConnectionParameters))
-		client = newClient("stream-locator", env.options.ConnectionParameters[n], env.options.ProtocolParameters)
+		client = newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters)
 		tentatives = tentatives + 1
 		err = client.connect()
 
@@ -205,7 +205,7 @@ func (env *Environment) Close() error {
 
 type EnvironmentOptions struct {
 	ConnectionParameters  []*Broker
-	ProtocolParameters    *ProtocolParameters
+	TCPParameters         *TCPParameters
 	MaxProducersPerClient int
 	MaxConsumersPerClient int
 	AddressResolver       *AddressResolver
@@ -216,7 +216,7 @@ func NewEnvironmentOptions() *EnvironmentOptions {
 		MaxProducersPerClient: 1,
 		MaxConsumersPerClient: 1,
 		ConnectionParameters:  []*Broker{},
-		ProtocolParameters:    newProtocolParameterDefault(),
+		TCPParameters:         newTCPParameterDefault(),
 	}
 }
 
@@ -282,10 +282,10 @@ func (envOptions *EnvironmentOptions) SetVHost(vhost string) *EnvironmentOptions
 }
 
 func (envOptions *EnvironmentOptions) SetTLSConfig(config *tls.Config) *EnvironmentOptions {
-	if envOptions.ProtocolParameters == nil {
-		envOptions.ProtocolParameters = newProtocolParameterDefault()
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
 	}
-	envOptions.ProtocolParameters.tlsConfig = config
+	envOptions.TCPParameters.tlsConfig = config
 	return envOptions
 }
 
@@ -341,46 +341,46 @@ func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentO
 }
 
 func (envOptions *EnvironmentOptions) SetRequestedHeartbeat(requestedHeartbeat time.Duration) *EnvironmentOptions {
-	if envOptions.ProtocolParameters == nil {
-		envOptions.ProtocolParameters = newProtocolParameterDefault()
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
 	}
-	envOptions.ProtocolParameters.RequestedHeartbeat = requestedHeartbeat
+	envOptions.TCPParameters.RequestedHeartbeat = requestedHeartbeat
 
 	return envOptions
 }
 
 func (envOptions *EnvironmentOptions) SetRequestedMaxFrameSize(requestedMaxFrameSize int) *EnvironmentOptions {
-	if envOptions.ProtocolParameters == nil {
-		envOptions.ProtocolParameters = newProtocolParameterDefault()
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
 	}
-	envOptions.ProtocolParameters.RequestedMaxFrameSize = requestedMaxFrameSize
+	envOptions.TCPParameters.RequestedMaxFrameSize = requestedMaxFrameSize
 
 	return envOptions
 }
 
 func (envOptions *EnvironmentOptions) SetWriteBuffer(writeBuffer int) *EnvironmentOptions {
-	if envOptions.ProtocolParameters == nil {
-		envOptions.ProtocolParameters = newProtocolParameterDefault()
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
 	}
-	envOptions.ProtocolParameters.WriteBuffer = writeBuffer
+	envOptions.TCPParameters.WriteBuffer = writeBuffer
 
 	return envOptions
 }
 
 func (envOptions *EnvironmentOptions) SetReadBuffer(readBuffer int) *EnvironmentOptions {
-	if envOptions.ProtocolParameters == nil {
-		envOptions.ProtocolParameters = newProtocolParameterDefault()
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
 	}
-	envOptions.ProtocolParameters.ReadBuffer = readBuffer
+	envOptions.TCPParameters.ReadBuffer = readBuffer
 
 	return envOptions
 }
 
 func (envOptions *EnvironmentOptions) SetNoDelay(noDelay bool) *EnvironmentOptions {
-	if envOptions.ProtocolParameters == nil {
-		envOptions.ProtocolParameters = newProtocolParameterDefault()
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
 	}
-	envOptions.ProtocolParameters.NoDelay = noDelay
+	envOptions.TCPParameters.NoDelay = noDelay
 
 	return envOptions
 }
@@ -465,7 +465,7 @@ func (client *Client) maybeCleanConsumers(streamName string) {
 	}
 }
 
-func (cc *environmentCoordinator) newProducer(leader *Broker, protocolParameters *ProtocolParameters, streamName string,
+func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, streamName string,
 	options *ProducerOptions) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
@@ -480,7 +480,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, protocolParameters
 	}
 
 	if clientResult == nil {
-		clientResult = cc.newClientForProducer(leader, protocolParameters)
+		clientResult = cc.newClientForProducer(leader, tcpParameters)
 	}
 
 	err := clientResult.connect()
@@ -497,7 +497,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, protocolParameters
 		if err != nil {
 			return nil, err
 		}
-		clientResult = cc.newClientForProducer(leader, protocolParameters)
+		clientResult = cc.newClientForProducer(leader, tcpParameters)
 		err = clientResult.connect()
 		if err != nil {
 			return nil, err
@@ -514,8 +514,8 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, protocolParameters
 	return producer, nil
 }
 
-func (cc *environmentCoordinator) newClientForProducer(leader *Broker, protocolParameters *ProtocolParameters) *Client {
-	clientResult := newClient("go-stream-producer", leader, protocolParameters)
+func (cc *environmentCoordinator) newClientForProducer(leader *Broker, tcpParameters *TCPParameters) *Client {
+	clientResult := newClient("go-stream-producer", leader, tcpParameters)
 	chMeta := make(chan metaDataUpdateEvent, 1)
 	clientResult.metadataListener = chMeta
 	go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -534,7 +534,7 @@ func (cc *environmentCoordinator) newClientForProducer(leader *Broker, protocolP
 	return clientResult
 }
 
-func (cc *environmentCoordinator) newConsumer(leader *Broker, protocolParameters *ProtocolParameters,
+func (cc *environmentCoordinator) newConsumer(leader *Broker, tcpParameters *TCPParameters,
 	streamName string, messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	cc.mutex.Lock()
@@ -550,7 +550,7 @@ func (cc *environmentCoordinator) newConsumer(leader *Broker, protocolParameters
 	}
 
 	if clientResult == nil {
-		clientResult = newClient("go-stream-consumer", leader, protocolParameters)
+		clientResult = newClient("go-stream-consumer", leader, tcpParameters)
 		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -634,7 +634,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 	}
 	leader.cloneFrom(clientLocator.broker, resolver)
 
-	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.protocolParameters, streamName,
+	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.tcpParameters, streamName,
 		options)
 	if err != nil {
 		return nil, err
@@ -699,7 +699,7 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 	}
 	consumerBroker.cloneFrom(clientLocator.broker, resolver)
 	consumer, err := ps.consumersCoordinator[coordinatorKey].
-		newConsumer(consumerBroker, clientLocator.protocolParameters, streamName, messagesHandler, consumerOptions)
+		newConsumer(consumerBroker, clientLocator.tcpParameters, streamName, messagesHandler, consumerOptions)
 	if err != nil {
 		return nil, err
 	}

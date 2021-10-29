@@ -14,7 +14,7 @@ type AddressResolver struct {
 	Port int
 }
 
-type ProtocolParameters struct {
+type TCPParameters struct {
 	tlsConfig             *tls.Config
 	RequestedHeartbeat    time.Duration
 	RequestedMaxFrameSize int
@@ -47,8 +47,8 @@ func newBrokerDefault() *Broker {
 	}
 }
 
-func newProtocolParameterDefault() *ProtocolParameters {
-	return &ProtocolParameters{
+func newTCPParameterDefault() *TCPParameters {
+	return &TCPParameters{
 		RequestedHeartbeat:    60 * time.Second,
 		RequestedMaxFrameSize: 1048576,
 		WriteBuffer:           8192,
