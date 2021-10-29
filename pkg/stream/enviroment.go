@@ -240,9 +240,7 @@ func (envOptions *EnvironmentOptions) SetMaxConsumersPerClient(maxConsumersPerCl
 
 func (envOptions *EnvironmentOptions) SetUri(uri string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		brokerOptions := newBrokerDefault()
-		brokerOptions.Uri = uri
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Uri: uri})
 	} else {
 		envOptions.ConnectionParameters[0].Uri = uri
 	}
@@ -252,18 +250,14 @@ func (envOptions *EnvironmentOptions) SetUri(uri string) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetUris(uris []string) *EnvironmentOptions {
 	for _, s := range uris {
-		brokerOptions := newBrokerDefault()
-		brokerOptions.Uri = s
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Uri: s})
 	}
 	return envOptions
 }
 
 func (envOptions *EnvironmentOptions) SetHost(host string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		brokerOptions := newBrokerDefault()
-		brokerOptions.Host = host
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Host: host})
 	} else {
 		envOptions.ConnectionParameters[0].Host = host
 	}
@@ -272,9 +266,7 @@ func (envOptions *EnvironmentOptions) SetHost(host string) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetVHost(vhost string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		brokerOptions := newBrokerDefault()
-		brokerOptions.Vhost = vhost
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Vhost: vhost})
 	} else {
 		envOptions.ConnectionParameters[0].Vhost = vhost
 	}
@@ -292,9 +284,7 @@ func (envOptions *EnvironmentOptions) SetTLSConfig(config *tls.Config) *Environm
 func (envOptions *EnvironmentOptions) IsTLS(val bool) *EnvironmentOptions {
 	if val {
 		if len(envOptions.ConnectionParameters) == 0 {
-			brokerOptions := newBrokerDefault()
-			brokerOptions.Scheme = "rabbitmq-stream+tls"
-			envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
+			envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Scheme: "rabbitmq-stream+tls"})
 		} else {
 			for _, parameter := range envOptions.ConnectionParameters {
 				parameter.Scheme = "rabbitmq-stream+tls"
@@ -318,9 +308,7 @@ func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		brokerOptions := newBrokerDefault()
-		brokerOptions.User = user
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{User: user})
 	} else {
 		envOptions.ConnectionParameters[0].User = user
 	}
@@ -330,9 +318,7 @@ func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		brokerOptions := newBrokerDefault()
-		brokerOptions.Password = password
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Password: password})
 	} else {
 		envOptions.ConnectionParameters[0].Password = password
 	}

@@ -54,6 +54,7 @@ func newTCPParameterDefault() *TCPParameters {
 		WriteBuffer:           8192,
 		ReadBuffer:            65536,
 		NoDelay:               false,
+		tlsConfig:             nil,
 	}
 }
 
