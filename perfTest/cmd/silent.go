@@ -248,6 +248,17 @@ func startPublisher(streamName string) error {
 		if compression == "gzip" {
 			cp = stream.Compression{}.Gzip()
 		}
+
+		if compression == "lz4" {
+			cp = stream.Compression{}.Lz4()
+		}
+		if compression == "snappy" {
+			cp = stream.Compression{}.Snappy()
+		}
+		if compression == "zstd" {
+			cp = stream.Compression{}.Zstd()
+		}
+
 		producerOptions.SetSubEntrySize(subEntrySize).SetCompression(cp)
 
 		logInfo("Enable SubEntrySize: %d, compression: %s", subEntrySize, cp)
