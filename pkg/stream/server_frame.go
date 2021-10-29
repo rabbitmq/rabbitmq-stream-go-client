@@ -27,7 +27,7 @@ func (c *Client) handleResponse() {
 		readerProtocol := &ReaderProtocol{}
 		frameLen, err := readUInt(buffer)
 		if err != nil {
-			logs.LogDebug("socket error: %s", err)
+			logs.LogDebug("Read connection failed: %s", err)
 			_ = c.Close()
 			break
 		}

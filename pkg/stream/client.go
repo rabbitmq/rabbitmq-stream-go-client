@@ -157,7 +157,7 @@ func (c *Client) connect() error {
 		err2 := c.peerProperties()
 
 		if err2 != nil {
-			logs.LogDebug("%s", err2)
+			logs.LogError("Can't set the peer-properties. Check if the stream server is running/reachable")
 			return err2
 		}
 		pwd, _ := u.User.Password()
@@ -367,7 +367,7 @@ func (c *Client) closeHartBeat() {
 	c.destructor.Do(func() {
 		r, err := c.coordinator.GetResponseByName("heartbeat")
 		if err != nil {
-			logs.LogWarn("error removing heartbeat: %s", err)
+			logs.LogDebug("error removing heartbeat: %s", err)
 		} else {
 			r.code <- Code{id: closeChannel}
 		}
