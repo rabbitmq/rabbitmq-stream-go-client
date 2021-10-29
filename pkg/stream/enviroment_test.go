@@ -193,6 +193,31 @@ var _ = Describe("Environment test", func() {
 				SetUri("rabbitmq-stream://g:g@noendpoint:5552/%2f"))
 			Expect(err).To(HaveOccurred())
 		})
+
+	})
+
+	Describe("TCP Parameters", func() {
+
+		env, err := NewEnvironment(&EnvironmentOptions{
+			ConnectionParameters: []*Broker{
+				newBrokerDefault(),
+			},
+			TCPParameters: &TCPParameters{
+				tlsConfig:             nil,
+				RequestedHeartbeat:    60,
+				RequestedMaxFrameSize: 55555,
+				WriteBuffer:           100,
+				ReadBuffer:            200,
+				NoDelay:               false,
+			},
+			MaxProducersPerClient: 1,
+			MaxConsumersPerClient: 1,
+			AddressResolver:       nil,
+		})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
 	})
 
 	Describe("Environment Validations", func() {
@@ -219,6 +244,21 @@ var _ = Describe("Environment test", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(env2.Close()).NotTo(HaveOccurred())
 		})
+
+		It("ReadBuffer and WriteBuffer defaulted to non-zero values", func() {
+			env, err := NewEnvironment(NewEnvironmentOptions())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(env.options.TCPParameters.ReadBuffer).NotTo(BeZero())
+			Expect(env.options.TCPParameters.WriteBuffer).NotTo(BeZero())
+		})
+
+		It("RequestedHeartbeat and RequestFrameSize defaulted to non-zero values", func() {
+			env, err := NewEnvironment(NewEnvironmentOptions())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(env.options.TCPParameters.RequestedHeartbeat).NotTo(BeZero())
+			Expect(env.options.TCPParameters.RequestedMaxFrameSize).NotTo(BeZero())
+		})
+
 	})
 
 	Describe("Stream Existing/Meta data", func() {

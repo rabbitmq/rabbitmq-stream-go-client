@@ -21,16 +21,16 @@ type Environment struct {
 }
 
 func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
-	client := newClient("go-stream-locator", nil)
+	if options == nil {
+		options = NewEnvironmentOptions()
+	}
+	client := newClient("go-stream-locator", nil, options.TCPParameters)
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
 			return
 		}
 	}(client)
-	if options == nil {
-		options = NewEnvironmentOptions()
-	}
 
 	if options.MaxConsumersPerClient <= 0 || options.MaxProducersPerClient <= 0 ||
 		options.MaxConsumersPerClient > 254 || options.MaxProducersPerClient > 254 {
@@ -73,8 +73,8 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	}, client.connect()
 }
 func (env *Environment) newReconnectClient() (*Client, error) {
-	broker := &env.options.ConnectionParameters[0]
-	client := newClient("go-stream-locator", *broker)
+	broker := env.options.ConnectionParameters[0]
+	client := newClient("go-stream-locator", broker, env.options.TCPParameters)
 
 	err := client.connect()
 	tentatives := 1
@@ -84,7 +84,7 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 		time.Sleep(time.Duration(tentatives) * time.Second)
 		rand.Seed(time.Now().UnixNano())
 		n := rand.Intn(len(env.options.ConnectionParameters))
-		client = newClient("stream-locator", env.options.ConnectionParameters[n])
+		client = newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters)
 		tentatives = tentatives + 1
 		err = client.connect()
 
@@ -205,6 +205,7 @@ func (env *Environment) Close() error {
 
 type EnvironmentOptions struct {
 	ConnectionParameters  []*Broker
+	TCPParameters         *TCPParameters
 	MaxProducersPerClient int
 	MaxConsumersPerClient int
 	AddressResolver       *AddressResolver
@@ -215,6 +216,7 @@ func NewEnvironmentOptions() *EnvironmentOptions {
 		MaxProducersPerClient: 1,
 		MaxConsumersPerClient: 1,
 		ConnectionParameters:  []*Broker{},
+		TCPParameters:         newTCPParameterDefault(),
 	}
 }
 
@@ -272,14 +274,10 @@ func (envOptions *EnvironmentOptions) SetVHost(vhost string) *EnvironmentOptions
 }
 
 func (envOptions *EnvironmentOptions) SetTLSConfig(config *tls.Config) *EnvironmentOptions {
-	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{tlsConfig: config})
-	} else {
-		for _, parameter := range envOptions.ConnectionParameters {
-			parameter.tlsConfig = config
-		}
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
 	}
-
+	envOptions.TCPParameters.tlsConfig = config
 	return envOptions
 }
 
@@ -298,7 +296,9 @@ func (envOptions *EnvironmentOptions) IsTLS(val bool) *EnvironmentOptions {
 
 func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
 	if len(envOptions.ConnectionParameters) == 0 {
-		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Port: strconv.Itoa(port)})
+		brokerOptions := newBrokerDefault()
+		brokerOptions.Port = strconv.Itoa(port)
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, brokerOptions)
 	} else {
 		envOptions.ConnectionParameters[0].Port = strconv.Itoa(port)
 	}
@@ -324,6 +324,51 @@ func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentO
 	}
 	return envOptions
 
+}
+
+func (envOptions *EnvironmentOptions) SetRequestedHeartbeat(requestedHeartbeat time.Duration) *EnvironmentOptions {
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
+	}
+	envOptions.TCPParameters.RequestedHeartbeat = requestedHeartbeat
+
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetRequestedMaxFrameSize(requestedMaxFrameSize int) *EnvironmentOptions {
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
+	}
+	envOptions.TCPParameters.RequestedMaxFrameSize = requestedMaxFrameSize
+
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetWriteBuffer(writeBuffer int) *EnvironmentOptions {
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
+	}
+	envOptions.TCPParameters.WriteBuffer = writeBuffer
+
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetReadBuffer(readBuffer int) *EnvironmentOptions {
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
+	}
+	envOptions.TCPParameters.ReadBuffer = readBuffer
+
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetNoDelay(noDelay bool) *EnvironmentOptions {
+	if envOptions.TCPParameters == nil {
+		envOptions.TCPParameters = newTCPParameterDefault()
+	}
+	envOptions.TCPParameters.NoDelay = noDelay
+
+	return envOptions
 }
 
 type environmentCoordinator struct {
@@ -406,7 +451,7 @@ func (client *Client) maybeCleanConsumers(streamName string) {
 	}
 }
 
-func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
+func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, streamName string,
 	options *ProducerOptions) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
@@ -421,7 +466,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 	}
 
 	if clientResult == nil {
-		clientResult = cc.newClientForProducer(leader)
+		clientResult = cc.newClientForProducer(leader, tcpParameters)
 	}
 
 	err := clientResult.connect()
@@ -438,7 +483,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 		if err != nil {
 			return nil, err
 		}
-		clientResult = cc.newClientForProducer(leader)
+		clientResult = cc.newClientForProducer(leader, tcpParameters)
 		err = clientResult.connect()
 		if err != nil {
 			return nil, err
@@ -455,8 +500,8 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, streamName string,
 	return producer, nil
 }
 
-func (cc *environmentCoordinator) newClientForProducer(leader *Broker) *Client {
-	clientResult := newClient("go-stream-producer", leader)
+func (cc *environmentCoordinator) newClientForProducer(leader *Broker, tcpParameters *TCPParameters) *Client {
+	clientResult := newClient("go-stream-producer", leader, tcpParameters)
 	chMeta := make(chan metaDataUpdateEvent, 1)
 	clientResult.metadataListener = chMeta
 	go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -475,7 +520,7 @@ func (cc *environmentCoordinator) newClientForProducer(leader *Broker) *Client {
 	return clientResult
 }
 
-func (cc *environmentCoordinator) newConsumer(leader *Broker,
+func (cc *environmentCoordinator) newConsumer(leader *Broker, tcpParameters *TCPParameters,
 	streamName string, messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	cc.mutex.Lock()
@@ -491,7 +536,7 @@ func (cc *environmentCoordinator) newConsumer(leader *Broker,
 	}
 
 	if clientResult == nil {
-		clientResult = newClient("go-stream-consumer", leader)
+		clientResult = newClient("go-stream-consumer", leader, tcpParameters)
 		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -575,7 +620,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 	}
 	leader.cloneFrom(clientLocator.broker, resolver)
 
-	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, streamName,
+	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.tcpParameters, streamName,
 		options)
 	if err != nil {
 		return nil, err
@@ -640,7 +685,7 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 	}
 	consumerBroker.cloneFrom(clientLocator.broker, resolver)
 	consumer, err := ps.consumersCoordinator[coordinatorKey].
-		newConsumer(consumerBroker, streamName, messagesHandler, consumerOptions)
+		newConsumer(consumerBroker, clientLocator.tcpParameters, streamName, messagesHandler, consumerOptions)
 	if err != nil {
 		return nil, err
 	}
