@@ -426,7 +426,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 9*time.Second).Should(Equal(int32((2000*5)+(50*len(batchMessages)))),
+		}, 15*time.Second).Should(Equal(int32((2000*5)+(50*len(batchMessages)))),
 			"consumer should be the same sent from different publishers settings")
 
 		Expect(producer1.Close()).NotTo(HaveOccurred())
