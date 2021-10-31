@@ -590,7 +590,7 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 	if streamMetadata.Leader == nil {
-		return nil, fmt.Errorf("leader not ready yet for stream: %s", stream)
+		return nil, LeaderNotReady
 	}
 
 	streamMetadata.Leader.advPort = streamMetadata.Leader.Port
@@ -619,8 +619,13 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 	}
 
 	if streamMetadata.Leader == nil {
-		// in this case the leader is not ready yet
-		return nil, fmt.Errorf("leader not ready yet for stream: %s", stream)
+		return nil, LeaderNotReady
+	}
+
+	for _, replica := range streamMetadata.Replicas {
+		if replica == nil {
+			return nil, ReplicaNotReady
+		}
 	}
 
 	var brokers []*Broker

@@ -112,6 +112,12 @@ var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
 var FrameTooLarge = errors.New("Frame Too Large, the buffer is too big")
 var CodeAccessRefused = errors.New("Resources Access Refused")
 var ConnectionClosed = errors.New("Can't send the message, connection closed")
+var StreamNotAvailable = errors.New("Stream Not Available")
+var UnknownFrame = errors.New("Unknown Frame")
+var InternalError = errors.New("Internal Error")
+
+var LeaderNotReady = errors.New("Leader not Ready yet")
+var ReplicaNotReady = errors.New("Replica is not ready yet")
 
 func lookErrorCode(errorCode uint16) error {
 	switch errorCode {
@@ -135,6 +141,12 @@ func lookErrorCode(errorCode uint16) error {
 		return FrameTooLarge
 	case responseCodeAccessRefused:
 		return CodeAccessRefused
+	case responseCodeStreamNotAvailable:
+		return StreamNotAvailable
+	case responseCodeUnknownFrame:
+		return UnknownFrame
+	case responseCodeInternalError:
+		return InternalError
 	default:
 		{
 			logs.LogWarn("Error not handled %d", errorCode)
