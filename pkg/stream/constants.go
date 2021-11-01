@@ -2,9 +2,10 @@ package stream
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
-	"time"
 )
 
 // is needed to indicate the general status
@@ -117,7 +118,6 @@ var UnknownFrame = errors.New("Unknown Frame")
 var InternalError = errors.New("Internal Error")
 
 var LeaderNotReady = errors.New("Leader not Ready yet")
-var ReplicaNotReady = errors.New("Replica is not ready yet")
 
 func lookErrorCode(errorCode uint16) error {
 	switch errorCode {
