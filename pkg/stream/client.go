@@ -5,14 +5,13 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
 	"net"
 	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 type TuneState struct {
