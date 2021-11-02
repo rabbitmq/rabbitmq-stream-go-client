@@ -40,15 +40,15 @@ func (compression Compression) Gzip() Compression {
 }
 
 func (compression Compression) Snappy() Compression {
-	return Compression{value: SNAPPY}
+	return Compression{value: SNAPPY, enabled: true}
 }
 
 func (compression Compression) Zstd() Compression {
-	return Compression{value: ZSTD}
+	return Compression{value: ZSTD, enabled: true}
 }
 
 func (compression Compression) Lz4() Compression {
-	return Compression{value: LZ4}
+	return Compression{value: LZ4, enabled: true}
 }
 
 type subEntry struct {

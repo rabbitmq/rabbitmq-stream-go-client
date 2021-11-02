@@ -174,7 +174,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 
 	if streamMetadata.Leader == nil {
 
-		return nil, errors.New("can't find leader for stream: " + streamName)
+		return nil, LeaderNotReady
 	}
 
 	return streamMetadata, nil

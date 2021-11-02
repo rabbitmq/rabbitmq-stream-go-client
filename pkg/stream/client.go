@@ -590,7 +590,7 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 	if streamMetadata.Leader == nil {
-		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
+		return nil, LeaderNotReady
 	}
 
 	streamMetadata.Leader.advPort = streamMetadata.Leader.Port
@@ -610,16 +610,28 @@ func (c *Client) StreamExists(stream string) bool {
 func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
-		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
+		return nil, fmt.Errorf("leader error for stream: %s", stream)
 	}
 
 	streamMetadata := streamsMetadata.Get(stream)
 	if streamMetadata.responseCode != responseCodeOk {
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
-	var brokers []*Broker
+
+	if streamMetadata.Leader == nil {
+		return nil, LeaderNotReady
+	}
+
+	brokers := make([]*Broker, 0, 1+len(streamMetadata.Replicas))
 	brokers = append(brokers, streamMetadata.Leader)
-	brokers = append(brokers, streamMetadata.Replicas...)
+	for idx, replica := range streamMetadata.Replicas {
+		if replica == nil {
+			logs.LogWarn("Stream %s replica not ready: %d", stream, idx)
+			continue
+		}
+		brokers = append(brokers, replica)
+	}
+
 	rand.Seed(time.Now().UnixNano())
 	n := rand.Intn(len(brokers))
 	return brokers[n], nil
