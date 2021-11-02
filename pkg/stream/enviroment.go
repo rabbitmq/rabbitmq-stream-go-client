@@ -104,7 +104,11 @@ func (env *Environment) DeclareStream(streamName string, options *StreamOptions)
 	if err != nil {
 		return err
 	}
-	return client.DeclareStream(streamName, options)
+	errCreateStream := client.DeclareStream(streamName, options)
+	if errCreateStream == StreamAlreadyExists {
+		return nil
+	}
+	return errCreateStream
 }
 
 func (env *Environment) DeleteStream(streamName string) error {

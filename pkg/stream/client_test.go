@@ -115,8 +115,19 @@ var _ = Describe("Streaming testEnvironment", func() {
 	It("Create two times Stream", func() {
 		Expect(testEnvironment.DeclareStream(testStreamName, nil)).NotTo(HaveOccurred())
 		err := testEnvironment.DeclareStream(testStreamName, nil)
-		Expect(err).To(HaveOccurred())
-		Expect(err).To(Equal(StreamAlreadyExists))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
+	})
+
+	It("Stream Exists", func() {
+		exists, err := testEnvironment.StreamExists(testStreamName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(Equal(false))
+
+		Expect(testEnvironment.DeclareStream(testStreamName, nil)).NotTo(HaveOccurred())
+		exists, err = testEnvironment.StreamExists(testStreamName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(Equal(true))
 		Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
 	})
 
