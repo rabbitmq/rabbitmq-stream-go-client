@@ -177,6 +177,7 @@ err = env.DeclareStream(streamName,
 ```
 
 The function `DeclareStream` doesn't return errors if a stream is already defined with the same parameters.
+Note that it returns the precondition failed when it doesn't have the same parameters
 Use `StreamExists` to check if a stream exists.
 
 
