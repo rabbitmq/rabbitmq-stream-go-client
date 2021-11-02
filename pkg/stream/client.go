@@ -5,13 +5,14 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
 	"net"
 	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 type TuneState struct {
@@ -610,7 +611,7 @@ func (c *Client) StreamExists(stream string) bool {
 func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
-		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
+		return nil, fmt.Errorf("leader error for stream: %s", stream)
 	}
 
 	streamMetadata := streamsMetadata.Get(stream)
@@ -622,15 +623,16 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 		return nil, LeaderNotReady
 	}
 
-	for _, replica := range streamMetadata.Replicas {
+	brokers := make([]*Broker, 0, 1+len(streamMetadata.Replicas))
+	brokers = append(brokers, streamMetadata.Leader)
+	for idx, replica := range streamMetadata.Replicas {
 		if replica == nil {
-			return nil, ReplicaNotReady
+			logs.LogWarn("Stream %s replica not ready: %d", stream, idx)
+			continue
 		}
+		brokers = append(brokers, replica)
 	}
 
-	var brokers []*Broker
-	brokers = append(brokers, streamMetadata.Leader)
-	brokers = append(brokers, streamMetadata.Replicas...)
 	rand.Seed(time.Now().UnixNano())
 	n := rand.Intn(len(brokers))
 	return brokers[n], nil
