@@ -176,7 +176,9 @@ err = env.DeclareStream(streamName,
 		SetMaxLengthBytes(stream.ByteCapacity{}.GB(2)))
 ```
 
-Note: The function `DeclareStream` returns `stream.StreamAlreadyExists` if a stream is already defined.
+The function `DeclareStream` doesn't return errors if a stream is already defined with the same parameters.
+Note that it returns the precondition failed when it doesn't have the same parameters
+Use `StreamExists` to check if a stream exists.
 
 
 ### Publish messages
