@@ -43,10 +43,10 @@ func (coordinator *Coordinator) NewProducer(
 	parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	////size := 1
-	//if parameters != nil {
-	//	size = parameters.QueueSize
-	//}
+	size := 1
+	if parameters != nil {
+		size = parameters.QueueSize
+	}
 
 	var lastId, err = coordinator.getNextProducerItem()
 	if err != nil {
@@ -57,7 +57,7 @@ func (coordinator *Coordinator) NewProducer(
 		mutex:               &sync.Mutex{},
 		unConfirmedMessages: map[int64]*ConfirmationStatus{},
 		status:              open,
-		messageSequenceCh:   make(chan messageSequence, 0),
+		messageSequenceCh:   make(chan messageSequence, size),
 		pendingMessages: pendingMessagesSequence{
 			messages: make([]messageSequence, 0),
 			size:     initBufferPublishSize,
