@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"strconv"
 	"sync"
 	"time"
@@ -93,9 +92,8 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 	reason.Name = producer.GetName()
 	tentatives := 0
 	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 		tentatives++
-		logs.LogInfo("%d %d", producer.lenUnConfirmed(), len(producer.pendingMessages.messages))
 	}
 	producer.FlushUnConfirmedMessages()
 
