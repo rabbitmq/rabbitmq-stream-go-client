@@ -45,9 +45,9 @@ func (coordinator *Coordinator) NewProducer(
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	size := 10000
-	//if parameters != nil {
-	//	size = parameters.QueueSize
-	//}
+	if parameters != nil {
+		size = parameters.QueueSize
+	}
 
 	var lastId, err = coordinator.getNextProducerItem()
 	if err != nil {
