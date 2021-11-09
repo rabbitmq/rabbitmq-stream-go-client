@@ -67,6 +67,7 @@ type Producer struct {
 	unConfirmedMessages map[int64]*ConfirmationStatus
 	sequence            int64
 	mutex               *sync.Mutex
+	mutexPending        *sync.Mutex
 	publishConfirm      chan []*ConfirmationStatus
 	closeHandler        chan Event
 	status              int
@@ -160,6 +161,12 @@ func (producer *Producer) lenUnConfirmed() int {
 	return len(producer.unConfirmedMessages)
 }
 
+func (producer *Producer) lenPending() int {
+	producer.mutexPending.Lock()
+	defer producer.mutexPending.Unlock()
+	return len(producer.pendingMessages.messages)
+}
+
 func (producer *Producer) getUnConfirmed(sequence int64) *ConfirmationStatus {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
@@ -229,6 +236,7 @@ func (producer *Producer) startPublishTask() {
 						}
 						return
 					}
+					producer.mutexPending.Lock()
 					if producer.pendingMessages.size+msg.unCompressedSize >= producer.options.client.getTuneState().
 						requestedMaxFrameSize {
 						producer.sendBufferedMessages()
@@ -239,10 +247,13 @@ func (producer *Producer) startPublishTask() {
 					if len(producer.pendingMessages.messages) >= (producer.options.BatchSize) {
 						producer.sendBufferedMessages()
 					}
+					producer.mutexPending.Unlock()
 				}
 
 			case <-ticker.C:
+				producer.mutexPending.Lock()
 				producer.sendBufferedMessages()
+				producer.mutexPending.Unlock()
 			}
 
 		}
@@ -402,6 +413,7 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 /// the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error, see
 var count int32
+
 func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequence, producerID uint8) error {
 	producer.options.client.socket.mutex.Lock()
 	defer producer.options.client.socket.mutex.Unlock()
@@ -482,9 +494,18 @@ func (producer *Producer) Close() error {
 	if producer.getStatus() == closed {
 		return AlreadyClosed
 	}
+
+	v1 := len(producer.messageSequenceCh)
+	v2 := producer.lenPending()
+
+	for v1 > 0 || v2 > 0 || producer.lenUnConfirmed() > 0 {
+		logs.LogInfo("len %d pendingMessages %d - lenUnConfirmed %d ", v1, v2, producer.lenUnConfirmed())
+		time.Sleep(time.Duration(2*producer.options.BatchPublishingDelay) * time.Millisecond)
+		logs.LogInfo("lenb %d pendingMessages %d - lenUnConfirmed %d ", v1, v2, producer.lenUnConfirmed())
+		v1 = len(producer.messageSequenceCh)
+		v2 = producer.lenPending()
+	}
 	producer.setStatus(closed)
-	time.Sleep(time.Duration(producer.options.BatchPublishingDelay) * time.Millisecond)
-	producer.sendBufferedMessages()
 
 	if !producer.options.client.socket.isOpen() {
 		return fmt.Errorf("tcp connection is closed")
