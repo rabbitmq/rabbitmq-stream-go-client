@@ -412,7 +412,6 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 
 /// the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error, see
-var count int32
 
 func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequence, producerID uint8) error {
 	producer.options.client.socket.mutex.Lock()
@@ -447,7 +446,6 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	writeBProtocolHeader(producer.options.client.socket.writer, length, commandPublish)
 	writeBByte(producer.options.client.socket.writer, producerID)
 	numberOfMessages := len(messagesSequence)
-	atomic.AddInt32(&count, int32(numberOfMessages))
 	numberOfMessages = numberOfMessages / producer.options.SubEntrySize
 	if len(messagesSequence)%producer.options.SubEntrySize != 0 {
 		numberOfMessages += 1
