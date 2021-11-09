@@ -55,6 +55,7 @@ func (coordinator *Coordinator) NewProducer(
 	var producer = &Producer{id: lastId,
 		options:             parameters,
 		mutex:               &sync.Mutex{},
+		mutexPending:        &sync.Mutex{},
 		unConfirmedMessages: map[int64]*ConfirmationStatus{},
 		status:              open,
 		messageSequenceCh:   make(chan messageSequence, size),
@@ -91,7 +92,7 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 	reason.Name = producer.GetName()
 	tentatives := 0
 	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 		tentatives++
 	}
 	producer.FlushUnConfirmedMessages()

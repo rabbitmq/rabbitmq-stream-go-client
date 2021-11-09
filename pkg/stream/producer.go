@@ -67,6 +67,7 @@ type Producer struct {
 	unConfirmedMessages map[int64]*ConfirmationStatus
 	sequence            int64
 	mutex               *sync.Mutex
+	mutexPending        *sync.Mutex
 	publishConfirm      chan []*ConfirmationStatus
 	closeHandler        chan Event
 	status              int
@@ -160,6 +161,12 @@ func (producer *Producer) lenUnConfirmed() int {
 	return len(producer.unConfirmedMessages)
 }
 
+func (producer *Producer) lenPendingMessages() int {
+	producer.mutexPending.Lock()
+	defer producer.mutexPending.Unlock()
+	return len(producer.pendingMessages.messages)
+}
+
 func (producer *Producer) getUnConfirmed(sequence int64) *ConfirmationStatus {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
@@ -229,6 +236,7 @@ func (producer *Producer) startPublishTask() {
 						}
 						return
 					}
+					producer.mutexPending.Lock()
 					if producer.pendingMessages.size+msg.unCompressedSize >= producer.options.client.getTuneState().
 						requestedMaxFrameSize {
 						producer.sendBufferedMessages()
@@ -239,10 +247,13 @@ func (producer *Producer) startPublishTask() {
 					if len(producer.pendingMessages.messages) >= (producer.options.BatchSize) {
 						producer.sendBufferedMessages()
 					}
+					producer.mutexPending.Unlock()
 				}
 
 			case <-ticker.C:
+				producer.mutexPending.Lock()
 				producer.sendBufferedMessages()
+				producer.mutexPending.Unlock()
 			}
 
 		}
@@ -401,6 +412,7 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 
 /// the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error, see
+
 func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequence, producerID uint8) error {
 	producer.options.client.socket.mutex.Lock()
 	defer producer.options.client.socket.mutex.Unlock()
@@ -456,7 +468,6 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 
 		producer.setStatus(closed)
 		producer.FlushUnConfirmedMessages()
-		//time.Sleep(800 * time.Millisecond)
 		return err
 	}
 	return nil
@@ -480,7 +491,10 @@ func (producer *Producer) Close() error {
 	if producer.getStatus() == closed {
 		return AlreadyClosed
 	}
+
+	producer.waitForInflightMessages()
 	producer.setStatus(closed)
+
 	if !producer.options.client.socket.isOpen() {
 		return fmt.Errorf("tcp connection is closed")
 	}
@@ -506,6 +520,27 @@ func (producer *Producer) Close() error {
 	close(producer.messageSequenceCh)
 
 	return nil
+}
+
+func (producer *Producer) waitForInflightMessages() {
+	// during the close there cloud be pending messages
+	// it waits for producer.options.BatchPublishingDelay
+	// to flush the last messages
+	// see issues/103
+
+	channelLength := len(producer.messageSequenceCh)
+	pendingMessagesLen := producer.lenPendingMessages()
+	tentatives := 0
+
+	for (channelLength > 0 || pendingMessagesLen > 0 || producer.lenUnConfirmed() > 0) && tentatives < 3 {
+		logs.LogDebug("waitForInflightMessages, channel: %d - pending messages len: %d - unconfirmed len: %d - retry: %d",
+			channelLength, pendingMessagesLen,
+			producer.lenUnConfirmed(), tentatives)
+		time.Sleep(time.Duration(2*producer.options.BatchPublishingDelay) * time.Millisecond)
+		channelLength = len(producer.messageSequenceCh)
+		pendingMessagesLen = producer.lenPendingMessages()
+		tentatives++
+	}
 }
 
 func (producer *Producer) GetStreamName() string {
