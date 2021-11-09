@@ -747,8 +747,25 @@ func (c *Client) DeclareSubscriber(streamName string,
 			case messages := <-consumer.response.messages:
 				for _, message := range messages {
 					consumer.MessagesHandler(ConsumerContext{Consumer: consumer}, message)
+					if consumer.options.autocommit {
+						consumer.messageCountBeforeStorage = consumer.messageCountBeforeStorage + 1
+						if consumer.messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage {
+							err := consumer.cacheStoreOffset()
+							if err != nil {
+								logs.LogError("message count before storage auto commit error : %s", err)
+							}
+							consumer.messageCountBeforeStorage = 0
+						}
+					}
 				}
 
+			case <-time.After(consumer.options.autoCommitStrategy.flushInterval):
+				if consumer.options.autocommit {
+					err := consumer.cacheStoreOffset()
+					if err != nil {
+						logs.LogError("auto commit error: %s", err)
+					}
+				}
 			}
 		}
 	}()

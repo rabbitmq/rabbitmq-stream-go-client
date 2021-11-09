@@ -6,6 +6,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	logs "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
+	"time"
 )
 
 type Consumer struct {
@@ -18,7 +19,16 @@ type Consumer struct {
 	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
 	// and won't change. currentOffset is the status of the offset
 	currentOffset int64
-	closeHandler  chan Event
+
+	/// this is needed for the autocommit
+	// to avoid to store always the same values
+	lastStoredOffset int64
+
+	closeHandler chan Event
+	// see autocommit strategy
+	// it is needed to trigger the
+	// auto-commit after messageCountBeforeStorage
+	messageCountBeforeStorage int
 
 	status int
 }
@@ -76,18 +86,41 @@ type ConsumerContext struct {
 
 type MessagesHandler func(consumerContext ConsumerContext, message *amqp.Message)
 
-type /**/ ConsumerOptions struct {
-	client       *Client
-	ConsumerName string
-	streamName   string
-	autocommit   bool
-	Offset       OffsetSpecification
+type AutoCommitStrategy struct {
+	messageCountBeforeStorage int
+	flushInterval             time.Duration
+}
+
+func (ac *AutoCommitStrategy) SetCountBeforeStorage(messageCountBeforeStorage int) *AutoCommitStrategy {
+	ac.messageCountBeforeStorage = messageCountBeforeStorage
+	return ac
+}
+func (ac *AutoCommitStrategy) SetFlushInterval(flushInterval time.Duration) *AutoCommitStrategy {
+	ac.flushInterval = flushInterval
+	return ac
+}
+
+func NewAutoCommitStrategy() *AutoCommitStrategy {
+	return &AutoCommitStrategy{
+		messageCountBeforeStorage: 20_000,
+		flushInterval:             10 * time.Second,
+	}
+}
+
+type ConsumerOptions struct {
+	client             *Client
+	ConsumerName       string
+	streamName         string
+	autocommit         bool
+	autoCommitStrategy *AutoCommitStrategy
+	Offset             OffsetSpecification
 }
 
 func NewConsumerOptions() *ConsumerOptions {
 	return &ConsumerOptions{
-		Offset:     OffsetSpecification{}.Last(),
-		autocommit: true}
+		Offset:             OffsetSpecification{}.Last(),
+		autocommit:         false,
+		autoCommitStrategy: NewAutoCommitStrategy()}
 }
 
 func (c *ConsumerOptions) SetConsumerName(consumerName string) *ConsumerOptions {
@@ -95,11 +128,17 @@ func (c *ConsumerOptions) SetConsumerName(consumerName string) *ConsumerOptions 
 	return c
 }
 
-//func (c *ConsumerOptions) AutoCommit() *ConsumerOptions {
-//	c.autocommit = true
-//	return c
-//}
-func (c *ConsumerOptions) ManualCommit() *ConsumerOptions {
+func (c *ConsumerOptions) SetAutoCommit() *ConsumerOptions {
+	c.autocommit = true
+	return c
+}
+
+func (c *ConsumerOptions) SetAutoCommitStrategy(autoCommitStrategy *AutoCommitStrategy) *ConsumerOptions {
+	c.autoCommitStrategy = autoCommitStrategy
+	return c
+}
+
+func (c *ConsumerOptions) SetManualCommit() *ConsumerOptions {
 	c.autocommit = false
 	return c
 }
@@ -170,7 +209,18 @@ func (consumer *Consumer) Close() error {
 	return err.Err
 }
 
+func (consumer *Consumer) cacheStoreOffset() error {
+	if consumer.lastStoredOffset != consumer.GetOffset() {
+		consumer.lastStoredOffset = consumer.GetOffset()
+		return consumer.internalStoreOffset()
+	}
+	return nil
+}
+
 func (consumer *Consumer) StoreOffset() error {
+	return consumer.internalStoreOffset()
+}
+func (consumer *Consumer) internalStoreOffset() error {
 	if consumer.options.streamName == "" {
 		return fmt.Errorf("stream Name can't be empty")
 	}
