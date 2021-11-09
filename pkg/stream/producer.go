@@ -161,7 +161,7 @@ func (producer *Producer) lenUnConfirmed() int {
 	return len(producer.unConfirmedMessages)
 }
 
-func (producer *Producer) lenPending() int {
+func (producer *Producer) lenPendingMessages() int {
 	producer.mutexPending.Lock()
 	defer producer.mutexPending.Unlock()
 	return len(producer.pendingMessages.messages)
@@ -470,7 +470,6 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 
 		producer.setStatus(closed)
 		producer.FlushUnConfirmedMessages()
-		//time.Sleep(800 * time.Millisecond)
 		return err
 	}
 	return nil
@@ -495,16 +494,7 @@ func (producer *Producer) Close() error {
 		return AlreadyClosed
 	}
 
-	v1 := len(producer.messageSequenceCh)
-	v2 := producer.lenPending()
-
-	for v1 > 0 || v2 > 0 || producer.lenUnConfirmed() > 0 {
-		logs.LogInfo("len %d pendingMessages %d - lenUnConfirmed %d ", v1, v2, producer.lenUnConfirmed())
-		time.Sleep(time.Duration(2*producer.options.BatchPublishingDelay) * time.Millisecond)
-		logs.LogInfo("lenb %d pendingMessages %d - lenUnConfirmed %d ", v1, v2, producer.lenUnConfirmed())
-		v1 = len(producer.messageSequenceCh)
-		v2 = producer.lenPending()
-	}
+	producer.waitForInflightMessages()
 	producer.setStatus(closed)
 
 	if !producer.options.client.socket.isOpen() {
@@ -532,6 +522,27 @@ func (producer *Producer) Close() error {
 	close(producer.messageSequenceCh)
 
 	return nil
+}
+
+func (producer *Producer) waitForInflightMessages() {
+	// during the close there cloud be pending messages
+	// it waits for producer.options.BatchPublishingDelay
+	// to flush the last messages
+	// see issues/103
+
+	channelLength := len(producer.messageSequenceCh)
+	pendingMessagesLen := producer.lenPendingMessages()
+	tentatives := 0
+
+	for (channelLength > 0 || pendingMessagesLen > 0 || producer.lenUnConfirmed() > 0) && tentatives < 3 {
+		logs.LogDebug("waitForInflightMessages, channel: %d - pending messages len: %d - unconfirmed len: %d - retry: %d",
+			channelLength, pendingMessagesLen,
+			producer.lenUnConfirmed(), tentatives)
+		time.Sleep(time.Duration(2*producer.options.BatchPublishingDelay) * time.Millisecond)
+		channelLength = len(producer.messageSequenceCh)
+		pendingMessagesLen = producer.lenPendingMessages()
+		tentatives++
+	}
 }
 
 func (producer *Producer) GetStreamName() string {

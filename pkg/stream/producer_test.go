@@ -40,8 +40,6 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).NotTo(HaveOccurred())
-		// we can't close the subscribe until the publish is finished
-		time.Sleep(200 * time.Millisecond)
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
@@ -55,8 +53,6 @@ var _ = Describe("Streaming Producers", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).NotTo(HaveOccurred())
-				// we can't close the subscribe until the publish is finished
-				time.Sleep(200 * time.Millisecond)
 				err = producer.Close()
 				Expect(err).NotTo(HaveOccurred())
 			}(&wg)
@@ -215,6 +211,22 @@ var _ = Describe("Streaming Producers", func() {
 
 		Expect(len(producer.unConfirmedMessages)).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
+	})
+
+	It("Wait for inflight messages", func() {
+		// https://github.com/rabbitmq/rabbitmq-stream-go-client/issues/103
+
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		for i := 0; i < 65672; i++ {
+			Expect(producer.Send(amqp.NewMessage([]byte("h")))).NotTo(HaveOccurred())
+		}
+
+		Expect(producer.Close()).NotTo(HaveOccurred())
+		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.lenPendingMessages()).To(Equal(0))
+		Expect(len(producer.messageSequenceCh)).To(Equal(0))
 	})
 
 	It("Handle close", func() {

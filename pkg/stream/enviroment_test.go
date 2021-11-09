@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -216,11 +215,7 @@ var _ = Describe("Environment test", func() {
 			AddressResolver:       nil,
 		})
 
-		//Expect(err).NotTo(HaveOccurred())
-		if err != nil {
-			fmt.Printf("aaaaaaaaaaaa %s", err)
-
-		}
+		Expect(err).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 
 	})
