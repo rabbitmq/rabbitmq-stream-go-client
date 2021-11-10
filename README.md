@@ -360,7 +360,7 @@ consumer, err := env.NewConsumer(
 stream.NewConsumerOptions().
 			SetConsumerName("my_consumer"). <------ 
 ```
-A consumer must have a name to be able to store offsets.
+A consumer must have a name to be able to store offsets. <br>
 Note: *AVOID to store the offset for each single message, it will reduce the performances*
 
 See also "Offset Tracking" example in the [examples](./examples/) directory
@@ -400,6 +400,7 @@ stream.NewConsumerOptions().
 	SetOffset(stream.OffsetSpecification{}.First())) 
 ```
 
+See also "Automatic Offset Tracking" example in the [examples](./examples/) directory
 
 ### Handle Close
 Client provides an interface to handle the producer/consumer close.

@@ -3,7 +3,8 @@ Stream examples
 
  - [Getting started](./getting_started.go). A good point to start.
  - [Offset Start](./offsetStart/offset.go). How to set different points to start consuming
- - [Offset Tracking](./offsetTracking/offsetTracking.go). How to store the consumer position server side
+ - [Offset Tracking](./offsetTracking/offsetTracking.go). Manually store the consumer offset 
+ - [Automatic Offset Tracking](./automaticOffsetTracking/automaticOffsetTracking.go). Automatic store the consumer offset
  - [Getting started TLS](./tls/getting_started_tls.go). A TLS example.
  - [HA Producer](./haProducer/producer.go). HA producer example (Still experimental)
  - [Deduplication](./deduplication/deduplication.go). deduplication example, run it more than one time, and the records <br />
