@@ -392,13 +392,12 @@ This avoids having pending, not stored offsets in case of inactivity.  The defau
 Those settings are configurable, as shown in the following snippet:
 ```golang
 stream.NewConsumerOptions().
-			// set a consumerOffsetNumber name
-			SetConsumerName("my_consumer").
-		
-			SetAutoCommit(stream.NewAutoCommitStrategy().
-										SetCountBeforeStorage(50). // store each 50 messages stores 
-										SetFlushInterval(10*time.Second)). // store each 10 seconds
-			SetOffset(stream.OffsetSpecification{}.First())) // or after 20 seconds
+	// set a consumerOffsetNumber name
+	SetConsumerName("my_consumer").
+	SetAutoCommit(stream.NewAutoCommitStrategy().
+		SetCountBeforeStorage(50). // store each 50 messages stores 
+		SetFlushInterval(10*time.Second)). // store each 10 seconds
+	SetOffset(stream.OffsetSpecification{}.First())) 
 ```
 
 
