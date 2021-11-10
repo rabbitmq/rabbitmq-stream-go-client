@@ -65,11 +65,34 @@ func (consumer *Consumer) setCurrentOffset(offset int64) {
 	consumer.currentOffset = offset
 }
 
+func (consumer *Consumer) incCurrentOffset() {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	consumer.currentOffset += 1
+}
+
 func (consumer *Consumer) GetOffset() int64 {
 	consumer.mutex.Lock()
 	res := consumer.currentOffset
 	consumer.mutex.Unlock()
 	return res
+}
+
+func (consumer *Consumer) GetLastStoredOffset() int64 {
+	consumer.mutex.Lock()
+	res := consumer.lastStoredOffset
+	consumer.mutex.Unlock()
+	return res
+}
+
+func (consumer *Consumer) updateLastStoredOffset() bool {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	if consumer.lastStoredOffset < consumer.currentOffset {
+		consumer.lastStoredOffset = consumer.currentOffset
+		return true
+	}
+	return false
 }
 
 func (consumer *Consumer) NotifyClose() ChannelClose {
@@ -102,8 +125,8 @@ func (ac *AutoCommitStrategy) SetFlushInterval(flushInterval time.Duration) *Aut
 
 func NewAutoCommitStrategy() *AutoCommitStrategy {
 	return &AutoCommitStrategy{
-		messageCountBeforeStorage: 20_000,
-		flushInterval:             10 * time.Second,
+		messageCountBeforeStorage: 10_000,
+		flushInterval:             5 * time.Second,
 	}
 }
 
@@ -128,13 +151,13 @@ func (c *ConsumerOptions) SetConsumerName(consumerName string) *ConsumerOptions 
 	return c
 }
 
-func (c *ConsumerOptions) SetAutoCommit() *ConsumerOptions {
+func (c *ConsumerOptions) SetAutoCommit(autoCommitStrategy *AutoCommitStrategy) *ConsumerOptions {
 	c.autocommit = true
-	return c
-}
-
-func (c *ConsumerOptions) SetAutoCommitStrategy(autoCommitStrategy *AutoCommitStrategy) *ConsumerOptions {
-	c.autoCommitStrategy = autoCommitStrategy
+	if autoCommitStrategy == nil {
+		c.autoCommitStrategy = NewAutoCommitStrategy()
+	} else {
+		c.autoCommitStrategy = autoCommitStrategy
+	}
 	return c
 }
 
@@ -163,6 +186,8 @@ func (consumer *Consumer) Close() error {
 	if consumer.getStatus() == closed {
 		return AlreadyClosed
 	}
+	consumer.cacheStoreOffset()
+
 	consumer.setStatus(closed)
 	_, errGet := consumer.options.client.coordinator.GetConsumerById(consumer.ID)
 	if errGet != nil {
@@ -209,12 +234,13 @@ func (consumer *Consumer) Close() error {
 	return err.Err
 }
 
-func (consumer *Consumer) cacheStoreOffset() error {
-	if consumer.lastStoredOffset != consumer.GetOffset() {
-		consumer.lastStoredOffset = consumer.GetOffset()
-		return consumer.internalStoreOffset()
+func (consumer *Consumer) cacheStoreOffset() {
+	if consumer.options.autocommit {
+		err := consumer.internalStoreOffset()
+		if err != nil {
+			logs.LogError("cache Store Offset error : %s", err)
+		}
 	}
-	return nil
 }
 
 func (consumer *Consumer) StoreOffset() error {
@@ -224,17 +250,20 @@ func (consumer *Consumer) internalStoreOffset() error {
 	if consumer.options.streamName == "" {
 		return fmt.Errorf("stream Name can't be empty")
 	}
-	length := 2 + 2 + 2 + len(consumer.options.ConsumerName) + 2 +
-		len(consumer.options.streamName) + 8
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandStoreOffset)
 
-	writeString(b, consumer.options.ConsumerName)
-	writeString(b, consumer.options.streamName)
+	if consumer.updateLastStoredOffset() {
+		length := 2 + 2 + 2 + len(consumer.options.ConsumerName) + 2 +
+			len(consumer.options.streamName) + 8
+		var b = bytes.NewBuffer(make([]byte, 0, length+4))
+		writeProtocolHeader(b, length, commandStoreOffset)
 
-	writeLong(b, consumer.GetOffset())
-	return consumer.options.client.socket.writeAndFlush(b.Bytes())
+		writeString(b, consumer.options.ConsumerName)
+		writeString(b, consumer.options.streamName)
 
+		writeLong(b, consumer.GetOffset())
+		return consumer.options.client.socket.writeAndFlush(b.Bytes())
+	}
+	return nil
 }
 
 func (consumer *Consumer) QueryOffset() (int64, error) {

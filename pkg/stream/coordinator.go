@@ -23,10 +23,15 @@ type Code struct {
 	id uint16
 }
 
+type offsetMessages struct {
+	messages []*amqp.Message
+	offset   int64
+}
+
 type Response struct {
 	code               chan Code
 	data               chan interface{}
-	messages           chan []*amqp.Message
+	offsetMessages     chan offsetMessages
 	commandDescription string
 	correlationid      int
 }
@@ -112,7 +117,7 @@ func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {
 	err = coordinator.removeById(fmt.Sprintf("%d", id), coordinator.responses)
 	close(resp.code)
 	close(resp.data)
-	close(resp.messages)
+	close(resp.offsetMessages)
 	return err
 }
 
@@ -126,7 +131,7 @@ func newResponse(commandDescription string) *Response {
 	res.commandDescription = commandDescription
 	res.code = make(chan Code, 1)
 	res.data = make(chan interface{})
-	res.messages = make(chan []*amqp.Message, 100)
+	res.offsetMessages = make(chan offsetMessages, 100)
 	return res
 }
 

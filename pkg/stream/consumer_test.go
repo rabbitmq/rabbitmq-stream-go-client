@@ -156,8 +156,6 @@ var _ = Describe("Streaming Consumers", func() {
 
 		err = producer.BatchSend(CreateArrayMessagesForTesting(100)) // batch send
 		Expect(err).NotTo(HaveOccurred())
-		// we can't close the subscribe until the publish is finished
-		time.Sleep(200 * time.Millisecond)
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		var messagesReceived int32 = 0
 		consumer, err := env.NewConsumer(streamName,
@@ -172,6 +170,59 @@ var _ = Describe("Streaming Consumers", func() {
 			"consumer should only 50 messages due the offset 50")
 
 		Expect(consumer.Close()).NotTo(HaveOccurred())
+	})
+
+	It("Offset Auto Tracking by number/time", func() {
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = producer.BatchSend(CreateArrayMessagesForTesting(105)) // batch send
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
+
+		consumer, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			}, NewConsumerOptions().
+				SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("my_auto_consumer").
+				SetAutoCommit(NewAutoCommitStrategy().
+					SetCountBeforeStorage(100).
+					SetFlushInterval(50*time.Second))) // here we set a high value to do not trigger the time
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() int64 {
+			return consumer.GetLastStoredOffset()
+		}, 5*time.Second).Should(Equal(int64(100)),
+			"Offset should be 100")
+		Expect(consumer.Close()).NotTo(HaveOccurred())
+		/// When the consumer is closed, it has to save the offset
+		// so  the last offest has to be 105
+		Eventually(func() int64 {
+			return consumer.GetLastStoredOffset()
+		}, 5*time.Second).Should(Equal(int64(105)),
+			"Offset should be 105")
+
+		consumerTimer, errTimer := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			}, NewConsumerOptions().
+				SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("my_auto_consumer_timer").
+				SetAutoCommit(NewAutoCommitStrategy().
+					SetCountBeforeStorage(10000000). /// We avoid raising the timer
+					SetFlushInterval(1*time.Second)))
+		Expect(errTimer).NotTo(HaveOccurred())
+		time.Sleep(2 * time.Second)
+		Eventually(func() int64 {
+			return consumerTimer.GetLastStoredOffset()
+		}, 5*time.Second).Should(Equal(int64(105)),
+			"Offset should be 105")
+		Expect(consumerTimer.Close()).NotTo(HaveOccurred())
+		/// When the consumer is closed, it has to save the offset
+		// so  the last offest has to be 105
+		Eventually(func() int64 {
+			return consumerTimer.GetLastStoredOffset()
+		}, 5*time.Second).Should(Equal(int64(105)),
+			"Offset should be 105")
+
 	})
 
 	It("Deduplication", func() {
@@ -220,26 +271,31 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 
-	It("Subscribe/Unsubscribe count messages", func() {
+	It("Subscribe/Unsubscribe count messages manual store", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(producer.BatchSend(CreateArrayMessagesForTesting(107))).
 			NotTo(HaveOccurred())
-		// we can't close the subscribe until the publish is finished
-		time.Sleep(500 * time.Millisecond)
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		var messagesReceived int32 = 0
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
 				_ = consumerContext.Consumer.StoreOffset()
-			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetConsumerName("consumer_test"))
+			}, NewConsumerOptions().
+				SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(107)),
 			"consumer should receive same messages send by producer")
+
+		Eventually(func() int64 {
+			return consumer.GetLastStoredOffset()
+		}, 5*time.Second).Should(Equal(int64(107)),
+			"Offset should be 107")
 
 		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
@@ -248,7 +304,8 @@ var _ = Describe("Streaming Consumers", func() {
 		consumer, err = env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
-			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.LastConsumed()).
+			}, NewConsumerOptions().
+				SetOffset(OffsetSpecification{}.LastConsumed()).
 				SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
@@ -359,6 +416,20 @@ var _ = Describe("Streaming Consumers", func() {
 				Offset: OffsetSpecification{},
 			})
 		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			}, NewConsumerOptions().SetAutoCommit(
+				NewAutoCommitStrategy().
+					SetCountBeforeStorage(-1)))
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			}, NewConsumerOptions().SetAutoCommit(
+				NewAutoCommitStrategy().SetFlushInterval(10*time.Millisecond)))
+		Expect(err).To(HaveOccurred())
+
 	})
 
 	It("Sub Batch consumer with different publishers GZIP and Not", func() {

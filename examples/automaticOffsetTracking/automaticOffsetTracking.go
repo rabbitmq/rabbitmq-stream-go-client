@@ -61,18 +61,18 @@ func main() {
 	consumerOffsetNumber, err := env.NewConsumer(streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer"). // set a consumerOffsetNumber name
-			SetAutoCommit().
-			SetAutoCommitStrategy(
-				stream.NewAutoCommitStrategy().
-					SetCountBeforeStorage(50).
-					SetFlushInterval(20*time.Second)))
+			// set a consumerOffsetNumber name
+			SetConsumerName("my_consumer").
+			// nil is also a valid value. Default values will be used
+			SetAutoCommit(stream.NewAutoCommitStrategy().
+										SetCountBeforeStorage(50). // each 50 messages stores the index
+										SetFlushInterval(20*time.Second)).
+			SetOffset(stream.OffsetSpecification{}.First())) // or after 20 seconds
 	CheckErr(err)
 
-	/// wait a bit just for demo and reset the counters
 	time.Sleep(2 * time.Second)
 	atomic.StoreInt32(&counter, 0)
-
+	// so here we consume only 20 messages
 	handleMessagesAfter := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		if atomic.AddInt32(&counter, 1)%20 == 0 {
 			fmt.Printf("messages consumed after: %d \n ", atomic.LoadInt32(&counter))
@@ -82,7 +82,9 @@ func main() {
 		handleMessagesAfter,
 		stream.NewConsumerOptions().
 			SetConsumerName("my_consumer").                         // set a consumerOffsetNumber name
-			SetOffset(stream.OffsetSpecification{}.LastConsumed())) // with first() the the stream is loaded from the beginning
+			SetOffset(stream.OffsetSpecification{}.LastConsumed())) // With last consumed we point to the last saved.
+	// in this case will be 200. So it will consume 20
+	//messages
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")

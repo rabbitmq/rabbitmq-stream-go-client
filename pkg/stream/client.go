@@ -683,6 +683,14 @@ func (c *Client) DeclareSubscriber(streamName string,
 		return nil, fmt.Errorf("specify a valid Offset")
 	}
 
+	if options.autoCommitStrategy.flushInterval < 1*time.Second {
+		return nil, fmt.Errorf("flush internal must be bigger than one second")
+	}
+
+	if options.autoCommitStrategy.messageCountBeforeStorage < 1 {
+		return nil, fmt.Errorf("message count before storage be bigger than one")
+	}
+
 	options.client = c
 	options.streamName = streamName
 	consumer := c.coordinator.NewConsumer(messagesHandler, options)
@@ -741,31 +749,22 @@ func (c *Client) DeclareSubscriber(streamName string,
 					return
 				}
 
-			case data := <-consumer.response.data:
-				consumer.setCurrentOffset(data.(int64))
-
-			case messages := <-consumer.response.messages:
-				for _, message := range messages {
+			case offsetMessages := <-consumer.response.offsetMessages:
+				for _, message := range offsetMessages.messages {
+					consumer.incCurrentOffset()
 					consumer.MessagesHandler(ConsumerContext{Consumer: consumer}, message)
 					if consumer.options.autocommit {
-						consumer.messageCountBeforeStorage = consumer.messageCountBeforeStorage + 1
+						consumer.messageCountBeforeStorage += 1
 						if consumer.messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage {
-							err := consumer.cacheStoreOffset()
-							if err != nil {
-								logs.LogError("message count before storage auto commit error : %s", err)
-							}
+							consumer.cacheStoreOffset()
 							consumer.messageCountBeforeStorage = 0
 						}
 					}
 				}
 
 			case <-time.After(consumer.options.autoCommitStrategy.flushInterval):
-				if consumer.options.autocommit {
-					err := consumer.cacheStoreOffset()
-					if err != nil {
-						logs.LogError("auto commit error: %s", err)
-					}
-				}
+				consumer.cacheStoreOffset()
+
 			}
 		}
 	}()
