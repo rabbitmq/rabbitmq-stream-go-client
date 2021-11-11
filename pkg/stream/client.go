@@ -688,7 +688,7 @@ func (c *Client) DeclareSubscriber(streamName string,
 	}
 
 	if options.autoCommitStrategy.messageCountBeforeStorage < 1 {
-		return nil, fmt.Errorf("message count before storage be bigger than one")
+		return nil, fmt.Errorf("message count before storage must be bigger than one")
 	}
 
 	options.client = c

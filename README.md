@@ -44,7 +44,7 @@ Experimental client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rab
 ### Installing
 
 ```shell
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.1.0-RC1
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v0.1.0-RC2
 ```
 
 imports:
