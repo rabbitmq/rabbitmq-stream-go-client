@@ -383,8 +383,10 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	}
 
 	if consumer.getStatus() == open {
-		consumer.response.data <- offset
-		consumer.response.messages <- batchConsumingMessages
+		consumer.response.offsetMessages <- offsetMessages{
+			messages: batchConsumingMessages,
+			offset:   offset,
+		}
 	}
 
 }

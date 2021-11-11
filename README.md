@@ -29,7 +29,8 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
         * [Sub Entries Batching](#sub-entries-batching)
         * [HA producer - Experimental](#ha-producer-experimental)
     * [Consume messages](#consume-messages)
-        * [Track Offset](#track-offset)
+        * [Manual Track Offset](#manual-track-offset)
+        * [Automatic Track Offset](#automatic-track-offset)
     * [Handle Close](#handle-close)
 - [Performance test tool](#performance-test-tool)
     * [Performance test tool Docker](#performance-test-tool-docker)
@@ -336,7 +337,7 @@ consumer, err := env.NewConsumer(
 		handleMessages,
 		....
 ```
-management UI
+
 With `ConsumerOptions` it is possible to customize the consumer behaviour.
 ```golang
   stream.NewConsumerOptions().
@@ -346,7 +347,7 @@ With `ConsumerOptions` it is possible to customize the consumer behaviour.
 See also "Offset Start" example in the [examples](./examples/) directory
 
 
-### Track Offset
+### Manual Track Offset
 The server can store the offset given a consumer, in this way:
 ```golang
 handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
@@ -359,9 +360,47 @@ consumer, err := env.NewConsumer(
 stream.NewConsumerOptions().
 			SetConsumerName("my_consumer"). <------ 
 ```
+A consumer must have a name to be able to store offsets. <br>
 Note: *AVOID to store the offset for each single message, it will reduce the performances*
 
 See also "Offset Tracking" example in the [examples](./examples/) directory
+
+### Automatic Track Offset
+
+The following snippet shows how to enable automatic tracking with the defaults:
+```golang
+stream.NewConsumerOptions().
+			SetConsumerName("my_consumer").
+			SetAutoCommit(stream.NewAutoCommitStrategy() ...
+```
+`nil` is also a valid value. Default values will be used
+
+```golang
+stream.NewConsumerOptions().
+			SetConsumerName("my_consumer").
+			SetAutoCommit(nil) ...
+```
+Set the consumer name (mandatory for offset tracking) </br>
+
+The automatic tracking strategy has the following available settings:
+- message count before storage: the client will store the offset after the specified number of messages, </br>
+right after the execution of the message handler. The default is every 10,000 messages.
+
+- flush interval: the client will make sure to store the last received offset at the specified interval. </br>
+This avoids having pending, not stored offsets in case of inactivity.  The default is 5 seconds.
+
+Those settings are configurable, as shown in the following snippet:
+```golang
+stream.NewConsumerOptions().
+	// set a consumerOffsetNumber name
+	SetConsumerName("my_consumer").
+	SetAutoCommit(stream.NewAutoCommitStrategy().
+		SetCountBeforeStorage(50). // store each 50 messages stores 
+		SetFlushInterval(10*time.Second)). // store each 10 seconds
+	SetOffset(stream.OffsetSpecification{}.First())) 
+```
+
+See also "Automatic Offset Tracking" example in the [examples](./examples/) directory
 
 ### Handle Close
 Client provides an interface to handle the producer/consumer close.
