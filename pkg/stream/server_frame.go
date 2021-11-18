@@ -328,12 +328,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	/// headers ---> payload -> messages
 
-	checkSum := crc32.ChecksumIEEE(bytesBuffer)
-
-	if crc != checkSum {
-		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
-		panic("Error during CRC")
-	} /// ???
+	if consumer.options.CRCCheck {
+		checkSum := crc32.ChecksumIEEE(bytesBuffer)
+		if crc != checkSum {
+			logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
+			panic("Error during CRC")
+		} /// ???
+	}
 
 	bufferReader := bytes.NewReader(bytesBuffer)
 	dataReader := bufio.NewReader(bufferReader)

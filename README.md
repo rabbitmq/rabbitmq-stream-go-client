@@ -342,8 +342,11 @@ With `ConsumerOptions` it is possible to customize the consumer behaviour.
 ```golang
   stream.NewConsumerOptions().
   SetConsumerName("my_consumer").                  // set a consumer name
+  SetCRCCheck(false).  // Enable/Disable the CRC control.  
   SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 ```
+Disabling the CRC control can increase the performances.
+
 See also "Offset Start" example in the [examples](./examples/) directory
 
 

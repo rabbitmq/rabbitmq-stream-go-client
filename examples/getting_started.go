@@ -102,7 +102,8 @@ func main() {
 		handleMessages,
 		stream.NewConsumerOptions().
 			SetConsumerName("my_consumer").                  // set a consumer name
-			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
+			SetOffset(stream.OffsetSpecification{}.First()). // start consuming from the beginning
+			SetCRCCheck(false))                              // Disable crc control, increase the performances
 	CheckErr(err)
 	channelClose := consumer.NotifyClose()
 	// channelClose receives all the closing events, here you can handle the

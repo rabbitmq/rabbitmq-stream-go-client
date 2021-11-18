@@ -137,17 +137,25 @@ type ConsumerOptions struct {
 	autocommit         bool
 	autoCommitStrategy *AutoCommitStrategy
 	Offset             OffsetSpecification
+	CRCCheck           bool
 }
 
 func NewConsumerOptions() *ConsumerOptions {
 	return &ConsumerOptions{
 		Offset:             OffsetSpecification{}.Last(),
 		autocommit:         false,
-		autoCommitStrategy: NewAutoCommitStrategy()}
+		autoCommitStrategy: NewAutoCommitStrategy(),
+		CRCCheck:           false,
+	}
 }
 
 func (c *ConsumerOptions) SetConsumerName(consumerName string) *ConsumerOptions {
 	c.ConsumerName = consumerName
+	return c
+}
+
+func (c *ConsumerOptions) SetCRCCheck(CRCCheck bool) *ConsumerOptions {
+	c.CRCCheck = CRCCheck
 	return c
 }
 
