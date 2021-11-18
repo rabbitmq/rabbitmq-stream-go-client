@@ -58,7 +58,8 @@ var _ = Describe("Streaming Consumers", func() {
 	})
 
 	It("Multi Consumers per client", func() {
-		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxConsumersPerClient(2))
+		env, err := NewEnvironment(NewEnvironmentOptions().
+			SetMaxConsumersPerClient(2))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
 		Expect(env.DeclareStream(streamName, nil)).
@@ -161,7 +162,9 @@ var _ = Describe("Streaming Consumers", func() {
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
-			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.Offset(50)))
+			}, NewConsumerOptions().
+				SetOffset(OffsetSpecification{}.Offset(50)).
+				SetCRCCheck(true))
 		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(func() int32 {
@@ -185,6 +188,7 @@ var _ = Describe("Streaming Consumers", func() {
 			}, NewConsumerOptions().
 				SetOffset(OffsetSpecification{}.First()).
 				SetConsumerName("my_auto_consumer").
+				SetCRCCheck(false).
 				SetAutoCommit(NewAutoCommitStrategy().
 					SetCountBeforeStorage(100).
 					SetFlushInterval(50*time.Second))) // here we set a high value to do not trigger the time
@@ -206,6 +210,7 @@ var _ = Describe("Streaming Consumers", func() {
 			}, NewConsumerOptions().
 				SetOffset(OffsetSpecification{}.First()).
 				SetConsumerName("my_auto_consumer_timer").
+				SetCRCCheck(true).
 				SetAutoCommit(NewAutoCommitStrategy().
 					SetCountBeforeStorage(10000000). /// We avoid raising the timer
 					SetFlushInterval(1*time.Second)))
