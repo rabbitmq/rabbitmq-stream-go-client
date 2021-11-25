@@ -10,4 +10,5 @@ type StreamMessage interface {
 	HasPublishingId() bool
 	GetData() [][]byte
 	GetMessageProperties() *amqp.MessageProperties
+	GetMessageAnnotations() amqp.Annotations
 }

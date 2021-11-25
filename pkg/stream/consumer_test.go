@@ -347,6 +347,19 @@ var _ = Describe("Streaming Consumers", func() {
 
 	It("message Properties", func() {
 		producer, err := env.NewProducer(streamName, nil)
+
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm, p *Producer) {
+			for ids := range ch {
+				for _, msg := range ids {
+					Expect(msg.GetMessage().GetMessageProperties().To).To(Equal("ToTest"))
+					Expect(msg.GetMessage().GetMessageProperties().Subject).To(Equal("SubjectTest"))
+					Expect(msg.GetMessage().GetMessageProperties().ReplyTo).To(Equal("replyToTest"))
+					Expect(msg.GetMessage().GetMessageProperties().ContentType).To(Equal("ContentTypeTest"))
+					Expect(msg.GetMessage().GetMessageProperties().ContentEncoding).To(Equal("ContentEncodingTest"))
+				}
+			}
+		}(chConfirm, producer)
 		Expect(err).NotTo(HaveOccurred())
 		msg := amqp.NewMessage([]byte("message"))
 		msg.Properties = &amqp.MessageProperties{
