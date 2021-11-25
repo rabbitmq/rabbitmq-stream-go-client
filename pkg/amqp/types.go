@@ -436,6 +436,14 @@ func (amqp *AMQP10) Message() *Message {
 
 }
 
+func (amqp *AMQP10) GetMessageProperties() *MessageProperties {
+	return amqp.message.Properties
+}
+
+func (amqp *AMQP10) GetMessageAnnotations() Annotations {
+	return amqp.message.Annotations
+}
+
 // NewMessage returns a *Message with data as the payload.
 //
 // This constructor is intended as a helper for basic Messages with a

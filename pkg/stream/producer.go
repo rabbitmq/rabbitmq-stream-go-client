@@ -45,6 +45,9 @@ func (cs *ConfirmationStatus) GetMessage() message.StreamMessage {
 	return cs.message
 }
 
+//func (cs *ConfirmationStatus) GetMessageProperties() *amqp.MessageProperties {
+//}
+
 func (cs *ConfirmationStatus) GetErrorCode() uint16 {
 	return cs.errorCode
 }
