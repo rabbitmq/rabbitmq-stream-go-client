@@ -45,6 +45,7 @@ func (cs *ConfirmationStatus) GetMessage() message.StreamMessage {
 	return cs.message
 }
 
+
 func (cs *ConfirmationStatus) GetErrorCode() uint16 {
 	return cs.errorCode
 }
