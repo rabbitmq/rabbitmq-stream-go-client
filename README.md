@@ -228,6 +228,10 @@ err = producer.BatchSend(messages)
 - accepts an array messages as parameter
 - is synchronous
 
+Close the producer:
+`producer.Close()` the producer is removed from the server. TCP connection is closed if there aren't </b>
+other producers
+
 ### `Send` vs `BatchSend`
 
 The `BatchSend` is the primitive to send the messages, `Send` introduces a smart layer to publish messages and internally uses `BatchSend`.
@@ -349,6 +353,9 @@ Disabling the CRC control can increase the performances.
 
 See also "Offset Start" example in the [examples](./examples/) directory
 
+Close the consumer:
+`consumer.Close()` the consumer is removed from the server. TCP connection is closed if there aren't </b>
+other consumers
 
 ### Manual Track Offset
 The server can store the offset given a consumer, in this way:
