@@ -116,6 +116,7 @@ var ConnectionClosed = errors.New("Can't send the message, connection closed")
 var StreamNotAvailable = errors.New("Stream Not Available")
 var UnknownFrame = errors.New("Unknown Frame")
 var InternalError = errors.New("Internal Error")
+var AuthenticationFailureLoopbackError = errors.New("Authentication Failure Loopback Error")
 
 var LeaderNotReady = errors.New("Leader not Ready yet")
 
@@ -147,6 +148,8 @@ func lookErrorCode(errorCode uint16) error {
 		return UnknownFrame
 	case responseCodeInternalError:
 		return InternalError
+	case responseCodeAuthenticationFailureLoopback:
+		return AuthenticationFailureLoopbackError
 	default:
 		{
 			logs.LogWarn("Error not handled %d", errorCode)
