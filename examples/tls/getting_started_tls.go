@@ -53,13 +53,12 @@ func main() {
 		stream.NewEnvironmentOptions().
 			SetHost("localhost").
 			SetPort(5551). // standard TLS port
-
 			SetUser("guest").
 			SetPassword("guest").
 			IsTLS(true).
 			// use tls.Config  to customize the TLS configuration
 			// for tests you may need InsecureSkipVerify: true
-			SetTLSConfig(&tls.Config{}),
+			SetTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
 	CheckErr(err)
 	// Create a stream, you can create streams without any option like:
