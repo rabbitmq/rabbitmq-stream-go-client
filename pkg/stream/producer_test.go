@@ -485,6 +485,11 @@ var _ = Describe("Streaming Producers", func() {
 			SetSubEntrySize(1).SetCompression(Compression{}.Gzip()))
 		Expect(err).To(HaveOccurred())
 
+		_, err = env.NewProducer(testProducerStream, &ProducerOptions{
+			SubEntrySize: 65_539,
+		})
+		Expect(err).To(HaveOccurred())
+
 		err = env.Close()
 		Expect(err).NotTo(HaveOccurred())
 	})

@@ -90,6 +90,7 @@ const (
 	maxBatchSize = 10_000
 
 	minSubEntrySize = 1
+	maxSubEntrySize = 65535
 
 	minBatchPublishingDelay = 50
 	maxBatchPublishingDelay = 500

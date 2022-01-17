@@ -464,9 +464,9 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 			minBatchPublishingDelay, maxBatchPublishingDelay)
 	}
 
-	if options.SubEntrySize < minSubEntrySize {
-		return nil, fmt.Errorf("SubEntrySize value must equal or bigger than %d",
-			minSubEntrySize)
+	if options.SubEntrySize < minSubEntrySize || options.SubEntrySize > maxSubEntrySize {
+		return nil, fmt.Errorf("SubEntrySize values must be between %d and %d",
+			minSubEntrySize, maxSubEntrySize)
 	}
 
 	if !options.isSubEntriesBatching() {
