@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/klauspost/compress v1.14.2
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.18.0
+	github.com/onsi/gomega v1.18.1
 	github.com/pierrec/lz4 v2.6.1+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.3.0
