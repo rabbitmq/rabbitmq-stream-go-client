@@ -44,7 +44,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
 ### Installing
 
 ```shell
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v1.0.0-rc7
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v1.0.0-rc8
 ```
 
 imports:
