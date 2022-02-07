@@ -3,7 +3,6 @@ module github.com/rabbitmq/rabbitmq-stream-go-client
 go 1.16
 
 require (
-	github.com/frankban/quicktest v1.14.0 // indirect
 	github.com/golang/snappy v0.0.4
 	github.com/google/uuid v1.3.0
 	github.com/klauspost/compress v1.14.2
