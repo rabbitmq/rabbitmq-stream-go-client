@@ -398,6 +398,60 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
+	It("Application Message Properties", func() {
+		producer, err := env.NewProducer(streamName, nil)
+
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm, p *Producer) {
+			for ids := range ch {
+				for _, msg := range ids {
+					Expect(msg.GetMessage().GetApplicationProperties()["key1"]).To(Equal("value1"))
+					Expect(msg.GetMessage().GetApplicationProperties()["key2"]).To(Equal("value2"))
+					Expect(msg.GetMessage().GetApplicationProperties()["key3"]).To(Equal("value3"))
+					Expect(msg.GetMessage().GetApplicationProperties()["key4"]).To(Equal("value4"))
+					Expect(msg.GetMessage().GetMessageAnnotations()["annotation_key_1"]).To(Equal("annotation_vale_1"))
+					Expect(msg.GetMessage().GetMessageAnnotations()["annotation_key_2"]).To(Equal("annotation_vale_2"))
+				}
+			}
+		}(chConfirm, producer)
+
+		appMap := map[string]interface{}{
+			"key1": "value1",
+			"key2": "value2",
+			"key3": "value3",
+			"key4": "value4",
+			"key5": "value5",
+		}
+		Expect(err).NotTo(HaveOccurred())
+		msg := amqp.NewMessage([]byte("message"))
+		msg.ApplicationProperties = appMap
+		msg.Annotations = map[interface{}]interface{}{
+			"annotation_key_1": "annotation_vale_1",
+			"annotation_key_2": "annotation_vale_2",
+		}
+
+		Expect(producer.Send(msg)).NotTo(HaveOccurred())
+		defer func(producer *Producer) {
+			Expect(producer.Close()).NotTo(HaveOccurred())
+		}(producer)
+
+		consumer, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				Expect(message.ApplicationProperties["key1"]).To(Equal("value1"))
+				Expect(message.ApplicationProperties["key2"]).To(Equal("value2"))
+				Expect(message.ApplicationProperties["key3"]).To(Equal("value3"))
+				Expect(message.ApplicationProperties["key4"]).To(Equal("value4"))
+				Expect(message.Annotations["annotation_key_1"]).To(Equal("annotation_vale_1"))
+				Expect(message.Annotations["annotation_key_2"]).To(Equal("annotation_vale_2"))
+
+			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(200 * time.Millisecond)
+		Expect(consumer.Close()).NotTo(HaveOccurred())
+
+	})
+
 	It("Consistent Messages", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())

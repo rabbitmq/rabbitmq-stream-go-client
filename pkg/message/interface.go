@@ -11,4 +11,5 @@ type StreamMessage interface {
 	GetData() [][]byte
 	GetMessageProperties() *amqp.MessageProperties
 	GetMessageAnnotations() amqp.Annotations
+	GetApplicationProperties() map[string]interface{}
 }

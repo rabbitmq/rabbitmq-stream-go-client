@@ -414,10 +414,12 @@ type Message struct {
 }
 
 type AMQP10 struct {
-	publishingId    int64
-	hasPublishingId bool
-	message         *Message
-	Properties      *MessageProperties
+	publishingId          int64
+	hasPublishingId       bool
+	message               *Message
+	Properties            *MessageProperties
+	Annotations           Annotations
+	ApplicationProperties map[string]interface{}
 }
 
 func NewMessage(data []byte) *AMQP10 {
@@ -443,6 +445,8 @@ func (amqp *AMQP10) GetPublishingId() int64 {
 
 func (amqp *AMQP10) MarshalBinary() ([]byte, error) {
 	amqp.message.Properties = amqp.Properties
+	amqp.message.ApplicationProperties = amqp.ApplicationProperties
+	amqp.message.Annotations = amqp.Annotations
 	return amqp.message.MarshalBinary()
 }
 
@@ -465,6 +469,10 @@ func (amqp *AMQP10) GetMessageProperties() *MessageProperties {
 
 func (amqp *AMQP10) GetMessageAnnotations() Annotations {
 	return amqp.message.Annotations
+}
+
+func (amqp *AMQP10) GetApplicationProperties() map[string]interface{} {
+	return amqp.message.ApplicationProperties
 }
 
 // NewMessage returns a *Message with data as the payload.
