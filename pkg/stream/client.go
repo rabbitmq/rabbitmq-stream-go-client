@@ -703,8 +703,8 @@ func (c *Client) DeclareSubscriber(streamName string,
 	if options.Offset.isLastConsumed() {
 		lastOffset, err := consumer.QueryOffset()
 		switch err {
-		case nil, NoOffset:
-			if err == NoOffset {
+		case nil, OffsetNotFound:
+			if err == OffsetNotFound {
 				options.Offset.offset = 0
 			} else {
 				options.Offset.offset = lastOffset

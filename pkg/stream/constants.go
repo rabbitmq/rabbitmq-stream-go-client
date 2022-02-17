@@ -112,7 +112,7 @@ var StreamAlreadyExists = errors.New("Stream Already Exists")
 var VirtualHostAccessFailure = errors.New("Virtual Host Access Failure")
 var SubscriptionIdDoesNotExist = errors.New("Subscription Id Does Not Exist")
 var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
-var NoOffset = errors.New("No Offset")
+var OffsetNotFound = errors.New("Offset not found")
 var FrameTooLarge = errors.New("Frame Too Large, the buffer is too big")
 var CodeAccessRefused = errors.New("Resources Access Refused")
 var ConnectionClosed = errors.New("Can't send the message, connection closed")
@@ -140,7 +140,7 @@ func lookErrorCode(errorCode uint16) error {
 	case responseCodePublisherDoesNotExist:
 		return PublisherDoesNotExist
 	case responseCodeNoOffset:
-		return NoOffset
+		return OffsetNotFound
 	case responseCodePreconditionFailed:
 		return PreconditionFailed
 	case responseCodeFrameTooLarge:
