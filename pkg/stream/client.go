@@ -702,19 +702,17 @@ func (c *Client) DeclareSubscriber(streamName string,
 
 	if options.Offset.isLastConsumed() {
 		lastOffset, err := consumer.QueryOffset()
-		if err != nil {
-			_ = c.coordinator.RemoveConsumerById(consumer.ID, Event{
-				Command:    CommandQueryOffset,
-				StreamName: streamName,
-				Name:       consumer.GetName(),
-				Reason:     "error QueryOffset",
-				Err:        err,
-			})
+		switch err {
+		case nil, NoOffset:
+			if err == nil {
+				options.Offset.offset = 0
+			} else {
+				options.Offset.offset = lastOffset
+			}
+			options.Offset.typeOfs = typeOffset
+		default:
 			return nil, err
 		}
-		options.Offset.offset = lastOffset
-		// here we change the type since typeLastConsumed is not part of the protocol
-		options.Offset.typeOfs = typeOffset
 	}
 
 	// copy the option offset to the consumer offset
