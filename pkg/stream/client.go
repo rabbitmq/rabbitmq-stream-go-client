@@ -684,13 +684,12 @@ func (c *Client) queryOffset(consumerName string, streamName string) (int64, err
 	writeString(b, consumerName)
 	writeString(b, streamName)
 	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
-	if err.Err != nil {
-		return 0, err.Err
-
-	}
-
 	offset := <-resp.data
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	if err.Err != nil {
+		return 0, err.Err
+	}
+
 	return offset.(int64), nil
 }
 
@@ -716,8 +715,8 @@ func (c *Client) DeclareSubscriber(streamName string,
 	if options.Offset.isLastConsumed() {
 		lastOffset, err := c.queryOffset(options.ConsumerName, streamName)
 		switch err {
-		case nil, NoOffset:
-			if err == NoOffset {
+		case nil, OffsetNotFoundError:
+			if err == OffsetNotFoundError {
 				options.Offset.typeOfs = typeFirst
 				options.Offset.offset = 0
 				break

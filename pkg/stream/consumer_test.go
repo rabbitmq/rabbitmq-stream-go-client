@@ -276,6 +276,16 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 
+	It("last consumed message not raise an error fist time", func() {
+
+		_, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			}, NewConsumerOptions().
+				SetOffset(OffsetSpecification{}.LastConsumed()).
+				SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("Subscribe/Unsubscribe count messages manual store", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
