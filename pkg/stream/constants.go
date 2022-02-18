@@ -69,6 +69,7 @@ const (
 	responseCodeAccessRefused                 = uint16(16)
 	responseCodePreconditionFailed            = uint16(17)
 	responseCodePublisherDoesNotExist         = uint16(18)
+	responseCodeNoOffset                      = uint16(19)
 
 	/// responses out of protocol
 	closeChannel         = uint16(60)
@@ -111,6 +112,7 @@ var StreamAlreadyExists = errors.New("Stream Already Exists")
 var VirtualHostAccessFailure = errors.New("Virtual Host Access Failure")
 var SubscriptionIdDoesNotExist = errors.New("Subscription Id Does Not Exist")
 var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
+var OffsetNotFoundError = errors.New("Offset not found")
 var FrameTooLarge = errors.New("Frame Too Large, the buffer is too big")
 var CodeAccessRefused = errors.New("Resources Access Refused")
 var ConnectionClosed = errors.New("Can't send the message, connection closed")
@@ -137,6 +139,8 @@ func lookErrorCode(errorCode uint16) error {
 		return SubscriptionIdDoesNotExist
 	case responseCodePublisherDoesNotExist:
 		return PublisherDoesNotExist
+	case responseCodeNoOffset:
+		return OffsetNotFoundError
 	case responseCodePreconditionFailed:
 		return PreconditionFailed
 	case responseCodeFrameTooLarge:

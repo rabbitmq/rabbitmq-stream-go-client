@@ -275,27 +275,7 @@ func (consumer *Consumer) internalStoreOffset() error {
 }
 
 func (consumer *Consumer) QueryOffset() (int64, error) {
-	length := 2 + 2 + 4 + 2 + len(consumer.options.ConsumerName) + 2 + len(consumer.options.streamName)
-
-	resp := consumer.options.client.coordinator.NewResponse(CommandQueryOffset)
-	correlationId := resp.correlationid
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, CommandQueryOffset,
-		correlationId)
-
-	writeString(b, consumer.options.ConsumerName)
-	writeString(b, consumer.options.streamName)
-	err := consumer.options.client.handleWriteWithResponse(b.Bytes(), resp, false)
-	if err.Err != nil {
-		return 0, err.Err
-
-	}
-
-	offset := <-resp.data
-	_ = consumer.options.client.coordinator.RemoveResponseById(resp.correlationid)
-
-	return offset.(int64), nil
-
+	return consumer.options.client.queryOffset(consumer.options.ConsumerName, consumer.options.streamName)
 }
 
 /*

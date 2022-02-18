@@ -672,6 +672,27 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 
 }
 
+func (c *Client) queryOffset(consumerName string, streamName string) (int64, error) {
+	length := 2 + 2 + 4 + 2 + len(consumerName) + 2 + len(streamName)
+
+	resp := c.coordinator.NewResponse(CommandQueryOffset)
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, CommandQueryOffset,
+		correlationId)
+
+	writeString(b, consumerName)
+	writeString(b, streamName)
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	offset := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	if err.Err != nil {
+		return 0, err.Err
+	}
+
+	return offset.(int64), nil
+}
+
 func (c *Client) DeclareSubscriber(streamName string,
 	messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
@@ -691,30 +712,32 @@ func (c *Client) DeclareSubscriber(streamName string,
 		return nil, fmt.Errorf("message count before storage must be bigger than one")
 	}
 
+	if options.Offset.isLastConsumed() {
+		lastOffset, err := c.queryOffset(options.ConsumerName, streamName)
+		switch err {
+		case nil, OffsetNotFoundError:
+			if err == OffsetNotFoundError {
+				options.Offset.typeOfs = typeFirst
+				options.Offset.offset = 0
+				break
+			} else {
+				options.Offset.offset = lastOffset
+				options.Offset.typeOfs = typeOffset
+				break
+			}
+		default:
+			return nil, err
+		}
+	}
+
 	options.client = c
 	options.streamName = streamName
 	consumer := c.coordinator.NewConsumer(messagesHandler, options)
+
 	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
 	if options.Offset.isOffset() ||
 		options.Offset.isTimestamp() {
 		length += 8
-	}
-
-	if options.Offset.isLastConsumed() {
-		lastOffset, err := consumer.QueryOffset()
-		if err != nil {
-			_ = c.coordinator.RemoveConsumerById(consumer.ID, Event{
-				Command:    CommandQueryOffset,
-				StreamName: streamName,
-				Name:       consumer.GetName(),
-				Reason:     "error QueryOffset",
-				Err:        err,
-			})
-			return nil, err
-		}
-		options.Offset.offset = lastOffset
-		// here we change the type since typeLastConsumed is not part of the protocol
-		options.Offset.typeOfs = typeOffset
 	}
 
 	// copy the option offset to the consumer offset
