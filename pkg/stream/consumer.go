@@ -20,8 +20,7 @@ type Consumer struct {
 	// and won't change. currentOffset is the status of the offset
 	currentOffset int64
 
-	/// this is needed for the autocommit
-	// to avoid to store always the same values
+	// Remembers the last stored offset (manual or automatic) to avoid to store always the same values
 	lastStoredOffset int64
 
 	closeHandler chan Event
@@ -254,26 +253,35 @@ func (consumer *Consumer) cacheStoreOffset() {
 func (consumer *Consumer) StoreOffset() error {
 	return consumer.internalStoreOffset()
 }
+func (consumer *Consumer) StoreCustomOffset(offset int64) error {
+	if consumer.lastStoredOffset < offset {
+		consumer.lastStoredOffset = offset
+		return consumer.writeOffsetToSocket(offset)
+	}
+	return nil
+}
 func (consumer *Consumer) internalStoreOffset() error {
 	if consumer.options.streamName == "" {
 		return fmt.Errorf("stream Name can't be empty")
 	}
 
 	if consumer.updateLastStoredOffset() {
-		length := 2 + 2 + 2 + len(consumer.options.ConsumerName) + 2 +
-			len(consumer.options.streamName) + 8
-		var b = bytes.NewBuffer(make([]byte, 0, length+4))
-		writeProtocolHeader(b, length, commandStoreOffset)
-
-		writeString(b, consumer.options.ConsumerName)
-		writeString(b, consumer.options.streamName)
-
-		writeLong(b, consumer.GetOffset())
-		return consumer.options.client.socket.writeAndFlush(b.Bytes())
+		return consumer.writeOffsetToSocket(consumer.GetOffset())
 	}
 	return nil
 }
+func (consumer *Consumer) writeOffsetToSocket(offset int64) error {
+	length := 2 + 2 + 2 + len(consumer.options.ConsumerName) + 2 +
+		len(consumer.options.streamName) + 8
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandStoreOffset)
 
+	writeString(b, consumer.options.ConsumerName)
+	writeString(b, consumer.options.streamName)
+
+	writeLong(b, offset)
+	return consumer.options.client.socket.writeAndFlush(b.Bytes())
+}
 func (consumer *Consumer) QueryOffset() (int64, error) {
 	return consumer.options.client.queryOffset(consumer.options.ConsumerName, consumer.options.streamName)
 }

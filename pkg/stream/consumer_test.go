@@ -175,58 +175,87 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 
-	It("Offset Auto Tracking by number/time", func() {
-		producer, err := env.NewProducer(streamName, nil)
-		Expect(err).NotTo(HaveOccurred())
+	Describe("Committing consumed messages", func() {
+		BeforeEach(func() {
+			producer, err := env.NewProducer(streamName, nil)
+			Expect(err).NotTo(HaveOccurred())
 
-		err = producer.BatchSend(CreateArrayMessagesForTesting(105)) // batch send
-		Expect(err).NotTo(HaveOccurred())
-		Expect(producer.Close()).NotTo(HaveOccurred())
+			// Given we have produced 105 messages ...
+			err = producer.BatchSend(CreateArrayMessagesForTesting(105)) // batch send
+			Expect(err).NotTo(HaveOccurred())
+			Expect(producer.Close()).NotTo(HaveOccurred())
 
-		consumer, err := env.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
-			}, NewConsumerOptions().
-				SetOffset(OffsetSpecification{}.First()).
-				SetConsumerName("my_auto_consumer").
-				SetCRCCheck(false).
-				SetAutoCommit(NewAutoCommitStrategy().
-					SetCountBeforeStorage(100).
-					SetFlushInterval(50*time.Second))) // here we set a high value to do not trigger the time
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(func() int64 {
-			return consumer.GetLastStoredOffset()
-		}, 5*time.Second).Should(Equal(int64(100)),
-			"Offset should be 100")
-		Expect(consumer.Close()).NotTo(HaveOccurred())
-		/// When the consumer is closed, it has to save the offset
-		// so  the last offest has to be 105
-		Eventually(func() int64 {
-			return consumer.GetLastStoredOffset()
-		}, 5*time.Second).Should(Equal(int64(105)),
-			"Offset should be 105")
+		})
 
-		consumerTimer, errTimer := env.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
-			}, NewConsumerOptions().
-				SetOffset(OffsetSpecification{}.First()).
-				SetConsumerName("my_auto_consumer_timer").
-				SetCRCCheck(true).
-				SetAutoCommit(NewAutoCommitStrategy().
-					SetCountBeforeStorage(10000000). /// We avoid raising the timer
-					SetFlushInterval(1*time.Second)))
-		Expect(errTimer).NotTo(HaveOccurred())
-		time.Sleep(2 * time.Second)
-		Eventually(func() int64 {
-			return consumerTimer.GetLastStoredOffset()
-		}, 5*time.Second).Should(Equal(int64(105)),
-			"Offset should be 105")
-		Expect(consumerTimer.Close()).NotTo(HaveOccurred())
-		/// When the consumer is closed, it has to save the offset
-		// so  the last offest has to be 105
-		Eventually(func() int64 {
-			return consumerTimer.GetLastStoredOffset()
-		}, 5*time.Second).Should(Equal(int64(105)),
-			"Offset should be 105")
+		It("can commit a given offset", func() {
+			consumer, err := env.NewConsumer(streamName,
+				func(consumerContext ConsumerContext, message *amqp.Message) {
+					offset := consumerContext.Consumer.GetOffset()
+					if offset%10 == 0 { //  every 10 messages
+						err := consumerContext.Consumer.StoreCustomOffset(offset - 1) // commit all except the last one
+						if err != nil {
+							Fail(err.Error())
+						}
+					}
+				}, NewConsumerOptions().
+					SetOffset(OffsetSpecification{}.First()).
+					SetConsumerName("my_manual_consumer").
+					SetCRCCheck(false))
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() int64 { return consumer.GetLastStoredOffset() }, 5*time.Second).Should(Equal(int64(99)),
+				"Offset should be 99")
+			Expect(consumer.Close()).NotTo(HaveOccurred())
+
+		})
+
+		It("automatically commit by number/time", func() {
+
+			consumer, err := env.NewConsumer(streamName,
+				func(consumerContext ConsumerContext, message *amqp.Message) {
+				}, NewConsumerOptions().
+					SetOffset(OffsetSpecification{}.First()).
+					SetConsumerName("my_auto_consumer").
+					SetCRCCheck(false).
+					SetAutoCommit(NewAutoCommitStrategy().
+						SetCountBeforeStorage(100).
+						SetFlushInterval(50*time.Second))) // here we set a high value to do not trigger the time
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() int64 {
+				return consumer.GetLastStoredOffset()
+			}, 5*time.Second).Should(Equal(int64(100)),
+				"Offset should be 100")
+			Expect(consumer.Close()).NotTo(HaveOccurred())
+			/// When the consumer is closed, it has to save the offset
+			// so  the last offest has to be 105
+			Eventually(func() int64 {
+				return consumer.GetLastStoredOffset()
+			}, 5*time.Second).Should(Equal(int64(105)),
+				"Offset should be 105")
+
+			consumerTimer, errTimer := env.NewConsumer(streamName,
+				func(consumerContext ConsumerContext, message *amqp.Message) {
+				}, NewConsumerOptions().
+					SetOffset(OffsetSpecification{}.First()).
+					SetConsumerName("my_auto_consumer_timer").
+					SetCRCCheck(true).
+					SetAutoCommit(NewAutoCommitStrategy().
+						SetCountBeforeStorage(10000000). /// We avoid raising the timer
+						SetFlushInterval(1*time.Second)))
+			Expect(errTimer).NotTo(HaveOccurred())
+			time.Sleep(2 * time.Second)
+			Eventually(func() int64 {
+				return consumerTimer.GetLastStoredOffset()
+			}, 5*time.Second).Should(Equal(int64(105)),
+				"Offset should be 105")
+			Expect(consumerTimer.Close()).NotTo(HaveOccurred())
+			/// When the consumer is closed, it has to save the offset
+			// so  the last offest has to be 105
+			Eventually(func() int64 {
+				return consumerTimer.GetLastStoredOffset()
+			}, 5*time.Second).Should(Equal(int64(105)),
+				"Offset should be 105")
+
+		})
 
 	})
 
