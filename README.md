@@ -358,11 +358,11 @@ Close the consumer:
 other consumers
 
 ### Manual Track Offset
-The server can store the offset given a consumer, in this way:
+The server can store the current delivered offset given a consumer, in this way:
 ```golang
 handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		if atomic.AddInt32(&count, 1)%1000 == 0 {
-			err := consumerContext.Consumer.StoreOffset()
+			err := consumerContext.Consumer.StoreOffset()  // commit all messages up to the current message's offset
 			....
 
 consumer, err := env.NewConsumer(
@@ -374,6 +374,17 @@ A consumer must have a name to be able to store offsets. <br>
 Note: *AVOID to store the offset for each single message, it will reduce the performances*
 
 See also "Offset Tracking" example in the [examples](./examples/) directory
+
+The server can also store a previous delivered offset rather than the current delivered offset, in this way:
+```golang
+processMessageAsync := func(consumer stream.Consumer, message *amqp.Message, offset int64) {
+    ....
+    err := consumer.StoreCustomOffset(offset)  // commit all messages up to this offset
+    ....
+```
+This is useful in situations where we have to process messages asynchronously and we cannot block the original message 
+handler. Which means we cannot store the current or latest delivered offset as we saw in the `handleMessages` function
+above. 
 
 ### Automatic Track Offset
 
