@@ -254,6 +254,9 @@ func (consumer *Consumer) StoreOffset() error {
 	return consumer.internalStoreOffset()
 }
 func (consumer *Consumer) StoreCustomOffset(offset int64) error {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+
 	if consumer.lastStoredOffset < offset {
 		consumer.lastStoredOffset = offset
 		return consumer.writeOffsetToSocket(offset)
