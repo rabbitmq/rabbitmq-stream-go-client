@@ -419,6 +419,8 @@ type AMQP10 struct {
 	message               *Message
 	Properties            *MessageProperties
 	Annotations           Annotations
+	header                *MessageHeader
+	amqpData              interface{}
 	ApplicationProperties map[string]interface{}
 }
 
@@ -458,11 +460,6 @@ func (amqp *AMQP10) GetData() [][]byte {
 	return amqp.message.Data
 }
 
-func (amqp *AMQP10) Message() *Message {
-	return amqp.message
-
-}
-
 func (amqp *AMQP10) GetMessageProperties() *MessageProperties {
 	return amqp.message.Properties
 }
@@ -473,6 +470,14 @@ func (amqp *AMQP10) GetMessageAnnotations() Annotations {
 
 func (amqp *AMQP10) GetApplicationProperties() map[string]interface{} {
 	return amqp.message.ApplicationProperties
+}
+
+func (amqp *AMQP10) GetMessageHeader() *MessageHeader {
+	return amqp.message.Header
+}
+
+func (amqp *AMQP10) GetAMQPValue() interface{} {
+	return amqp.message.Value
 }
 
 // NewMessage returns a *Message with data as the payload.

@@ -450,6 +450,8 @@ var _ = Describe("Streaming Consumers", func() {
 					Expect(msg.GetMessage().GetApplicationProperties()["key4"]).To(Equal("value4"))
 					Expect(msg.GetMessage().GetMessageAnnotations()["annotation_key_1"]).To(Equal("annotation_vale_1"))
 					Expect(msg.GetMessage().GetMessageAnnotations()["annotation_key_2"]).To(Equal("annotation_vale_2"))
+					Expect(msg.GetMessage().GetMessageHeader()).To(BeNil())
+					Expect(msg.GetMessage().GetAMQPValue()).To(BeNil())
 				}
 			}
 		}(chConfirm, producer)
