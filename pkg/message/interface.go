@@ -12,4 +12,8 @@ type StreamMessage interface {
 	GetMessageProperties() *amqp.MessageProperties
 	GetMessageAnnotations() amqp.Annotations
 	GetApplicationProperties() map[string]interface{}
+
+	// GetMessageHeader GetAMQPValue read only values see: rabbitmq-stream-go-client/issues/128
+	GetMessageHeader() *amqp.MessageHeader
+	GetAMQPValue() interface{}
 }
