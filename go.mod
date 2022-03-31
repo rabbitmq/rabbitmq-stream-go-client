@@ -1,6 +1,6 @@
 module github.com/rabbitmq/rabbitmq-stream-go-client
 
-go 1.16
+go 1.17
 
 require (
 	github.com/frankban/quicktest v1.14.2 // indirect
