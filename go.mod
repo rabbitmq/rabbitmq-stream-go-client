@@ -15,4 +15,5 @@ require (
 	github.com/spf13/cobra v1.4.0
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
+	honnef.co/go/tools v0.3.0 // indirect
 )
