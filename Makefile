@@ -18,7 +18,7 @@ fmt:
 
 STATICCHECK ?= $(GOBIN)/staticcheck
 $(STATICCHECK):
-	go get honnef.co/go/tools/cmd/staticcheck
+	go get honnef.co/go/tools/cmd/staticcheck@latest
 check: $(STATICCHECK)
 	$(STATICCHECK) ./pkg/stream
 
