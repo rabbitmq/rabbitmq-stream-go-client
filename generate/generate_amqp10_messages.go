@@ -107,7 +107,7 @@ func main() {
 
 	msg = amqp.NewMessage([]byte(generateString(900)))
 	msg.Properties = &amqp.MessageProperties{
-		MessageID:          33333333,
+		MessageID:          uint64(33333333),
 		UserID:             nil,
 		To:                 generateString(50),
 		Subject:            generateString(30),
