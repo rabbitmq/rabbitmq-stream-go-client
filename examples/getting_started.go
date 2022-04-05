@@ -42,7 +42,8 @@ func consumerClose(channelClose stream.ChannelClose) {
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 	// Set log level, not mandatory by default is INFO
-	stream.SetLevelInfo(logs.DEBUG)
+	// you cn set DEBUG for more information
+   //  stream.SetLevelInfo(logs.DEBUG)
 
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
