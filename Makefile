@@ -63,13 +63,17 @@ rabbitmq-server:
 rabbitmq-ha-proxy:
 	cd compose/ha_tls; rm -rf tls-gen;
 	cd compose/ha_tls; git clone https://github.com/michaelklishin/tls-gen tls-gen; cd tls-gen/basic; make
+	mv compose/ha_tls/tls-gen/basic/result/server_*_certificate.pem compose/ha_tls/tls-gen/basic/result/server_certificate.pem
+	mv compose/ha_tls/tls-gen/basic/result/server_*key.pem compose/ha_tls/tls-gen/basic/result/server_key.pem
 	cd compose/ha_tls; docker build -t haproxy-rabbitmq-cluster  .
 	cd compose/ha_tls; docker-compose down
-	cd compose/ha_tls; docker-compose up
+	cd compose/ha_tls; docker-compose up -d
 
 rabbitmq-server-tls:
 	cd compose/tls; rm -rf tls-gen;
 	cd compose/tls; git clone https://github.com/michaelklishin/tls-gen tls-gen; cd tls-gen/basic; make
+	mv compose/tls/tls-gen/basic/result/server_*_certificate.pem compose/tls/tls-gen/basic/result/server_certificate.pem
+	mv compose/tls/tls-gen/basic/result/server_*key.pem compose/tls/tls-gen/basic/result/server_key.pem
 	docker run -it --rm --name rabbitmq-stream-go-client-test \
 		-p 5552:5552 -p 5672:5672 -p 5671:5671 -p 5551:5551 -p 15672:15672 \
 		-v  $(shell pwd)/compose/tls/conf/:/etc/rabbitmq/ -v $(shell pwd)/compose/tls/tls-gen/basic/result/:/certs \
