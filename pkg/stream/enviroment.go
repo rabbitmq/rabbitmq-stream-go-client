@@ -154,6 +154,20 @@ func (env *Environment) StreamExists(streamName string) (bool, error) {
 	return client.StreamExists(streamName), nil
 }
 
+func (env *Environment) QueryOffset(consumerName string, streamName string) (int64, error) {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		err := client.Close()
+		if err != nil {
+			return
+		}
+	}(client)
+	if err != nil {
+		return 0, err
+	}
+	return client.queryOffset(consumerName, streamName)
+}
+
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {

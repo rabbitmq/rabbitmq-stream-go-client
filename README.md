@@ -31,6 +31,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
     * [Consume messages](#consume-messages)
         * [Manual Track Offset](#manual-track-offset)
         * [Automatic Track Offset](#automatic-track-offset)
+        * [Get consumer Offset](#get-consumer-offset)
     * [Handle Close](#handle-close)
 - [Performance test tool](#performance-test-tool)
     * [Performance test tool Docker](#performance-test-tool-docker)
@@ -44,7 +45,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
 ### Installing
 
 ```shell
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v1.0.0-rc12
+go get -u github.com/rabbitmq/rabbitmq-stream-go-client
 ```
 
 imports:
@@ -422,6 +423,15 @@ stream.NewConsumerOptions().
 ```
 
 See also "Automatic Offset Tracking" example in the [examples](./examples/) directory
+
+### Get consumer offset
+
+It is possible to query the consumer offset using:
+```golang
+offset, err := env.QueryOffset("consumer_name", "streamName")
+```
+An error is returned if the offset doesn't exist.
+
 
 ### Handle Close
 Client provides an interface to handle the producer/consumer close.

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
@@ -43,7 +42,7 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	// Set log level, not mandatory by default is INFO
 	// you cn set DEBUG for more information
-   //  stream.SetLevelInfo(logs.DEBUG)
+	// stream.SetLevelInfo(logs.DEBUG)
 
 	fmt.Println("Getting started with Streaming client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
