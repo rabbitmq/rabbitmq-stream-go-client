@@ -342,7 +342,7 @@ var _ = Describe("Streaming Consumers", func() {
 			return consumer.GetLastStoredOffset()
 		}, 5*time.Second).Should(Equal(int64(107)),
 			"Offset should be 107")
-
+		time.Sleep(500 * time.Millisecond)
 		offset, err := env.QueryOffset("consumer_test", streamName)
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(func() int64 {
