@@ -5,8 +5,8 @@ go fmt ./...
 rm pkg/stream/constants.go-e
 
 
-sed -i -e "s/.*github.com\/rabbitmq\/rabbitmq-stream-go-client@v*.*/go get -u github.com\/rabbitmq\/rabbitmq-stream-go-client@v$1/" README.md
+# sed -i -e "s/.*github.com\/rabbitmq\/rabbitmq-stream-go-client@v*.*/go get -u github.com\/rabbitmq\/rabbitmq-stream-go-client@v$1/" README.md
 go fmt ./...
-rm README.md-e
+# rm README.md-e
 
 git add VERSION pkg/stream/constants.go README.md
