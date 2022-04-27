@@ -205,7 +205,6 @@ var _ = Describe("Streaming Consumers", func() {
 			Eventually(func() int64 { return consumer.GetLastStoredOffset() }, 5*time.Second).Should(Equal(int64(99)),
 				"Offset should be 99")
 			Expect(consumer.Close()).NotTo(HaveOccurred())
-
 		})
 
 		It("automatically commit by number/time", func() {
@@ -226,7 +225,7 @@ var _ = Describe("Streaming Consumers", func() {
 				"Offset should be 100")
 			Expect(consumer.Close()).NotTo(HaveOccurred())
 			/// When the consumer is closed, it has to save the offset
-			// so  the last offest has to be 105
+			// so  the last offset has to be 105
 			Eventually(func() int64 {
 				return consumer.GetLastStoredOffset()
 			}, 5*time.Second).Should(Equal(int64(105)),
@@ -318,6 +317,9 @@ var _ = Describe("Streaming Consumers", func() {
 	It("Subscribe/Unsubscribe count messages manual store", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
+		// the offset doesn't exist (yet) here for the consumer test
+		_, err = env.QueryOffset("consumer_test", streamName)
+		Expect(err).To(HaveOccurred())
 
 		Expect(producer.BatchSend(CreateArrayMessagesForTesting(107))).
 			NotTo(HaveOccurred())
@@ -338,6 +340,13 @@ var _ = Describe("Streaming Consumers", func() {
 
 		Eventually(func() int64 {
 			return consumer.GetLastStoredOffset()
+		}, 5*time.Second).Should(Equal(int64(107)),
+			"Offset should be 107")
+
+		offset, err := env.QueryOffset("consumer_test", streamName)
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() int64 {
+			return offset
 		}, 5*time.Second).Should(Equal(int64(107)),
 			"Offset should be 107")
 
