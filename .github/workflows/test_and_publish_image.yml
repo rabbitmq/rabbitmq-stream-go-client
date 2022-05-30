@@ -49,8 +49,6 @@ jobs:
       - name: Install GNU make
         run: choco install make
       - run: make test
-      - name: Upload code coverage to Codecov
-        run: bash <(curl -s https://codecov.io/bash)
   publish:
     runs-on: ubuntu-latest
     needs: [test, test-win32]
