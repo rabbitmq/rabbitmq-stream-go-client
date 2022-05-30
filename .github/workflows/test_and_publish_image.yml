@@ -31,14 +31,6 @@ jobs:
     strategy:
       matrix:
         go: [ '1.17', '1.18' ]
-    services:
-      rabbitmq-streaming:
-        image: pivotalrabbitmq/rabbitmq-stream
-        env:
-          RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_stream  advertised_host localhost"
-        ports:
-          - 5552:5552
-          - 15672:15672
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
