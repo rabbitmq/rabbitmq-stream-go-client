@@ -8,6 +8,7 @@ import (
 )
 
 func TestStream(t *testing.T) {
+	defer GinkgoRecover()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Go-streaming-client")
 }

@@ -15,6 +15,7 @@ cue.mod/
 # Dependency directories (remove the comment below to include it)
 # vendor/
 .idea
+coverage
 coverage.txt
 bin/
 examples/examples
