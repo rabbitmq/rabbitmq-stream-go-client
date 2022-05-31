@@ -23,7 +23,7 @@ check: $(STATICCHECK)
 	$(STATICCHECK) ./pkg/stream
 
 test: vet fmt check
-	go test -race -tags debug -v -cpu 1,2 ./pkg/stream -coverprofile coverage.txt -covermode atomic -ginkgo.v -ginkgo.progress
+	go test -race -tags debug -v -cpu 2 ./pkg/stream -coverprofile coverage.txt -covermode atomic -ginkgo.v -ginkgo.progress
 
 build-all: vet fmt check build-darwin build-windows build-linux
 
