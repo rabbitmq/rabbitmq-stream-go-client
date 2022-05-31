@@ -78,14 +78,14 @@ func newClient(connectionName string, broker *Broker, tcpParameters *TCPParamete
 }
 
 func (c *Client) getSocket() *socket {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	//c.mutex.Lock()
+	//defer c.mutex.Unlock()
 	return &c.socket
 }
 
 func (c *Client) setSocketConnection(connection net.Conn) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	//c.mutex.Lock()
+	//defer c.mutex.Unlock()
 	c.socket.connection = connection
 	c.socket.writer = bufio.NewWriter(connection)
 }
