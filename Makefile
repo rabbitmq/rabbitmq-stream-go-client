@@ -18,18 +18,17 @@ fmt:
 
 STATICCHECK ?= $(GOBIN)/staticcheck
 $(STATICCHECK):
-	go get honnef.co/go/tools/cmd/staticcheck@latest
+	go install honnef.co/go/tools/cmd/staticcheck@latest
 check: $(STATICCHECK)
 	$(STATICCHECK) ./pkg/stream
 
 test: vet fmt check
-	go test --race --tags=debug -v  ./pkg/stream -coverprofile=coverage.txt -covermode=atomic  #-ginkgo.v
+	go test -race -tags debug -v -cpu 2 ./pkg/stream -coverprofile coverage.txt -covermode atomic -ginkgo.v
 
 build-all: vet fmt check build-darwin build-windows build-linux
-	 go test --tags=debug -v -race ./pkg/stream -coverprofile=coverage.txt -covermode=atomic  #-ginkgo.v
 
 integration-test: vet fmt check
-	cd ./pkg/system_integration && go test -v  . -race -coverprofile=coverage.txt -covermode=atomic -tags debug -timeout 99999s
+	go test -race -tags debug -v -cpu 2 ./pkg/system_integration -coverprofile coverage.txt -covermode atomic -timeout 99999s -ginkgo.v
 
 build-%: vet fmt check
 	GOOS=$(*) GOARCH=amd64 go build -ldflags=$(LDFLAGS) -v ./...

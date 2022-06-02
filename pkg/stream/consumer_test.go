@@ -2,7 +2,7 @@ package stream
 
 import (
 	"github.com/google/uuid"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
@@ -594,8 +594,8 @@ var _ = Describe("Streaming Consumers", func() {
 			msg := amqp.NewMessage([]byte(v))
 			batchMessages = append(batchMessages, msg)
 		}
-
-		for i := 0; i < 2000; i++ {
+		totalMessages := 200
+		for i := 0; i < totalMessages; i++ {
 			msg := amqp.NewMessage(make([]byte, 50))
 			Expect(producer1.Send(msg)).NotTo(HaveOccurred())
 			Expect(producer2.Send(msg)).NotTo(HaveOccurred())
@@ -619,7 +619,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 15*time.Second).Should(Equal(int32((2000*5)+(50*len(batchMessages)))),
+		}, 15*time.Second).Should(Equal(int32((totalMessages*5)+(50*len(batchMessages)))),
 			"consumer should be the same sent from different publishers settings")
 
 		Expect(producer1.Close()).NotTo(HaveOccurred())
