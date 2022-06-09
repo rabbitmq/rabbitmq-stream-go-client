@@ -261,6 +261,20 @@ var _ = Describe("Environment test", func() {
 
 	})
 
+	Describe("Validation Query Offset/Sequence", func() {
+
+		env, err := NewEnvironment(NewEnvironmentOptions())
+		Expect(err).NotTo(HaveOccurred())
+		_, err = env.QuerySequence("my_prod",
+			"Stream_Doesnt_exist")
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.QueryOffset("my_cons",
+			"Stream_Doesnt_exist")
+		Expect(err).To(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
 	Describe("Stream Existing/Meta data", func() {
 
 		env, err := NewEnvironment(NewEnvironmentOptions().SetPort(5552).

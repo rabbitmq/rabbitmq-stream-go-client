@@ -296,6 +296,11 @@ https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/ 
 You can find a "Deduplication" example in the [examples](./examples/) directory. </br>
 Run it more than time, the messages count will be always 10.
 
+To retrieve the last sequence id for producer you can use:
+```
+publishingId, err := producer.GetLastPublishingId()
+```
+
 ### Sub Entries Batching
 
 The number of messages to put in a sub-entry. A sub-entry is one "slot" in a publishing frame, 

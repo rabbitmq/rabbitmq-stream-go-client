@@ -487,6 +487,9 @@ func (producer *Producer) FlushUnConfirmedMessages() {
 	producer.mutex.Unlock()
 }
 
+func (producer *Producer) GetLastPublishingId() (int64, error) {
+	return producer.options.client.queryPublisherSequence(producer.GetName(), producer.GetStreamName())
+}
 func (producer *Producer) Close() error {
 	if producer.getStatus() == closed {
 		return AlreadyClosed

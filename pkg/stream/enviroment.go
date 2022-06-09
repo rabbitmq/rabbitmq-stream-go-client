@@ -168,6 +168,8 @@ func (env *Environment) QueryOffset(consumerName string, streamName string) (int
 	return client.queryOffset(consumerName, streamName)
 }
 
+// QuerySequence gets the last id stored for a producer
+// you can also see producer.GetLastPublishingId() that is the easier way to get the last-id
 func (env *Environment) QuerySequence(publisherReference string, streamName string) (int64, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {

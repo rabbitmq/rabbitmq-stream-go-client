@@ -308,6 +308,12 @@ var _ = Describe("Streaming Consumers", func() {
 		}, 5*time.Second).Should(Equal(int64(90)),
 			"QuerySequence should give the last id: 90")
 
+		Eventually(func() int64 {
+			v, _ := producer.GetLastPublishingId()
+			return v
+		}, 5*time.Second).Should(Equal(int64(90)),
+			"GetLastPublishingId should give the last id: 90")
+
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
