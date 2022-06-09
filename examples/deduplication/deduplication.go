@@ -53,6 +53,13 @@ func main() {
 		}
 	}(chConfirm, producer)
 
+	// In case you need to know which is the last ID for the producer: GetLastPublishingId
+	lastPublishingId, err := producer.GetLastPublishingId()
+	CheckErr(err)
+	fmt.Printf("lastPublishingId: %d\n",
+		lastPublishingId,
+	)
+
 	data := make(map[int]string)
 	data[0] = "Piaggio"
 	data[1] = "Ferrari"

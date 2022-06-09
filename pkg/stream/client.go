@@ -525,7 +525,8 @@ func (c *Client) internalDeclarePublisher(streamName string, producer *Producer)
 	res := c.handleWrite(b.Bytes(), resp)
 
 	if publisherReferenceSize > 0 {
-		producer.sequence = c.queryPublisherSequence(producer.options.Name, streamName)
+		v, _ := c.queryPublisherSequence(producer.options.Name, streamName)
+		producer.sequence = v
 	}
 
 	return res
@@ -560,7 +561,7 @@ func (c *Client) metaData(streams ...string) *StreamsMetadata {
 	return data.(*StreamsMetadata)
 }
 
-func (c *Client) queryPublisherSequence(publisherReference string, stream string) int64 {
+func (c *Client) queryPublisherSequence(publisherReference string, stream string) (int64, error) {
 
 	length := 2 + 2 + 4 + 2 + len(publisherReference) + 2 + len(stream)
 	resp := c.coordinator.NewResponse(commandQueryPublisherSequence)
@@ -570,10 +571,13 @@ func (c *Client) queryPublisherSequence(publisherReference string, stream string
 
 	writeString(b, publisherReference)
 	writeString(b, stream)
-	c.handleWriteWithResponse(b.Bytes(), resp, false)
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
 	sequence := <-resp.data
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
-	return sequence.(int64)
+	if err.Err != nil {
+		return 0, err.Err
+	}
+	return sequence.(int64), nil
 
 }
 

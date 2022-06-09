@@ -259,12 +259,13 @@ var _ = Describe("Streaming Consumers", func() {
 	})
 
 	It("Deduplication", func() {
-		producer, err := env.NewProducer(streamName, NewProducerOptions().SetProducerName("producer-ded"))
+		producerName := "producer-ded"
+		producer, err := env.NewProducer(streamName, NewProducerOptions().SetProducerName(producerName))
 		Expect(err).NotTo(HaveOccurred())
 		var arr []message.StreamMessage
 		for z := 0; z < 10; z++ {
 			m := amqp.NewMessage([]byte("test_" + strconv.Itoa(z)))
-			m.SetPublishingId(int64(z * 10))
+			m.SetPublishingId(int64(z * 10)) // id stored: the last one should be the same on QuerySequence
 			arr = append(arr, m)
 		}
 
@@ -300,6 +301,19 @@ var _ = Describe("Streaming Consumers", func() {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(10)),
 			"consumer should receive only 10 messages")
+
+		Eventually(func() int64 {
+			v, _ := env.QuerySequence(producerName, streamName)
+			return v
+		}, 5*time.Second).Should(Equal(int64(90)),
+			"QuerySequence should give the last id: 90")
+
+		Eventually(func() int64 {
+			v, _ := producer.GetLastPublishingId()
+			return v
+		}, 5*time.Second).Should(Equal(int64(90)),
+			"GetLastPublishingId should give the last id: 90")
+
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})

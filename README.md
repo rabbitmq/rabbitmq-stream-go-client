@@ -45,7 +45,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
 ### Installing
 
 ```shell
- go get -u github.com/rabbitmq/rabbitmq-stream-go-client@v1.0.0-rc.13
+ go get -u github.com/rabbitmq/rabbitmq-stream-go-client
 ```
 
 imports:
@@ -295,6 +295,11 @@ The stream plugin can handle deduplication data, see this blog post for more det
 https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/ </br>
 You can find a "Deduplication" example in the [examples](./examples/) directory. </br>
 Run it more than time, the messages count will be always 10.
+
+To retrieve the last sequence id for producer you can use:
+```
+publishingId, err := producer.GetLastPublishingId()
+```
 
 ### Sub Entries Batching
 
