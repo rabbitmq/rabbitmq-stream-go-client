@@ -168,6 +168,20 @@ func (env *Environment) QueryOffset(consumerName string, streamName string) (int
 	return client.queryOffset(consumerName, streamName)
 }
 
+func (env *Environment) QuerySequence(publisherReference string, streamName string) (int64, error) {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		err := client.Close()
+		if err != nil {
+			return
+		}
+	}(client)
+	if err != nil {
+		return 0, err
+	}
+	return client.queryPublisherSequence(publisherReference, streamName)
+}
+
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {

@@ -26,3 +26,4 @@ tls-gen/
 dist/
 
 perfTest/perfTest
+go.dev/

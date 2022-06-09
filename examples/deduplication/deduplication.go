@@ -53,6 +53,13 @@ func main() {
 		}
 	}(chConfirm, producer)
 
+	// In case you need to know which is the last ID for the producer
+	lastSequenceID, err := env.QuerySequence("myProducer", streamName)
+	CheckErr(err)
+	fmt.Printf("lastSequenceID: %d\n",
+		lastSequenceID,
+	)
+
 	data := make(map[int]string)
 	data[0] = "Piaggio"
 	data[1] = "Ferrari"
