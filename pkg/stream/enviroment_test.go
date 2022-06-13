@@ -321,4 +321,31 @@ var _ = Describe("Environment test", func() {
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
+	It("Multi Uris/Multi Uris Fails", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().
+			SetUris([]string{"rabbitmq-stream://guest:guest@localhost:5552/%2f"}))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
+		_, errWrong := NewEnvironment(NewEnvironmentOptions().
+			SetUris([]string{"rabbitmq-stream://wrong_user:wrong_password@localhost:5552/%2f"}))
+		Expect(errWrong).To(HaveOccurred())
+	})
+
+	It("Fail TLS connection", func() {
+		_, err := NewEnvironment(NewEnvironmentOptions().IsTLS(true))
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("Set TCP parameters", func() {
+		// weak test, atm I don't have other ways to test these values
+		// just validate that the connection still works
+		env, err := NewEnvironment(NewEnvironmentOptions().
+			SetRequestedMaxFrameSize(1048576).
+			SetNoDelay(false).SetReadBuffer(4096).
+			SetWriteBuffer(4096))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
 })

@@ -364,6 +364,13 @@ var _ = Describe("Streaming Consumers", func() {
 		}, 5*time.Second).Should(Equal(int64(107)),
 			"Offset should be 107")
 
+		offsetConsumer, err := consumer.QueryOffset()
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() int64 {
+			return offsetConsumer
+		}, 5*time.Second).Should(Equal(int64(107)),
+			"Consumer Offset should be 107")
+
 		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
 
