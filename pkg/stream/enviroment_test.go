@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"crypto/tls"
 	"sync"
 	"time"
 
@@ -333,7 +334,9 @@ var _ = Describe("Environment test", func() {
 	})
 
 	It("Fail TLS connection", func() {
-		_, err := NewEnvironment(NewEnvironmentOptions().IsTLS(true))
+		_, err := NewEnvironment(NewEnvironmentOptions().
+			SetTLSConfig(&tls.Config{InsecureSkipVerify: true}).
+			IsTLS(true))
 		Expect(err).To(HaveOccurred())
 	})
 

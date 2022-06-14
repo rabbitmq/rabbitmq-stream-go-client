@@ -42,6 +42,14 @@ var _ = Describe("Converters", func() {
 		v = ByteCapacity{}.From("aGB")
 		Expect(fmt.Sprintf("%s", v.error)).
 			To(ContainSubstring("Invalid number format"))
+
+		v = ByteCapacity{}.From("")
+		Expect(v.bytes).To(Equal(int64(0)))
+		Expect(v.error).To(BeNil())
+
+		v = ByteCapacity{}.From("0")
+		Expect(v.bytes).To(Equal(int64(0)))
+		Expect(v.error).To(BeNil())
 	})
 
 })
