@@ -30,8 +30,15 @@ $(GOMOCK):
 .PHONY: gomock
 gomock: $(GOMOCK)
 
+NUM_PROCS ?= 2
+TEST_TIMEOUT ?= 2m
 test: vet fmt check
-	go test -race -tags debug -v -cpu 2 ./pkg/stream -coverprofile coverage.txt -covermode atomic -ginkgo.v -timeout=2m
+	go run github.com/onsi/ginkgo/v2/ginkgo -r --procs=$(NUM_PROCS) --compilers=$(NUM_PROCS) \
+		--randomize-all --randomize-suites \
+		--cover --coverprofile=coverage.txt --covermode=atomic \
+		--race --trace \
+		--tags debug \
+		--timeout=$(TEST_TIMEOUT)
 
 build-all: vet fmt check build-darwin build-windows build-linux
 
