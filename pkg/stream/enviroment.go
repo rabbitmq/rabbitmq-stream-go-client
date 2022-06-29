@@ -18,6 +18,7 @@ type Environment struct {
 	producers *producersEnvironment
 	consumers *consumersEnvironment
 	options   *EnvironmentOptions
+	closed    bool
 }
 
 func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
@@ -70,6 +71,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		options:   options,
 		producers: newProducers(options.MaxProducersPerClient),
 		consumers: newConsumerEnvironment(options.MaxConsumersPerClient),
+		closed:    false,
 	}, client.connect()
 }
 func (env *Environment) newReconnectClient() (*Client, error) {
@@ -234,7 +236,12 @@ func (env *Environment) NewConsumer(streamName string,
 func (env *Environment) Close() error {
 	_ = env.producers.close()
 	_ = env.consumers.close()
+	env.closed = true
 	return nil
+}
+
+func (env *Environment) IsClosed() bool {
+	return env.closed
 }
 
 type EnvironmentOptions struct {
@@ -435,11 +442,11 @@ func (cc *environmentCoordinator) maybeCleanClients() {
 	}
 }
 
-func (client *Client) maybeCleanProducers(streamName string) {
-	client.mutex.Lock()
-	for pidx, producer := range client.coordinator.Producers() {
+func (c *Client) maybeCleanProducers(streamName string) {
+	c.mutex.Lock()
+	for pidx, producer := range c.coordinator.Producers() {
 		if producer.(*Producer).GetStreamName() == streamName {
-			err := client.coordinator.RemoveProducerById(pidx.(uint8), Event{
+			err := c.coordinator.RemoveProducerById(pidx.(uint8), Event{
 				Command:    CommandMetadataUpdate,
 				StreamName: streamName,
 				Name:       producer.(*Producer).GetName(),
@@ -451,20 +458,20 @@ func (client *Client) maybeCleanProducers(streamName string) {
 			}
 		}
 	}
-	client.mutex.Unlock()
-	if client.coordinator.ProducersCount() == 0 {
-		err := client.Close()
+	c.mutex.Unlock()
+	if c.coordinator.ProducersCount() == 0 {
+		err := c.Close()
 		if err != nil {
 			return
 		}
 	}
 }
 
-func (client *Client) maybeCleanConsumers(streamName string) {
-	client.mutex.Lock()
-	for pidx, consumer := range client.coordinator.consumers {
+func (c *Client) maybeCleanConsumers(streamName string) {
+	c.mutex.Lock()
+	for pidx, consumer := range c.coordinator.consumers {
 		if consumer.(*Consumer).options.streamName == streamName {
-			err := client.coordinator.RemoveConsumerById(pidx.(uint8), Event{
+			err := c.coordinator.RemoveConsumerById(pidx.(uint8), Event{
 				Command:    CommandMetadataUpdate,
 				StreamName: streamName,
 				Name:       consumer.(*Consumer).GetName(),
@@ -476,9 +483,9 @@ func (client *Client) maybeCleanConsumers(streamName string) {
 			}
 		}
 	}
-	client.mutex.Unlock()
-	if client.coordinator.ConsumersCount() == 0 {
-		err := client.Close()
+	c.mutex.Unlock()
+	if c.coordinator.ConsumersCount() == 0 {
+		err := c.Close()
 		if err != nil {
 			return
 		}
@@ -601,7 +608,7 @@ func (cc *environmentCoordinator) newConsumer(leader *Broker, tcpParameters *TCP
 	return subscriber, nil
 }
 
-func (cc *environmentCoordinator) close() error {
+func (cc *environmentCoordinator) Close() error {
 	cc.mutexContext.Lock()
 	defer cc.mutexContext.Unlock()
 	for _, client := range cc.clientsPerContext {
@@ -672,7 +679,7 @@ func (ps *producersEnvironment) close() error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 	for _, coordinator := range ps.producersCoordinator {
-		_ = coordinator.close()
+		_ = coordinator.Close()
 	}
 	return nil
 }
@@ -735,7 +742,7 @@ func (ps *consumersEnvironment) close() error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 	for _, coordinator := range ps.consumersCoordinator {
-		_ = coordinator.close()
+		_ = coordinator.Close()
 	}
 	return nil
 }

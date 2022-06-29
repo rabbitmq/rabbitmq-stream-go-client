@@ -2,7 +2,6 @@ package stream
 
 import (
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,37 +9,22 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const testVhost = "rabbitmq-streams-go-test"
-
-var testEnvironment *Environment
-var testStreamName string
-
-var _ = SynchronizedBeforeSuite(func() []byte {
-	err := createVhost(testVhost)
-	Expect(err).NotTo(HaveOccurred())
-	return nil
-}, func(_ []byte) {
-	//SetLevelInfo(logs.DEBUG)
-	client, err := NewEnvironment(nil)
-	testEnvironment = client
-	Expect(err).NotTo(HaveOccurred())
-	testStreamName = uuid.New().String()
-})
-
-var _ = SynchronizedAfterSuite(func() {
-	time.Sleep(400 * time.Millisecond)
-	Expect(testEnvironment.Close()).NotTo(HaveOccurred())
-	time.Sleep(100 * time.Millisecond)
-}, func() {
-	Expect(deleteVhost(testVhost)).NotTo(HaveOccurred())
-})
-
 var _ = Describe("Streaming testEnvironment", func() {
+	var (
+		testStreamName  string
+		testEnvironment *Environment
+	)
+
 	BeforeEach(func() {
-		time.Sleep(200 * time.Millisecond)
+		client, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		testEnvironment = client
+		testStreamName = uuid.New().String()
 	})
+
 	AfterEach(func() {
-		time.Sleep(200 * time.Millisecond)
+		Expect(testEnvironment.Close()).To(Succeed())
+		Eventually(testEnvironment.IsClosed, time.Millisecond*300).Should(BeTrue(), "Expected testEnvironment to be closed")
 	})
 
 	It("Create Stream", func() {
@@ -150,33 +134,3 @@ var _ = Describe("Streaming testEnvironment", func() {
 			To(ContainSubstring("stream Name can't be empty"))
 	})
 })
-
-func createVhost(vhost string) error {
-	return httpCall("PUT", vhostUrl(vhost))
-}
-
-func deleteVhost(vhost string) error {
-	return httpCall("DELETE", vhostUrl(vhost))
-}
-
-func vhostUrl(vhost string) string {
-	return fmt.Sprintf("http://guest:guest@localhost:15672/api/vhosts/%s", vhost)
-}
-
-func httpCall(method, url string) error {
-	req, err := http.NewRequest(method, url, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("http error (%d): %s", resp.StatusCode, resp.Status)
-	}
-	return nil
-}

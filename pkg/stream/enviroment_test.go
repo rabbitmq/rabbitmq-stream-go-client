@@ -11,6 +11,7 @@ import (
 )
 
 var _ = Describe("Environment test", func() {
+	const testVhost = "rabbitmq-streams-go-test"
 
 	It("Multi Producers", func() {
 		env, err := NewEnvironment(nil)

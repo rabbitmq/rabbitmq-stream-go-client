@@ -13,21 +13,25 @@ import (
 	"time"
 )
 
-var testProducerStream string
-
 var _ = Describe("Streaming Producers", func() {
+	var (
+		testEnvironment    *Environment
+		testProducerStream string
+	)
 
 	BeforeEach(func() {
-		time.Sleep(200 * time.Millisecond)
+		client, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		testEnvironment = client
 		testProducerStream = uuid.New().String()
 		Expect(testEnvironment.DeclareStream(testProducerStream, nil)).
 			NotTo(HaveOccurred())
-
 	})
-	AfterEach(func() {
-		time.Sleep(200 * time.Millisecond)
-		Expect(testEnvironment.DeleteStream(testProducerStream)).NotTo(HaveOccurred())
 
+	AfterEach(func() {
+		Expect(testEnvironment.DeleteStream(testProducerStream)).NotTo(HaveOccurred())
+		Expect(testEnvironment.Close()).To(Succeed())
+		Eventually(testEnvironment.IsClosed, time.Millisecond*300).Should(BeTrue(), "Expected testEnvironment to be closed")
 	})
 
 	It("NewProducer/Close Publisher", func() {
@@ -76,8 +80,12 @@ var _ = Describe("Streaming Producers", func() {
 		When("No batching, nor sub-entry. nor compression", func() {
 
 			BeforeEach(func() {
-				producer = createProducer(NewProducerOptions().SetBatchSize(1).SetSubEntrySize(1),
-					&messagesReceived)
+				producer = createProducer(
+					NewProducerOptions().SetBatchSize(1).SetSubEntrySize(1),
+					&messagesReceived,
+					testEnvironment,
+					testProducerStream,
+				)
 				wg.Add(ThreadCount)
 			})
 
@@ -100,8 +108,12 @@ var _ = Describe("Streaming Producers", func() {
 		When("Batching enabled, but without sub-entry and compression", func() {
 
 			BeforeEach(func() {
-				producer = createProducer(NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(1),
-					&messagesReceived)
+				producer = createProducer(
+					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(1),
+					&messagesReceived,
+					testEnvironment,
+					testProducerStream,
+				)
 				wg.Add(ThreadCount)
 			})
 
@@ -126,7 +138,10 @@ var _ = Describe("Streaming Producers", func() {
 			BeforeEach(func() {
 				producer = createProducer(
 					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(SubEntrySize).SetCompression(Compression{}.None()),
-					&messagesReceived)
+					&messagesReceived,
+					testEnvironment,
+					testProducerStream,
+				)
 				wg.Add(ThreadCount)
 			})
 
@@ -151,7 +166,10 @@ var _ = Describe("Streaming Producers", func() {
 			BeforeEach(func() {
 				producer = createProducer(
 					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(SubEntrySize).SetCompression(Compression{}.Gzip()),
-					&messagesReceived)
+					&messagesReceived,
+					testEnvironment,
+					testProducerStream,
+				)
 
 				wg.Add(ThreadCount)
 			})
@@ -750,12 +768,12 @@ func testCompress(producer *Producer) {
 		"confirm should receive same messages send by producer")
 }
 
-func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *Producer {
+func createProducer(producerOptions *ProducerOptions, messagesReceived *int32, testEnvironment *Environment, streamName string) *Producer {
 	var err error
 
 	atomic.StoreInt32(messagesReceived, 0)
 
-	producer, err := testEnvironment.NewProducer(testProducerStream, producerOptions)
+	producer, err := testEnvironment.NewProducer(streamName, producerOptions)
 	Expect(err).NotTo(HaveOccurred())
 
 	chConfirm := producer.NotifyPublishConfirmation()
