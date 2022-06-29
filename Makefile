@@ -22,8 +22,16 @@ $(STATICCHECK):
 check: $(STATICCHECK)
 	$(STATICCHECK) ./pkg/stream
 
+GOMOCK ?= $(GOBIN)/mockgen
+GOMOCK_VERSION ?= v1.6.0
+$(GOMOCK):
+	go install github.com/golang/mock/mockgen@$(GOMOCK_VERSION)
+
+.PHONY: gomock
+gomock: $(GOMOCK)
+
 test: vet fmt check
-	go test -race -tags debug -v -cpu 2 ./pkg/stream -coverprofile coverage.txt -covermode atomic -ginkgo.v
+	go test -race -tags debug -v -cpu 2 ./pkg/stream -coverprofile coverage.txt -covermode atomic -ginkgo.v -timeout=2m
 
 build-all: vet fmt check build-darwin build-windows build-linux
 
@@ -46,18 +54,22 @@ perf-test-help: perf-test-build
 perf-test-build: vet fmt check
 	go build -ldflags=$(LDFLAGS) -o bin/stream-perf-test perfTest/perftest.go
 
+BUILDKIT ?= docker
 perf-test-docker-build: perf-test-build
-	docker build -t pivotalrabbitmq/go-stream-perf-test:$(VERSION) .
+	$(BUILDKIT) build -t pivotalrabbitmq/go-stream-perf-test:$(VERSION) .
 
 perf-test-docker-push: perf-test-docker-build
-	docker push pivotalrabbitmq/go-stream-perf-test:$(VERSION)
+	$(BUILDKIT) push pivotalrabbitmq/go-stream-perf-test:$(VERSION)
 
+RABBITMQ_OCI ?= pivotalrabbitmq/rabbitmq-stream
+BUILDKIT_RUN_ARGS ?= --pull always
+.PHONY: rabbitmq-server
 rabbitmq-server:
-	docker run -it --rm --name rabbitmq-stream-go-client-test \
+	$(BUILDKIT) run -it --rm --name rabbitmq-stream-go-client-test \
 		-p 5552:5552 -p 5672:5672 -p 15672:15672 \
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
-		--pull always \
-		pivotalrabbitmq/rabbitmq-stream
+		$(BUILDKIT_RUN_ARGS) \
+		$(RABBITMQ_OCI)
 
 rabbitmq-ha-proxy:
 	cd compose/ha_tls; rm -rf tls-gen;
