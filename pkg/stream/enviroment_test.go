@@ -73,6 +73,7 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
+				defer GinkgoRecover()
 				producer, err := env.NewProducer(streamName, nil)
 				Expect(err).NotTo(HaveOccurred())
 				time.Sleep(20 * time.Millisecond)
@@ -105,6 +106,7 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func() {
+				defer GinkgoRecover()
 				_, errProd := env.NewProducer(streamNameWillBeDelete, nil)
 				Expect(errProd).NotTo(HaveOccurred())
 				_, errProd = env.NewProducer(streamNameWillBeDeleteAfter, nil)

@@ -15,6 +15,7 @@ var _ = Describe("Utils", func() {
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {
+			defer GinkgoRecover()
 			err := waitCodeWithDefaultTimeOut(res)
 			Expect(err.Err).ToNot(HaveOccurred())
 			wg.Done()
@@ -33,6 +34,7 @@ var _ = Describe("Utils", func() {
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func(res *Response) {
+			defer GinkgoRecover()
 			err := waitCodeWithDefaultTimeOut(res)
 			Expect(err.Err).To(HaveOccurred())
 			wg.Done()

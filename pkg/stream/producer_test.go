@@ -52,6 +52,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
+				defer GinkgoRecover()
 				defer wg.Done()
 				producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -204,6 +205,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm, p *Producer) {
+			defer GinkgoRecover()
 			for ids := range ch {
 				atomic.AddInt32(&messagesReceived, int32(len(ids)))
 				for i, msg := range ids {
@@ -275,6 +277,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		chPublishConfirmation := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
+			defer GinkgoRecover()
 			for msgs := range ch {
 				for _, msg := range msgs {
 					if !msg.IsConfirmed() {
@@ -528,6 +531,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		chPublishError := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
+			defer GinkgoRecover()
 			for msgs := range ch {
 				for _, msg := range msgs {
 					if !msg.IsConfirmed() {
@@ -788,27 +792,22 @@ func createProducer(producerOptions *ProducerOptions, messagesReceived *int32, t
 
 func sendConcurrentlyAndAsynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
-		//fmt.Printf("[%d] Sending %d messages asynchronoulsy\n", goRoutingIndex, totalMessageCountPerThread)
+		defer GinkgoRecover()
 		messagePrefix := fmt.Sprintf("test_%d_", goRoutingIndex)
 		for i := 0; i < totalMessageCountPerThread; i++ {
 			Expect(producer.Send(CreateMessageForTesting(messagePrefix, i))).NotTo(HaveOccurred())
 		}
-		//fmt.Printf("[%d] Sent %d messages\n", goRoutingIndex, totalMessageCountPerThread)
-
 	})
 }
 
 func sendConcurrentlyAndSynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int, batchSize int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
+		defer GinkgoRecover()
 		totalBatchCount := totalMessageCountPerThread / batchSize
-		//fmt.Printf("[%d] Sending %d messages in batches of %d (total batch:%d) synchronously\n", goRoutingIndex,
-		//			totalMessageCountPerThread, batchSize, totalBatchCount)
 		for batchIndex := 0; batchIndex < totalBatchCount; batchIndex++ {
 			messagePrefix := fmt.Sprintf("test_%d_%d_", goRoutingIndex, batchIndex)
 			Expect(producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))).NotTo(HaveOccurred())
 		}
-		//fmt.Printf("[%d] Sent %d messages\n", goRoutingIndex, totalMessageCountPerThread)
-
 	})
 }
 

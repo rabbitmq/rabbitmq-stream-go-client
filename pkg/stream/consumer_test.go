@@ -272,6 +272,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm, p *Producer) {
+			defer GinkgoRecover()
 			for ids := range ch {
 				for _, msg := range ids {
 					Expect(msg.GetError()).NotTo(HaveOccurred())
@@ -420,6 +421,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm, p *Producer) {
+			defer GinkgoRecover()
 			for ids := range ch {
 				for _, msg := range ids {
 					Expect(msg.GetMessage().GetMessageProperties().To).To(Equal("ToTest"))
@@ -473,6 +475,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm, p *Producer) {
+			defer GinkgoRecover()
 			for ids := range ch {
 				for _, msg := range ids {
 					Expect(msg.GetMessage().GetApplicationProperties()["key1"]).To(Equal("value1"))
