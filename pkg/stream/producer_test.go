@@ -13,21 +13,25 @@ import (
 	"time"
 )
 
-var testProducerStream string
-
 var _ = Describe("Streaming Producers", func() {
+	var (
+		testEnvironment    *Environment
+		testProducerStream string
+	)
 
 	BeforeEach(func() {
-		time.Sleep(200 * time.Millisecond)
+		client, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		testEnvironment = client
 		testProducerStream = uuid.New().String()
 		Expect(testEnvironment.DeclareStream(testProducerStream, nil)).
 			NotTo(HaveOccurred())
-
 	})
-	AfterEach(func() {
-		time.Sleep(200 * time.Millisecond)
-		Expect(testEnvironment.DeleteStream(testProducerStream)).NotTo(HaveOccurred())
 
+	AfterEach(func() {
+		Expect(testEnvironment.DeleteStream(testProducerStream)).NotTo(HaveOccurred())
+		Expect(testEnvironment.Close()).To(Succeed())
+		Eventually(testEnvironment.IsClosed, time.Millisecond*300).Should(BeTrue(), "Expected testEnvironment to be closed")
 	})
 
 	It("NewProducer/Close Publisher", func() {
@@ -48,6 +52,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
+				defer GinkgoRecover()
 				defer wg.Done()
 				producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -76,8 +81,12 @@ var _ = Describe("Streaming Producers", func() {
 		When("No batching, nor sub-entry. nor compression", func() {
 
 			BeforeEach(func() {
-				producer = createProducer(NewProducerOptions().SetBatchSize(1).SetSubEntrySize(1),
-					&messagesReceived)
+				producer = createProducer(
+					NewProducerOptions().SetBatchSize(1).SetSubEntrySize(1),
+					&messagesReceived,
+					testEnvironment,
+					testProducerStream,
+				)
 				wg.Add(ThreadCount)
 			})
 
@@ -100,8 +109,12 @@ var _ = Describe("Streaming Producers", func() {
 		When("Batching enabled, but without sub-entry and compression", func() {
 
 			BeforeEach(func() {
-				producer = createProducer(NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(1),
-					&messagesReceived)
+				producer = createProducer(
+					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(1),
+					&messagesReceived,
+					testEnvironment,
+					testProducerStream,
+				)
 				wg.Add(ThreadCount)
 			})
 
@@ -126,7 +139,10 @@ var _ = Describe("Streaming Producers", func() {
 			BeforeEach(func() {
 				producer = createProducer(
 					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(SubEntrySize).SetCompression(Compression{}.None()),
-					&messagesReceived)
+					&messagesReceived,
+					testEnvironment,
+					testProducerStream,
+				)
 				wg.Add(ThreadCount)
 			})
 
@@ -151,7 +167,10 @@ var _ = Describe("Streaming Producers", func() {
 			BeforeEach(func() {
 				producer = createProducer(
 					NewProducerOptions().SetBatchSize(BatchSize).SetSubEntrySize(SubEntrySize).SetCompression(Compression{}.Gzip()),
-					&messagesReceived)
+					&messagesReceived,
+					testEnvironment,
+					testProducerStream,
+				)
 
 				wg.Add(ThreadCount)
 			})
@@ -186,6 +205,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm, p *Producer) {
+			defer GinkgoRecover()
 			for ids := range ch {
 				atomic.AddInt32(&messagesReceived, int32(len(ids)))
 				for i, msg := range ids {
@@ -257,6 +277,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		chPublishConfirmation := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
+			defer GinkgoRecover()
 			for msgs := range ch {
 				for _, msg := range msgs {
 					if !msg.IsConfirmed() {
@@ -510,6 +531,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		chPublishError := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
+			defer GinkgoRecover()
 			for msgs := range ch {
 				for _, msg := range msgs {
 					if !msg.IsConfirmed() {
@@ -750,12 +772,12 @@ func testCompress(producer *Producer) {
 		"confirm should receive same messages send by producer")
 }
 
-func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *Producer {
+func createProducer(producerOptions *ProducerOptions, messagesReceived *int32, testEnvironment *Environment, streamName string) *Producer {
 	var err error
 
 	atomic.StoreInt32(messagesReceived, 0)
 
-	producer, err := testEnvironment.NewProducer(testProducerStream, producerOptions)
+	producer, err := testEnvironment.NewProducer(streamName, producerOptions)
 	Expect(err).NotTo(HaveOccurred())
 
 	chConfirm := producer.NotifyPublishConfirmation()
@@ -770,27 +792,22 @@ func createProducer(producerOptions *ProducerOptions, messagesReceived *int32) *
 
 func sendConcurrentlyAndAsynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
-		//fmt.Printf("[%d] Sending %d messages asynchronoulsy\n", goRoutingIndex, totalMessageCountPerThread)
+		defer GinkgoRecover()
 		messagePrefix := fmt.Sprintf("test_%d_", goRoutingIndex)
 		for i := 0; i < totalMessageCountPerThread; i++ {
 			Expect(producer.Send(CreateMessageForTesting(messagePrefix, i))).NotTo(HaveOccurred())
 		}
-		//fmt.Printf("[%d] Sent %d messages\n", goRoutingIndex, totalMessageCountPerThread)
-
 	})
 }
 
 func sendConcurrentlyAndSynchronously(producer *Producer, threadCount int, wg *sync.WaitGroup, totalMessageCountPerThread int, batchSize int) {
 	runConcurrentlyAndWaitTillAllDone(threadCount, wg, func(goRoutingIndex int) {
+		defer GinkgoRecover()
 		totalBatchCount := totalMessageCountPerThread / batchSize
-		//fmt.Printf("[%d] Sending %d messages in batches of %d (total batch:%d) synchronously\n", goRoutingIndex,
-		//			totalMessageCountPerThread, batchSize, totalBatchCount)
 		for batchIndex := 0; batchIndex < totalBatchCount; batchIndex++ {
 			messagePrefix := fmt.Sprintf("test_%d_%d_", goRoutingIndex, batchIndex)
 			Expect(producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))).NotTo(HaveOccurred())
 		}
-		//fmt.Printf("[%d] Sent %d messages\n", goRoutingIndex, totalMessageCountPerThread)
-
 	})
 }
 
