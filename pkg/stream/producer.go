@@ -63,7 +63,6 @@ type messageSequence struct {
 type Producer struct {
 	id                  uint8
 	options             *ProducerOptions
-	onClose             onInternalClose
 	unConfirmedMessages map[int64]*ConfirmationStatus
 	sequence            int64
 	mutex               *sync.Mutex
@@ -71,6 +70,7 @@ type Producer struct {
 	publishConfirm      chan []*ConfirmationStatus
 	closeHandler        chan Event
 	status              int
+	client              *Client
 
 	/// needed for the async publish
 	messageSequenceCh chan messageSequence
@@ -78,7 +78,6 @@ type Producer struct {
 }
 
 type ProducerOptions struct {
-	client               *Client
 	streamName           string
 	Name                 string      // Producer name, it is useful to handle deduplication messages
 	QueueSize            int         // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
@@ -190,7 +189,7 @@ func (producer *Producer) GetOptions() *ProducerOptions {
 }
 
 func (producer *Producer) GetBroker() *Broker {
-	return producer.options.client.broker
+	return producer.client.broker
 }
 func (producer *Producer) setStatus(status int) {
 	producer.mutex.Lock()
@@ -237,7 +236,7 @@ func (producer *Producer) startPublishTask() {
 						return
 					}
 					producer.mutexPending.Lock()
-					if producer.pendingMessages.size+msg.unCompressedSize >= producer.options.client.getTuneState().
+					if producer.pendingMessages.size+msg.unCompressedSize >= producer.client.getTuneState().
 						requestedMaxFrameSize {
 						producer.sendBufferedMessages()
 					}
@@ -267,7 +266,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return err
 	}
 
-	if len(msgBytes)+initBufferPublishSize > producer.options.client.getTuneState().requestedMaxFrameSize {
+	if len(msgBytes)+initBufferPublishSize > producer.client.getTuneState().requestedMaxFrameSize {
 		return FrameTooLarge
 	}
 
@@ -315,7 +314,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 	}
 
-	if totalBufferToSend+initBufferPublishSize > producer.options.client.tuneState.requestedMaxFrameSize {
+	if totalBufferToSend+initBufferPublishSize > producer.client.tuneState.requestedMaxFrameSize {
 		for _, msg := range messagesSequence {
 
 			unConfirmedMessage := producer.getUnConfirmed(msg.publishingId)
@@ -414,8 +413,8 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 // some condition, like simulate publish error, see
 
 func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequence, producerID uint8) error {
-	producer.options.client.socket.mutex.Lock()
-	defer producer.options.client.socket.mutex.Unlock()
+	producer.client.socket.mutex.Lock()
+	defer producer.client.socket.mutex.Unlock()
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
@@ -443,25 +442,25 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	length := frameHeaderLength + msgLen
 	//var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
-	writeBProtocolHeader(producer.options.client.socket.writer, length, commandPublish)
-	writeBByte(producer.options.client.socket.writer, producerID)
+	writeBProtocolHeader(producer.client.socket.writer, length, commandPublish)
+	writeBByte(producer.client.socket.writer, producerID)
 	numberOfMessages := len(messagesSequence)
 	numberOfMessages = numberOfMessages / producer.options.SubEntrySize
 	if len(messagesSequence)%producer.options.SubEntrySize != 0 {
 		numberOfMessages += 1
 	}
 
-	writeBInt(producer.options.client.socket.writer, numberOfMessages) //toExcluded - fromInclude
+	writeBInt(producer.client.socket.writer, numberOfMessages) //toExcluded - fromInclude
 
 	if producer.options.isSubEntriesBatching() {
-		producer.subEntryAggregation(aggregation, producer.options.client.socket.writer, producer.options.Compression)
+		producer.subEntryAggregation(aggregation, producer.client.socket.writer, producer.options.Compression)
 	}
 
 	if !producer.options.isSubEntriesBatching() {
-		producer.simpleAggregation(messagesSequence, producer.options.client.socket.writer)
+		producer.simpleAggregation(messagesSequence, producer.client.socket.writer)
 	}
 
-	err := producer.options.client.socket.writer.Flush() //writeAndFlush(b.Bytes())
+	err := producer.client.socket.writer.Flush() //writeAndFlush(b.Bytes())
 	if err != nil {
 		// This sleep is need to wait the
 		// 800 milliseconds to flush all the pending messages
@@ -488,7 +487,7 @@ func (producer *Producer) FlushUnConfirmedMessages() {
 }
 
 func (producer *Producer) GetLastPublishingId() (int64, error) {
-	return producer.options.client.queryPublisherSequence(producer.GetName(), producer.GetStreamName())
+	return producer.client.queryPublisherSequence(producer.GetName(), producer.GetStreamName())
 }
 func (producer *Producer) Close() error {
 	if producer.getStatus() == closed {
@@ -496,16 +495,16 @@ func (producer *Producer) Close() error {
 	}
 	producer.setStatus(closed)
 
-	if !producer.options.client.socket.isOpen() {
+	if !producer.client.socket.isOpen() {
 		return fmt.Errorf("tcp connection is closed")
 	}
 
-	err := producer.options.client.deletePublisher(producer.id)
+	err := producer.client.deletePublisher(producer.id)
 	if err != nil {
 		logs.LogError("error delete Publisher on closing: %s", err)
 	}
 
-	err = producer.options.client.Close()
+	err = producer.client.Close()
 	if err != nil {
 		logs.LogError("error during closing client: %s", err)
 	}

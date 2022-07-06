@@ -229,41 +229,19 @@ func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
 func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 
 	readProtocol.PublishID = readByte(r)
-	//readProtocol.PublishingIdCount = ReadIntFromReader(testEnvironment.reader)
 	publishingIdCount, _ := readUInt(r)
-	//var _publishingId int64
 
-	var unConfirmed []*ConfirmationStatus
-	for publishingIdCount != 0 {
-		seq := readInt64(r)
+	// publishingIdCount * 8 bytes
+	confirmationBuffer := make([]byte, publishingIdCount*8)
 
-		m := producer.getUnConfirmed(seq)
-		if m != nil {
-			m.confirmed = true
-			unConfirmed = append(unConfirmed, m)
-			producer.removeUnConfirmed(m.publishingId)
-
-			// in case of sub-batch entry the client receives only
-			// one publishingId (or sequence)
-			// so the other messages are confirmed using the linkedTo
-			for _, message := range m.linkedTo {
-				message.confirmed = true
-				unConfirmed = append(unConfirmed, message)
-				producer.removeUnConfirmed(message.publishingId)
-			}
-		}
-		//} else {
-		//logs.LogWarn("message %d not found in confirmation", seq)
-		//}
-		publishingIdCount--
+	_, err := io.ReadFull(r, confirmationBuffer)
+	if err != nil {
+		logs.LogError("Handle Confirm error: %s", err)
 	}
-
-	producer.mutex.Lock()
-	if producer.publishConfirm != nil {
-		producer.publishConfirm <- unConfirmed
-	}
-	producer.mutex.Unlock()
-
+	//for publishingIdCount != 0 {
+	//	_ = readInt64(r)
+	//}
+	c.socketDataChannel <- confirmationBuffer
 	return 0
 }
 
@@ -427,31 +405,32 @@ func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol,
 
 func (c *Client) handlePublishError(buffer *bufio.Reader) {
 
-	publisherId := readByte(buffer)
+	//publisherId := readByte(buffer)
+	_ = readByte(buffer)
 
 	publishingErrorCount, _ := readUInt(buffer)
-	var publishingId int64
-	var code uint16
+	//var publishingId int64
+	//var code uint16
 	for publishingErrorCount != 0 {
-		publishingId = readInt64(buffer)
-		code = readUShort(buffer)
-		producer, err := c.coordinator.GetProducerById(publisherId)
-		if err != nil {
-			logs.LogWarn("producer id %d not found, publish error :%s", publisherId, lookErrorCode(code))
-			producer = &Producer{unConfirmedMessages: map[int64]*ConfirmationStatus{}}
-		} else {
-			unConfirmedMessage := producer.getUnConfirmed(publishingId)
-
-			producer.mutex.Lock()
-
-			if producer.publishConfirm != nil && unConfirmedMessage != nil {
-				unConfirmedMessage.errorCode = code
-				unConfirmedMessage.err = lookErrorCode(code)
-				producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
-			}
-			producer.mutex.Unlock()
-			producer.removeUnConfirmed(publishingId)
-		}
+		_ = readInt64(buffer)
+		_ = readUShort(buffer)
+		//producer, err := c.coordinator.GetProducerById(publisherId)
+		//if err != nil {
+		//	logs.LogWarn("producer id %d not found, publish error :%s", publisherId, lookErrorCode(code))
+		//	producer = &Producer{unConfirmedMessages: map[int64]*ConfirmationStatus{}}
+		//} else {
+		//	unConfirmedMessage := producer.getUnConfirmed(publishingId)
+		//
+		//	producer.mutex.Lock()
+		//
+		//	if producer.publishConfirm != nil && unConfirmedMessage != nil {
+		//		unConfirmedMessage.errorCode = code
+		//		unConfirmedMessage.err = lookErrorCode(code)
+		//		producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
+		//	}
+		//	producer.mutex.Unlock()
+		//	producer.removeUnConfirmed(publishingId)
+		//}
 		publishingErrorCount--
 	}
 

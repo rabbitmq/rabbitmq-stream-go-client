@@ -499,6 +499,7 @@ var _ = Describe("Streaming Producers", func() {
 	// change manually the producer id.
 	// It works, but would be better to introduce some mock function
 	It("Publish  Error", func() {
+		//TODO: Implement this test
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		prodErrorStream := uuid.New().String()
@@ -528,12 +529,7 @@ var _ = Describe("Streaming Producers", func() {
 			messageBytes:     messageBytes,
 			unCompressedSize: len(messageBytes),
 		}
-		for _, producerC := range producer.options.client.coordinator.producers {
-			producerC.(*Producer).id = uint8(200)
-		}
-		producer.options.client.coordinator.mutex.Lock()
-		producer.options.client.coordinator.producers[uint8(200)] = producer
-		producer.options.client.coordinator.mutex.Unlock()
+
 		// 200 producer ID doesn't exist
 		Expect(producer.internalBatchSendProdId(messagesSequence, 200)).
 			NotTo(HaveOccurred())

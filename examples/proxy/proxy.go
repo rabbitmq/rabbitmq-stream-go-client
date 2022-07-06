@@ -38,8 +38,7 @@ func main() {
 			SetPort(addressResolver.Port).
 			IsTLS(true).
 			SetTLSConfig(conf).
-			SetAddressResolver(addressResolver).
-			SetMaxProducersPerClient(5))
+			SetAddressResolver(addressResolver))
 
 	CheckErr(err)
 

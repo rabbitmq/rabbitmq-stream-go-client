@@ -12,7 +12,6 @@ type Coordinator struct {
 	counter          int
 	consumers        map[interface{}]interface{}
 	responses        map[interface{}]interface{}
-	nextItemProducer uint8
 	nextItemConsumer uint8
 	mutex            *sync.Mutex
 }

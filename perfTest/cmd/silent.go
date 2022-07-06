@@ -152,9 +152,7 @@ func startSimulation() error {
 	checkErr(err)
 
 	simulEnvironment, err = stream.NewEnvironment(stream.NewEnvironmentOptions().
-		SetUris(rabbitmqBrokerUrl).
-		SetMaxProducersPerClient(publishersPerClient).
-		SetMaxConsumersPerClient(consumersPerClient))
+		SetUris(rabbitmqBrokerUrl))
 	checkErr(err)
 	if consumers > 0 {
 		err = startConsumers()
