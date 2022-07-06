@@ -89,7 +89,7 @@ func (br *Broker) mergeWithDefault() {
 
 }
 
-func (br *Broker) cloneFrom(broker *Broker, resolver *AddressResolver) {
+func (br *Broker) setBrokerProperties(broker *Broker, resolver *AddressResolver) {
 	br.User = broker.User
 	br.Password = broker.Password
 	br.Vhost = broker.Vhost

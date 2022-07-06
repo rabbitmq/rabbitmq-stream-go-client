@@ -436,7 +436,7 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("Already Closed/Limits", func() {
-		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(5))
+		env, err := NewEnvironment(NewEnvironmentOptions())
 		Expect(err).NotTo(HaveOccurred())
 		producer, err := env.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())

@@ -6,12 +6,10 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"strconv"
 	"sync"
-	"time"
 )
 
 type Coordinator struct {
 	counter          int
-	producers        map[interface{}]interface{}
 	consumers        map[interface{}]interface{}
 	responses        map[interface{}]interface{}
 	nextItemProducer uint8
@@ -38,38 +36,8 @@ type Response struct {
 
 func NewCoordinator() *Coordinator {
 	return &Coordinator{mutex: &sync.Mutex{},
-		producers: make(map[interface{}]interface{}),
 		consumers: make(map[interface{}]interface{}),
 		responses: make(map[interface{}]interface{})}
-}
-
-// producersEnvironment
-func (coordinator *Coordinator) NewProducer(
-	parameters *ProducerOptions) (*Producer, error) {
-	coordinator.mutex.Lock()
-	defer coordinator.mutex.Unlock()
-	size := 10000
-	if parameters != nil {
-		size = parameters.QueueSize
-	}
-
-	var lastId, err = coordinator.getNextProducerItem()
-	if err != nil {
-		return nil, err
-	}
-	var producer = &Producer{id: lastId,
-		options:             parameters,
-		mutex:               &sync.Mutex{},
-		mutexPending:        &sync.Mutex{},
-		unConfirmedMessages: map[int64]*ConfirmationStatus{},
-		status:              open,
-		messageSequenceCh:   make(chan messageSequence, size),
-		pendingMessages: pendingMessagesSequence{
-			messages: make([]messageSequence, 0),
-			size:     initBufferPublishSize,
-		}}
-	coordinator.producers[lastId] = producer
-	return producer, err
 }
 
 func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event) error {
@@ -87,26 +55,6 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 
 	return coordinator.removeById(id, coordinator.consumers)
 }
-func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error {
-
-	producer, err := coordinator.GetProducerById(id)
-	if err != nil {
-		return err
-	}
-	reason.StreamName = producer.GetStreamName()
-	reason.Name = producer.GetName()
-	tentatives := 0
-	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
-		time.Sleep(200 * time.Millisecond)
-		tentatives++
-	}
-	producer.FlushUnConfirmedMessages()
-
-	if producer.closeHandler != nil {
-		producer.closeHandler <- reason
-	}
-	return coordinator.removeById(id, coordinator.producers)
-}
 
 func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {
 	resp, err := coordinator.GetResponseByName(fmt.Sprintf("%d", id))
@@ -119,10 +67,6 @@ func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {
 	close(resp.data)
 	close(resp.offsetMessages)
 	return err
-}
-
-func (coordinator *Coordinator) ProducersCount() int {
-	return coordinator.count(coordinator.producers)
 }
 
 /// response
@@ -222,14 +166,6 @@ func (coordinator *Coordinator) ConsumersCount() int {
 	return coordinator.count(coordinator.consumers)
 }
 
-func (coordinator *Coordinator) GetProducerById(id interface{}) (*Producer, error) {
-	v, err := coordinator.getById(id, coordinator.producers)
-	if err != nil {
-		return nil, err
-	}
-	return v.(*Producer), err
-}
-
 // general functions
 
 func (coordinator *Coordinator) getById(id interface{}, refmap map[interface{}]interface{}) (interface{}, error) {
@@ -257,14 +193,6 @@ func (coordinator *Coordinator) count(refmap map[interface{}]interface{}) int {
 	defer coordinator.mutex.Unlock()
 	return len(refmap)
 }
-func (coordinator *Coordinator) getNextProducerItem() (uint8, error) {
-	if coordinator.nextItemProducer >= ^uint8(0) {
-		return coordinator.reuseFreeId(coordinator.producers)
-	}
-	res := coordinator.nextItemProducer
-	coordinator.nextItemProducer++
-	return res, nil
-}
 
 func (coordinator *Coordinator) getNextConsumerItem() (uint8, error) {
 	if coordinator.nextItemConsumer >= ^uint8(0) {
@@ -288,10 +216,4 @@ func (coordinator *Coordinator) reuseFreeId(refMap map[interface{}]interface{}) 
 		return 0, errors.New("No more items available")
 	}
 	return result, nil
-}
-
-func (coordinator *Coordinator) Producers() map[interface{}]interface{} {
-	coordinator.mutex.Lock()
-	defer coordinator.mutex.Unlock()
-	return coordinator.producers
 }

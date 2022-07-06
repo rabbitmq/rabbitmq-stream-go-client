@@ -376,20 +376,6 @@ func (c *Client) closeHartBeat() {
 }
 
 func (c *Client) Close() error {
-	for _, p := range c.coordinator.Producers() {
-		err := c.coordinator.RemoveProducerById(p.(*Producer).id, Event{
-			Command:    CommandClose,
-			StreamName: p.(*Producer).GetStreamName(),
-			Name:       p.(*Producer).GetName(),
-			Reason:     "socket client closed",
-			Err:        nil,
-		})
-
-		if err != nil {
-			logs.LogWarn("error removing producer: %s", err)
-		}
-	}
-
 	for _, cs := range c.coordinator.consumers {
 		err := c.coordinator.RemoveConsumerById(cs.(*Consumer).ID, Event{
 			Command:    CommandClose,
@@ -429,19 +415,6 @@ func (c *Client) Close() error {
 	return err
 }
 
-func (c *Client) ReusePublisher(streamName string, existingProducer *Producer) (*Producer, error) {
-	existingProducer.options.client = c
-	_, err := c.coordinator.GetProducerById(existingProducer.id)
-	if err != nil {
-		c.coordinator.producers[existingProducer.id] = existingProducer
-	} else {
-		return nil, fmt.Errorf("can't reuse producer")
-	}
-	res := c.internalDeclarePublisher(streamName, existingProducer)
-
-	return existingProducer, res.Err
-}
-
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
 	if options == nil {
 		options = NewProducerOptions()
@@ -479,7 +452,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		}
 	}
 
-	producer, err := c.coordinator.NewProducer(&ProducerOptions{
+	optionsP := &ProducerOptions{
 		client:               c,
 		streamName:           streamName,
 		Name:                 options.Name,
@@ -488,10 +461,10 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		BatchPublishingDelay: options.BatchPublishingDelay,
 		SubEntrySize:         options.SubEntrySize,
 		Compression:          options.Compression,
-	})
+	}
 
-	if err != nil {
-		return nil, err
+	producer := &Producer{
+		options: optionsP,
 	}
 	res := c.internalDeclarePublisher(streamName, producer)
 	if res.Err == nil {

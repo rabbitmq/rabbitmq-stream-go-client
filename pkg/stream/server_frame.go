@@ -57,6 +57,7 @@ func (c *Client) handleResponse() {
 			{
 				c.handleGenericResponse(readerProtocol, buffer)
 			}
+
 		case commandOpen:
 			{
 				c.commandOpen(readerProtocol, buffer)
@@ -231,11 +232,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	//readProtocol.PublishingIdCount = ReadIntFromReader(testEnvironment.reader)
 	publishingIdCount, _ := readUInt(r)
 	//var _publishingId int64
-	producer, err := c.coordinator.GetProducerById(readProtocol.PublishID)
-	if err != nil {
-		logs.LogWarn("can't find the producer during confirmation: %s", err)
-		return nil
-	}
+
 	var unConfirmed []*ConfirmationStatus
 	for publishingIdCount != 0 {
 		seq := readInt64(r)

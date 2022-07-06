@@ -494,8 +494,6 @@ func (producer *Producer) Close() error {
 	if producer.getStatus() == closed {
 		return AlreadyClosed
 	}
-
-	producer.waitForInflightMessages()
 	producer.setStatus(closed)
 
 	if !producer.options.client.socket.isOpen() {
@@ -506,44 +504,15 @@ func (producer *Producer) Close() error {
 	if err != nil {
 		logs.LogError("error delete Publisher on closing: %s", err)
 	}
-	if producer.options.client.coordinator.ProducersCount() == 0 {
-		err := producer.options.client.Close()
-		if err != nil {
-			logs.LogError("error during closing client: %s", err)
-		}
-	}
 
-	if producer.onClose != nil {
-		ch := make(chan uint8, 1)
-		ch <- producer.id
-		producer.onClose(ch)
-		close(ch)
+	err = producer.options.client.Close()
+	if err != nil {
+		logs.LogError("error during closing client: %s", err)
 	}
 
 	close(producer.messageSequenceCh)
 
 	return nil
-}
-
-func (producer *Producer) waitForInflightMessages() {
-	// during the close there cloud be pending messages
-	// it waits for producer.options.BatchPublishingDelay
-	// to flush the last messages
-	// see issues/103
-
-	channelLength := len(producer.messageSequenceCh)
-	pendingMessagesLen := producer.lenPendingMessages()
-	tentatives := 0
-
-	for (channelLength > 0 || pendingMessagesLen > 0 || producer.lenUnConfirmed() > 0) && tentatives < 3 {
-		logs.LogDebug("waitForInflightMessages, channel: %d - pending messages len: %d - unconfirmed len: %d - retry: %d",
-			channelLength, pendingMessagesLen,
-			producer.lenUnConfirmed(), tentatives)
-		time.Sleep(time.Duration(2*producer.options.BatchPublishingDelay) * time.Millisecond)
-		channelLength = len(producer.messageSequenceCh)
-		pendingMessagesLen = producer.lenPendingMessages()
-		tentatives++
-	}
 }
 
 func (producer *Producer) GetStreamName() string {
@@ -570,15 +539,5 @@ func (c *Client) deletePublisher(publisherId byte) error {
 
 	writeByte(b, publisherId)
 	errWrite := c.handleWrite(b.Bytes(), resp)
-
-	err := c.coordinator.RemoveProducerById(publisherId, Event{
-		Command: CommandDeletePublisher,
-		Reason:  "deletePublisher",
-		Err:     nil,
-	})
-	if err != nil {
-		logs.LogWarn("producer id: %d already removed", publisherId)
-	}
-
 	return errWrite.Err
 }

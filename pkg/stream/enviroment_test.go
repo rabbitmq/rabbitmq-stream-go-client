@@ -25,40 +25,11 @@ var _ = Describe("Environment test", func() {
 			Expect(producer.id).To(Equal(uint8(0)))
 			producers = append(producers, producer)
 		}
-
-		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(10))
-
 		for _, producer := range producers {
 			Expect(producer.Close()).NotTo(HaveOccurred())
 		}
 
-		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(0))
-
 		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
-	})
-
-	It("Multi Producers per client", func() {
-		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(2))
-		Expect(err).NotTo(HaveOccurred())
-		streamName := uuid.New().String()
-		Expect(env.DeclareStream(streamName, nil)).
-			NotTo(HaveOccurred())
-
-		for i := 0; i < 10; i++ {
-			producer, err := env.NewProducer(streamName, nil)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(producer.id).To(Equal(uint8(i % 2)))
-		}
-
-		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
-
-		time.Sleep(500 * time.Millisecond)
-		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(0))
-
 	})
 
 	It("Producers multi threads", func() {
@@ -72,6 +43,7 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
+				defer GinkgoRecover()
 				producer, err := env.NewProducer(streamName, nil)
 				Expect(err).NotTo(HaveOccurred())
 				time.Sleep(20 * time.Millisecond)
@@ -80,15 +52,11 @@ var _ = Describe("Environment test", func() {
 			}(wg)
 		}
 		wg.Wait()
-		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(0))
 		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
 	})
 
 	It("Meta handler delete consistency threads", func() {
 		env, err := NewEnvironment(&EnvironmentOptions{
-			MaxProducersPerClient: 3,
 			MaxConsumersPerClient: 3,
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -104,6 +72,7 @@ var _ = Describe("Environment test", func() {
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func() {
+				defer GinkgoRecover()
 				_, errProd := env.NewProducer(streamNameWillBeDelete, nil)
 				Expect(errProd).NotTo(HaveOccurred())
 				_, errProd = env.NewProducer(streamNameWillBeDeleteAfter, nil)
@@ -118,17 +87,12 @@ var _ = Describe("Environment test", func() {
 		time.Sleep(200 * time.Millisecond)
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
 		time.Sleep(200 * time.Millisecond)
-		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(0))
 		Expect(err).NotTo(HaveOccurred())
-
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
 	It("Meta handler delete consistency sync", func() {
 		env, err := NewEnvironment(&EnvironmentOptions{
-			MaxProducersPerClient: 5,
 			MaxConsumersPerClient: 5,
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -150,15 +114,9 @@ var _ = Describe("Environment test", func() {
 		time.Sleep(500 * time.Millisecond)
 		Expect(env.DeleteStream(streamNameWillBeDelete)).NotTo(HaveOccurred())
 		time.Sleep(200 * time.Millisecond)
-		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(10))
 
 		err = env.DeleteStream(streamNameWillBeDeleteAfter)
 		time.Sleep(200 * time.Millisecond)
-		Expect(len(env.producers.getCoordinators())).To(Equal(1))
-		Expect(len(env.producers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(0))
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(env.Close()).NotTo(HaveOccurred())
@@ -198,40 +156,29 @@ var _ = Describe("Environment test", func() {
 	})
 
 	Describe("TCP Parameters", func() {
+		It("runs TCP parameters tests", func() {
+			env, err := NewEnvironment(&EnvironmentOptions{
+				ConnectionParameters: []*Broker{
+					newBrokerDefault(),
+				},
+				TCPParameters: &TCPParameters{
+					tlsConfig:             nil,
+					RequestedHeartbeat:    60,
+					RequestedMaxFrameSize: 1048574,
+					WriteBuffer:           100,
+					ReadBuffer:            200,
+					NoDelay:               false,
+				},
+				MaxConsumersPerClient: 1,
+				AddressResolver:       nil,
+			})
 
-		env, err := NewEnvironment(&EnvironmentOptions{
-			ConnectionParameters: []*Broker{
-				newBrokerDefault(),
-			},
-			TCPParameters: &TCPParameters{
-				tlsConfig:             nil,
-				RequestedHeartbeat:    60,
-				RequestedMaxFrameSize: 1048574,
-				WriteBuffer:           100,
-				ReadBuffer:            200,
-				NoDelay:               false,
-			},
-			MaxProducersPerClient: 1,
-			MaxConsumersPerClient: 1,
-			AddressResolver:       nil,
+			Expect(err).NotTo(HaveOccurred())
+			Expect(env.Close()).NotTo(HaveOccurred())
 		})
-
-		Expect(err).NotTo(HaveOccurred())
-		Expect(env.Close()).NotTo(HaveOccurred())
-
 	})
 
 	Describe("Environment Validations", func() {
-
-		_, err := NewEnvironment(NewEnvironmentOptions().
-			SetMaxConsumersPerClient(0).
-			SetMaxProducersPerClient(0))
-		Expect(err).To(HaveOccurred())
-
-		_, err = NewEnvironment(NewEnvironmentOptions().
-			SetMaxConsumersPerClient(500).
-			SetMaxProducersPerClient(500))
-		Expect(err).To(HaveOccurred())
 
 		It("Malformed URI", func() {
 			_, err := NewEnvironment(NewEnvironmentOptions().
@@ -263,63 +210,65 @@ var _ = Describe("Environment test", func() {
 	})
 
 	Describe("Validation Query Offset/Sequence", func() {
+		It("runs some tests on offset", func() {
+			env, err := NewEnvironment(NewEnvironmentOptions())
+			Expect(err).NotTo(HaveOccurred())
+			_, err = env.QuerySequence("my_prod",
+				"Stream_Doesnt_exist")
+			Expect(err).To(HaveOccurred())
 
-		env, err := NewEnvironment(NewEnvironmentOptions())
-		Expect(err).NotTo(HaveOccurred())
-		_, err = env.QuerySequence("my_prod",
-			"Stream_Doesnt_exist")
-		Expect(err).To(HaveOccurred())
-
-		_, err = env.QueryOffset("my_cons",
-			"Stream_Doesnt_exist")
-		Expect(err).To(HaveOccurred())
-		Expect(env.Close()).NotTo(HaveOccurred())
+			_, err = env.QueryOffset("my_cons",
+				"Stream_Doesnt_exist")
+			Expect(err).To(HaveOccurred())
+			Expect(env.Close()).NotTo(HaveOccurred())
+		})
 	})
 
 	Describe("Stream Existing/Meta data", func() {
-
-		env, err := NewEnvironment(NewEnvironmentOptions().SetPort(5552).
-			SetUser("guest").
-			SetPassword("guest").SetHost("localhost"))
-		Expect(err).NotTo(HaveOccurred())
-		stream := uuid.New().String()
-		err = env.DeclareStream(stream, nil)
-		Expect(err).NotTo(HaveOccurred())
-		exists, err := env.StreamExists(stream)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(exists).To(Equal(true))
-		metaData, err := env.StreamMetaData(stream)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(metaData.Leader.Host).To(Equal("localhost"))
-		Expect(metaData.Leader.Port).To(Equal("5552"))
-		Expect(len(metaData.Replicas)).To(Equal(0))
-		Expect(env.DeleteStream(stream)).NotTo(HaveOccurred())
-		exists, err = env.StreamExists(stream)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(exists).To(Equal(false))
-		Expect(env.Close()).NotTo(HaveOccurred())
-
+		It("runs some tests on stream metadata", func() {
+			env, err := NewEnvironment(NewEnvironmentOptions().SetPort(5552).
+				SetUser("guest").
+				SetPassword("guest").SetHost("localhost"))
+			Expect(err).NotTo(HaveOccurred())
+			stream := uuid.New().String()
+			err = env.DeclareStream(stream, nil)
+			Expect(err).NotTo(HaveOccurred())
+			exists, err := env.StreamExists(stream)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(Equal(true))
+			metaData, err := env.StreamMetaData(stream)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metaData.Leader.Host).To(Equal("localhost"))
+			Expect(metaData.Leader.Port).To(Equal("5552"))
+			Expect(len(metaData.Replicas)).To(Equal(0))
+			Expect(env.DeleteStream(stream)).NotTo(HaveOccurred())
+			exists, err = env.StreamExists(stream)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(Equal(false))
+			Expect(env.Close()).NotTo(HaveOccurred())
+		})
 	})
 
 	Describe("Address Resolver", func() {
-		addressResolver := AddressResolver{
-			Host: "localhost",
-			Port: 5552,
-		}
-		env, err := NewEnvironment(
-			NewEnvironmentOptions().
-				SetHost(addressResolver.Host).
-				SetPort(addressResolver.Port).
-				SetAddressResolver(addressResolver).
-				SetMaxProducersPerClient(1))
-		Expect(err).NotTo(HaveOccurred())
-		streamName := uuid.New().String()
-		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
-		p, err := env.NewProducer(streamName, nil)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(p.Close()).NotTo(HaveOccurred())
-		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
-		Expect(env.Close()).NotTo(HaveOccurred())
+		It("runs tests on address resolved", func() {
+			addressResolver := AddressResolver{
+				Host: "localhost",
+				Port: 5552,
+			}
+			env, err := NewEnvironment(
+				NewEnvironmentOptions().
+					SetHost(addressResolver.Host).
+					SetPort(addressResolver.Port).
+					SetAddressResolver(addressResolver))
+			Expect(err).NotTo(HaveOccurred())
+			streamName := uuid.New().String()
+			Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+			p, err := env.NewProducer(streamName, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(p.Close()).NotTo(HaveOccurred())
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).NotTo(HaveOccurred())
+		})
 	})
 
 	It("Multi Uris/Multi Uris Fails", func() {
