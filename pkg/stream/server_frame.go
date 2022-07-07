@@ -228,20 +228,23 @@ func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
 
 func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 
-	readProtocol.PublishID = readByte(r)
+	readProtocol.PublishID = readByte(r) // it will be always 0
 	publishingIdCount, _ := readUInt(r)
 
 	// publishingIdCount * 8 bytes
 	confirmationBuffer := make([]byte, publishingIdCount*8)
-
 	_, err := io.ReadFull(r, confirmationBuffer)
 	if err != nil {
 		logs.LogError("Handle Confirm error: %s", err)
 	}
-	//for publishingIdCount != 0 {
-	//	_ = readInt64(r)
-	//}
-	c.socketDataChannel <- confirmationBuffer
+
+	if c := (c.coordinator.entity).getDataChannel(); c != nil {
+		c <- ServerResponse{
+			commandId: commandPublishConfirm,
+			payload:   confirmationBuffer,
+		}
+	}
+
 	return 0
 }
 

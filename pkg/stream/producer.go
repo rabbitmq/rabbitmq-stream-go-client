@@ -60,21 +60,56 @@ type messageSequence struct {
 	publishingId     int64
 }
 
+type ServerResponse struct {
+	commandId uint16
+	payload   []byte
+}
+
+func (s *ServerResponse) IsConfirm() bool {
+	return s.commandId == commandPublishConfirm
+}
+
+func (s *ServerResponse) GetResponseType() uint16 {
+	return s.commandId
+}
+
+func (s *ServerResponse) GetListOfConfirmations() []int64 {
+	publishingIdCount := len(s.payload) / 8
+	confirmationsID := make([]int64, 0, publishingIdCount)
+	bufferReader := bytes.NewReader(s.payload)
+	for i := 0; i < publishingIdCount; i++ {
+		val := readInt64(bufferReader)
+		confirmationsID = append(confirmationsID, val)
+	}
+	return confirmationsID
+}
+
+func (s *ServerResponse) GetPublishError() error {
+	// TODO: parse payload to extract error
+	return nil
+}
+
+func (s *ServerResponse) GetDelivery() {
+
+}
+
 type Producer struct {
-	id                  uint8
-	options             *ProducerOptions
-	unConfirmedMessages map[int64]*ConfirmationStatus
-	sequence            int64
-	mutex               *sync.Mutex
-	mutexPending        *sync.Mutex
-	publishConfirm      chan []*ConfirmationStatus
-	closeHandler        chan Event
-	status              int
-	client              *Client
+	id             uint8
+	options        *ProducerOptions
+	sequence       int64
+	mutex          *sync.Mutex
+	mutexPending   *sync.Mutex
+	publishConfirm chan []*ConfirmationStatus
+	closeHandler   chan Event
+	status         int
+	client         *Client
 
 	/// needed for the async publish
 	messageSequenceCh chan messageSequence
 	pendingMessages   pendingMessagesSequence
+
+	//
+	producerServerResponse chan ServerResponse
 }
 
 type ProducerOptions struct {
@@ -127,49 +162,20 @@ func NewProducerOptions() *ProducerOptions {
 	}
 }
 
-func (producer *Producer) GetUnConfirmed() map[int64]*ConfirmationStatus {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
-	return producer.unConfirmedMessages
-}
-
-func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamMessage, producerID uint8) {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
-	producer.unConfirmedMessages[sequence] = &ConfirmationStatus{
-		message:      message,
-		producerID:   producerID,
-		publishingId: sequence,
-		confirmed:    false,
-	}
+func (producer *Producer) NotifyPublishConfirmationChannel() chan ServerResponse {
+	var myChan = make(chan ServerResponse)
+	producer.producerServerResponse = myChan
+	return myChan
 }
 
 func (po *ProducerOptions) isSubEntriesBatching() bool {
 	return po.SubEntrySize > 1
 }
 
-func (producer *Producer) removeUnConfirmed(sequence int64) {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
-	delete(producer.unConfirmedMessages, sequence)
-}
-
-func (producer *Producer) lenUnConfirmed() int {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
-	return len(producer.unConfirmedMessages)
-}
-
 func (producer *Producer) lenPendingMessages() int {
 	producer.mutexPending.Lock()
 	defer producer.mutexPending.Unlock()
 	return len(producer.pendingMessages.messages)
-}
-
-func (producer *Producer) getUnConfirmed(sequence int64) *ConfirmationStatus {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
-	return producer.unConfirmedMessages[sequence]
 }
 
 func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
@@ -224,7 +230,6 @@ func (producer *Producer) startPublishTask() {
 			case msg, running := <-ch:
 				{
 					if !running {
-						producer.FlushUnConfirmedMessages()
 						if producer.publishConfirm != nil {
 							close(producer.publishConfirm)
 							producer.publishConfirm = nil
@@ -260,6 +265,10 @@ func (producer *Producer) startPublishTask() {
 
 }
 
+func (producer *Producer) getDataChannel() chan ServerResponse {
+	return producer.producerServerResponse
+}
+
 func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	msgBytes, err := streamMessage.MarshalBinary()
 	if err != nil {
@@ -269,10 +278,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	if len(msgBytes)+initBufferPublishSize > producer.client.getTuneState().requestedMaxFrameSize {
 		return FrameTooLarge
 	}
-
 	sequence := producer.assignPublishingID(streamMessage)
-	producer.addUnConfirmed(sequence, streamMessage, producer.id)
-
 	if producer.getStatus() == open {
 		producer.messageSequenceCh <- messageSequence{
 			messageBytes:     msgBytes,
@@ -310,25 +316,9 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 			unCompressedSize: len(messageBytes),
 			publishingId:     sequence,
 		}
-
-		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 	}
 
 	if totalBufferToSend+initBufferPublishSize > producer.client.tuneState.requestedMaxFrameSize {
-		for _, msg := range messagesSequence {
-
-			unConfirmedMessage := producer.getUnConfirmed(msg.publishingId)
-
-			//producer.mutex.Lock()
-			if producer.publishConfirm != nil {
-				unConfirmedMessage.err = FrameTooLarge
-				unConfirmedMessage.errorCode = responseCodeFrameTooLarge
-				producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
-			}
-			//producer.mutex.Unlock()
-			producer.removeUnConfirmed(msg.publishingId)
-		}
-
 		return FrameTooLarge
 	}
 
@@ -386,22 +376,6 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 			entry.publishingId = msg.publishingId
 		}
 
-		/// since there is only one publishingId
-		// the others publishingId(s) are linked
-		// so the client confirms all the messages
-		//when the client receives the confirmation form the server
-		// see: server_frame:handleConfirm/2
-		// suppose you have 10 messages with publishingId [5..15]
-		// the message 5 is linked to 6,7,8,9..15
-
-		if entry.publishingId != msg.publishingId {
-			unConfirmed := producer.getUnConfirmed(entry.publishingId)
-			if unConfirmed != nil {
-				unConfirmed.linkedTo =
-					append(unConfirmed.linkedTo,
-						producer.getUnConfirmed(msg.publishingId))
-			}
-		}
 	}
 
 	compressByValue(compression.value).Compress(&subEntries)
@@ -466,24 +440,9 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 		// 800 milliseconds to flush all the pending messages
 
 		producer.setStatus(closed)
-		producer.FlushUnConfirmedMessages()
 		return err
 	}
 	return nil
-}
-
-func (producer *Producer) FlushUnConfirmedMessages() {
-	producer.mutex.Lock()
-	if producer.publishConfirm != nil {
-		for _, msg := range producer.unConfirmedMessages {
-			msg.confirmed = false
-			msg.err = ConnectionClosed
-			msg.errorCode = connectionCloseError
-			producer.publishConfirm <- []*ConfirmationStatus{msg}
-			delete(producer.unConfirmedMessages, msg.publishingId)
-		}
-	}
-	producer.mutex.Unlock()
 }
 
 func (producer *Producer) GetLastPublishingId() (int64, error) {

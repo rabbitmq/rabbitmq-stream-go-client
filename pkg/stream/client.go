@@ -33,13 +33,14 @@ type HeartBeat struct {
 	value time.Time
 }
 
-// ISocketData is a generic channel to receive data from the response
+// SocketData is a generic channel to receive data from the response
 // in case of producer it will be confirmations messages or publish error
 // Consumer will receive messages
 // See server_frame: handle_confirm for producer
 //and handle_deliver for consumer
 
-type ISocketData interface {
+type SocketData interface {
+	Parse([]byte) ([]byte, error)
 }
 
 type Client struct {
@@ -54,8 +55,6 @@ type Client struct {
 	mutex                *sync.Mutex
 	metadataListener     metadataListener
 	lastHeartBeat        HeartBeat
-
-	socketDataChannel chan ISocketData
 }
 
 func newClient(connectionName string, broker *Broker, tcpParameters *TCPParameters) *Client {
@@ -473,9 +472,20 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	}
 
 	producer := &Producer{
-		options: optionsP,
-		client:  c,
+		id:                0,
+		options:           optionsP,
+		sequence:          0,
+		mutex:             &sync.Mutex{},
+		mutexPending:      &sync.Mutex{},
+		publishConfirm:    nil,
+		closeHandler:      nil,
+		status:            0,
+		client:            c,
+		messageSequenceCh: make(chan messageSequence, options.QueueSize),
+		pendingMessages:   pendingMessagesSequence{},
 	}
+
+	c.coordinator.entity = producer
 	res := c.internalDeclarePublisher(streamName, producer)
 	if res.Err == nil {
 		producer.startPublishTask()

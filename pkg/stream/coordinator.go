@@ -8,10 +8,18 @@ import (
 	"sync"
 )
 
+type Entity interface {
+	GetID() uint8
+	getDataChannel() chan ServerResponse
+}
+
 type Coordinator struct {
+	entity Entity
+
+	responses map[interface{}]interface{}
+
 	counter          int
 	consumers        map[interface{}]interface{}
-	responses        map[interface{}]interface{}
 	nextItemConsumer uint8
 	mutex            *sync.Mutex
 }

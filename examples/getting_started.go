@@ -70,11 +70,43 @@ func main() {
 
 	// Get a new producer for a stream
 	producer, err := env.NewProducer(streamName, nil)
+	mychannel := producer.NotifyPublishConfirmationChannel()
 	CheckErr(err)
 
-	//optional publish confirmation channel
-	chPublishConfirm := producer.NotifyPublishConfirmation()
-	handlePublishConfirm(chPublishConfirm)
+	go func(v chan stream.ServerResponse) {
+		for r := range mychannel {
+			fmt.Printf("Confirmation id: %d\n", r.GetListOfConfirmations())
+
+		}
+	}(mychannel)
+
+	for i := 0; i < 100; i++ {
+		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
+		time.Sleep(1 * time.Second)
+		CheckErr(err)
+	}
+
+	/*
+		mychannel := new(chan ProducerSocketData)
+		producer.SetDataChannel(mychannel)
+		go func() {
+			rawData := <- mychannel
+			if rawData.command == confirms {
+				listOfConfirms, err := rawData.Parse()
+				if err != nil ...
+			}
+			if rawData.command == publishError {
+				err := rawData.Parse()
+				if err != nil ...
+		}
+
+
+
+	*/
+
+	////optional publish confirmation channel
+	//chPublishConfirm := producer.NotifyPublishConfirmation()
+	//handlePublishConfirm(chPublishConfirm)
 
 	// the send method automatically aggregates the messages
 	// based on batch size
@@ -101,11 +133,12 @@ func main() {
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer").                  // set a consumer name
+			SetConsumerName("my_consumer").
 			SetOffset(stream.OffsetSpecification{}.First()). // start consuming from the beginning
 			SetCRCCheck(false))                              // Disable crc control, increase the performances
 	CheckErr(err)
 	channelClose := consumer.NotifyClose()
+
 	// channelClose receives all the closing events, here you can handle the
 	// client reconnection or just log
 	defer consumerClose(channelClose)
