@@ -70,10 +70,10 @@ func main() {
 
 	// Get a new producer for a stream
 	producer, err := env.NewProducer(streamName, nil)
-	mychannel := producer.NotifyPublishConfirmationChannel()
+	mychannel := producer.NotifyPublishConfirmation()
 	CheckErr(err)
 
-	go func(v chan stream.ServerResponse) {
+	go func(v chan stream.ProducerResponse) {
 		for r := range mychannel {
 			fmt.Printf("Confirmation id: %d\n", r.GetListOfConfirmations())
 
@@ -82,7 +82,7 @@ func main() {
 
 	for i := 0; i < 100; i++ {
 		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
-		time.Sleep(1 * time.Second)
+		time.Sleep(10 * time.Millisecond)
 		CheckErr(err)
 	}
 

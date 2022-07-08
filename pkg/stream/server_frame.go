@@ -69,7 +69,7 @@ func (c *Client) handleResponse() {
 			}
 		case commandPublishConfirm:
 			{
-				c.handleConfirm(readerProtocol, buffer)
+				c.handlePublishConfirm(readerProtocol, buffer)
 			}
 		case commandDeliver:
 			{
@@ -226,7 +226,7 @@ func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
 
 }
 
-func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
+func (c *Client) handlePublishConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
 
 	readProtocol.PublishID = readByte(r) // it will be always 0
 	publishingIdCount, _ := readUInt(r)
@@ -238,12 +238,10 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		logs.LogError("Handle Confirm error: %s", err)
 	}
 
-	if c := (c.coordinator.entity).getDataChannel(); c != nil {
-		c <- ServerResponse{
-			commandId: commandPublishConfirm,
-			payload:   confirmationBuffer,
-		}
-	}
+	(c.coordinator.entity).sendToChannel(ProducerResponse{
+		commandId: commandPublishConfirm,
+		payload:   confirmationBuffer,
+	})
 
 	return 0
 }

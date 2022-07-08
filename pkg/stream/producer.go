@@ -60,20 +60,26 @@ type messageSequence struct {
 	publishingId     int64
 }
 
-type ServerResponse struct {
+// ProducerResponse is a response from the broker to the producer
+// It can be a confirmation or an error
+type ProducerResponse struct {
 	commandId uint16
 	payload   []byte
 }
 
-func (s *ServerResponse) IsConfirm() bool {
+func (s *ProducerResponse) IsConfirm() bool {
 	return s.commandId == commandPublishConfirm
 }
 
-func (s *ServerResponse) GetResponseType() uint16 {
+func (s *ProducerResponse) IsPublishError() bool {
+	return s.commandId == commandPublishError
+}
+
+func (s ProducerResponse) GetResponseType() uint16 {
 	return s.commandId
 }
 
-func (s *ServerResponse) GetListOfConfirmations() []int64 {
+func (s *ProducerResponse) GetListOfConfirmations() []int64 {
 	publishingIdCount := len(s.payload) / 8
 	confirmationsID := make([]int64, 0, publishingIdCount)
 	bufferReader := bytes.NewReader(s.payload)
@@ -84,32 +90,29 @@ func (s *ServerResponse) GetListOfConfirmations() []int64 {
 	return confirmationsID
 }
 
-func (s *ServerResponse) GetPublishError() error {
+func (s *ProducerResponse) GetPublishError() error {
 	// TODO: parse payload to extract error
 	return nil
 }
 
-func (s *ServerResponse) GetDelivery() {
-
-}
-
 type Producer struct {
-	id             uint8
-	options        *ProducerOptions
-	sequence       int64
-	mutex          *sync.Mutex
-	mutexPending   *sync.Mutex
-	publishConfirm chan []*ConfirmationStatus
-	closeHandler   chan Event
-	status         int
-	client         *Client
+	id           uint8
+	options      *ProducerOptions
+	sequence     int64
+	mutex        *sync.Mutex
+	mutexPending *sync.Mutex
+	closeHandler chan Event
+	status       int
+	client       *Client
 
 	/// needed for the async publish
 	messageSequenceCh chan messageSequence
 	pendingMessages   pendingMessagesSequence
 
-	//
-	producerServerResponse chan ServerResponse
+	//producerServerResponse is the channel where the producer receives the responses from the broker
+	// It is an optional field see NotifyPublishConfirmation func to enable it
+	// see server_frame handlePublishError and handlePublishConfirm for details
+	producerServerResponse chan ProducerResponse
 }
 
 type ProducerOptions struct {
@@ -162,26 +165,44 @@ func NewProducerOptions() *ProducerOptions {
 	}
 }
 
-func (producer *Producer) NotifyPublishConfirmationChannel() chan ServerResponse {
-	var myChan = make(chan ServerResponse)
-	producer.producerServerResponse = myChan
-	return myChan
-}
-
 func (po *ProducerOptions) isSubEntriesBatching() bool {
 	return po.SubEntrySize > 1
+}
+
+func newProducer(client *Client, options *ProducerOptions) *Producer {
+
+	producer := &Producer{
+		id:                0,
+		options:           options,
+		sequence:          0,
+		mutex:             &sync.Mutex{},
+		mutexPending:      &sync.Mutex{},
+		closeHandler:      nil,
+		status:            0,
+		client:            client,
+		messageSequenceCh: make(chan messageSequence, options.QueueSize),
+		pendingMessages:   pendingMessagesSequence{},
+	}
+	client.coordinator.entity = producer
+	return producer
+}
+
+func (producer *Producer) NotifyPublishConfirmation() chan ProducerResponse {
+	var producerResponses = make(chan ProducerResponse)
+	producer.producerServerResponse = producerResponses
+	return producerResponses
+}
+
+func (producer *Producer) sendToChannel(data interface{}) {
+	if producer.producerServerResponse != nil {
+		producer.producerServerResponse <- data.(ProducerResponse)
+	}
 }
 
 func (producer *Producer) lenPendingMessages() int {
 	producer.mutexPending.Lock()
 	defer producer.mutexPending.Unlock()
 	return len(producer.pendingMessages.messages)
-}
-
-func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
-	ch := make(chan []*ConfirmationStatus)
-	producer.publishConfirm = ch
-	return ch
 }
 
 func (producer *Producer) NotifyClose() ChannelClose {
@@ -230,10 +251,7 @@ func (producer *Producer) startPublishTask() {
 			case msg, running := <-ch:
 				{
 					if !running {
-						if producer.publishConfirm != nil {
-							close(producer.publishConfirm)
-							producer.publishConfirm = nil
-						}
+
 						if producer.closeHandler != nil {
 							close(producer.closeHandler)
 							producer.closeHandler = nil
@@ -263,10 +281,6 @@ func (producer *Producer) startPublishTask() {
 		}
 	}(producer.messageSequenceCh)
 
-}
-
-func (producer *Producer) getDataChannel() chan ServerResponse {
-	return producer.producerServerResponse
 }
 
 func (producer *Producer) Send(streamMessage message.StreamMessage) error {
@@ -414,7 +428,6 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 
 	frameHeaderLength := initBufferPublishSize
 	length := frameHeaderLength + msgLen
-	//var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	writeBProtocolHeader(producer.client.socket.writer, length, commandPublish)
 	writeBByte(producer.client.socket.writer, producerID)
@@ -434,11 +447,8 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 		producer.simpleAggregation(messagesSequence, producer.client.socket.writer)
 	}
 
-	err := producer.client.socket.writer.Flush() //writeAndFlush(b.Bytes())
+	err := producer.client.socket.writer.Flush()
 	if err != nil {
-		// This sleep is need to wait the
-		// 800 milliseconds to flush all the pending messages
-
 		producer.setStatus(closed)
 		return err
 	}
@@ -469,6 +479,9 @@ func (producer *Producer) Close() error {
 	}
 
 	close(producer.messageSequenceCh)
+	if producer.producerServerResponse != nil {
+		close(producer.producerServerResponse)
+	}
 
 	return nil
 }

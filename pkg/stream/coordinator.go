@@ -8,14 +8,19 @@ import (
 	"sync"
 )
 
+// Entity is the interface for Producer and Consumer
+// It is used to identify the Producer or Consumer and send messages
+// to their channel
+//
+// For example the producer will receive the confirmations or errors
+// see server_frame.go:handlePublishConfirm for more details
 type Entity interface {
 	GetID() uint8
-	getDataChannel() chan ServerResponse
+	sendToChannel(data interface{})
 }
 
 type Coordinator struct {
-	entity Entity
-
+	entity    Entity
 	responses map[interface{}]interface{}
 
 	counter          int

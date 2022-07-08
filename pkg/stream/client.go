@@ -461,31 +461,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		}
 	}
 
-	optionsP := &ProducerOptions{
-		streamName:           streamName,
-		Name:                 options.Name,
-		QueueSize:            options.QueueSize,
-		BatchSize:            options.BatchSize,
-		BatchPublishingDelay: options.BatchPublishingDelay,
-		SubEntrySize:         options.SubEntrySize,
-		Compression:          options.Compression,
-	}
-
-	producer := &Producer{
-		id:                0,
-		options:           optionsP,
-		sequence:          0,
-		mutex:             &sync.Mutex{},
-		mutexPending:      &sync.Mutex{},
-		publishConfirm:    nil,
-		closeHandler:      nil,
-		status:            0,
-		client:            c,
-		messageSequenceCh: make(chan messageSequence, options.QueueSize),
-		pendingMessages:   pendingMessagesSequence{},
-	}
-
-	c.coordinator.entity = producer
+	producer := newProducer(c, options)
 	res := c.internalDeclarePublisher(streamName, producer)
 	if res.Err == nil {
 		producer.startPublishTask()
