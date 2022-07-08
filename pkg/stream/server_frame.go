@@ -412,28 +412,23 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 	publishingErrorCount, _ := readUInt(buffer)
 	//var publishingId int64
 	//var code uint16
-	for publishingErrorCount != 0 {
-		_ = readInt64(buffer)
-		_ = readUShort(buffer)
-		//producer, err := c.coordinator.GetProducerById(publisherId)
-		//if err != nil {
-		//	logs.LogWarn("producer id %d not found, publish error :%s", publisherId, lookErrorCode(code))
-		//	producer = &Producer{unConfirmedMessages: map[int64]*ConfirmationStatus{}}
-		//} else {
-		//	unConfirmedMessage := producer.getUnConfirmed(publishingId)
-		//
-		//	producer.mutex.Lock()
-		//
-		//	if producer.publishConfirm != nil && unConfirmedMessage != nil {
-		//		unConfirmedMessage.errorCode = code
-		//		unConfirmedMessage.err = lookErrorCode(code)
-		//		producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
-		//	}
-		//	producer.mutex.Unlock()
-		//	producer.removeUnConfirmed(publishingId)
-		//}
-		publishingErrorCount--
+	//for publishingErrorCount != 0 {
+	//	_ = readInt64(buffer)
+	//	_ = readUShort(buffer)
+	//	publishingErrorCount--
+	//}
+	ErrorBuffer := make([]byte, publishingErrorCount*
+		(8+ // int64 for publishingId
+			2)) // uint16 for errorCode
+
+	_, err := io.ReadFull(buffer, ErrorBuffer)
+	if err != nil {
+		logs.LogError("Handle Publish Error error: %s", err)
 	}
+	(c.coordinator.entity).sendToChannel(ProducerResponse{
+		commandId: commandPublishError,
+		payload:   ErrorBuffer,
+	})
 
 }
 

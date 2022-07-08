@@ -11,54 +11,7 @@ import (
 	"time"
 )
 
-type ConfirmationStatus struct {
-	message      message.StreamMessage
-	producerID   uint8
-	publishingId int64
-	confirmed    bool
-	err          error
-	errorCode    uint16
-	linkedTo     []*ConfirmationStatus
-}
-
-func (cs *ConfirmationStatus) IsConfirmed() bool {
-	return cs.confirmed
-}
-
-func (cs *ConfirmationStatus) GetProducerID() uint8 {
-	return cs.producerID
-}
-
-func (cs *ConfirmationStatus) GetPublishingId() int64 {
-	return cs.publishingId
-}
-
-func (cs *ConfirmationStatus) GetError() error {
-	return cs.err
-}
-
-func (cs *ConfirmationStatus) LinkedMessages() []*ConfirmationStatus {
-	return cs.linkedTo
-}
-
-func (cs *ConfirmationStatus) GetMessage() message.StreamMessage {
-	return cs.message
-}
-
-func (cs *ConfirmationStatus) GetErrorCode() uint16 {
-	return cs.errorCode
-}
-
-type pendingMessagesSequence struct {
-	messages []messageSequence
-	size     int
-}
-
-type messageSequence struct {
-	messageBytes     []byte
-	unCompressedSize int
-	publishingId     int64
-}
+/// ProducerResponse Section ///
 
 // ProducerResponse is a response from the broker to the producer
 // It can be a confirmation or an error
@@ -79,6 +32,9 @@ func (s ProducerResponse) GetResponseType() uint16 {
 	return s.commandId
 }
 
+// GetListOfConfirmations returns a list of confirmations for the messages sent
+// It is used to check if the messages were sent correctly
+// The parser is on-demand.
 func (s *ProducerResponse) GetListOfConfirmations() []int64 {
 	publishingIdCount := len(s.payload) / 8
 	confirmationsID := make([]int64, 0, publishingIdCount)
@@ -90,31 +46,33 @@ func (s *ProducerResponse) GetListOfConfirmations() []int64 {
 	return confirmationsID
 }
 
-func (s *ProducerResponse) GetPublishError() error {
-	// TODO: parse payload to extract error
-	return nil
+// PublishingIdError tuple of publishingId and errorCode
+// for example an error could be: PublisherDoesNotExist
+type PublishingIdError struct {
+	PublishingId int64
+	ErrorCode    uint16
 }
 
-type Producer struct {
-	id           uint8
-	options      *ProducerOptions
-	sequence     int64
-	mutex        *sync.Mutex
-	mutexPending *sync.Mutex
-	closeHandler chan Event
-	status       int
-	client       *Client
-
-	/// needed for the async publish
-	messageSequenceCh chan messageSequence
-	pendingMessages   pendingMessagesSequence
-
-	//producerServerResponse is the channel where the producer receives the responses from the broker
-	// It is an optional field see NotifyPublishConfirmation func to enable it
-	// see server_frame handlePublishError and handlePublishConfirm for details
-	producerServerResponse chan ProducerResponse
+// GetPublishError returns the error code and publishingId if there is an error
+// during the publishing of the message
+func (s *ProducerResponse) GetPublishError() []PublishingIdError {
+	publishingErrorCount := len(s.payload) / (8 + // int64 for publishingId
+		2) // uint16 for errorCode
+	publishingErrors := make([]PublishingIdError, 0, publishingErrorCount)
+	bufferReader := bytes.NewReader(s.payload)
+	for i := 0; i < publishingErrorCount; i++ {
+		id := readInt64(bufferReader)
+		code := readUShort(bufferReader)
+		publishingErrors = append(publishingErrors, PublishingIdError{id, code})
+	}
+	return publishingErrors
 }
 
+//// ProducerOptions Section ///
+
+// ProducerOptions is the options for the producer
+// if not specified default values will be used
+// see NewProducerOptions for default values
 type ProducerOptions struct {
 	streamName           string
 	Name                 string      // Producer name, it is useful to handle deduplication messages
@@ -169,24 +127,67 @@ func (po *ProducerOptions) isSubEntriesBatching() bool {
 	return po.SubEntrySize > 1
 }
 
-func newProducer(client *Client, options *ProducerOptions) *Producer {
+//// Producer Section ///
 
+// pendingMessagesSequence is a struct to manage the buffered messages
+// that have to be sent to the server
+type pendingMessagesSequence struct {
+	messages []messageSequence
+	size     int // size of the buffer
+}
+
+// messageSequence contains the decoded messages, publishing id
+// and the unCompressed data Size.
+type messageSequence struct {
+	messageBytes     []byte
+	unCompressedSize int
+	publishingId     int64
+}
+
+// Producer is the struct to handle the producer
+// It is used to publish messages to the stream
+
+type Producer struct {
+	id uint8 // id of the producer. By protocol is a byte. In this case it is always 0 since
+	// the relationship between the producer and the connection is 1:1
+	options      *ProducerOptions
+	sequence     int64
+	mutex        *sync.Mutex
+	mutexPending *sync.Mutex
+	closeHandler chan Event
+	status       int
+	client       *Client
+
+	/// bufferedMessagesCh channel to cache the messages to be sent
+	bufferedMessagesCh chan messageSequence
+
+	// pendingMessages contains the messages cached
+	pendingMessages pendingMessagesSequence
+
+	//producerServerResponse is the channel where the producer receives the responses from the broker
+	// It is an optional field see NotifyPublishConfirmation func to enable it
+	// see server_frame handlePublishError and handlePublishConfirm for details
+	producerServerResponse chan ProducerResponse
+}
+
+func newProducer(client *Client, options *ProducerOptions) *Producer {
 	producer := &Producer{
-		id:                0,
-		options:           options,
-		sequence:          0,
-		mutex:             &sync.Mutex{},
-		mutexPending:      &sync.Mutex{},
-		closeHandler:      nil,
-		status:            0,
-		client:            client,
-		messageSequenceCh: make(chan messageSequence, options.QueueSize),
-		pendingMessages:   pendingMessagesSequence{},
+		id:                 0,
+		options:            options,
+		sequence:           0,
+		mutex:              &sync.Mutex{},
+		mutexPending:       &sync.Mutex{},
+		closeHandler:       nil,
+		status:             0,
+		client:             client,
+		bufferedMessagesCh: make(chan messageSequence, options.QueueSize),
+		pendingMessages:    pendingMessagesSequence{},
 	}
 	client.coordinator.entity = producer
 	return producer
 }
 
+// NotifyPublishConfirmation returns a channel where the producer receives the responses from the broker
 func (producer *Producer) NotifyPublishConfirmation() chan ProducerResponse {
 	var producerResponses = make(chan ProducerResponse)
 	producer.producerServerResponse = producerResponses
@@ -241,17 +242,16 @@ func (producer *Producer) sendBufferedMessages() {
 		producer.pendingMessages.size = initBufferPublishSize
 	}
 }
+
 func (producer *Producer) startPublishTask() {
 	go func(ch chan messageSequence) {
 		var ticker = time.NewTicker(time.Duration(producer.options.BatchPublishingDelay) * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
-
 			case msg, running := <-ch:
 				{
 					if !running {
-
 						if producer.closeHandler != nil {
 							close(producer.closeHandler)
 							producer.closeHandler = nil
@@ -263,7 +263,6 @@ func (producer *Producer) startPublishTask() {
 						requestedMaxFrameSize {
 						producer.sendBufferedMessages()
 					}
-
 					producer.pendingMessages.size += msg.unCompressedSize
 					producer.pendingMessages.messages = append(producer.pendingMessages.messages, msg)
 					if len(producer.pendingMessages.messages) >= (producer.options.BatchSize) {
@@ -277,9 +276,8 @@ func (producer *Producer) startPublishTask() {
 				producer.sendBufferedMessages()
 				producer.mutexPending.Unlock()
 			}
-
 		}
-	}(producer.messageSequenceCh)
+	}(producer.bufferedMessagesCh)
 
 }
 
@@ -294,7 +292,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	}
 	sequence := producer.assignPublishingID(streamMessage)
 	if producer.getStatus() == open {
-		producer.messageSequenceCh <- messageSequence{
+		producer.bufferedMessagesCh <- messageSequence{
 			messageBytes:     msgBytes,
 			unCompressedSize: len(msgBytes),
 			publishingId:     sequence,
@@ -478,7 +476,7 @@ func (producer *Producer) Close() error {
 		logs.LogError("error during closing client: %s", err)
 	}
 
-	close(producer.messageSequenceCh)
+	close(producer.bufferedMessagesCh)
 	if producer.producerServerResponse != nil {
 		close(producer.producerServerResponse)
 	}

@@ -190,7 +190,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(producer.lenPendingMessages()).To(Equal(0))
-		Expect(len(producer.messageSequenceCh)).To(Equal(0))
+		Expect(len(producer.bufferedMessagesCh)).To(Equal(0))
 	})
 
 	It("Handle close", func() {

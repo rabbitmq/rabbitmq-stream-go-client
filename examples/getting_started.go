@@ -18,21 +18,6 @@ func CheckErr(err error) {
 	}
 }
 
-func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
-	go func() {
-		for confirmed := range confirms {
-			for _, msg := range confirmed {
-				if msg.IsConfirmed() {
-					fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
-				} else {
-					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
-				}
-
-			}
-		}
-	}()
-}
-
 func consumerClose(channelClose stream.ChannelClose) {
 	event := <-channelClose
 	fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", event.Name, event.StreamName, event.Reason)
