@@ -222,15 +222,16 @@ var _ = Describe("Streaming Consumers", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() int64 {
 				return consumer.GetLastStoredOffset()
-			}, 5*time.Second).Should(Equal(int64(100)),
-				"Offset should be 100")
+				// 99 is the offset since it starts from 0
+			}, 5*time.Second).Should(Equal(int64(99)),
+				"Offset should be 99")
 			Expect(consumer.Close()).NotTo(HaveOccurred())
 			/// When the consumer is closed, it has to save the offset
-			// so  the last offset has to be 105
+			// so  the last offset has to be 104
 			Eventually(func() int64 {
 				return consumer.GetLastStoredOffset()
-			}, 5*time.Second).Should(Equal(int64(105)),
-				"Offset should be 105")
+			}, 5*time.Second).Should(Equal(int64(104)),
+				"Offset should be 104")
 
 			consumerTimer, errTimer := env.NewConsumer(streamName,
 				func(consumerContext ConsumerContext, message *amqp.Message) {
@@ -245,15 +246,15 @@ var _ = Describe("Streaming Consumers", func() {
 			time.Sleep(2 * time.Second)
 			Eventually(func() int64 {
 				return consumerTimer.GetLastStoredOffset()
-			}, 5*time.Second).Should(Equal(int64(105)),
-				"Offset should be 105")
+			}, 5*time.Second).Should(Equal(int64(104)),
+				"Offset should be 104")
 			Expect(consumerTimer.Close()).NotTo(HaveOccurred())
 			/// When the consumer is closed, it has to save the offset
-			// so  the last offest has to be 105
+			// so  the last offest has to be 104
 			Eventually(func() int64 {
 				return consumerTimer.GetLastStoredOffset()
-			}, 5*time.Second).Should(Equal(int64(105)),
-				"Offset should be 105")
+			}, 5*time.Second).Should(Equal(int64(104)),
+				"Offset should be 104")
 
 		})
 
@@ -356,22 +357,25 @@ var _ = Describe("Streaming Consumers", func() {
 
 		Eventually(func() int64 {
 			return consumer.GetLastStoredOffset()
-		}, 5*time.Second).Should(Equal(int64(107)),
-			"Offset should be 107")
+			// 106 is the offset since it starts from 0
+		}, 5*time.Second).Should(Equal(int64(106)),
+			"Offset should be 106")
 		time.Sleep(500 * time.Millisecond)
 		offset, err := env.QueryOffset("consumer_test", streamName)
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(func() int64 {
 			return offset
-		}, 5*time.Second).Should(Equal(int64(107)),
-			"Offset should be 107")
+			// 106 is the offset since it starts from 0
+		}, 5*time.Second).Should(Equal(int64(106)),
+			"Offset should be 106")
 
 		offsetConsumer, err := consumer.QueryOffset()
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(func() int64 {
 			return offsetConsumer
-		}, 5*time.Second).Should(Equal(int64(107)),
-			"Consumer Offset should be 107")
+			// 106 is the offset since it starts from 0
+		}, 5*time.Second).Should(Equal(int64(106)),
+			"Consumer Offset should be 106")
 
 		err = consumer.Close()
 		Expect(err).NotTo(HaveOccurred())
@@ -385,7 +389,7 @@ var _ = Describe("Streaming Consumers", func() {
 				SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(500 * time.Millisecond)
-		Expect(atomic.LoadInt32(&messagesReceived)).To(Equal(int32(0)))
+		Expect(atomic.LoadInt32(&messagesReceived)).To(Equal(int32(1)))
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 

@@ -319,7 +319,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	filter := offsetLimit != -1
 
 	//messages
-	var batchConsumingMessages []*amqp.Message
+	var batchConsumingMessages offsetMessages
 	var bytesBuffer = make([]byte, int(dataLength))
 	_, err = io.ReadFull(r, bytesBuffer)
 	if err != nil {
@@ -384,15 +384,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	}
 
 	if consumer.getStatus() == open {
-		consumer.response.offsetMessages <- offsetMessages{
-			messages: batchConsumingMessages,
-			offset:   offset,
-		}
+		consumer.response.offsetMessages <- batchConsumingMessages
+
 	}
 
 }
 
-func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offsetLimit int64, batchConsumingMessages []*amqp.Message) []*amqp.Message {
+func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offsetLimit int64, batchConsumingMessages offsetMessages) offsetMessages {
 	sizeMessage, _ := readUInt(r)
 	arrayMessage := readUint8Array(r, sizeMessage)
 	if filter && (offset < offsetLimit) {
@@ -403,7 +401,8 @@ func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offse
 		if err != nil {
 			logs.LogError("error unmarshal messages: %s", err)
 		}
-		batchConsumingMessages = append(batchConsumingMessages, msg)
+		batchConsumingMessages = append(batchConsumingMessages,
+			&offsetMessage{offset: offset, message: msg})
 	}
 	return batchConsumingMessages
 }
