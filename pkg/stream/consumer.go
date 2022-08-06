@@ -64,12 +64,6 @@ func (consumer *Consumer) setCurrentOffset(offset int64) {
 	consumer.currentOffset = offset
 }
 
-func (consumer *Consumer) incCurrentOffset() {
-	consumer.mutex.Lock()
-	defer consumer.mutex.Unlock()
-	consumer.currentOffset += 1
-}
-
 func (consumer *Consumer) GetOffset() int64 {
 	consumer.mutex.Lock()
 	res := consumer.currentOffset

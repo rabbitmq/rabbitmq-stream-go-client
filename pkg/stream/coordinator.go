@@ -23,10 +23,12 @@ type Code struct {
 	id uint16
 }
 
-type offsetMessages struct {
-	messages []*amqp.Message
-	offset   int64
+type offsetMessage struct {
+	message *amqp.Message
+	offset  int64
 }
+
+type offsetMessages = []*offsetMessage
 
 type Response struct {
 	code               chan Code

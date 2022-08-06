@@ -775,9 +775,9 @@ func (c *Client) DeclareSubscriber(streamName string,
 				}
 
 			case offsetMessages := <-consumer.response.offsetMessages:
-				for _, message := range offsetMessages.messages {
-					consumer.incCurrentOffset()
-					consumer.MessagesHandler(ConsumerContext{Consumer: consumer}, message)
+				for _, offMessage := range offsetMessages {
+					consumer.setCurrentOffset(offMessage.offset)
+					consumer.MessagesHandler(ConsumerContext{Consumer: consumer}, offMessage.message)
 					if consumer.options.autocommit {
 						consumer.messageCountBeforeStorage += 1
 						if consumer.messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage {
