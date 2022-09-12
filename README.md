@@ -1,0 +1,1 @@
+# rabbitmq-stream-go-client
