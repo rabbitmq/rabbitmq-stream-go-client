@@ -4,11 +4,13 @@ import (
 	"bufio"
 )
 
-const CommandSaslMechanisms = 18
-
 type SaslMechanismsRequest struct {
 	key           uint16
 	correlationId uint32
+}
+
+func (s *SaslMechanismsRequest) Version() int16 {
+	return Version1
 }
 
 func NewSaslMechanismsRequest() *SaslMechanismsRequest {
@@ -16,7 +18,7 @@ func NewSaslMechanismsRequest() *SaslMechanismsRequest {
 }
 
 func (s *SaslMechanismsRequest) Write(writer *bufio.Writer) (int, error) {
-	return WriteMany(writer, s.GetCorrelationId())
+	return WriteMany(writer, s.CorrelationId())
 }
 
 func (s *SaslMechanismsRequest) SizeNeeded() int {
@@ -27,11 +29,11 @@ func (s *SaslMechanismsRequest) SetCorrelationId(id uint32) {
 	s.correlationId = id
 }
 
-func (s *SaslMechanismsRequest) GetCorrelationId() uint32 {
+func (s *SaslMechanismsRequest) CorrelationId() uint32 {
 	return s.correlationId
 }
 
-func (s *SaslMechanismsRequest) GetKey() uint16 {
+func (s *SaslMechanismsRequest) Key() uint16 {
 	return s.key
 }
 
@@ -45,7 +47,7 @@ func NewSaslMechanismsResponse() *SaslMechanismsResponse {
 	return &SaslMechanismsResponse{}
 }
 
-func (s *SaslMechanismsResponse) Read(reader *bufio.Reader) {
+func (s *SaslMechanismsResponse) Read(reader *bufio.Reader) error {
 
 	var mechanismsCount uint32
 	err := ReadMany(reader, &s.correlationId, &s.responseCode, &mechanismsCount)
@@ -54,8 +56,9 @@ func (s *SaslMechanismsResponse) Read(reader *bufio.Reader) {
 	for i := 0; i < int(mechanismsCount); i++ {
 		s.Mechanisms = append(s.Mechanisms, ReadString(reader))
 	}
+	return nil
 }
 
-func (s *SaslMechanismsResponse) GetCorrelationId() uint32 {
+func (s *SaslMechanismsResponse) CorrelationId() uint32 {
 	return s.correlationId
 }

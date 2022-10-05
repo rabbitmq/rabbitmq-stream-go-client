@@ -27,7 +27,7 @@ type TCPClient struct {
 	nextCorrelation uint32
 }
 
-func NewTcpClient(connection net.Conn) *TCPClient {
+func NewTcpClient(connection net.Conn) Clienter {
 	tcp := &TCPClient{connection: internal.NewConnection(connection), correlationsMap: sync.Map{}}
 	go tcp.handleIncoming()
 	return tcp
@@ -43,7 +43,7 @@ func (tc *TCPClient) getCorrelationById(id uint32) *correlation {
 }
 func (tc *TCPClient) storeCorrelation(request internal.CommandWrite) {
 	request.SetCorrelationId(tc.getNextCorrelation())
-	tc.correlationsMap.Store(request.GetCorrelationId(), NewCorrelation(request.GetCorrelationId()))
+	tc.correlationsMap.Store(request.CorrelationId(), NewCorrelation(request.CorrelationId()))
 }
 
 func (tc *TCPClient) removeCorrelation(id uint32) {
@@ -55,6 +55,9 @@ func (tc *TCPClient) removeCorrelation(id uint32) {
 
 func (tc *TCPClient) writeCommand(request internal.CommandWrite) error {
 	hWritten, err := internal.NewHeaderRequest(request).Write(tc.connection.GetWriter())
+	if err != nil {
+		return err
+	}
 	bWritten, err := request.Write(tc.connection.GetWriter())
 	if err != nil {
 		return err
@@ -67,13 +70,13 @@ func (tc *TCPClient) writeCommand(request internal.CommandWrite) error {
 
 func (tc *TCPClient) request(request internal.CommandWrite) (internal.CommandRead, error) {
 	tc.storeCorrelation(request)
-	defer tc.removeCorrelation(request.GetCorrelationId())
+	defer tc.removeCorrelation(request.CorrelationId())
 	err := tc.writeCommand(request)
 	if err != nil {
 		return nil, err
 	}
 	select {
-	case r := <-tc.getCorrelationById(request.GetCorrelationId()).chResponse:
+	case r := <-tc.getCorrelationById(request.CorrelationId()).chResponse:
 		return r, nil
 	}
 }
@@ -83,26 +86,36 @@ func (tc *TCPClient) getNextCorrelation() uint32 {
 }
 
 func (tc *TCPClient) handleResponse(read internal.CommandRead) {
-	tc.getCorrelationById(read.GetCorrelationId()).chResponse <- read
+	tc.getCorrelationById(read.CorrelationId()).chResponse <- read
 }
 
 func (tc *TCPClient) handleIncoming() {
 	buffer := tc.connection.GetReader()
 	for {
-		var header = internal.NewHeaderResponse()
+		var header = new(internal.Header)
 		err := header.Read(buffer)
-		internal.MaybeLogError(err, "error reading frame length")
-		switch internal.UShortExtractResponseCode(header.Command) {
+		if err != nil {
+			panic(err)
+		}
+		switch internal.UShortExtractResponseCode(header.Command()) {
 		case internal.CommandPeerProperties:
 			peerPropResponse := internal.NewPeerPropertiesResponse()
-			peerPropResponse.Read(buffer)
+			err = peerPropResponse.Read(buffer)
+			if err != nil {
+				panic(err)
+			}
 			tc.handleResponse(peerPropResponse)
 			break
 		case internal.CommandSaslMechanisms:
 			saslMechanismsResponse := internal.NewSaslMechanismsResponse()
-			saslMechanismsResponse.Read(buffer)
+			err = saslMechanismsResponse.Read(buffer)
+			if err != nil {
+				panic(err)
+			}
 			tc.handleResponse(saslMechanismsResponse)
 			break
+		default:
+			panic("unknown command")
 		}
 	}
 }

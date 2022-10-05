@@ -16,7 +16,7 @@ func main() {
 	if errorConnection != nil {
 		panic(errorConnection)
 	}
-	var tc stream.Client
+	var tc stream.Clienter
 	tc = stream.NewTcpClient(connection)
 	//time.Sleep(1 * time.Second)
 	err := tc.Connect(nil)

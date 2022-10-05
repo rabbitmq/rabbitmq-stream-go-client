@@ -4,19 +4,21 @@ import (
 	"bufio"
 )
 
-const CommandPeerProperties = 17
+const (
+	encodingMapSizeBytes        = 4
+	encodingMapKeyLengthBytes   = 2
+	encodingMapValueLengthBytes = 2
+)
 
 type PeerPropertiesRequest struct {
 	clientProperties map[string]string
-	key              uint16
 	correlationId    uint32
 }
 
 func NewPeerPropertiesRequest() *PeerPropertiesRequest {
-	p := &PeerPropertiesRequest{clientProperties: make(
-		map[string]string,
-		CommandPeerProperties,
-	)}
+	p := &PeerPropertiesRequest{
+		clientProperties: make(map[string]string, 6),
+	}
 	p.clientProperties["connection_name"] = "go-stream-locator"
 	p.clientProperties["product"] = "RabbitMQ Stream"
 	p.clientProperties["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
@@ -25,58 +27,75 @@ func NewPeerPropertiesRequest() *PeerPropertiesRequest {
 	p.clientProperties["platform"] = "Golang"
 	return p
 }
+
 func (p *PeerPropertiesRequest) Write(writer *bufio.Writer) (int, error) {
-	return WriteMany(writer, p.GetCorrelationId(), len(p.clientProperties), p.clientProperties)
+	return WriteMany(writer, p.CorrelationId(), len(p.clientProperties), p.clientProperties)
 
 }
 
 func (p *PeerPropertiesRequest) SizeNeeded() int {
-	size := 4 // size of the map, always there
+	/* Map Encoded as follows:
+	map = [key value]*
+	key = key_length + key_content
+	value = value_length + value_content
+	_________________________________________
+	| map_size		| 4 bytes				|
+	| key_length	| 2 bytes				|
+	| key_content	| key_length bytes		|
+	| value_length	| 2 bytes				|
+	| value_content	| value_length bytes	|
+	-----------------------------------------
+	*/
+	size := encodingMapSizeBytes // size of the map, always there
 	for key, element := range p.clientProperties {
-		size = size + 2 + len(key) + 2 + len(element)
+		size += encodingMapKeyLengthBytes + len(key) + encodingMapValueLengthBytes + len(element)
 	}
-	size = size + 2 + 2 + 4
+	size += streamProtocolKeySizeBytes + streamProtocolVersionSizeBytes + streamProtocolCorrelationIdSizeBytes
 	return size
+}
+
+func (p *PeerPropertiesRequest) Version() int16 {
+	return Version1
 }
 
 func (p *PeerPropertiesRequest) SetCorrelationId(id uint32) {
 	p.correlationId = id
 }
 
-func (p *PeerPropertiesRequest) GetCorrelationId() uint32 {
+func (p *PeerPropertiesRequest) CorrelationId() uint32 {
 	return p.correlationId
 }
 
-func (p *PeerPropertiesRequest) GetKey() uint16 {
+func (p *PeerPropertiesRequest) Key() uint16 {
 	return CommandPeerProperties
 }
 
 type PeerPropertiesResponse struct {
-	ServerProperties map[string]string
 	correlationId    uint32
 	responseCode     uint16
+	ServerProperties map[string]string
 }
 
 func NewPeerPropertiesResponse() *PeerPropertiesResponse {
-	return &PeerPropertiesResponse{ServerProperties: make(
-		map[string]string,
-		CommandPeerProperties)}
+	return &PeerPropertiesResponse{ServerProperties: make(map[string]string)}
 }
 
-func (p *PeerPropertiesResponse) Read(reader *bufio.Reader) {
-
+func (p *PeerPropertiesResponse) Read(reader *bufio.Reader) error {
 	var serverPropertiesCount uint32
 	err := ReadMany(reader, &p.correlationId, &p.responseCode, &serverPropertiesCount)
+	if err != nil {
+		return err
+	}
 	p.responseCode = UShortExtractResponseCode(p.responseCode)
-	MaybeLogError(err)
 
-	for i := 0; i < int(serverPropertiesCount); i++ {
+	for i := uint32(0); i < serverPropertiesCount; i++ {
 		key := ReadString(reader)
 		value := ReadString(reader)
 		p.ServerProperties[key] = value
 	}
+	return nil
 }
 
-func (p *PeerPropertiesResponse) GetCorrelationId() uint32 {
+func (p *PeerPropertiesResponse) CorrelationId() uint32 {
 	return p.correlationId
 }

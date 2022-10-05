@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-type IConnection interface {
+type Connecter interface {
 	GetWriter() *bufio.Writer
 	GetReader() *bufio.Reader
 }

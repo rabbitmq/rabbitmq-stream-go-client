@@ -5,10 +5,10 @@ import (
 	"encoding/binary"
 )
 
-func ReadUShort(readerStream *bufio.Reader) uint16 {
+func ReadUShort(readerStream *bufio.Reader) (uint16, error) {
 	var res uint16
-	_ = binary.Read(readerStream, binary.BigEndian, &res)
-	return res
+	err := binary.Read(readerStream, binary.BigEndian, &res)
+	return res, err
 }
 
 func ReadUInt(readerStream *bufio.Reader) (uint32, error) {
@@ -26,7 +26,8 @@ func peekByte(readerStream *bufio.Reader) (uint8, error) {
 }
 
 func ReadString(readerStream *bufio.Reader) string {
-	lenString := ReadUShort(readerStream)
+	// FIXME: handle the potential error from ReadUShort
+	lenString, _ := ReadUShort(readerStream)
 	buff := make([]byte, lenString)
 	_ = binary.Read(readerStream, binary.BigEndian, &buff)
 	return string(buff)
