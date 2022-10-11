@@ -33,26 +33,74 @@ var _ = Describe("PeerProperties", func() {
 					2 + 3 // value
 				Expect(pp.SizeNeeded()).To(BeNumerically("==", expectedSize))
 			})
+
+			It("binary encodes the struct correctly", func() {
+				buff := new(bytes.Buffer)
+				wr := bufio.NewWriter(buff)
+				writtenBytes, err := pp.Write(wr)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(wr.Flush()).To(Succeed())
+
+				By("writing the expected number of bytes")
+				expectedWrittenBytes := streamProtocolCorrelationIdSizeBytes +
+					streamProtocolMapLenBytes +
+					streamProtocolMapKeyLengthBytes +
+					3 + // "foo"
+					streamProtocolMapValueLengthBytes +
+					3 // "bar"
+				Expect(writtenBytes).To(Equal(expectedWrittenBytes))
+
+				By("generating the expected byte sequence")
+				expectedBytes := []byte{
+					0x00, 0x00, 0x03, 0x15, // correlation id
+					0x00, 0x00, 0x00, 0x01, // map size
+					0x00, 0x03, // key length
+					byte('f'), byte('o'), byte('o'),
+					0x00, 0x03, // value length
+					byte('b'), byte('a'), byte('r'),
+				}
+				Expect(buff.Bytes()).To(Equal(expectedBytes))
+			})
 		})
 
 		When("there are no peer properties", func() {
-			It("returns the correct size", func() {
-				var pp = PeerPropertiesRequest{
-					clientProperties: map[string]string{},
-					correlationId:    456,
-				}
+			var pp = PeerPropertiesRequest{
+				clientProperties: map[string]string{},
+				correlationId:    456,
+			}
 
+			It("returns the correct size", func() {
 				expectedSize := 2 + // key
 					2 + // version
 					4 + // correlation id
 					4 // map size
 				Expect(pp.SizeNeeded()).To(BeNumerically("==", expectedSize))
 			})
+
+			It("binary encodes the struct correctly", func() {
+				buff := new(bytes.Buffer)
+				wr := bufio.NewWriter(buff)
+				writtenBytes, err := pp.Write(wr)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(wr.Flush()).To(Succeed())
+
+				By("writing the expected number of bytes")
+				expectedWrittenBytes := streamProtocolCorrelationIdSizeBytes +
+					streamProtocolMapLenBytes
+				Expect(writtenBytes).To(Equal(expectedWrittenBytes))
+
+				By("generating the expected byte sequence")
+				expectedBytes := []byte{
+					0x00, 0x00, 0x01, 0xc8, // correlation id
+					0x00, 0x00, 0x00, 0x00, // map size
+				}
+				Expect(buff.Bytes()).To(Equal(expectedBytes))
+			})
 		})
 
 		When("there are many properties", func() {
-			It("returns the correct size", func() {
-				var pp = PeerPropertiesRequest{
+			var (
+				pp = PeerPropertiesRequest{
 					clientProperties: map[string]string{
 						"one": "1",
 						"two": "2",
@@ -60,7 +108,9 @@ var _ = Describe("PeerProperties", func() {
 					},
 					correlationId: 890,
 				}
+			)
 
+			It("returns the correct size", func() {
 				expectedSize := 2 + // key
 					2 + // version
 					4 + // correlation id
@@ -72,6 +122,48 @@ var _ = Describe("PeerProperties", func() {
 					2 + 3 + // key_length + key -- bmw
 					2 + 8 // value_length + value -- mercedes
 				Expect(pp.SizeNeeded()).To(BeNumerically("==", expectedSize))
+			})
+
+			// Adding FlakeAttempts because writeMany uses `range` to iterate
+			// the map of peer properties. Range does not guarantee the iteration
+			// order; therefore, the binary sequence may not always be what we expect,
+			// although it will be correct, because we do not care about map item order
+			// https://go.dev/ref/spec#RangeClause
+			It("binary encodes the struct correctly", FlakeAttempts(7), func() {
+				buff := new(bytes.Buffer)
+				wr := bufio.NewWriter(buff)
+				writtenBytes, err := pp.Write(wr)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(wr.Flush()).To(Succeed())
+
+				By("writing the expected number of bytes")
+				expectedWrittenBytes := streamProtocolCorrelationIdSizeBytes +
+					streamProtocolMapLenBytes +
+					(streamProtocolMapKeyLengthBytes * 3) +
+					(streamProtocolMapValueLengthBytes * 3) +
+					3 + 3 + 3 + // "one" "two" "bmw"
+					1 + 1 + 8 // "1" "2" "mercedes"
+				Expect(writtenBytes).To(Equal(expectedWrittenBytes))
+
+				By("generating the expected byte sequence")
+				expectedBytes := []byte{
+					0x00, 0x00, 0x03, 0x7a, // correlation id
+					0x00, 0x00, 0x00, 0x03, // map size
+					0x00, 0x03, // key length
+					byte('o'), byte('n'), byte('e'),
+					0x00, 0x01, // value length
+					byte('1'),
+					0x00, 0x03, // key length
+					byte('t'), byte('w'), byte('o'),
+					0x00, 0x01, // value length
+					byte('2'),
+					0x00, 0x03, // key length
+					byte('b'), byte('m'), byte('w'),
+					0x00, 0x08, // value length
+					byte('m'), byte('e'), byte('r'), byte('c'), byte('e'), byte('d'),
+					byte('e'), byte('s'), // "mercedes"
+				}
+				Expect(buff.Bytes()).To(Equal(expectedBytes))
 			})
 		})
 	})
@@ -90,7 +182,7 @@ var _ = Describe("PeerProperties", func() {
 				}
 				rd := bytes.NewReader(binaryPeerPropertyResponse)
 				pp := PeerPropertiesResponse{ServerProperties: make(map[string]string)}
-				pp.Read(bufio.NewReader(rd))
+				Expect(pp.Read(bufio.NewReader(rd))).To(Succeed())
 
 				Expect(pp.correlationId).To(BeNumerically("==", 0x12345678))
 				// Response code most significant bit is set to 0 during decoding
@@ -112,7 +204,7 @@ var _ = Describe("PeerProperties", func() {
 					responseCode:     0,
 					ServerProperties: make(map[string]string),
 				}
-				pp.Read(bufio.NewReader(rd))
+				Expect(pp.Read(bufio.NewReader(rd))).To(Succeed())
 
 				Expect(pp.CorrelationId()).To(BeNumerically("==", 305419896))
 				Expect(pp.responseCode).To(BeNumerically("==", 4660))
@@ -146,7 +238,7 @@ var _ = Describe("PeerProperties", func() {
 					responseCode:     0,
 					ServerProperties: make(map[string]string),
 				}
-				pp.Read(bufio.NewReader(rd))
+				Expect(pp.Read(bufio.NewReader(rd))).To(Succeed())
 
 				Expect(pp.CorrelationId()).To(BeNumerically("==", 305419896))
 				Expect(pp.responseCode).To(BeNumerically("==", 4660))

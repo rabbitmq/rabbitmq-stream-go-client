@@ -4,12 +4,6 @@ import (
 	"bufio"
 )
 
-const (
-	encodingMapSizeBytes        = 4
-	encodingMapKeyLengthBytes   = 2
-	encodingMapValueLengthBytes = 2
-)
-
 type PeerPropertiesRequest struct {
 	clientProperties map[string]string
 	correlationId    uint32
@@ -29,7 +23,7 @@ func NewPeerPropertiesRequest() *PeerPropertiesRequest {
 }
 
 func (p *PeerPropertiesRequest) Write(writer *bufio.Writer) (int, error) {
-	return WriteMany(writer, p.CorrelationId(), len(p.clientProperties), p.clientProperties)
+	return writeMany(writer, p.CorrelationId(), len(p.clientProperties), p.clientProperties)
 
 }
 
@@ -46,9 +40,9 @@ func (p *PeerPropertiesRequest) SizeNeeded() int {
 	| value_content	| value_length bytes	|
 	-----------------------------------------
 	*/
-	size := encodingMapSizeBytes // size of the map, always there
+	size := streamProtocolMapLenBytes // size of the map, always there
 	for key, element := range p.clientProperties {
-		size += encodingMapKeyLengthBytes + len(key) + encodingMapValueLengthBytes + len(element)
+		size += streamProtocolMapKeyLengthBytes + len(key) + streamProtocolMapValueLengthBytes + len(element)
 	}
 	size += streamProtocolKeySizeBytes + streamProtocolVersionSizeBytes + streamProtocolCorrelationIdSizeBytes
 	return size
@@ -82,15 +76,15 @@ func NewPeerPropertiesResponse() *PeerPropertiesResponse {
 
 func (p *PeerPropertiesResponse) Read(reader *bufio.Reader) error {
 	var serverPropertiesCount uint32
-	err := ReadMany(reader, &p.correlationId, &p.responseCode, &serverPropertiesCount)
+	err := readMany(reader, &p.correlationId, &p.responseCode, &serverPropertiesCount)
 	if err != nil {
 		return err
 	}
-	p.responseCode = UShortExtractResponseCode(p.responseCode)
+	p.responseCode = ExtractResponseCode(p.responseCode)
 
 	for i := uint32(0); i < serverPropertiesCount; i++ {
-		key := ReadString(reader)
-		value := ReadString(reader)
+		key := readString(reader)
+		value := readString(reader)
 		p.ServerProperties[key] = value
 	}
 	return nil

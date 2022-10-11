@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"context"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 	"net"
 	"sync"
@@ -12,12 +13,14 @@ type correlation struct {
 	chResponse chan internal.CommandRead
 }
 
-func NewCorrelation(id uint32) *correlation {
+func newCorrelation(id uint32) *correlation {
 	return &correlation{chResponse: make(chan internal.CommandRead),
 		id: id}
 }
 
 func (c *correlation) Close() {
+	// TODO: maybe we don't need to close the channel. When there are 0 references to
+	// 		correlation struct, it will be garbage collected by Go's GC
 	close(c.chResponse)
 }
 
@@ -41,17 +44,16 @@ func (tc *TCPClient) getCorrelationById(id uint32) *correlation {
 	}
 	return nil
 }
+
 func (tc *TCPClient) storeCorrelation(request internal.CommandWrite) {
 	request.SetCorrelationId(tc.getNextCorrelation())
-	tc.correlationsMap.Store(request.CorrelationId(), NewCorrelation(request.CorrelationId()))
+	tc.correlationsMap.Store(request.CorrelationId(), newCorrelation(request.CorrelationId()))
 }
 
 func (tc *TCPClient) removeCorrelation(id uint32) {
 	tc.getCorrelationById(id).Close()
 	tc.correlationsMap.Delete(id)
 }
-
-// end correlation map section
 
 func (tc *TCPClient) writeCommand(request internal.CommandWrite) error {
 	hWritten, err := internal.NewHeaderRequest(request).Write(tc.connection.GetWriter())
@@ -68,7 +70,11 @@ func (tc *TCPClient) writeCommand(request internal.CommandWrite) error {
 	return tc.connection.GetWriter().Flush()
 }
 
+// end correlation map section
+
+// This makes an RPC-style request. We send the frame and we await for a response
 func (tc *TCPClient) request(request internal.CommandWrite) (internal.CommandRead, error) {
+	// TODO: refactor to use context.Context
 	tc.storeCorrelation(request)
 	defer tc.removeCorrelation(request.CorrelationId())
 	err := tc.writeCommand(request)
@@ -76,6 +82,7 @@ func (tc *TCPClient) request(request internal.CommandWrite) (internal.CommandRea
 		return nil, err
 	}
 	select {
+	// TODO: add a case for ctx.Done()
 	case r := <-tc.getCorrelationById(request.CorrelationId()).chResponse:
 		return r, nil
 	}
@@ -97,7 +104,7 @@ func (tc *TCPClient) handleIncoming() {
 		if err != nil {
 			panic(err)
 		}
-		switch internal.UShortExtractResponseCode(header.Command()) {
+		switch internal.ExtractResponseCode(header.Command()) {
 		case internal.CommandPeerProperties:
 			peerPropResponse := internal.NewPeerPropertiesResponse()
 			err = peerPropResponse.Read(buffer)
@@ -106,8 +113,8 @@ func (tc *TCPClient) handleIncoming() {
 			}
 			tc.handleResponse(peerPropResponse)
 			break
-		case internal.CommandSaslMechanisms:
-			saslMechanismsResponse := internal.NewSaslMechanismsResponse()
+		case internal.CommandSaslHandshake:
+			saslMechanismsResponse := internal.NewSaslHandshakeResponse()
 			err = saslMechanismsResponse.Read(buffer)
 			if err != nil {
 				panic(err)
@@ -126,24 +133,32 @@ func (tc *TCPClient) peerProperties() error {
 	return err
 }
 
-func (tc *TCPClient) saslMechanisms() error {
-	saslMechanisms, err := tc.request(internal.NewSaslMechanismsRequest())
-	internal.Debug("saslMechanismsResponse: %v", saslMechanisms.(*internal.SaslMechanismsResponse).Mechanisms)
+func (tc *TCPClient) saslAuthenticate() error {
+	saslMechanisms, err := tc.request(internal.NewSaslHandshakeRequest())
+	internal.Debug("saslMechanismsResponse: %v", saslMechanisms.(*internal.SaslHandshakeResponse).Mechanisms)
 	return err
 
 }
 
 // public API
 
-func (tc *TCPClient) Connect(brokers []Broker) error {
+func (tc *TCPClient) Connect(ctx context.Context, brokers []Broker) error {
+	if ctx == nil {
+
+	}
 	err := tc.peerProperties()
 	if internal.MaybeLogError(err, "error reading server properties") {
 		return err
 	}
-	err = tc.saslMechanisms()
+	err = tc.saslAuthenticate()
 	if internal.MaybeLogError(err, "error reading sasl mechanisms") {
 		return err
 	}
 
 	return nil
+}
+
+func (tc *TCPClient) DeclareStream(ctx context.Context, name string) error {
+	//TODO implement me
+	panic("implement me")
 }

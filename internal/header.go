@@ -64,9 +64,9 @@ func NewHeaderRequest(command CommandWrite) *Header {
 }
 
 func (h *Header) Write(writer *bufio.Writer) (int, error) {
-	return WriteMany(writer, h.length, h.command, h.version)
+	return writeMany(writer, h.length, h.command, h.version)
 }
 
 func (h *Header) Read(reader *bufio.Reader) error {
-	return ReadMany(reader, &h.length, &h.command, &h.version)
+	return readMany(reader, &h.length, &h.command, &h.version)
 }

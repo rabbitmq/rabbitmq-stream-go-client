@@ -19,7 +19,7 @@ func main() {
 	var tc stream.Clienter
 	tc = stream.NewTcpClient(connection)
 	//time.Sleep(1 * time.Second)
-	err := tc.Connect(nil)
+	err := tc.Connect(nil, nil)
 	if err != nil {
 		return
 	}

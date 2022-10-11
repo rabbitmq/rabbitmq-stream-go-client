@@ -5,13 +5,13 @@ import (
 	"encoding/binary"
 )
 
-func ReadUShort(readerStream *bufio.Reader) (uint16, error) {
+func readUShort(readerStream *bufio.Reader) (uint16, error) {
 	var res uint16
 	err := binary.Read(readerStream, binary.BigEndian, &res)
 	return res, err
 }
 
-func ReadUInt(readerStream *bufio.Reader) (uint32, error) {
+func readUInt(readerStream *bufio.Reader) (uint32, error) {
 	var res uint32
 	err := binary.Read(readerStream, binary.BigEndian, &res)
 	return res, err
@@ -25,25 +25,38 @@ func peekByte(readerStream *bufio.Reader) (uint8, error) {
 	return res[0], nil
 }
 
-func ReadString(readerStream *bufio.Reader) string {
-	// FIXME: handle the potential error from ReadUShort
-	lenString, _ := ReadUShort(readerStream)
+func readString(readerStream *bufio.Reader) string {
+	// FIXME: handle the potential error from readUShort
+	lenString, _ := readUShort(readerStream)
 	buff := make([]byte, lenString)
 	_ = binary.Read(readerStream, binary.BigEndian, &buff)
 	return string(buff)
 }
 
-func UShortEncodeResponseCode(code uint16) uint16 {
+func readByteSlice(readerStream *bufio.Reader) (data []byte, err error) {
+	numEntries, err := readUShort(readerStream)
+	if err != nil {
+		return nil, err
+	}
+	data = make([]byte, numEntries)
+	err = binary.Read(readerStream, binary.BigEndian, data)
+	if err != nil {
+		return nil, err
+	}
+	return
+}
+
+func EncodeResponseCode(code uint16) uint16 {
 	return code | 0b1000_0000_0000_0000
 }
 
-func UShortExtractResponseCode(code uint16) uint16 {
+func ExtractResponseCode(code uint16) uint16 {
 	return code & 0b0111_1111_1111_1111
 }
 
-func ReadMany(readerStream *bufio.Reader, args ...interface{}) error {
+func readMany(readerStream *bufio.Reader, args ...interface{}) error {
 	for _, arg := range args {
-		err := ReadAny(readerStream, arg)
+		err := readAny(readerStream, arg)
 		if err != nil {
 			return err
 		}
@@ -51,19 +64,25 @@ func ReadMany(readerStream *bufio.Reader, args ...interface{}) error {
 	return nil
 }
 
-func ReadAny(readerStream *bufio.Reader, arg interface{}) error {
+func readAny(readerStream *bufio.Reader, arg interface{}) error {
 
 	switch arg.(type) {
 	case *int:
-		uInt, err := ReadUInt(readerStream)
+		uInt, err := readUInt(readerStream)
 		if err != nil {
 			return err
 		}
 		*arg.(*int) = int(uInt)
 		break
 	case *string:
-		*arg.(*string) = ReadString(readerStream)
+		*arg.(*string) = readString(readerStream)
 		break
+	case *[]byte:
+		byteSlice, err := readByteSlice(readerStream)
+		if err != nil {
+			return err
+		}
+		*arg.(*[]byte) = byteSlice
 	default:
 		err := binary.Read(readerStream, binary.BigEndian, arg)
 		if err != nil {
@@ -74,7 +93,7 @@ func ReadAny(readerStream *bufio.Reader, arg interface{}) error {
 	return nil
 }
 
-func WriteMany(writer *bufio.Writer, args ...interface{}) (int, error) {
+func writeMany(writer *bufio.Writer, args ...interface{}) (int, error) {
 	var written int
 
 	for _, arg := range args {
@@ -87,7 +106,7 @@ func WriteMany(writer *bufio.Writer, args ...interface{}) (int, error) {
 			written += binary.Size(int32(arg.(int)))
 			break
 		case string:
-			n, err := WriteString(writer, arg.(string))
+			n, err := writeString(writer, arg.(string))
 			if err != nil {
 				return written, err
 			}
@@ -95,9 +114,9 @@ func WriteMany(writer *bufio.Writer, args ...interface{}) (int, error) {
 			break
 		case map[string]string:
 			for key, value := range arg.(map[string]string) {
-				n, err := WriteString(writer, key)
+				n, err := writeString(writer, key)
 				written += n
-				n, err = WriteString(writer, value)
+				n, err = writeString(writer, value)
 				written += n
 				if err != nil {
 					return written, err
@@ -115,8 +134,8 @@ func WriteMany(writer *bufio.Writer, args ...interface{}) (int, error) {
 	return written, nil
 }
 
-func WriteString(writer *bufio.Writer, value string) (nn int, err error) {
-	shortLen, err := WriteMany(writer, uint16(len(value)))
+func writeString(writer *bufio.Writer, value string) (nn int, err error) {
+	shortLen, err := writeMany(writer, uint16(len(value)))
 	if err != nil {
 		return 0, err
 	}

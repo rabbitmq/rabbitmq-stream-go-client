@@ -22,15 +22,21 @@ type CommandWrite interface {
 
 // command IDs
 const (
-	CommandPeerProperties = 0x0011 // 17
-	CommandSaslMechanisms = 0x0012 // 18
+	CommandPeerProperties   uint16 = 0x0011 // 17
+	CommandSaslHandshake    uint16 = 0x0012 // 18
+	CommandSaslAuthenticate uint16 = 0x0013 // 19
 )
 
 // Stream protocol field sizes
 const (
-	streamProtocolKeySizeBytes           = 2
-	streamProtocolVersionSizeBytes       = 2
-	streamProtocolCorrelationIdSizeBytes = 4
+	streamProtocolKeySizeBytes                  = 2
+	streamProtocolVersionSizeBytes              = 2
+	streamProtocolCorrelationIdSizeBytes        = 4
+	streamProtocolStringLenSizeBytes            = 2
+	streamProtocolMapLenBytes                   = 4
+	streamProtocolMapKeyLengthBytes             = 2
+	streamProtocolMapValueLengthBytes           = 2
+	streamProtocolSaslChallengeResponseLenBytes = 2
 )
 
 const (
@@ -43,8 +49,8 @@ const (
 	ResponseCodeStreamDoesNotExist          uint16 = 0x02
 	ResponseCodeSubscriptionIdAlreadyExists uint16 = 0x03
 	ResponseCodeSubscriptionIdDoesNotExist  uint16 = 0x04
-	ResponseCodeStreamAlreadyExists                = 0x05
-	ResponseCodeStreamNotAvailable                 = 0x06
+	ResponseCodeStreamAlreadyExists         uint16 = 0x05
+	ResponseCodeStreamNotAvailable          uint16 = 0x06
 	ResponseCodeSASLMechanismNotSupported   uint16 = 0x07
 	ResponseCodeAuthFailure                 uint16 = 0x08
 	ResponseCodeSASLError                   uint16 = 0x09
