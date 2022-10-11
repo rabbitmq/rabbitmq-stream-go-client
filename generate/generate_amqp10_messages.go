@@ -160,4 +160,21 @@ func main() {
 	}
 	saveMessageToFile("static_test_message_compare", binary)
 
+	byteString := "Alan  Mathison Turing  ( 23 June 1912 – 7 June 1954 ) was an English  mathematician, computer scientist, logician, cryptanalyst,  philosopher, and theoretical biologist. Turing  was   highly  influential in the development of theoretical computer science."
+	chineseStringTest :=
+		"Alan Mathison Turing（1912 年 6 月 23 日 - 1954 年 6 月 7 日）是英国数学家、计算机科学家、逻辑学家、密码分析家、哲学家和理论生物学家。 [6] 图灵在理论计算机科学的发展中具有很大的影响力，用图灵机提供了算法和计算概念的形式化，可以被认为是通用计算机的模型。[7][8][9] 他被广泛认为是理论计算机科学和人工智能之父。 [10]"
+
+	greekTest := "Ο Άλαν Μάθισον Τούρινγκ (23 Ιουνίου 1912 – 7 Ιουνίου 1954) ήταν Άγγλος μαθηματικός, επιστήμονας υπολογιστών, λογικός, κρυπαναλυτής, φιλόσοφος και θεωρητικός βιολόγος. Ο Τούρινγκ είχε μεγάλη επιρροή στην ανάπτυξη της θεωρητικής επιστήμης των υπολογιστών."
+	msg = amqp.NewMessage([]byte(byteString))
+	msg.ApplicationProperties = map[string]interface{}{
+		"from_go":         "祝您有美好的一天，并享受客户",
+		"from_go_ch_long": chineseStringTest,
+		"from_go_greek":   greekTest,
+		"from_go_byte":    byteString,
+	}
+
+	binary, err = msg.MarshalBinary()
+	if err == nil {
+		saveMessageToFile("message_unicode_message", binary)
+	}
 }
