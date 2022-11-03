@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 )
 
 type Header struct {
@@ -12,6 +13,10 @@ type Header struct {
 	// Key ID
 	command uint16
 	version int16
+}
+
+func NewHeader(length int, command uint16, version int16) *Header {
+	return &Header{length: length, command: command, version: version}
 }
 
 func (h *Header) Command() uint16 {
@@ -42,16 +47,18 @@ func (h *Header) UnmarshalBinary(data []byte) error {
 func (h *Header) MarshalBinary() (data []byte, err error) {
 	buf := new(bytes.Buffer)
 	wr := bufio.NewWriter(buf)
-	if err = binary.Write(wr, binary.BigEndian, h.length); err != nil {
+	n, err := writeMany(wr, h.length, h.command, h.version)
+	if err != nil {
 		return nil, err
 	}
-	if err = binary.Write(wr, binary.BigEndian, h.command); err != nil {
+	if n != 8 {
+		return nil, fmt.Errorf("wrote unexpected number of bytes: wrote %d, expected 8", n)
+	}
+
+	if err = wr.Flush(); err != nil {
 		return nil, err
 	}
-	if err = binary.Write(wr, binary.BigEndian, h.version); err != nil {
-		return nil, err
-	}
-	copy(data, buf.Bytes())
+	data = buf.Bytes()
 	return data, nil
 }
 

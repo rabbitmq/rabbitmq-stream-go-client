@@ -7,6 +7,7 @@ import (
 type CommandRead interface {
 	Read(reader *bufio.Reader) error
 	CorrelationId() uint32
+	ResponseCode() uint16
 }
 
 type CommandWrite interface {
@@ -25,6 +26,9 @@ const (
 	CommandPeerProperties   uint16 = 0x0011 // 17
 	CommandSaslHandshake    uint16 = 0x0012 // 18
 	CommandSaslAuthenticate uint16 = 0x0013 // 19
+	CommandTune             uint16 = 0x0014 // 20
+	CommandOpen             uint16 = 0x0015 // 21
+	CommandClose            uint16 = 0x0016 // 22
 )
 
 // Stream protocol field sizes
@@ -36,7 +40,11 @@ const (
 	streamProtocolMapLenBytes                   = 4
 	streamProtocolMapKeyLengthBytes             = 2
 	streamProtocolMapValueLengthBytes           = 2
-	streamProtocolSaslChallengeResponseLenBytes = 2
+	streamProtocolSaslChallengeResponseLenBytes = 4
+	streamProtocolMaxFrameSizeBytes             = 4
+	streamProtocolHeartbeatPeriodBytes          = 4
+	streamProtocolClosingCodeSizeBytes          = 2
+	streamProtocolResponseCodeSizeBytes         = 2
 )
 
 const (

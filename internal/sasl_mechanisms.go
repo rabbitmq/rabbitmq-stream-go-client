@@ -47,6 +47,40 @@ type SaslHandshakeResponse struct {
 	Mechanisms    []string
 }
 
+func (s *SaslHandshakeResponse) ResponseCode() uint16 {
+	return s.responseCode
+}
+
+func (s *SaslHandshakeResponse) MarshalBinary() (data []byte, err error) {
+	buff := new(bytes.Buffer)
+	wr := bufio.NewWriter(buff)
+
+	n, err := writeMany(wr, s.correlationId, s.responseCode, uint32(len(s.Mechanisms)))
+	if err != nil {
+		return nil, err
+	}
+	if n != 10 {
+		return nil, fmt.Errorf("error marshalling: wrote %d, expected %d", n, 10)
+	}
+
+	for _, mechanism := range s.Mechanisms {
+		n, err = writeString(wr, mechanism)
+		if n != (len(mechanism) + 2) {
+			return nil, fmt.Errorf("error marshalling: wrote %d, expected %d", n, len(mechanism)+2)
+		}
+	}
+	err = wr.Flush()
+	if err != nil {
+		return nil, err
+	}
+	data = buff.Bytes()
+	return
+}
+
+func NewSaslHandshakeResponseWith(correlationId uint32, responseCode uint16, mechanisms []string) *SaslHandshakeResponse {
+	return &SaslHandshakeResponse{correlationId: correlationId, responseCode: responseCode, Mechanisms: mechanisms}
+}
+
 func NewSaslHandshakeResponse() *SaslHandshakeResponse {
 	return &SaslHandshakeResponse{}
 }
@@ -57,7 +91,6 @@ func (s *SaslHandshakeResponse) Read(reader *bufio.Reader) error {
 	if err != nil {
 		return err
 	}
-	s.responseCode = ExtractResponseCode(s.responseCode)
 	for i := uint32(0); i < mechanismsCount; i++ {
 		s.Mechanisms = append(s.Mechanisms, readString(reader))
 	}
@@ -92,7 +125,7 @@ func (s *SaslAuthenticateRequest) Write(writer *bufio.Writer) (int, error) {
 		writer,
 		s.correlationId,
 		s.mechanism,
-		uint16(len(s.saslOpaqueData)),
+		len(s.saslOpaqueData),
 		s.saslOpaqueData,
 	)
 	if err != nil {
@@ -109,7 +142,7 @@ func (s *SaslAuthenticateRequest) SizeNeeded() int {
 	return streamProtocolKeySizeBytes + streamProtocolVersionSizeBytes +
 		streamProtocolCorrelationIdSizeBytes +
 		streamProtocolStringLenSizeBytes + len(s.mechanism) +
-		streamProtocolStringLenSizeBytes + len(s.saslOpaqueData)
+		streamProtocolSaslChallengeResponseLenBytes + len(s.saslOpaqueData)
 }
 
 func (s *SaslAuthenticateRequest) SetCorrelationId(id uint32) {
@@ -124,15 +157,15 @@ func (s *SaslAuthenticateRequest) Version() int16 {
 	return Version1
 }
 
-type saslPlainMechanism struct {
+type SaslPlainMechanism struct {
 	username, password string
 }
 
-func newSaslPlainMechanism(username string, password string) *saslPlainMechanism {
-	return &saslPlainMechanism{username: username, password: password}
+func NewSaslPlainMechanism(username string, password string) *SaslPlainMechanism {
+	return &SaslPlainMechanism{username: username, password: password}
 }
 
-func (s saslPlainMechanism) MarshalBinary() (data []byte, err error) {
+func (s SaslPlainMechanism) MarshalBinary() (data []byte, err error) {
 	buff := new(bytes.Buffer)
 	bytesWritten := 0
 	n, err := buff.WriteRune('\u0000')
@@ -175,6 +208,44 @@ type SaslAuthenticateResponse struct {
 	correlationId  uint32
 	responseCode   uint16
 	saslOpaqueData []byte
+}
+
+func (s *SaslAuthenticateResponse) ResponseCode() uint16 {
+	return s.responseCode
+}
+
+func (s *SaslAuthenticateResponse) MarshalBinary() (data []byte, err error) {
+	buff := new(bytes.Buffer)
+	wr := bufio.NewWriter(buff)
+
+	n, err := writeMany(wr, s.correlationId, s.responseCode)
+	if err != nil {
+		return nil, err
+	}
+	if n != 6 {
+		return nil, fmt.Errorf("error in binary marshal: expected to write %d wrote %d", 6, n)
+	}
+
+	if s.saslOpaqueData != nil {
+		n, err := writeMany(wr, s.saslOpaqueData)
+		if err != nil {
+			return nil, err
+		}
+		if n != len(s.saslOpaqueData) {
+			return nil, fmt.Errorf("expected to write %d, wrote %d", len(s.saslOpaqueData), n)
+		}
+	}
+	err = wr.Flush()
+	if err != nil {
+		return nil, err
+	}
+
+	data = buff.Bytes()
+	return
+}
+
+func NewSaslAuthenticateResponseWith(correlationId uint32, responseCode uint16, saslOpaqueData []byte) *SaslAuthenticateResponse {
+	return &SaslAuthenticateResponse{correlationId: correlationId, responseCode: responseCode, saslOpaqueData: saslOpaqueData}
 }
 
 func (s *SaslAuthenticateResponse) Read(reader *bufio.Reader) error {

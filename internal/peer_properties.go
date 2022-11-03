@@ -2,6 +2,8 @@ package internal
 
 import (
 	"bufio"
+	"bytes"
+	"fmt"
 )
 
 type PeerPropertiesRequest struct {
@@ -70,6 +72,40 @@ type PeerPropertiesResponse struct {
 	ServerProperties map[string]string
 }
 
+func (p *PeerPropertiesResponse) ResponseCode() uint16 {
+	return p.responseCode
+}
+
+func (p *PeerPropertiesResponse) MarshalBinary() (data []byte, err error) {
+	buff := new(bytes.Buffer)
+	wr := bufio.NewWriter(buff)
+
+	n, err := writeMany(wr, p.correlationId, p.responseCode, len(p.ServerProperties), p.ServerProperties)
+	if err != nil {
+		return nil, err
+	}
+
+	expectedBytesWritten := streamProtocolCorrelationIdSizeBytes + streamProtocolResponseCodeSizeBytes +
+		streamProtocolMapLenBytes + (4 * len(p.ServerProperties)) // 2B for key len + 2B value len * num. of items
+	for k, v := range p.ServerProperties {
+		expectedBytesWritten += len(k) + len(v)
+	}
+
+	if n != expectedBytesWritten {
+		return nil, fmt.Errorf("did not write expected number of bytes: wanted %d, wrote %d", expectedBytesWritten, n)
+	}
+
+	if err = wr.Flush(); err != nil {
+		return nil, err
+	}
+	data = buff.Bytes()
+	return
+}
+
+func NewPeerPropertiesResponseWith(correlationId uint32, responseCode uint16, serverProperties map[string]string) *PeerPropertiesResponse {
+	return &PeerPropertiesResponse{correlationId: correlationId, responseCode: responseCode, ServerProperties: serverProperties}
+}
+
 func NewPeerPropertiesResponse() *PeerPropertiesResponse {
 	return &PeerPropertiesResponse{ServerProperties: make(map[string]string)}
 }
@@ -80,7 +116,6 @@ func (p *PeerPropertiesResponse) Read(reader *bufio.Reader) error {
 	if err != nil {
 		return err
 	}
-	p.responseCode = ExtractResponseCode(p.responseCode)
 
 	for i := uint32(0); i < serverPropertiesCount; i++ {
 		key := readString(reader)

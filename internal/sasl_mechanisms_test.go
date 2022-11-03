@@ -87,14 +87,14 @@ var _ = Describe("SaslMechanisms", func() {
 			Expect(saslReq.Key()).To(BeNumerically("==", 0x0013))
 			Expect(saslReq.SizeNeeded()).To(BeNumerically("==", 4+ // correlation id
 				2+11+ // string_len + string
-				2+ // challenge response len
+				4+ // challenge response len
 				2+2, // command id + version
 			))
 		})
 
 		It("encodes the challenge response", func() {
 			saslReq := saslReq
-			Expect(saslReq.SetChallengeResponse(newSaslPlainMechanism("foo", "bar"))).To(Succeed())
+			Expect(saslReq.SetChallengeResponse(NewSaslPlainMechanism("foo", "bar"))).To(Succeed())
 
 			expectedByteSequence := []byte("\u0000foo\u0000bar")
 			Expect(saslReq.saslOpaqueData).To(Equal(expectedByteSequence))
@@ -103,7 +103,7 @@ var _ = Describe("SaslMechanisms", func() {
 		It("binary encodes the struct", func() {
 			saslReq := saslReq
 			saslReq.SetCorrelationId(255)
-			Expect(saslReq.SetChallengeResponse(newSaslPlainMechanism("user", "password"))).To(Succeed())
+			Expect(saslReq.SetChallengeResponse(NewSaslPlainMechanism("user", "password"))).To(Succeed())
 			buff := new(bytes.Buffer)
 			wr := bufio.NewWriter(buff)
 
@@ -123,7 +123,7 @@ var _ = Describe("SaslMechanisms", func() {
 				0x00, 0x0b, // mechanism_len
 			}
 			expectedByteSequence = append(expectedByteSequence, []byte("very-secure")...)
-			expectedByteSequence = append(expectedByteSequence, 0x00, 0x0e) // challenge response len
+			expectedByteSequence = append(expectedByteSequence, 0x00, 0x00, 0x00, 0x0e) // challenge response len
 			expectedByteSequence = append(expectedByteSequence, []byte("\u0000user\u0000password")...)
 
 			Expect(buff.Bytes()).To(Equal(expectedByteSequence))

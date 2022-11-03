@@ -50,7 +50,7 @@ func EncodeResponseCode(code uint16) uint16 {
 	return code | 0b1000_0000_0000_0000
 }
 
-func ExtractResponseCode(code uint16) uint16 {
+func ExtractCommandCode(code uint16) uint16 {
 	return code & 0b0111_1111_1111_1111
 }
 

@@ -3,6 +3,7 @@ package internal
 import (
 	"bufio"
 	"net"
+	"time"
 )
 
 type Connecter interface {
@@ -28,4 +29,12 @@ func (c *Connection) GetWriter() *bufio.Writer {
 
 func (c *Connection) GetReader() *bufio.Reader {
 	return c.reader
+}
+
+func (c *Connection) SetDeadline(t time.Time) error {
+	return c.connection.SetDeadline(t)
+}
+
+func (c *Connection) Close() error {
+	return c.connection.Close()
 }
