@@ -120,9 +120,24 @@ func (tc *Client) getNextCorrelation() uint32 {
 	return atomic.AddUint32(&tc.nextCorrelation, 1)
 }
 
-func (tc *Client) handleResponse(read internal.CommandRead) {
-	// fixme: potential nil pointer dereference and panics
-	tc.getCorrelationById(read.CorrelationId()).chResponse <- read
+func (tc *Client) handleResponse(ctx context.Context, read internal.CommandRead) {
+	var logger logr.Logger
+	if ctx != nil {
+		logger = logr.FromContextOrDiscard(ctx)
+	} else {
+		logger = logr.Discard()
+	}
+
+	correlation := tc.getCorrelationById(read.CorrelationId())
+	if correlation == nil {
+		logger.V(debugLevel).Info(
+			"no correlation found for response",
+			"response correlation",
+			read.CorrelationId(),
+		)
+		return
+	}
+	correlation.chResponse <- read
 }
 
 // TODO: Maybe Add a timeout
@@ -154,7 +169,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error(err, "error decoding peer properties")
 					return err
 				}
-				tc.handleResponse(peerPropResponse)
+				tc.handleResponse(ctx, peerPropResponse)
 			case internal.CommandSaslHandshake:
 				saslMechanismsResponse := internal.NewSaslHandshakeResponse()
 				err = saslMechanismsResponse.Read(buffer)
@@ -162,7 +177,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error(err, "error decoding SASL handshake")
 					return err
 				}
-				tc.handleResponse(saslMechanismsResponse)
+				tc.handleResponse(ctx, saslMechanismsResponse)
 			case internal.CommandSaslAuthenticate:
 				saslAuthResp := new(internal.SaslAuthenticateResponse)
 				err = saslAuthResp.Read(buffer)
@@ -170,7 +185,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error(err, "error decoding SASL authenticate")
 					return err
 				}
-				tc.handleResponse(saslAuthResp)
+				tc.handleResponse(ctx, saslAuthResp)
 			case internal.CommandTune:
 				tuneReq := new(internal.TuneRequest)
 				err = tuneReq.Read(buffer)
@@ -186,7 +201,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error(err, "error decoding open")
 					return err
 				}
-				tc.handleResponse(openResp)
+				tc.handleResponse(ctx, openResp)
 			case internal.CommandClose:
 				// FIXME: we may receive the request from the server
 				// 		in such case, we have to start the shutdown process
@@ -197,7 +212,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error(err, "error decoding open")
 					return err
 				}
-				tc.handleResponse(closeResp)
+				tc.handleResponse(ctx, closeResp)
 			case internal.CommandCreate:
 				createResp := new(internal.SimpleResponse)
 				err = createResp.Read(buffer)
@@ -205,7 +220,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error(err, "error decoding stream create")
 					return err
 				}
-				tc.handleResponse(createResp)
+				tc.handleResponse(ctx, createResp)
 			default:
 				log.Info("frame not implemented", "command ID", header.Command())
 			}
