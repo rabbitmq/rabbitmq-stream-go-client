@@ -199,7 +199,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				}
 				tc.handleResponse(closeResp)
 			case internal.CommandCreate:
-				createResp := new(internal.CreateResponse)
+				createResp := new(internal.SimpleResponse)
 				err = createResp.Read(buffer)
 				if err != nil {
 					log.Error(err, "error decoding stream create")

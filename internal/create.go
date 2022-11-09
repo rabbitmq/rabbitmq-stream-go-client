@@ -3,7 +3,6 @@ package internal
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 )
 
 type CreateRequest struct {
@@ -54,42 +53,4 @@ func (c *CreateRequest) CorrelationId() uint32 {
 
 func (c *CreateRequest) Version() int16 {
 	return Version1
-}
-
-type CreateResponse struct {
-	correlationId uint32
-	responseCode  uint16
-}
-
-func (c *CreateResponse) MarshalBinary() (data []byte, err error) {
-	buff := new(bytes.Buffer)
-	wr := bufio.NewWriter(buff)
-	n, err := writeMany(wr, c.correlationId, c.responseCode)
-	if err != nil {
-		return nil, err
-	}
-	if n != (streamProtocolCorrelationIdSizeBytes + streamProtocolResponseCodeSizeBytes) {
-		return nil, fmt.Errorf("error marshalling create response: wrote %d, expected: 6", n)
-	}
-	if err = wr.Flush(); err != nil {
-		return nil, err
-	}
-	data = buff.Bytes()
-	return
-}
-
-func NewCreateResponseWith(id uint32, responseCode uint16) *CreateResponse {
-	return &CreateResponse{id, responseCode}
-}
-
-func (c *CreateResponse) Read(reader *bufio.Reader) error {
-	return readMany(reader, &c.correlationId, &c.responseCode)
-}
-
-func (c *CreateResponse) CorrelationId() uint32 {
-	return c.correlationId
-}
-
-func (c *CreateResponse) ResponseCode() uint16 {
-	return c.responseCode
 }

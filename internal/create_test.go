@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Create",  func() {
+var _ = Describe("Create", func() {
 	Context("Request", func() {
 		It("returns the expected attributes", func() {
 			createRequest := NewCreateRequest("mystream", map[string]string{"some-config": "it-works"})
@@ -59,7 +59,7 @@ var _ = Describe("Create",  func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(wr.Flush()).To(Succeed())
 
-			response := CreateResponse{}
+			response := SimpleResponse{}
 			Expect(response.Read(bufio.NewReader(buff))).To(Succeed())
 
 			Expect(response.correlationId).To(BeNumerically("==", 12345))
