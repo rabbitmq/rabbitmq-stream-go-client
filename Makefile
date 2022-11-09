@@ -57,6 +57,13 @@ go-mod-tidy: ## Run 'go mod tidy' with compatibility to Go 1.17
 go-generate-mocks: | $(MOCKGEN) ## Generate Mocks for testing
 	$(MOCKGEN) -destination=./pkg/stream/mock_conn_test.go -package=stream_test net Conn
 
+### build
+
+build: ## Install tool dependencies for development
+	$(GO) build -v ./...
+
+
+
 ### Tests
 
 GINKGO_RUN_FLAGS := -r --randomize-all -p --race
