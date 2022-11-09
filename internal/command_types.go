@@ -23,6 +23,7 @@ type CommandWrite interface {
 
 // command IDs
 const (
+	CommandCreate           uint16 = 0x000d // 13
 	CommandPeerProperties   uint16 = 0x0011 // 17
 	CommandSaslHandshake    uint16 = 0x0012 // 18
 	CommandSaslAuthenticate uint16 = 0x0013 // 19
@@ -45,6 +46,7 @@ const (
 	streamProtocolHeartbeatPeriodBytes          = 4
 	streamProtocolClosingCodeSizeBytes          = 2
 	streamProtocolResponseCodeSizeBytes         = 2
+	streamProtocolHeaderSizeBytes               = 4
 )
 
 const (

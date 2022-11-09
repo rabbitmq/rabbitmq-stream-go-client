@@ -83,6 +83,19 @@ func readAny(readerStream *bufio.Reader, arg interface{}) error {
 			return err
 		}
 		*arg.(*[]byte) = byteSlice
+	case *map[string]string:
+		mapLen, err := readUInt(readerStream)
+		if err != nil {
+			return err
+		}
+		//*arg.(*map[string]string) = make(map[string]string, mapLen)
+		myMap := make(map[string]string, mapLen)
+		for i := uint32(0); i < mapLen; i++ {
+			k := readString(readerStream)
+			v := readString(readerStream)
+			myMap[k] = v
+		}
+		*arg.(*map[string]string) = myMap
 	default:
 		err := binary.Read(readerStream, binary.BigEndian, arg)
 		if err != nil {
@@ -113,7 +126,13 @@ func writeMany(writer *bufio.Writer, args ...interface{}) (int, error) {
 			written += n
 			break
 		case map[string]string:
-			for key, value := range arg.(map[string]string) {
+			m := arg.(map[string]string)
+			n, err := writeMany(writer, len(m))
+			if err != nil {
+				return n, err
+			}
+			written += n
+			for key, value := range m {
 				n, err := writeString(writer, key)
 				written += n
 				n, err = writeString(writer, value)

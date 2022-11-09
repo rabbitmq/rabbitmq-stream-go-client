@@ -2,7 +2,7 @@
 // Source: net (interfaces: Conn)
 
 // Package stream_test is a generated GoMock package.
-package stream_test
+package raw_test
 
 import (
 	"github.com/onsi/ginkgo/v2"

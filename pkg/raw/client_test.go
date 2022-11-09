@@ -1,12 +1,14 @@
-package stream_test
+package raw_test
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
+	"github.com/go-logr/logr"
 	"github.com/golang/mock/gomock"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/stream"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"io"
@@ -14,7 +16,7 @@ import (
 	"time"
 )
 
-var _ = Describe("RawClient",  func() {
+var _ = Describe("Client", func() {
 	var (
 		fakeServerConn net.Conn
 		fakeClientConn net.Conn
@@ -41,10 +43,10 @@ var _ = Describe("RawClient",  func() {
 			Times(0)
 
 		By("creating a new raw client")
-		conf, err := stream.NewRawClientConfiguration()
+		conf, err := raw.NewClientConfiguration()
 		Expect(err).ToNot(HaveOccurred())
 
-		streamClient := stream.NewRawClient(fakeConn, conf)
+		streamClient := raw.NewClient(fakeConn, conf)
 		Expect(streamClient).NotTo(BeNil())
 
 		By("not starting a connection yet")
@@ -57,13 +59,13 @@ var _ = Describe("RawClient",  func() {
 		go fakeRabbitMQConnectionOpen(fakeServerConn)
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 
-		itCtx, cancel := context.WithTimeout(ctx, time.Second*6)
+		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*6)
 		defer cancel()
 
-		conf, err := stream.NewRawClientConfiguration()
+		conf, err := raw.NewClientConfiguration()
 		Expect(err).ToNot(HaveOccurred())
 
-		streamClient := stream.NewRawClient(fakeClientConn, conf)
+		streamClient := raw.NewClient(fakeClientConn, conf)
 		Eventually(streamClient.Connect).
 			WithContext(itCtx).
 			WithTimeout(time.Second).
@@ -83,6 +85,30 @@ var _ = Describe("RawClient",  func() {
 		Consistently(streamClient.IsOpen).
 			WithTimeout(time.Second*2).
 			Should(BeFalse(), "expected connection to be closed")
+	})
+
+	It("creates a new stream", func(ctx SpecContext) {
+		go fakeRabbitMQConnectionOpen(fakeServerConn)
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+
+		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*6)
+		defer cancel()
+
+		conf, err := raw.NewClientConfiguration()
+		Expect(err).ToNot(HaveOccurred())
+
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		Eventually(streamClient.Connect).
+			WithContext(itCtx).
+			WithTimeout(time.Second).
+			Should(Succeed(), "expected connection to succeed")
+
+		go fakeRabbitMQDeclareStream(fakeServerConn)
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+
+		err = streamClient.DeclareStream(itCtx, "test-stream", map[string]string{"some-key": "some-value"})
+		Expect(err).To(Succeed())
+		//Expect(client.DeclareStream(ctx, "steam-test", map[string]string{"some-key": "some-value"})).To(Succeed())
 	})
 })
 
@@ -246,4 +272,42 @@ func fakeRabbitMQConnectionClose(fakeConn net.Conn) {
 	_, err = rw.Write(binaryResponse)
 	expect(err).ToNot(HaveOccurred())
 	expect(rw.Flush()).To(Succeed())
+}
+
+// TODO: accept matchers as variadic argument and match after each read-step
+func fakeRabbitMQDeclareStream(fakeConn net.Conn) {
+	defer GinkgoRecover()
+	expect := func(v interface{}) Assertion {
+		return Expect(v).WithOffset(1)
+	}
+
+	//expect(fakeConn.SetDeadline(time.Now().Add(time.Second))).
+	//	To(Succeed())
+
+	serverReader := bufio.NewReader(fakeConn)
+	serverWriter := bufio.NewWriter(fakeConn)
+	buffLen := 14 + len("test-stream") + 4 + 2 + len("some-key") + 2 + len("some-value")
+	body := new(internal.CreateRequest)
+	buff := make([]byte, buffLen)
+	full, err := io.ReadFull(serverReader, buff)
+	expect(err).ToNot(HaveOccurred())
+	expect(full).To(BeNumerically("==", buffLen))
+
+	header := new(internal.Header)
+	expect(header.Read(bufio.NewReader(bytes.NewReader(buff)))).To(Succeed())
+	expect(header.Command()).To(BeNumerically("==", 0x000d))
+	expect(header.Version()).To(BeNumerically("==", 1))
+
+	expect(body.UnmarshalBinary(buff[8:])).To(Succeed())
+	expect(body.Stream()).To(Equal("test-stream"))
+	expect(body.Arguments()).To(HaveKeyWithValue("some-key", "some-value"))
+	/// there server says ok! :)
+	// /writing the response to the client
+	responseHeader := internal.NewHeader(10, internal.EncodeResponseCode(internal.CommandCreate), 1)
+	responseBody := internal.NewCreateResponseWith(5, internal.ResponseCodeOK)
+	Expect(responseHeader.Write(serverWriter)).WithOffset(1).To(BeNumerically("==", 8))
+	responseBodyBinary, err := responseBody.MarshalBinary()
+	expect(err).ToNot(HaveOccurred())
+	Expect(serverWriter.Write(responseBodyBinary)).WithOffset(1).To(BeNumerically("==", 6))
+	expect(serverWriter.Flush()).To(Succeed())
 }

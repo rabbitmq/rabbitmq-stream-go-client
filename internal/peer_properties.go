@@ -25,7 +25,7 @@ func NewPeerPropertiesRequest() *PeerPropertiesRequest {
 }
 
 func (p *PeerPropertiesRequest) Write(writer *bufio.Writer) (int, error) {
-	return writeMany(writer, p.CorrelationId(), len(p.clientProperties), p.clientProperties)
+	return writeMany(writer, p.CorrelationId(), p.clientProperties)
 
 }
 
@@ -80,7 +80,7 @@ func (p *PeerPropertiesResponse) MarshalBinary() (data []byte, err error) {
 	buff := new(bytes.Buffer)
 	wr := bufio.NewWriter(buff)
 
-	n, err := writeMany(wr, p.correlationId, p.responseCode, len(p.ServerProperties), p.ServerProperties)
+	n, err := writeMany(wr, p.correlationId, p.responseCode, p.ServerProperties)
 	if err != nil {
 		return nil, err
 	}

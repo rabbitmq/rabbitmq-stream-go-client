@@ -1,10 +1,11 @@
-package stream
+package raw
 
 import (
 	"context"
 	"errors"
 	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"math"
 	"net"
 	"strconv"
@@ -30,7 +31,7 @@ func (c *correlation) Close() {
 	close(c.chResponse)
 }
 
-type RawClient struct {
+type Client struct {
 	mu sync.Mutex
 	// this channel is used for correlation-less incoming frames from the server
 	frameBodyListener    chan internal.CommandRead
@@ -38,18 +39,18 @@ type RawClient struct {
 	connection           *internal.Connection
 	correlationsMap      sync.Map
 	nextCorrelation      uint32
-	configuration        *RawClientConfiguration
+	configuration        *ClientConfiguration
 	connectionProperties map[string]string
 }
 
-func (tc *RawClient) IsOpen() bool {
+func (tc *Client) IsOpen() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.isOpen
 }
 
-func NewRawClient(connection net.Conn, configuration *RawClientConfiguration) Clienter {
-	rawClient := &RawClient{
+func NewClient(connection net.Conn, configuration *ClientConfiguration) common.Clienter {
+	rawClient := &Client{
 		frameBodyListener: make(chan internal.CommandRead),
 		connection:        internal.NewConnection(connection),
 		isOpen:            false,
@@ -62,26 +63,26 @@ func NewRawClient(connection net.Conn, configuration *RawClientConfiguration) Cl
 
 // correlation map section
 
-func (tc *RawClient) getCorrelationById(id uint32) *correlation {
+func (tc *Client) getCorrelationById(id uint32) *correlation {
 	if v, ok := tc.correlationsMap.Load(id); ok {
 		return v.(*correlation)
 	}
 	return nil
 }
 
-func (tc *RawClient) storeCorrelation(request internal.CommandWrite) {
+func (tc *Client) storeCorrelation(request internal.CommandWrite) {
 	request.SetCorrelationId(tc.getNextCorrelation())
 	tc.correlationsMap.Store(request.CorrelationId(), newCorrelation(request.CorrelationId()))
 }
 
-func (tc *RawClient) removeCorrelation(id uint32) {
+func (tc *Client) removeCorrelation(id uint32) {
 	tc.getCorrelationById(id).Close()
 	tc.correlationsMap.Delete(id)
 }
 
 // end correlation map section
 
-func (tc *RawClient) writeCommand(request internal.CommandWrite) error {
+func (tc *Client) writeCommand(request internal.CommandWrite) error {
 	hWritten, err := internal.NewHeaderRequest(request).Write(tc.connection.GetWriter())
 	if err != nil {
 		return err
@@ -97,7 +98,7 @@ func (tc *RawClient) writeCommand(request internal.CommandWrite) error {
 }
 
 // This makes an RPC-style request. We send the frame and we await for a response
-func (tc *RawClient) request(request internal.CommandWrite) (internal.CommandRead, error) {
+func (tc *Client) request(request internal.CommandWrite) (internal.CommandRead, error) {
 	// TODO: refactor to use context.Context
 	tc.storeCorrelation(request)
 	defer tc.removeCorrelation(request.CorrelationId())
@@ -106,22 +107,26 @@ func (tc *RawClient) request(request internal.CommandWrite) (internal.CommandRea
 		return nil, err
 	}
 	select {
+	// TODO: remove for better timeout
+	//case <-time.After(time.Second * 20):
+	//	return nil, fmt.Errorf("timed out waiting for server response")
 	// TODO: add a case for ctx.Done()
 	case r := <-tc.getCorrelationById(request.CorrelationId()).chResponse:
 		return r, nil
 	}
 }
 
-func (tc *RawClient) getNextCorrelation() uint32 {
+func (tc *Client) getNextCorrelation() uint32 {
 	return atomic.AddUint32(&tc.nextCorrelation, 1)
 }
 
-func (tc *RawClient) handleResponse(read internal.CommandRead) {
+func (tc *Client) handleResponse(read internal.CommandRead) {
 	// fixme: potential nil pointer dereference and panics
 	tc.getCorrelationById(read.CorrelationId()).chResponse <- read
 }
 
-func (tc *RawClient) handleIncoming(ctx context.Context) error {
+// TODO: Maybe Add a timeout
+func (tc *Client) handleIncoming(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
 	}
@@ -193,6 +198,14 @@ func (tc *RawClient) handleIncoming(ctx context.Context) error {
 					return err
 				}
 				tc.handleResponse(closeResp)
+			case internal.CommandCreate:
+				createResp := new(internal.CreateResponse)
+				err = createResp.Read(buffer)
+				if err != nil {
+					log.Error(err, "error decoding stream create")
+					return err
+				}
+				tc.handleResponse(createResp)
 			default:
 				log.Info("frame not implemented", "command ID", header.Command())
 			}
@@ -201,7 +214,7 @@ func (tc *RawClient) handleIncoming(ctx context.Context) error {
 	//return nil
 }
 
-func (tc *RawClient) peerProperties(ctx context.Context) error {
+func (tc *Client) peerProperties(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
 	}
@@ -220,7 +233,7 @@ func (tc *RawClient) peerProperties(ctx context.Context) error {
 	return err
 }
 
-func (tc *RawClient) saslHandshake(ctx context.Context) error {
+func (tc *Client) saslHandshake(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
 	}
@@ -244,7 +257,7 @@ func (tc *RawClient) saslHandshake(ctx context.Context) error {
 	return nil
 }
 
-func (tc *RawClient) saslAuthenticate(ctx context.Context) error {
+func (tc *Client) saslAuthenticate(ctx context.Context) error {
 	// FIXME: make this pluggable to allow different authentication backends
 	log := logr.FromContextOrDiscard(ctx).WithName("sasl authenticate")
 	for _, mechanism := range tc.configuration.authMechanism {
@@ -267,7 +280,7 @@ func (tc *RawClient) saslAuthenticate(ctx context.Context) error {
 				return err
 			}
 			//if saslAuthResp.ResponseCode() != internal.ResponseCodeOK {
-			//	errCode, ok := streamErrors[saslAuthResp.ResponseCode()]
+			//	errCode, ok := responseCodeToError[saslAuthResp.ResponseCode()]
 			//	if !ok {
 			//		// we should never enter this
 			//		return fmt.Errorf("unknown error code %d", saslAuthResp.ResponseCode())
@@ -280,7 +293,7 @@ func (tc *RawClient) saslAuthenticate(ctx context.Context) error {
 	return errors.New("server does not support PLAIN SASL mechanism")
 }
 
-func (tc *RawClient) open(ctx context.Context, brokerIndex int) error {
+func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 	if ctx == nil {
 		return errNilContext
 	}
@@ -310,7 +323,7 @@ func (tc *RawClient) open(ctx context.Context, brokerIndex int) error {
 // public API
 
 // TODO go docs
-func DialConfig(ctx context.Context, config *RawClientConfiguration) (Clienter, error) {
+func DialConfig(ctx context.Context, config *ClientConfiguration) (common.Clienter, error) {
 	// FIXME: test this code path at system level
 	// FIXME: try to test this with net.Pipe fake
 	//		dialer should return the fakeClientConn from net.Pipe
@@ -351,7 +364,7 @@ func DialConfig(ctx context.Context, config *RawClientConfiguration) (Clienter, 
 		return nil, err
 	}
 
-	client := NewRawClient(conn, config)
+	client := NewClient(conn, config)
 	err = client.Connect(ctx)
 	if err != nil {
 		return nil, err
@@ -380,7 +393,7 @@ func DefaultDial(connectionTimeout time.Duration) func(network string, addr stri
 }
 
 // TODO go docs
-func (tc *RawClient) Connect(ctx context.Context) error {
+func (tc *Client) Connect(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
 	}
@@ -474,12 +487,23 @@ func (tc *RawClient) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (tc *RawClient) DeclareStream(ctx context.Context, name string) error {
-	//TODO implement me
-	panic("implement me")
+func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration common.StreamConfiguration) error {
+	if ctx == nil {
+		return errNilContext
+	}
+
+	log := logr.FromContextOrDiscard(ctx).WithName("DeclareStream")
+	log.V(debugLevel).Info("starting declare stream. ", "stream", stream)
+
+	createResponse, err := tc.request(internal.NewCreateRequest(stream, configuration))
+	if err != nil {
+		log.Error(err, "error creating declare stream request ")
+		return err
+	}
+	return streamErrorOrNil(createResponse.ResponseCode())
 }
 
-func (tc *RawClient) Close(ctx context.Context) error {
+func (tc *Client) Close(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
 	}

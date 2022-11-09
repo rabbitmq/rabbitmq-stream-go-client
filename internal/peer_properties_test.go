@@ -138,11 +138,7 @@ var _ = Describe("PeerProperties", func() {
 
 				By("writing the expected number of bytes")
 				expectedWrittenBytes := streamProtocolCorrelationIdSizeBytes +
-					streamProtocolMapLenBytes +
-					(streamProtocolMapKeyLengthBytes * 3) +
-					(streamProtocolMapValueLengthBytes * 3) +
-					3 + 3 + 3 + // "one" "two" "bmw"
-					1 + 1 + 8 // "1" "2" "mercedes"
+					sizeNeededForMap(pp.clientProperties)
 				Expect(writtenBytes).To(Equal(expectedWrittenBytes))
 
 				By("generating the expected byte sequence")

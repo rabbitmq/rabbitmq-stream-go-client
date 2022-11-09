@@ -1,4 +1,4 @@
-package stream_test
+package raw_test
 
 import (
 	"testing"

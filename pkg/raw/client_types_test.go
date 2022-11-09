@@ -1,7 +1,7 @@
-package stream_test
+package raw_test
 
 import (
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/stream"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
@@ -10,7 +10,7 @@ import (
 var _ = Describe("ClientTypes", func() {
 	Context("Raw Client Configurations", func() {
 		It("creates a new client configuration", func() {
-			clientConf, err := stream.NewRawClientConfiguration(
+			clientConf, err := raw.NewClientConfiguration(
 				"rabbitmq-stream://foo:bar@localparty.com:4321/party-vhost")
 			Expect(err).ToNot(HaveOccurred())
 
@@ -28,8 +28,8 @@ var _ = Describe("ClientTypes", func() {
 				}))
 		})
 
-		It("accepts multiple uris",  func() {
-			conf, err := stream.NewRawClientConfiguration(
+		It("accepts multiple uris", func() {
+			conf, err := raw.NewClientConfiguration(
 				"rabbitmq-stream://localhost:5552",
 				"rabbitmq-stream://example.com",
 				"rabbitmq-stream+tls://user:pass@some.service.com:4242/a-vhost")
@@ -70,7 +70,7 @@ var _ = Describe("ClientTypes", func() {
 		})
 
 		It("accepts zero URLs and returns default broker", func() {
-			conf, err := stream.NewRawClientConfiguration()
+			conf, err := raw.NewClientConfiguration()
 			Expect(err).ToNot(HaveOccurred())
 
 			broker := conf.RabbitmqBrokers()
@@ -96,7 +96,7 @@ var _ = Describe("ClientTypes", func() {
 				}
 
 				for _, uri := range uris {
-					b, err := stream.NewRawClientConfiguration(uri)
+					b, err := raw.NewClientConfiguration(uri)
 					Expect(err).To(HaveOccurred())
 					Expect(b).To(BeNil())
 				}
