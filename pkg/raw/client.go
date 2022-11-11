@@ -31,6 +31,10 @@ func (c *correlation) Close() {
 	close(c.chResponse)
 }
 
+// Client is the base struct to interact with RabbitMQ streams at a low level. Client implements the common.Clienter
+// interface. Functions of this interface accept a context.Context. It is highly advised to provide a context with a
+// deadline/timeout to all function calls. When a context is cancelled, the function will cancel its work and return
+// a relevant error.
 type Client struct {
 	mu sync.Mutex
 	// this channel is used for correlation-less incoming frames from the server
@@ -49,6 +53,9 @@ func (tc *Client) IsOpen() bool {
 	return tc.isOpen
 }
 
+// NewClient returns a common.Clienter implementation to interact with RabbitMQ stream using low level primitives.
+// NewClient requires an established net.Conn and a ClientConfiguration. Using DialConfig() is the preferred method
+// to establish a connection to RabbitMQ servers.
 func NewClient(connection net.Conn, configuration *ClientConfiguration) common.Clienter {
 	rawClient := &Client{
 		frameBodyListener: make(chan internal.CommandRead),
@@ -57,7 +64,6 @@ func NewClient(connection net.Conn, configuration *ClientConfiguration) common.C
 		correlationsMap:   sync.Map{},
 		configuration:     configuration,
 	}
-	// TODO: check Dial function and use a default one if required
 	return rawClient
 }
 
@@ -110,7 +116,8 @@ func (tc *Client) writeCommand(request internal.CommandWrite) error {
 	return tc.connection.GetWriter().Flush()
 }
 
-// This makes an RPC-style request. We send the frame and we await for a response
+// This makes an RPC-style request. We send the frame, and we await for a response. The context is passed down from the
+// public functions. Context should have a deadline/timeout to avoid deadlocks on a non-responding RabbitMQ server.
 func (tc *Client) request(ctx context.Context, request internal.CommandWrite) (internal.CommandRead, error) {
 	if ctx == nil {
 		return nil, errNilContext
@@ -155,6 +162,7 @@ func (tc *Client) handleResponse(ctx context.Context, read internal.CommandRead)
 		)
 		return
 	}
+	// Perhaps we should check here ctx.Done() ?
 	correlation.chResponse <- read
 }
 
@@ -172,6 +180,8 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			return ctx.Err()
 		default:
 			var header = new(internal.Header)
+			// TODO: set an I/O deadline to avoid deadlock on I/O
+			// 		renew the deadline at the beginning of each iteration
 			err := header.Read(buffer)
 			if err != nil {
 				// TODO: some errors may be recoverable. We only need to return if reconnection
@@ -227,7 +237,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				closeResp := new(internal.CloseResponse)
 				err = closeResp.Read(buffer)
 				if err != nil {
-					log.Error(err, "error decoding open")
+					log.Error(err, "error decoding close")
 					return err
 				}
 				tc.handleResponse(ctx, closeResp)
@@ -244,7 +254,6 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			}
 		}
 	}
-	//return nil
 }
 
 func (tc *Client) peerProperties(ctx context.Context) error {
@@ -300,6 +309,7 @@ func (tc *Client) saslAuthenticate(ctx context.Context) error {
 	for _, mechanism := range tc.configuration.authMechanism {
 		if strings.EqualFold(mechanism, "PLAIN") {
 			log.V(debugLevel).Info("found PLAIN mechanism as supported")
+			// FIXME: try different rabbitmq credentials
 			saslPlain := internal.NewSaslPlainMechanism(
 				tc.configuration.rabbitmqBrokers[0].Username,
 				tc.configuration.rabbitmqBrokers[0].Password,
@@ -359,11 +369,24 @@ func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 
 // public API
 
-// TODO go docs
+// DialConfig establishes a connection to RabbitMQ servers in common.Configuration. It returns an error if the
+// connection cannot be established. On a successful connection, in returns an implementation of common.Clienter,
+// capable of interacting to RabbitMQ streams binary protocol at a low level.
+//
+// This is the recommended method to connect to RabbitMQ. After this function returns, a connection is established
+// and authenticated with RabbitMQ. Do NOT call Client.Connect() after this function.
+//
+// ClientConfiguration must not be nil. ClientConfiguration should be initialised using NewClientConfiguration().
+// A custom dial function can be set using ClientConfiguration.SetDial(). Check ClientConfiguration.SetDial()
+// for more information. If dial function is not provided, DefaultDial is used with a timeout of 30 seconds.
+// DefaultDial uses net.Dial
 func DialConfig(ctx context.Context, config *ClientConfiguration) (common.Clienter, error) {
 	// FIXME: test this code path at system level
 	// FIXME: try to test this with net.Pipe fake
 	//		dialer should return the fakeClientConn from net.Pipe
+	if config == nil {
+		return nil, errNilConfig
+	}
 	if ctx == nil {
 		return nil, errNilContext
 	}
@@ -380,6 +403,7 @@ func DialConfig(ctx context.Context, config *ClientConfiguration) (common.Client
 	// TODO: TLS if scheme is rabbitmq-stream+tls
 	for _, rabbitmqBroker := range config.rabbitmqBrokers {
 		addr := net.JoinHostPort(rabbitmqBroker.Host, strconv.FormatInt(int64(rabbitmqBroker.Port), 10))
+		// TODO: check if context is Done()
 		conn, err = dialer("tcp", addr)
 		if err != nil {
 			log.Error(
@@ -419,8 +443,8 @@ func DefaultDial(connectionTimeout time.Duration) func(network string, addr stri
 		}
 
 		// Heartbeating hasn't started yet, don't stall forever on a dead server.
-		// A deadline is set for TLS and AMQP handshaking. After AMQP is established,
-		// the deadline is cleared in openComplete.
+		// A deadline is set for TLS and Stream handshaking. After conn is established,
+		// the deadline is cleared in Client.Connect().
 		if err := conn.SetDeadline(time.Now().Add(connectionTimeout)); err != nil {
 			return nil, err
 		}
@@ -429,7 +453,17 @@ func DefaultDial(connectionTimeout time.Duration) func(network string, addr stri
 	}
 }
 
-// TODO go docs
+// Connect performs a Stream-protocol handshake to connect to RabbitMQ. On a
+// successful connect, it returns a nil error and starts listening to incoming
+// frames from RabbitMQ. If more than 1 broker is defined in ClientConfiguration,
+// they will be tried sequentially.
+//
+// It is recommended to establish a connection via DialConfig, instead of calling
+// this method.
+//
+// Calling this method requires to manually establish a TCP connection to
+// RabbitMQ, and create a Client using NewClient passing said established
+// connection. It's recommended to use DialConfig instead.
 func (tc *Client) Connect(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
@@ -441,7 +475,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 	var i = 0 // broker index for chosen broker to dial to
 
 	go func(ctx context.Context) {
-		log := logr.FromContextOrDiscard(ctx)
+		log := logr.FromContextOrDiscard(ctx).WithName("frame-listener")
 		log.V(debugLevel).Info("starting frame listener")
 		err := tc.handleIncoming(ctx)
 		if err != nil {
@@ -450,8 +484,10 @@ func (tc *Client) Connect(ctx context.Context) error {
 		}
 	}(ctx)
 
+	// TODO: stop handshake if context is Done()
 	err := tc.peerProperties(ctx)
 	if err != nil {
+		// FIXME: wrap error in Connect-specific error
 		logger.Error(err, "error exchanging peer properties")
 		return err
 	}
@@ -524,6 +560,8 @@ func (tc *Client) Connect(ctx context.Context) error {
 	return nil
 }
 
+// DeclareStream sends a request to create a new Stream. If the error is nil, the
+// Stream was created successfully, and it is ready to use.
 func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration common.StreamConfiguration) error {
 	if ctx == nil {
 		return errNilContext
@@ -540,6 +578,10 @@ func (tc *Client) DeclareStream(ctx context.Context, stream string, configuratio
 	return streamErrorOrNil(createResponse.ResponseCode())
 }
 
+// Close gracefully shutdowns the connection to RabbitMQ. The Client will send a
+// close request to RabbitMQ, and it will await a response. It is recommended to
+// set a deadline in the context, to avoid waiting forever on a non-responding
+// RabbitMQ server.
 func (tc *Client) Close(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
