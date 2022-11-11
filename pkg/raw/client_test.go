@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"github.com/go-logr/logr"
 	"github.com/golang/mock/gomock"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
@@ -13,6 +14,7 @@ import (
 	. "github.com/onsi/gomega"
 	"io"
 	"net"
+	"os"
 	"time"
 )
 
@@ -110,6 +112,43 @@ var _ = Describe("Client", func() {
 		Expect(err).To(Succeed())
 		//Expect(client.DeclareStream(ctx, "steam-test", map[string]string{"some-key": "some-value"})).To(Succeed())
 	})
+
+	It("cancels requests after a timeout", Focus, func(ctx SpecContext) {
+		conf, err := raw.NewClientConfiguration()
+		Expect(err).ToNot(HaveOccurred())
+
+		routineCtx, rCancel := context.WithDeadline(ctx, time.Now().Add(time.Second*2))
+		defer rCancel()
+		go func(ctx context.Context) {
+			// Go routine to drain the 'server' pipe
+			// Required for 'client' pipe Flush() to return
+			defer GinkgoRecover()
+
+			buffer := make([]byte, 1024)
+			for {
+				Expect(fakeServerConn.SetDeadline(time.Now().Add(time.Millisecond * 100))).WithOffset(1).To(Succeed())
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					_, err := fakeServerConn.Read(buffer)
+					if errors.Is(err, os.ErrDeadlineExceeded) {
+						continue
+					}
+					if err != nil {
+						Fail("unexpected error reading server fake conn")
+						return
+					}
+				}
+			}
+		}(routineCtx)
+
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		connectCtx, cancel := context.WithDeadline(logr.NewContext(ctx, GinkgoLogr), time.Now().Add(time.Millisecond*500))
+		defer cancel()
+
+		Expect(streamClient.Connect(connectCtx)).To(MatchError("timed out waiting for server response"))
+	}, SpecTimeout(2*time.Second))
 })
 
 func fakeRabbitMQConnectionOpen(fakeConn net.Conn) {

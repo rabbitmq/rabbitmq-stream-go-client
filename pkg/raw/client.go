@@ -3,6 +3,7 @@ package raw
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
@@ -80,6 +81,10 @@ func (tc *Client) removeCorrelation(id uint32) {
 	tc.correlationsMap.Delete(id)
 }
 
+func (tc *Client) getNextCorrelation() uint32 {
+	return atomic.AddUint32(&tc.nextCorrelation, 1)
+}
+
 // end correlation map section
 
 func (tc *Client) writeCommand(request internal.CommandWrite) error {
@@ -98,26 +103,33 @@ func (tc *Client) writeCommand(request internal.CommandWrite) error {
 }
 
 // This makes an RPC-style request. We send the frame and we await for a response
-func (tc *Client) request(request internal.CommandWrite) (internal.CommandRead, error) {
-	// TODO: refactor to use context.Context
+func (tc *Client) request(ctx context.Context, request internal.CommandWrite) (internal.CommandRead, error) {
+	var logger logr.Logger
+	if ctx != nil {
+		logger = logr.FromContextOrDiscard(ctx)
+	} else {
+		logger = logr.Discard()
+	}
+
 	tc.storeCorrelation(request)
 	defer tc.removeCorrelation(request.CorrelationId())
+
+	logger.V(traceLevel).Info("writing command to the wire", "request", request)
 	err := tc.writeCommand(request)
 	if err != nil {
 		return nil, err
 	}
+
+	_, ok := ctx.Deadline()
+	if !ok {
+		logger.Info("request does not have a timeout, consider adding a deadline to context")
+	}
 	select {
-	// TODO: remove for better timeout
-	//case <-time.After(time.Second * 20):
-	//	return nil, fmt.Errorf("timed out waiting for server response")
-	// TODO: add a case for ctx.Done()
+	case <-ctx.Done():
+		return nil, fmt.Errorf("timed out waiting for server response")
 	case r := <-tc.getCorrelationById(request.CorrelationId()).chResponse:
 		return r, nil
 	}
-}
-
-func (tc *Client) getNextCorrelation() uint32 {
-	return atomic.AddUint32(&tc.nextCorrelation, 1)
 }
 
 func (tc *Client) handleResponse(ctx context.Context, read internal.CommandRead) {
@@ -235,7 +247,11 @@ func (tc *Client) peerProperties(ctx context.Context) error {
 	}
 	log := logr.FromContextOrDiscard(ctx).WithName("peer properties")
 
-	serverPropertiesResponse, err := tc.request(internal.NewPeerPropertiesRequest())
+	serverPropertiesResponse, err := tc.request(ctx, internal.NewPeerPropertiesRequest())
+	if err != nil {
+		log.Error(err, "error in request to server")
+		return err
+	}
 	response, ok := serverPropertiesResponse.(*internal.PeerPropertiesResponse)
 	if !ok {
 		panic("could not polymorph response")
@@ -253,7 +269,7 @@ func (tc *Client) saslHandshake(ctx context.Context) error {
 		return errNilContext
 	}
 	log := logr.FromContextOrDiscard(ctx).WithName("sasl handshake")
-	saslMechanisms, err := tc.request(internal.NewSaslHandshakeRequest())
+	saslMechanisms, err := tc.request(ctx, internal.NewSaslHandshakeRequest())
 	saslMechanismResponse, ok := saslMechanisms.(*internal.SaslHandshakeResponse)
 	if !ok {
 		panic("could not polymorph response")
@@ -289,7 +305,7 @@ func (tc *Client) saslAuthenticate(ctx context.Context) error {
 				return err
 			}
 
-			_, err = tc.request(saslAuthReq)
+			_, err = tc.request(ctx, saslAuthReq)
 			if err != nil {
 				log.Error(err, "error in SASL authenticate request")
 				return err
@@ -315,7 +331,7 @@ func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 	log := logr.FromContextOrDiscard(ctx).WithName("open")
 	rabbit := tc.configuration.rabbitmqBrokers[brokerIndex]
 	openReq := internal.NewOpenRequest(rabbit.Vhost)
-	openRespCommand, err := tc.request(openReq)
+	openRespCommand, err := tc.request(ctx, openReq)
 	if err != nil {
 		log.Error(err, "error in open request")
 		return err
@@ -510,7 +526,7 @@ func (tc *Client) DeclareStream(ctx context.Context, stream string, configuratio
 	log := logr.FromContextOrDiscard(ctx).WithName("DeclareStream")
 	log.V(debugLevel).Info("starting declare stream. ", "stream", stream)
 
-	createResponse, err := tc.request(internal.NewCreateRequest(stream, configuration))
+	createResponse, err := tc.request(ctx, internal.NewCreateRequest(stream, configuration))
 	if err != nil {
 		log.Error(err, "error creating declare stream request ")
 		return err
@@ -526,7 +542,7 @@ func (tc *Client) Close(ctx context.Context) error {
 	log := logr.FromContextOrDiscard(ctx).WithName("close")
 	log.V(debugLevel).Info("starting connection close")
 
-	response, err := tc.request(internal.NewCloseRequest(internal.ResponseCodeOK, "kthxbye"))
+	response, err := tc.request(ctx, internal.NewCloseRequest(internal.ResponseCodeOK, "kthxbye"))
 	if err != nil {
 		log.Error(err, "error sending close request")
 		return err
