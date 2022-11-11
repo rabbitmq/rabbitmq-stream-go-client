@@ -113,7 +113,7 @@ var _ = Describe("Client", func() {
 		//Expect(client.DeclareStream(ctx, "steam-test", map[string]string{"some-key": "some-value"})).To(Succeed())
 	})
 
-	It("cancels requests after a timeout", Focus, func(ctx SpecContext) {
+	It("cancels requests after a timeout",  func(ctx SpecContext) {
 		conf, err := raw.NewClientConfiguration()
 		Expect(err).ToNot(HaveOccurred())
 
@@ -320,8 +320,8 @@ func fakeRabbitMQDeclareStream(fakeConn net.Conn) {
 		return Expect(v).WithOffset(1)
 	}
 
-	//expect(fakeConn.SetDeadline(time.Now().Add(time.Second))).
-	//	To(Succeed())
+	expect(fakeConn.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
 
 	serverReader := bufio.NewReader(fakeConn)
 	serverWriter := bufio.NewWriter(fakeConn)

@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -76,13 +75,22 @@ func (tc *Client) storeCorrelation(request internal.CommandWrite) {
 	tc.correlationsMap.Store(request.CorrelationId(), newCorrelation(request.CorrelationId()))
 }
 
-func (tc *Client) removeCorrelation(id uint32) {
-	tc.getCorrelationById(id).Close()
+func (tc *Client) removeCorrelation(ctx context.Context, id uint32) {
+	logger := logr.FromContextOrDiscard(ctx).WithName("correlation-map")
+	corr := tc.getCorrelationById(id)
+	if corr == nil {
+		logger.Info("correlation not found, skipping removal", "correlation-id", id)
+		return
+	}
+	corr.Close()
 	tc.correlationsMap.Delete(id)
 }
 
 func (tc *Client) getNextCorrelation() uint32 {
-	return atomic.AddUint32(&tc.nextCorrelation, 1)
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.nextCorrelation += 1
+	return tc.nextCorrelation
 }
 
 // end correlation map section
@@ -104,15 +112,13 @@ func (tc *Client) writeCommand(request internal.CommandWrite) error {
 
 // This makes an RPC-style request. We send the frame and we await for a response
 func (tc *Client) request(ctx context.Context, request internal.CommandWrite) (internal.CommandRead, error) {
-	var logger logr.Logger
-	if ctx != nil {
-		logger = logr.FromContextOrDiscard(ctx)
-	} else {
-		logger = logr.Discard()
+	if ctx == nil {
+		return nil, errNilContext
 	}
+	logger := logr.FromContextOrDiscard(ctx)
 
 	tc.storeCorrelation(request)
-	defer tc.removeCorrelation(request.CorrelationId())
+	defer tc.removeCorrelation(ctx, request.CorrelationId())
 
 	logger.V(traceLevel).Info("writing command to the wire", "request", request)
 	err := tc.writeCommand(request)
