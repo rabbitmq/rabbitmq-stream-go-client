@@ -110,10 +110,9 @@ var _ = Describe("Client", func() {
 
 		err = streamClient.DeclareStream(itCtx, "test-stream", map[string]string{"some-key": "some-value"})
 		Expect(err).To(Succeed())
-		//Expect(client.DeclareStream(ctx, "steam-test", map[string]string{"some-key": "some-value"})).To(Succeed())
 	})
 
-	It("cancels requests after a timeout",  func(ctx SpecContext) {
+	It("cancels requests after a timeout", func(ctx SpecContext) {
 		conf, err := raw.NewClientConfiguration()
 		Expect(err).ToNot(HaveOccurred())
 
@@ -132,7 +131,10 @@ var _ = Describe("Client", func() {
 					return
 				default:
 					_, err := fakeServerConn.Read(buffer)
-					if errors.Is(err, os.ErrDeadlineExceeded) {
+					if errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, io.ErrClosedPipe) {
+						// ErrClosedPipe is ok because the test can pass and leave this routine in the background.
+						// When that happens, Ginkgo.DeferCleanup closes the net.Pipe while this routine
+						// is trying to Read(), failing the suite since it expects no errors in DeferCleanup.
 						continue
 					}
 					if err != nil {

@@ -50,8 +50,8 @@ install-tools: ## Install tool dependencies for development
 ### Golang targets
 
 .PHONY: go-mod-tidy
-go-mod-tidy: ## Run 'go mod tidy' with compatibility to Go 1.17
-	$(GO) mod tidy -go=1.17
+go-mod-tidy: ## Run 'go mod tidy' with compatibility to Go 1.18
+	$(GO) mod tidy -go=1.18
 
 .PHONY: go-generate-mocks
 go-generate-mocks: | $(MOCKGEN) ## Generate Mocks for testing
@@ -59,7 +59,7 @@ go-generate-mocks: | $(MOCKGEN) ## Generate Mocks for testing
 
 ### build
 
-build: ## Install tool dependencies for development
+build: ## Just compile all
 	$(GO) build -v ./...
 
 

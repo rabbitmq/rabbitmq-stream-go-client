@@ -74,7 +74,7 @@ var _ = Describe("Unexported client functions", func() {
 		})
 	})
 
-	Context("correlation map",  func() {
+	Context("correlation map", func() {
 		var c *Client
 
 		BeforeEach(func() {
