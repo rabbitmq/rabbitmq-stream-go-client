@@ -479,7 +479,6 @@ func (tc *Client) Connect(ctx context.Context) error {
 		log.V(debugLevel).Info("starting frame listener")
 		err := tc.handleIncoming(ctx)
 		if err != nil {
-			// FIXME: handle error, possibly shutdown or reconnect
 			log.Error(err, "error handling incoming frames")
 		}
 	}(ctx)

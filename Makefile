@@ -66,7 +66,7 @@ build: ## Just compile all
 
 ### Tests
 
-GINKGO_RUN_FLAGS := -r --randomize-all -p --race
+GINKGO_RUN_FLAGS := -r --randomize-all -p --race --tags="rabbitmq.stream.test"
 
 .PHONY: tests
 tests: | $(GINKGO) ## Run unit tests. Make sure you install-tools before running this target
