@@ -177,4 +177,28 @@ func main() {
 	if err == nil {
 		saveMessageToFile("message_unicode_message", binary)
 	}
+
+	msg = amqp.NewMessage(nil)
+	msg.Properties = &amqp.MessageProperties{
+		MessageID:     nil,
+		UserID:        nil,
+		To:            "",
+		Subject:       "",
+		ReplyTo:       "",
+		CorrelationID: nil,
+	}
+	msg.ApplicationProperties = map[string]interface{}{
+		"empty":      "",
+		"long_value": 91_000_001_001,
+		"byte_value": byte(216),
+		"bool_value": true,
+		"int_value":  1,
+		"float":      1.1,
+		"double":     1.1,
+		"null":       nil,
+	}
+	binary, err = msg.MarshalBinary()
+	if err == nil {
+		saveMessageToFile("nil_and_types", binary)
+	}
 }
