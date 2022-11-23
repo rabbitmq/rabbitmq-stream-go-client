@@ -12,6 +12,28 @@ import (
 	"time"
 )
 
+const (
+	streamResponseCodeOK uint16 = iota + 1
+	streamResponseCodeStreamDoesNotExist
+	streamResponseCodeSubscriptionIdAlreadyExists
+	streamResponseCodeSubscriptionIdDoesNotExist
+	streamResponseCodeStreamAlreadyExists
+	streamResponseCodeStreamNotAvailable
+	streamResponseCodeSASLMechanismNotSupported
+	streamResponseCodeAuthFailure
+	streamResponseCodeSASLError
+	streamResponseCodeSASLChallenge
+	streamResponseCodeSASLAuthFailureLoopback
+	streamResponseCodeVirtualHostAccessFailure
+	streamResponseCodeUnknownFrame
+	streamResponseCodeFrameTooLarge
+	streamResponseCodeInternalError
+	streamResponseCodeAccessRefused
+	streamResponseCodePreconditionFailed
+	streamResponseCodePublisherDoesNotExist
+	streamResponseCodeNoOffset
+)
+
 var _ = Describe("Client", func() {
 	var (
 		fakeServerConn net.Conn
@@ -115,7 +137,7 @@ var _ = Describe("Client", func() {
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
 
-		go fakeRabbitMQ.fakeRabbitMQDeleteStream(newContextWithResponseCode(itCtx, 0x0001))
+		go fakeRabbitMQ.fakeRabbitMQDeleteStream(newContextWithResponseCode(itCtx, 0x0001), "test-stream")
 		err = streamClient.DeleteStream(itCtx, "test-stream")
 		Expect(err).To(Succeed())
 	})
@@ -130,7 +152,7 @@ var _ = Describe("Client", func() {
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
 
-		go fakeRabbitMQ.fakeRabbitMQNewPublisher(newContextWithResponseCode(itCtx, 0x0001))
+		go fakeRabbitMQ.fakeRabbitMQNewPublisher(newContextWithResponseCode(itCtx, 0x0001), 12, "myPublisherRef", "test-stream")
 		err = streamClient.DeclarePublisher(itCtx, 12, "myPublisherRef", "test-stream")
 		Expect(err).To(Succeed())
 	})
@@ -165,4 +187,58 @@ var _ = Describe("Client", func() {
 
 		Expect(streamClient.Connect(connectCtx)).To(MatchError("timed out waiting for server response"))
 	}, SpecTimeout(2*time.Second))
+
+	Context("server returns an error", func() {
+		var c *raw.ClientConfiguration
+
+		BeforeEach(func() {
+			var err error
+			c, err = raw.NewClientConfiguration()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		})
+
+		When("stream already exists", func() {
+			It("returns a 'stream already exists' error", func(ctx SpecContext) {
+				ctx2 := newContextWithResponseCode(logr.NewContext(ctx, GinkgoLogr), streamResponseCodeStreamAlreadyExists)
+
+				streamClient := raw.NewClient(fakeClientConn, c)
+				go streamClient.(*raw.Client).StartFrameListener(ctx2)
+
+				go fakeRabbitMQ.fakeRabbitMQDeclareStream(ctx2, "already-exists", common.StreamConfiguration{})
+				Expect(streamClient.DeclareStream(ctx, "already-exists", common.StreamConfiguration{})).To(MatchError("stream already exists"))
+			}, SpecTimeout(1500*time.Millisecond))
+		})
+
+		When("stream does not exist", func() {
+			It("returns 'stream does not exist' error", func(ctx SpecContext) {
+				ctx2 := newContextWithResponseCode(logr.NewContext(ctx, GinkgoLogr), streamResponseCodeStreamDoesNotExist)
+
+				streamClient := raw.NewClient(fakeClientConn, c)
+				go streamClient.(*raw.Client).StartFrameListener(ctx2)
+
+				By("deleting a non-existent stream")
+				go fakeRabbitMQ.fakeRabbitMQDeleteStream(ctx2, "does-not-exist")
+				Expect(streamClient.DeleteStream(ctx2, "does-not-exist")).To(MatchError("stream does not exist"))
+
+				By("declaring a publisher to a non-existent stream")
+				go fakeRabbitMQ.fakeRabbitMQNewPublisher(ctx2, 123, "a-publisher", "not-here")
+				Expect(streamClient.DeclarePublisher(ctx2, 123, "a-publisher", "not-here")).
+					To(MatchError("stream does not exist"))
+			}, SpecTimeout(1500*time.Millisecond))
+		})
+
+		When("authentication fails", func() {
+			It("returns 'authentication failed' error", func(ctx SpecContext) {
+				itCtx := logr.NewContext(newContextWithResponseCode(ctx, streamResponseCodeAuthFailure, "sasl-auth"), GinkgoLogr)
+				go fakeRabbitMQ.fakeRabbitMQConnectionOpen(itCtx)
+
+				streamClient := raw.NewClient(fakeClientConn, c)
+				Expect(streamClient.Connect(itCtx)).
+					To(MatchError("authentication failure"))
+				Expect(streamClient.IsOpen()).
+					Should(BeFalse(), "expected connection to be closed")
+			}, SpecTimeout(1500*time.Millisecond))
+		})
+	})
 })

@@ -266,7 +266,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQDeclareStream(ctx context.Context, na
 	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandCreate)
 }
 
-func (rmq *fakeRabbitMQServer) fakeRabbitMQDeleteStream(ctx context.Context) {
+func (rmq *fakeRabbitMQServer) fakeRabbitMQDeleteStream(ctx context.Context, name string) {
 	defer GinkgoRecover()
 	expect := func(v any, extra ...any) Assertion {
 		if extra != nil {
@@ -290,14 +290,14 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQDeleteStream(ctx context.Context) {
 
 	body := new(internal.DeleteRequest)
 	expect(body.UnmarshalBinary(buff)).To(Succeed())
-	expect(body.Stream()).To(Equal("test-stream"))
+	expect(body.Stream()).To(Equal(name))
 
 	/// there server says ok! :)
 	/// writing the response to the client
 	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandDelete)
 }
 
-func (rmq *fakeRabbitMQServer) fakeRabbitMQNewPublisher(ctx context.Context) {
+func (rmq *fakeRabbitMQServer) fakeRabbitMQNewPublisher(ctx context.Context, publisherId uint8, publisherRef string, stream string) {
 	defer GinkgoRecover()
 
 	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
@@ -316,9 +316,9 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQNewPublisher(ctx context.Context) {
 
 	body := new(internal.DeclarePublisherRequest)
 	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
-	expectOffset1(body.PublisherId()).To(BeNumerically("==", 12))
-	expectOffset1(body.Reference()).To(Equal("myPublisherRef"))
-	expectOffset1(body.Stream()).To(Equal("test-stream"))
+	expectOffset1(body.PublisherId()).To(BeNumerically("==", publisherId))
+	expectOffset1(body.Reference()).To(Equal(publisherRef))
+	expectOffset1(body.Stream()).To(Equal(stream))
 
 	/// there server says ok! :)
 	/// writing the response to the client
