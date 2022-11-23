@@ -241,11 +241,11 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return err
 				}
 				tc.handleResponse(ctx, closeResp)
-			case internal.CommandCreate:
+			case internal.CommandCreate, internal.CommandDelete:
 				createResp := new(internal.SimpleResponse)
 				err = createResp.Read(buffer)
 				if err != nil {
-					log.Error(err, "error decoding stream create")
+					log.Error(err, "error decoding simple response")
 					return err
 				}
 				tc.handleResponse(ctx, createResp)
@@ -575,6 +575,24 @@ func (tc *Client) DeclareStream(ctx context.Context, stream string, configuratio
 		return err
 	}
 	return streamErrorOrNil(createResponse.ResponseCode())
+}
+
+// DeleteStream sends a request to delete a Stream. If the error is nil, the
+// Stream was deleted successfully.
+func (tc *Client) DeleteStream(ctx context.Context, stream string) error {
+	if ctx == nil {
+		return errNilContext
+	}
+
+	log := logr.FromContextOrDiscard(ctx).WithName("DeleteStream")
+	log.V(debugLevel).Info("starting delete stream. ", "stream", stream)
+
+	deleteResponse, err := tc.request(ctx, internal.NewDeleteRequest(stream))
+	if err != nil {
+		log.Error(err, "error creating delete stream request ")
+		return err
+	}
+	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
 
 // Close gracefully shutdowns the connection to RabbitMQ. The Client will send a

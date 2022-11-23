@@ -15,7 +15,7 @@ func main() {
 	logrusLog := logrus.New()
 	logrusLog.Level = logrus.DebugLevel
 	log := logrusr.New(logrusLog).WithName("rabbitmq-stream")
-
+	stream := "test-stream"
 	config, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost:5552")
 	if err != nil {
 		panic(err)
@@ -31,7 +31,12 @@ func main() {
 
 	log.Info("connection status", "open", streamClient.IsOpen())
 
-	err = streamClient.DeclareStream(ctx, "test-stream", map[string]string{"name": "test-stream"})
+	err = streamClient.DeclareStream(ctx, stream, map[string]string{"name": "test-stream"})
+	if err != nil {
+		return
+	}
+
+	err = streamClient.DeleteStream(ctx, stream)
 	if err != nil {
 		return
 	}

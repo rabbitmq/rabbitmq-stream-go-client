@@ -5,6 +5,7 @@ import "context"
 type Clienter interface {
 	Connect(ctx context.Context) error
 	DeclareStream(ctx context.Context, stream string, configuration StreamConfiguration) error
+	DeleteStream(ctx context.Context, stream string) error
 	IsOpen() bool
 	Close(ctx context.Context) error
 }

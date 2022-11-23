@@ -24,6 +24,7 @@ type CommandWrite interface {
 // command IDs
 const (
 	CommandCreate           uint16 = 0x000d // 13
+	CommandDelete           uint16 = 0x000e // 14
 	CommandPeerProperties   uint16 = 0x0011 // 17
 	CommandSaslHandshake    uint16 = 0x0012 // 18
 	CommandSaslAuthenticate uint16 = 0x0013 // 19

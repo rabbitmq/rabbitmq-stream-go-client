@@ -94,7 +94,6 @@ var _ = Describe("Client", func() {
 
 		conf, err := raw.NewClientConfiguration()
 		Expect(err).ToNot(HaveOccurred())
-
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
@@ -102,6 +101,21 @@ var _ = Describe("Client", func() {
 		go fakeRabbitMQ.fakeRabbitMQDeclareStream(newContextWithResponseCode(itCtx, 0x0001))
 
 		err = streamClient.DeclareStream(itCtx, "test-stream", map[string]string{"some-key": "some-value"})
+		Expect(err).To(Succeed())
+	})
+
+	It("Delete a stream", func(ctx SpecContext) {
+		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
+		defer cancel()
+		conf, err := raw.NewClientConfiguration()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(itCtx)
+
+		go fakeRabbitMQ.fakeRabbitMQDeleteStream(newContextWithResponseCode(itCtx, 0x0001))
+		err = streamClient.DeleteStream(itCtx, "test-stream")
 		Expect(err).To(Succeed())
 	})
 

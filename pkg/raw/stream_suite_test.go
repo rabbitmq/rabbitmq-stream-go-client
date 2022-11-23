@@ -263,7 +263,46 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQDeclareStream(ctx context.Context) {
 
 	responseHeader := internal.NewHeader(10, internal.EncodeResponseCode(internal.CommandCreate), 1)
 	responseCode := responseCodeFromContext(ctx)
-	responseBody := internal.NewCreateResponseWith(1, responseCode)
+	responseBody := internal.NewCreateResponseWith(rmq.correlationIdSeq.next(), responseCode)
+	Expect(responseHeader.Write(serverWriter)).WithOffset(1).To(BeNumerically("==", 8))
+	responseBodyBinary, err := responseBody.MarshalBinary()
+	expect(err).ToNot(HaveOccurred())
+	Expect(serverWriter.Write(responseBodyBinary)).WithOffset(1).To(BeNumerically("==", 6))
+	expect(serverWriter.Flush()).To(Succeed())
+}
+
+func (rmq *fakeRabbitMQServer) fakeRabbitMQDeleteStream(ctx context.Context) {
+	defer GinkgoRecover()
+	expect := func(v interface{}) Assertion {
+		return Expect(v).WithOffset(1)
+	}
+	expect(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+
+	serverReader := bufio.NewReader(rmq.connection)
+
+	buffLen := 14 + len("test-stream")
+	body := new(internal.DeleteRequest)
+	buff := make([]byte, buffLen)
+	full, err := io.ReadFull(serverReader, buff)
+	expect(err).ToNot(HaveOccurred())
+	expect(full).To(BeNumerically("==", buffLen))
+
+	header := new(internal.Header)
+	expect(header.Read(bufio.NewReader(bytes.NewReader(buff)))).To(Succeed())
+	expect(header.Command()).To(BeNumerically("==", 0x000e))
+	expect(header.Version()).To(BeNumerically("==", 1))
+
+	expect(body.UnmarshalBinary(buff[8:])).To(Succeed())
+	expect(body.Stream()).To(Equal("test-stream"))
+
+	/// there server says ok! :)
+	/// writing the response to the client
+	serverWriter := bufio.NewWriter(rmq.connection)
+
+	responseHeader := internal.NewHeader(10, internal.EncodeResponseCode(internal.CommandDelete), 1)
+	responseCode := responseCodeFromContext(ctx)
+	responseBody := internal.NewCreateResponseWith(rmq.correlationIdSeq.next(), responseCode)
 	Expect(responseHeader.Write(serverWriter)).WithOffset(1).To(BeNumerically("==", 8))
 	responseBodyBinary, err := responseBody.MarshalBinary()
 	expect(err).ToNot(HaveOccurred())
