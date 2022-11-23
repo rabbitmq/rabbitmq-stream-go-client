@@ -36,6 +36,8 @@ func main() {
 		return
 	}
 
+	err = streamClient.DeclarePublisher(ctx, 1, "test-publisher", stream)
+
 	err = streamClient.DeleteStream(ctx, stream)
 	if err != nil {
 		return

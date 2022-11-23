@@ -23,6 +23,7 @@ type CommandWrite interface {
 
 // command IDs
 const (
+	CommandDeclarePublisher uint16 = 0x0001 // 1
 	CommandCreate           uint16 = 0x000d // 13
 	CommandDelete           uint16 = 0x000e // 14
 	CommandPeerProperties   uint16 = 0x0011 // 17
@@ -35,7 +36,11 @@ const (
 
 // Stream protocol field sizes
 const (
+	streamProtocolHeader = streamProtocolKeySizeBytes +
+		streamProtocolVersionSizeBytes +
+		streamProtocolCorrelationIdSizeBytes
 	streamProtocolKeySizeBytes                  = 2
+	streamProtocolKeySizeUint8                  = 1
 	streamProtocolVersionSizeBytes              = 2
 	streamProtocolCorrelationIdSizeBytes        = 4
 	streamProtocolStringLenSizeBytes            = 2

@@ -310,6 +310,53 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQDeleteStream(ctx context.Context) {
 	expect(serverWriter.Flush()).To(Succeed())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQNewPublisher(ctx context.Context) {
+	defer GinkgoRecover()
+	expect := func(v interface{}) Assertion {
+		return Expect(v).WithOffset(1)
+	}
+	expect(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+
+	serverReader := bufio.NewReader(rmq.connection)
+
+	buffLen := 12 +
+		1 + // publisher id
+		2 + // len ref
+		len("myPublisherRef") + // ref
+		2 + // len test-stream
+		len("test-stream") // test-stream
+
+	body := new(internal.DeclarePublisherRequest)
+	buff := make([]byte, buffLen)
+	full, err := io.ReadFull(serverReader, buff)
+	expect(err).ToNot(HaveOccurred())
+	expect(full).To(BeNumerically("==", buffLen))
+
+	header := new(internal.Header)
+	expect(header.Read(bufio.NewReader(bytes.NewReader(buff)))).To(Succeed())
+	expect(header.Command()).To(BeNumerically("==", 0x0001))
+	expect(header.Version()).To(BeNumerically("==", 1))
+
+	expect(body.UnmarshalBinary(buff[8:])).To(Succeed())
+	expect(body.PublisherId()).To(BeNumerically("==", 12))
+	expect(body.Reference()).To(Equal("myPublisherRef"))
+	expect(body.Stream()).To(Equal("test-stream"))
+
+	/// there server says ok! :)
+	/// writing the response to the client
+	serverWriter := bufio.NewWriter(rmq.connection)
+
+	responseHeader := internal.NewHeader(10, internal.EncodeResponseCode(internal.CommandDeclarePublisher), 1)
+	responseCode := responseCodeFromContext(ctx)
+	responseBody := internal.NewCreateResponseWith(rmq.correlationIdSeq.next(), responseCode)
+	Expect(responseHeader.Write(serverWriter)).WithOffset(1).To(BeNumerically("==", 8))
+	responseBodyBinary, err := responseBody.MarshalBinary()
+	expect(err).ToNot(HaveOccurred())
+	Expect(serverWriter.Write(responseBodyBinary)).WithOffset(1).To(BeNumerically("==", 6))
+	expect(serverWriter.Flush()).To(Succeed())
+}
+
 func newContextWithResponseCode(ctx context.Context, respCode uint16) context.Context {
 	return context.WithValue(ctx, "rabbitmq-stream.response-code", respCode)
 }

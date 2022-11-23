@@ -119,6 +119,21 @@ var _ = Describe("Client", func() {
 		Expect(err).To(Succeed())
 	})
 
+	It("Declare new Publisher", func(ctx SpecContext) {
+		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
+		defer cancel()
+		conf, err := raw.NewClientConfiguration()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(itCtx)
+
+		go fakeRabbitMQ.fakeRabbitMQNewPublisher(newContextWithResponseCode(itCtx, 0x0001))
+		err = streamClient.DeclarePublisher(itCtx, 12, "myPublisherRef", "test-stream")
+		Expect(err).To(Succeed())
+	})
+
 	It("cancels requests after a timeout", func(ctx SpecContext) {
 		conf, err := raw.NewClientConfiguration()
 		Expect(err).ToNot(HaveOccurred())

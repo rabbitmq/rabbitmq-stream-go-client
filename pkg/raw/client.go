@@ -241,7 +241,8 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return err
 				}
 				tc.handleResponse(ctx, closeResp)
-			case internal.CommandCreate, internal.CommandDelete:
+			case internal.CommandCreate, internal.CommandDelete,
+				internal.CommandDeclarePublisher:
 				createResp := new(internal.SimpleResponse)
 				err = createResp.Read(buffer)
 				if err != nil {
@@ -590,6 +591,28 @@ func (tc *Client) DeleteStream(ctx context.Context, stream string) error {
 	deleteResponse, err := tc.request(ctx, internal.NewDeleteRequest(stream))
 	if err != nil {
 		log.Error(err, "error creating delete stream request ")
+		return err
+	}
+	return streamErrorOrNil(deleteResponse.ResponseCode())
+}
+
+// DeclarePublisher sends a request to create a new Publisher. If the error is
+// nil, the Publisher was created successfully.
+// publisherId is the ID of the publisher to create. The publisherId is not tracked in this level of the client.
+// The publisherId is used to identify the publisher in the server. Per connection
+// publisherReference identify the publisher. it can be empty. With the publisherReference is possible to query the last published offset.
+// stream is the name of the stream to publish to.
+func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publisherReference string, stream string) error {
+	if ctx == nil {
+		return errNilContext
+	}
+
+	log := logr.FromContextOrDiscard(ctx).WithName("DeclarePublisher")
+	log.V(debugLevel).Info("starting declare publisher. ", "publisherId", publisherId, "publisherReference", publisherReference, "stream", stream)
+
+	deleteResponse, err := tc.request(ctx, internal.NewDeclarePublisherRequest(publisherId, publisherReference, stream))
+	if err != nil {
+		log.Error(err, "error creating declare publisher request ")
 		return err
 	}
 	return streamErrorOrNil(deleteResponse.ResponseCode())
