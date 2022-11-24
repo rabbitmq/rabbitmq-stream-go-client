@@ -325,6 +325,32 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQNewPublisher(ctx context.Context) {
 	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandDeclarePublisher)
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQDeletePublisher(ctx context.Context, publisherId uint8) {
+	defer GinkgoRecover()
+
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+
+	serverReader := bufio.NewReader(rmq.connection)
+
+	header := new(internal.Header)
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x0006))
+	expectOffset1(header.Version()).To(BeNumerically("==", 1))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
+
+	body := new(internal.DeletePublisherRequest)
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	expectOffset1(body.PublisherId()).To(BeNumerically("==", publisherId))
+
+	/// there server says ok! :)
+	/// writing the response to the client
+	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandDeletePublisher)
+}
+
 func newContextWithResponseCode(ctx context.Context, respCode uint16, suffix ...string) context.Context {
 	var key = "rabbitmq-stream.response-code"
 	if suffix != nil {
