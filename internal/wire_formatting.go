@@ -88,7 +88,6 @@ func readAny(readerStream *bufio.Reader, arg interface{}) error {
 		if err != nil {
 			return err
 		}
-		//*arg.(*map[string]string) = make(map[string]string, mapLen)
 		myMap := make(map[string]string, mapLen)
 		for i := uint32(0); i < mapLen; i++ {
 			k := readString(readerStream)

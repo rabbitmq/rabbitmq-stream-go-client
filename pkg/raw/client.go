@@ -109,7 +109,7 @@ func (tc *Client) request(ctx context.Context, request internal.SyncCommandWrite
 	if ctx == nil {
 		return nil, errNilContext
 	}
-	logger := logr.FromContextOrDiscard(ctx)
+	logger := logr.FromContextOrDiscard(ctx).WithName("request")
 
 	tc.storeCorrelation(request)
 	defer tc.removeCorrelation(ctx, request.CorrelationId())
@@ -117,6 +117,7 @@ func (tc *Client) request(ctx context.Context, request internal.SyncCommandWrite
 	logger.V(traceLevel).Info("writing sync command to the wire", "request", request)
 	err := internal.WriteCommand(request, tc.connection.GetWriter())
 	if err != nil {
+		logger.Error(err, "error writing command to the wire")
 		return nil, err
 	}
 
@@ -646,7 +647,7 @@ func (tc *Client) Close(ctx context.Context) error {
 	log := logr.FromContextOrDiscard(ctx).WithName("close")
 	log.V(debugLevel).Info("starting connection close")
 
-	response, err := tc.request(ctx, internal.NewCloseRequest(internal.ResponseCodeOK, "kthxbye"))
+	response, err := tc.request(ctx, internal.NewCloseRequest(common.ResponseCodeOK, "kthxbye"))
 	if err != nil {
 		log.Error(err, "error sending close request")
 		return err

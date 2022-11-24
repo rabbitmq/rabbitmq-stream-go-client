@@ -2,11 +2,11 @@ package raw_test
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"io"
 	"net"
 	"os"
@@ -39,8 +39,7 @@ type fakeRabbitMQServer struct {
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionOpen(ctx context.Context) {
 	defer GinkgoRecover()
-
-	Expect(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
 		WithOffset(1).
 		To(Succeed())
 
@@ -50,17 +49,17 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionOpen(ctx context.Context) {
 	// peer properties
 	fourByteBuff := make([]byte, 4)
 	n, err := io.ReadFull(serverConnReader, fourByteBuff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
-	Expect(n).WithOffset(1).To(BeNumerically("==", 4))
+	expectOffset1(err).ToNot(HaveOccurred())
+	expectOffset1(n).To(BeNumerically("==", 4))
 
 	var frameLen uint32
 	frameLen = binary.BigEndian.Uint32(fourByteBuff)
-	Expect(frameLen).WithOffset(1).To(BeNumerically(">", 0))
+	expectOffset1(frameLen).To(BeNumerically(">", 0))
 	// TODO: perhaps decode bytes and assert on header + body?
 
 	buff := make([]byte, frameLen)
 	_, err = io.ReadFull(serverConnReader, buff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
 	// peer properties response
 	responseHeader := internal.NewHeader(
@@ -69,27 +68,32 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionOpen(ctx context.Context) {
 		1,
 	)
 	_, err = responseHeader.Write(serverConnWriter)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
+	var responseCode uint16
+	responseCode = responseCodeFromContext(ctx, "peer-properties")
 	propertiesResponse := internal.NewPeerPropertiesResponseWith(
 		rmq.correlationIdSeq.next(),
-		0x0001,
+		responseCode,
 		map[string]string{"product": "mock-rabbitmq"},
 	)
 	binaryFrame, err := propertiesResponse.MarshalBinary()
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 	_, err = serverConnWriter.Write(binaryFrame)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
-	Expect(serverConnWriter.Flush()).WithOffset(1).To(Succeed())
+	expectOffset1(err).ToNot(HaveOccurred())
+	expectOffset1(serverConnWriter.Flush()).To(Succeed())
+	if responseCode != 0x01 {
+		return
+	}
 
 	// sasl handshake
 	_, err = io.ReadFull(serverConnReader, fourByteBuff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 	frameLen = binary.BigEndian.Uint32(fourByteBuff)
 
 	buff = make([]byte, frameLen)
 	_, err = io.ReadFull(serverConnReader, buff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
 	// sasl handshake response
 	responseHeader = internal.NewHeader(
@@ -98,44 +102,52 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionOpen(ctx context.Context) {
 		1,
 	)
 	_, err = responseHeader.Write(serverConnWriter)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
+	responseCode = responseCodeFromContext(ctx, "sasl-handshake")
 	saslHandShakeResp := internal.NewSaslHandshakeResponseWith(
 		rmq.correlationIdSeq.next(),
-		0x01,
+		responseCode,
 		[]string{"FOOBAR", "PLAIN"},
 	)
 	binaryFrame, err = saslHandShakeResp.MarshalBinary()
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 	_, err = serverConnWriter.Write(binaryFrame)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
-	Expect(serverConnWriter.Flush()).WithOffset(1).To(Succeed())
+	expectOffset1(err).ToNot(HaveOccurred())
+	expectOffset1(serverConnWriter.Flush()).To(Succeed())
+	if responseCode != 0x01 {
+		return
+	}
 
 	// sasl authenticate
 	_, err = io.ReadFull(serverConnReader, fourByteBuff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 	frameLen = binary.BigEndian.Uint32(fourByteBuff)
 
 	buff = make([]byte, frameLen)
 	_, err = io.ReadFull(serverConnReader, buff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
 	responseHeader = internal.NewHeader(
 		10,
 		internal.EncodeResponseCode(internal.CommandSaslAuthenticate),
 		1)
 	_, err = responseHeader.Write(serverConnWriter)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
+	responseCode = responseCodeFromContext(ctx, "sasl-auth")
 	saslAuthResp := internal.NewSaslAuthenticateResponseWith(
 		rmq.correlationIdSeq.next(),
-		0x01,
+		responseCode,
 		nil)
 	binaryFrame, err = saslAuthResp.MarshalBinary()
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 	_, err = serverConnWriter.Write(binaryFrame)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
-	Expect(serverConnWriter.Flush()).WithOffset(1).To(Succeed())
+	expectOffset1(err).ToNot(HaveOccurred())
+	expectOffset1(serverConnWriter.Flush()).To(Succeed())
+	if responseCode != 0x01 {
+		return
+	}
 
 	// tune
 	responseHeader = internal.NewHeader(
@@ -143,30 +155,30 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionOpen(ctx context.Context) {
 		internal.CommandTune,
 		1)
 	_, err = responseHeader.Write(serverConnWriter)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
 	tuneReq := internal.NewTuneResponse(8192, 60)
 	_, err = tuneReq.Write(serverConnWriter)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
-	Expect(serverConnWriter.Flush()).WithOffset(1).To(Succeed())
+	expectOffset1(err).ToNot(HaveOccurred())
+	expectOffset1(serverConnWriter.Flush()).WithOffset(1).To(Succeed())
 
 	// tune from client
 	_, err = io.ReadFull(serverConnReader, fourByteBuff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 	frameLen = binary.BigEndian.Uint32(fourByteBuff)
 
 	buff = make([]byte, frameLen)
 	_, err = io.ReadFull(serverConnReader, buff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
 	// open
 	_, err = io.ReadFull(serverConnReader, fourByteBuff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 	frameLen = binary.BigEndian.Uint32(fourByteBuff)
 
 	buff = make([]byte, frameLen)
 	_, err = io.ReadFull(serverConnReader, buff)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
 	// open response
 	responseHeader = internal.NewHeader(
@@ -175,44 +187,42 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionOpen(ctx context.Context) {
 		1,
 	)
 	_, err = responseHeader.Write(serverConnWriter)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 
+	responseCode = responseCodeFromContext(ctx, "open")
 	openResp := internal.NewOpenResponseWith(
 		rmq.correlationIdSeq.next(),
-		0x01,
+		responseCode,
 		map[string]string{"welcome": "friend"},
 	)
 	binaryFrame, err = openResp.MarshalBinary()
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 	_, err = serverConnWriter.Write(binaryFrame)
-	Expect(err).WithOffset(1).ToNot(HaveOccurred())
-	Expect(serverConnWriter.Flush()).WithOffset(1).To(Succeed())
+	expectOffset1(err).ToNot(HaveOccurred())
+	expectOffset1(serverConnWriter.Flush()).To(Succeed())
 }
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionClose(ctx context.Context) {
 	defer GinkgoRecover()
-	expect := func(v interface{}) Assertion {
-		return Expect(v).WithOffset(1)
-	}
-	expect(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
 		To(Succeed())
 
 	rw := bufio.NewReadWriter(bufio.NewReader(rmq.connection), bufio.NewWriter(rmq.connection))
 
 	// close request
-	buff := make([]byte, 4)
-	n, err := io.ReadFull(rw.Reader, buff)
-	expect(err).ToNot(HaveOccurred())
-	expect(n).To(BeNumerically("==", 4))
+	headerRequest := new(internal.Header)
+	expectOffset1(headerRequest.Read(rw.Reader)).To(Succeed())
+	expectOffset1(headerRequest.Command()).To(BeNumerically("==", 0x0016))
+	expectOffset1(headerRequest.Version()).To(BeNumerically("==", 1))
 
-	var frameLen uint32
-	frameLen = binary.BigEndian.Uint32(buff)
-	buff = make([]byte, frameLen)
-	n, err = io.ReadFull(rw.Reader, buff)
-	expect(err).ToNot(HaveOccurred())
+	buff := make([]byte, headerRequest.Length()-4)
+	expectOffset1(io.ReadFull(rw.Reader, buff)).
+		To(BeNumerically("==", headerRequest.Length()-4))
 
-	expectedBytes := 12 + len("kthxbye")
-	expect(n).To(BeNumerically("==", expectedBytes))
+	bodyRequest := new(internal.CloseRequest)
+	expectOffset1(bodyRequest.UnmarshalBinary(buff)).To(Succeed())
+	expectOffset1(bodyRequest.ClosingCode()).To(BeNumerically("==", 1))
+	expectOffset1(bodyRequest.ClosingReason()).To(Equal("kthxbye"))
 
 	// close response
 	headerResponse := internal.NewHeader(
@@ -220,60 +230,48 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionClose(ctx context.Context) 
 		internal.EncodeResponseCode(internal.CommandClose),
 		1,
 	)
-	_, err = headerResponse.Write(rw.Writer)
-	expect(err).ToNot(HaveOccurred())
+	expectOffset1(headerResponse.Write(rw.Writer)).To(BeNumerically("==", 8))
 
 	response := internal.NewCloseResponse(rmq.correlationIdSeq.next(), responseCodeFromContext(ctx))
 	binaryResponse, err := response.MarshalBinary()
-	expect(err).ToNot(HaveOccurred())
+	expectOffset1(err).ToNot(HaveOccurred())
 	_, err = rw.Write(binaryResponse)
-	expect(err).ToNot(HaveOccurred())
-	expect(rw.Flush()).To(Succeed())
+	expectOffset1(err).ToNot(HaveOccurred())
+	expectOffset1(rw.Flush()).To(Succeed())
 }
 
-func (rmq *fakeRabbitMQServer) fakeRabbitMQDeclareStream(ctx context.Context) {
+func (rmq *fakeRabbitMQServer) fakeRabbitMQDeclareStream(ctx context.Context, name string, args common.StreamConfiguration) {
 	defer GinkgoRecover()
-	expect := func(v interface{}) Assertion {
-		return Expect(v).WithOffset(1)
-	}
-	expect(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
 		To(Succeed())
 
 	serverReader := bufio.NewReader(rmq.connection)
 
-	buffLen := 14 + len("test-stream") + 4 + 2 + len("some-key") + 2 + len("some-value")
-	body := new(internal.CreateRequest)
-	buff := make([]byte, buffLen)
-	full, err := io.ReadFull(serverReader, buff)
-	expect(err).ToNot(HaveOccurred())
-	expect(full).To(BeNumerically("==", buffLen))
-
 	header := new(internal.Header)
-	expect(header.Read(bufio.NewReader(bytes.NewReader(buff)))).To(Succeed())
-	expect(header.Command()).To(BeNumerically("==", 0x000d))
-	expect(header.Version()).To(BeNumerically("==", 1))
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x000d))
+	expectOffset1(header.Version()).To(BeNumerically("==", 1))
 
-	expect(body.UnmarshalBinary(buff[8:])).To(Succeed())
-	expect(body.Stream()).To(Equal("test-stream"))
-	expect(body.Arguments()).To(HaveKeyWithValue("some-key", "some-value"))
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
+
+	body := new(internal.CreateRequest)
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	expectOffset1(body.Stream()).To(Equal(name))
+	expectOffset1(body.Arguments()).To(Equal(args))
 
 	/// there server says ok! :)
 	/// writing the response to the client
-	serverWriter := bufio.NewWriter(rmq.connection)
-
-	responseHeader := internal.NewHeader(10, internal.EncodeResponseCode(internal.CommandCreate), 1)
-	responseCode := responseCodeFromContext(ctx)
-	responseBody := internal.NewCreateResponseWith(rmq.correlationIdSeq.next(), responseCode)
-	Expect(responseHeader.Write(serverWriter)).WithOffset(1).To(BeNumerically("==", 8))
-	responseBodyBinary, err := responseBody.MarshalBinary()
-	expect(err).ToNot(HaveOccurred())
-	Expect(serverWriter.Write(responseBodyBinary)).WithOffset(1).To(BeNumerically("==", 6))
-	expect(serverWriter.Flush()).To(Succeed())
+	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandCreate)
 }
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQDeleteStream(ctx context.Context) {
 	defer GinkgoRecover()
-	expect := func(v interface{}) Assertion {
+	expect := func(v any, extra ...any) Assertion {
+		if extra != nil {
+			return Expect(v, extra...).WithOffset(1)
+		}
 		return Expect(v).WithOffset(1)
 	}
 	expect(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
@@ -281,93 +279,86 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQDeleteStream(ctx context.Context) {
 
 	serverReader := bufio.NewReader(rmq.connection)
 
-	buffLen := 14 + len("test-stream")
-	body := new(internal.DeleteRequest)
-	buff := make([]byte, buffLen)
-	full, err := io.ReadFull(serverReader, buff)
-	expect(err).ToNot(HaveOccurred())
-	expect(full).To(BeNumerically("==", buffLen))
-
 	header := new(internal.Header)
-	expect(header.Read(bufio.NewReader(bytes.NewReader(buff)))).To(Succeed())
+	expect(header.Read(serverReader)).To(Succeed())
 	expect(header.Command()).To(BeNumerically("==", 0x000e))
 	expect(header.Version()).To(BeNumerically("==", 1))
 
-	expect(body.UnmarshalBinary(buff[8:])).To(Succeed())
+	buff := make([]byte, header.Length()-4)
+	expect(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
+
+	body := new(internal.DeleteRequest)
+	expect(body.UnmarshalBinary(buff)).To(Succeed())
 	expect(body.Stream()).To(Equal("test-stream"))
 
 	/// there server says ok! :)
 	/// writing the response to the client
-	serverWriter := bufio.NewWriter(rmq.connection)
-
-	responseHeader := internal.NewHeader(10, internal.EncodeResponseCode(internal.CommandDelete), 1)
-	responseCode := responseCodeFromContext(ctx)
-	responseBody := internal.NewCreateResponseWith(rmq.correlationIdSeq.next(), responseCode)
-	Expect(responseHeader.Write(serverWriter)).WithOffset(1).To(BeNumerically("==", 8))
-	responseBodyBinary, err := responseBody.MarshalBinary()
-	expect(err).ToNot(HaveOccurred())
-	Expect(serverWriter.Write(responseBodyBinary)).WithOffset(1).To(BeNumerically("==", 6))
-	expect(serverWriter.Flush()).To(Succeed())
+	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandDelete)
 }
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQNewPublisher(ctx context.Context) {
 	defer GinkgoRecover()
-	expect := func(v interface{}) Assertion {
-		return Expect(v).WithOffset(1)
-	}
-	expect(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
 		To(Succeed())
 
 	serverReader := bufio.NewReader(rmq.connection)
 
-	buffLen := 12 +
-		1 + // publisher id
-		2 + // len ref
-		len("myPublisherRef") + // ref
-		2 + // len test-stream
-		len("test-stream") // test-stream
+	header := new(internal.Header)
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x0001))
+	expectOffset1(header.Version()).To(BeNumerically("==", 1))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
 
 	body := new(internal.DeclarePublisherRequest)
-	buff := make([]byte, buffLen)
-	full, err := io.ReadFull(serverReader, buff)
-	expect(err).ToNot(HaveOccurred())
-	expect(full).To(BeNumerically("==", buffLen))
-
-	header := new(internal.Header)
-	expect(header.Read(bufio.NewReader(bytes.NewReader(buff)))).To(Succeed())
-	expect(header.Command()).To(BeNumerically("==", 0x0001))
-	expect(header.Version()).To(BeNumerically("==", 1))
-
-	expect(body.UnmarshalBinary(buff[8:])).To(Succeed())
-	expect(body.PublisherId()).To(BeNumerically("==", 12))
-	expect(body.Reference()).To(Equal("myPublisherRef"))
-	expect(body.Stream()).To(Equal("test-stream"))
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	expectOffset1(body.PublisherId()).To(BeNumerically("==", 12))
+	expectOffset1(body.Reference()).To(Equal("myPublisherRef"))
+	expectOffset1(body.Stream()).To(Equal("test-stream"))
 
 	/// there server says ok! :)
 	/// writing the response to the client
-	serverWriter := bufio.NewWriter(rmq.connection)
-
-	responseHeader := internal.NewHeader(10, internal.EncodeResponseCode(internal.CommandDeclarePublisher), 1)
-	responseCode := responseCodeFromContext(ctx)
-	responseBody := internal.NewCreateResponseWith(rmq.correlationIdSeq.next(), responseCode)
-	Expect(responseHeader.Write(serverWriter)).WithOffset(1).To(BeNumerically("==", 8))
-	responseBodyBinary, err := responseBody.MarshalBinary()
-	expect(err).ToNot(HaveOccurred())
-	Expect(serverWriter.Write(responseBodyBinary)).WithOffset(1).To(BeNumerically("==", 6))
-	expect(serverWriter.Flush()).To(Succeed())
+	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandDeclarePublisher)
 }
 
-func newContextWithResponseCode(ctx context.Context, respCode uint16) context.Context {
-	return context.WithValue(ctx, "rabbitmq-stream.response-code", respCode)
+func newContextWithResponseCode(ctx context.Context, respCode uint16, suffix ...string) context.Context {
+	var key = "rabbitmq-stream.response-code"
+	if suffix != nil {
+		key += suffix[0]
+	}
+	return context.WithValue(ctx, key, respCode)
 }
 
-func responseCodeFromContext(ctx context.Context) (responseCode uint16) {
-	v := ctx.Value("rabbitmq-stream.response-code")
+func responseCodeFromContext(ctx context.Context, suffix ...string) (responseCode uint16) {
+	var key = "rabbitmq-stream.response-code"
+	if suffix != nil {
+		key += suffix[0]
+	}
+	v := ctx.Value(key)
 	if v == nil {
-		return internal.ResponseCodeOK
+		return common.ResponseCodeOK
 	}
 	responseCode = v.(uint16)
 	return
+}
+
+func writeResponse(ctx context.Context, rmq *fakeRabbitMQServer, serverWriter *bufio.Writer, commandId uint16) {
+	responseHeader := internal.NewHeader(10, internal.EncodeResponseCode(commandId), 1)
+	responseBody := internal.NewSimpleResponseWith(rmq.correlationIdSeq.next(), responseCodeFromContext(ctx))
+	Expect(responseHeader.Write(serverWriter)).WithOffset(2).To(BeNumerically("==", 8))
+
+	responseBodyBinary, err := responseBody.MarshalBinary()
+	Expect(err).WithOffset(2).ToNot(HaveOccurred())
+	Expect(serverWriter.Write(responseBodyBinary)).WithOffset(2).To(BeNumerically("==", 6))
+	Expect(serverWriter.Flush()).WithOffset(2).To(Succeed())
+}
+
+func expectOffset1(v any, extra ...any) Assertion {
+	return Expect(v, extra...).WithOffset(1)
 }
 
 func bufferDrainer(ctx context.Context, fakeServerConn net.Conn) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/go-logr/logr"
 	"github.com/golang/mock/gomock"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -98,9 +99,9 @@ var _ = Describe("Client", func() {
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
 
-		go fakeRabbitMQ.fakeRabbitMQDeclareStream(newContextWithResponseCode(itCtx, 0x0001))
+		go fakeRabbitMQ.fakeRabbitMQDeclareStream(newContextWithResponseCode(itCtx, 0x0001), "test-stream", common.StreamConfiguration{"some-key": "some-value"})
 
-		err = streamClient.DeclareStream(itCtx, "test-stream", map[string]string{"some-key": "some-value"})
+		err = streamClient.DeclareStream(itCtx, "test-stream", common.StreamConfiguration{"some-key": "some-value"})
 		Expect(err).To(Succeed())
 	})
 

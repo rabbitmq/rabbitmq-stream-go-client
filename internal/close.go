@@ -72,6 +72,11 @@ func (c *CloseRequest) Version() int16 {
 	return Version1
 }
 
+func (c *CloseRequest) UnmarshalBinary(data []byte) error {
+	rd := bufio.NewReader(bytes.NewReader(data))
+	return readMany(rd, &c.correlationId, &c.closingCode, &c.closingReason)
+}
+
 type CloseResponse struct {
 	correlationId uint32
 	responseCode  uint16

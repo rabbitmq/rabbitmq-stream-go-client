@@ -19,6 +19,12 @@ func NewHeader(length int, command uint16, version int16) *Header {
 	return &Header{length: length, command: command, version: version}
 }
 
+// Length returns the size required to read this header (excluding the length
+// filed), plus the command content/body.
+func (h *Header) Length() int {
+	return h.length
+}
+
 func (h *Header) Command() uint16 {
 	return h.command
 }

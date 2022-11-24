@@ -31,7 +31,7 @@ func (c *SimpleResponse) MarshalBinary() (data []byte, err error) {
 	return
 }
 
-func NewCreateResponseWith(id uint32, responseCode uint16) *SimpleResponse {
+func NewSimpleResponseWith(id uint32, responseCode uint16) *SimpleResponse {
 	return &SimpleResponse{id, responseCode}
 }
 

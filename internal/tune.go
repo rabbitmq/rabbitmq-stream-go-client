@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 )
 
 // TuneRequest is initiated by the server. It's the few commands where the request is initiated from the server
@@ -22,7 +23,7 @@ func (t *TuneRequest) HeartbeatPeriod() uint32 {
 // ResponseCode is always OK for Tune frames. Tune frames do not have a response code. This function is
 // implemented to conform with the interface
 func (t *TuneRequest) ResponseCode() uint16 {
-	return ResponseCodeOK
+	return common.ResponseCodeOK
 }
 
 func (t *TuneRequest) Read(reader *bufio.Reader) error {

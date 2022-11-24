@@ -95,26 +95,3 @@ const (
 const (
 	Version1 = int16(1)
 )
-
-// Stream protocol response codes
-const (
-	ResponseCodeOK                          uint16 = 0x01
-	ResponseCodeStreamDoesNotExist          uint16 = 0x02
-	ResponseCodeSubscriptionIdAlreadyExists uint16 = 0x03
-	ResponseCodeSubscriptionIdDoesNotExist  uint16 = 0x04
-	ResponseCodeStreamAlreadyExists         uint16 = 0x05
-	ResponseCodeStreamNotAvailable          uint16 = 0x06
-	ResponseCodeSASLMechanismNotSupported   uint16 = 0x07
-	ResponseCodeAuthFailure                 uint16 = 0x08
-	ResponseCodeSASLError                   uint16 = 0x09
-	ResponseCodeSASLChallenge               uint16 = 0x0a
-	ResponseCodeSASLAuthFailureLoopback     uint16 = 0x0b
-	ResponseCodeVirtualHostAccessFailure    uint16 = 0x0c
-	ResponseCodeUnknownFrame                uint16 = 0x0d
-	ResponseCodeFrameTooLarge               uint16 = 0x0e
-	ResponseCodeInternalError               uint16 = 0x0f
-	ResponseCodeAccessRefused               uint16 = 0x10
-	ResponseCodePreconditionFailed          uint16 = 0x11
-	ResponseCodePublisherDoesNotExist       uint16 = 0x12
-	ResponseCodeNoOffset                    uint16 = 0x13
-)
