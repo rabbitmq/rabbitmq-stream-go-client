@@ -8,7 +8,7 @@ import (
 )
 
 // CloseRequest can be initiated from the Client or from the Server. This struct must implement both internal.CommandRead
-// and internal.CommandWrite
+// and internal.SyncCommandWrite
 type CloseRequest struct {
 	correlationId uint32
 	closingCode   uint16

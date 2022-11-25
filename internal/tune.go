@@ -40,7 +40,7 @@ func (t *TuneRequest) CorrelationId() uint32 {
 }
 
 // TuneResponse is sent by the client. It's the few commands where the server sends a request and expects a response.
-// In this case, the response implements the internal.CommandWrite interface, as opposed to other responses.
+// In this case, the response implements the internal.SyncCommandWrite interface, as opposed to other responses.
 type TuneResponse struct {
 	TuneRequest
 }
@@ -68,7 +68,7 @@ func (t *TuneResponse) SizeNeeded() int {
 }
 
 // SetCorrelationId is a no-op. Tune frames do not have a correlation ID. This function is a placeholder to conform to
-// the internal.CommandWrite interface.
+// the internal.SyncCommandWrite interface.
 func (t *TuneResponse) SetCorrelationId(correlationId uint32) {}
 
 func (t *TuneResponse) Version() int16 {

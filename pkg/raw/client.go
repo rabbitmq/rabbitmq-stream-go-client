@@ -76,7 +76,7 @@ func (tc *Client) getCorrelationById(id uint32) *correlation {
 	return nil
 }
 
-func (tc *Client) storeCorrelation(request internal.CommandWrite) {
+func (tc *Client) storeCorrelation(request internal.SyncCommandWrite) {
 	request.SetCorrelationId(tc.getNextCorrelation())
 	tc.correlationsMap.Store(request.CorrelationId(), newCorrelation(request.CorrelationId()))
 }
@@ -101,24 +101,9 @@ func (tc *Client) getNextCorrelation() uint32 {
 
 // end correlation map section
 
-func (tc *Client) writeCommand(request internal.CommandWrite) error {
-	hWritten, err := internal.NewHeaderRequest(request).Write(tc.connection.GetWriter())
-	if err != nil {
-		return err
-	}
-	bWritten, err := request.Write(tc.connection.GetWriter())
-	if err != nil {
-		return err
-	}
-	if (bWritten + hWritten) != (request.SizeNeeded() + 4) {
-		panic("Write Command: Not all bytes written")
-	}
-	return tc.connection.GetWriter().Flush()
-}
-
 // This makes an RPC-style request. We send the frame, and we await for a response. The context is passed down from the
 // public functions. Context should have a deadline/timeout to avoid deadlocks on a non-responding RabbitMQ server.
-func (tc *Client) request(ctx context.Context, request internal.CommandWrite) (internal.CommandRead, error) {
+func (tc *Client) request(ctx context.Context, request internal.SyncCommandWrite) (internal.CommandRead, error) {
 	if ctx == nil {
 		return nil, errNilContext
 	}
@@ -128,7 +113,7 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) (i
 	defer tc.removeCorrelation(ctx, request.CorrelationId())
 
 	logger.V(traceLevel).Info("writing command to the wire", "request", request)
-	err := tc.writeCommand(request)
+	err := internal.WriteCommand(request, tc.connection.GetWriter())
 	if err != nil {
 		return nil, err
 	}
@@ -527,7 +512,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 			desiredHeartbeat,
 		)
 		tuneResp := internal.NewTuneResponse(uint32(desiredFrameSize), uint32(desiredHeartbeat))
-		err = tc.writeCommand(tuneResp)
+		err = internal.WriteCommand(tuneResp, tc.connection.GetWriter())
 		if err != nil {
 			logger.Error(err, "error in Tune")
 			tuneCancel()

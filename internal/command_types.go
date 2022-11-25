@@ -10,15 +10,55 @@ type CommandRead interface {
 	ResponseCode() uint16
 }
 
+// CommandWrite is the interface that wraps the Write method.
+// The interface is implemented by all commands that are sent to the server.
+// and that have no responses. Fire and forget style
+// Command like: Publish and Store Offset.
 type CommandWrite interface {
 	Write(writer *bufio.Writer) (int, error)
 	Key() uint16
 	// SizeNeeded must return the size required to encode this CommandWrite
 	// plus the size of the Header. The size of the Header is always 4 bytes
 	SizeNeeded() int
+	Version() int16
+}
+
+// SyncCommandWrite is the interface that wraps the Write method.
+// The interface is implemented by all commands that are sent to the server.
+// and that have responses in RPC style.
+// Command like: Create Stream, Delete Stream, Declare Publisher, etc.
+// SetCorrelationId CorrelationId is used to match the response with the request.
+type SyncCommandWrite interface {
+	Write(writer *bufio.Writer) (int, error)
+	Key() uint16
+	// SizeNeeded must return the size required to encode this SyncCommandWrite
+	// plus the size of the Header. The size of the Header is always 4 bytes
+	SizeNeeded() int
 	SetCorrelationId(id uint32)
 	CorrelationId() uint32
 	Version() int16
+}
+
+// WriteCommand sends the Commands to the server.
+// The commands are sent in the following order:
+// 1. Header
+// 2. Command
+// 3. Flush
+// The flush is required to make sure that the commands are sent to the server.
+// WriteCommand doesn't care about the response.
+func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
+	hWritten, err := NewHeaderRequest(request).Write(writer)
+	if err != nil {
+		return err
+	}
+	bWritten, err := request.Write(writer)
+	if err != nil {
+		return err
+	}
+	if (bWritten + hWritten) != (request.SizeNeeded() + 4) {
+		panic("Write Command: Not all bytes written")
+	}
+	return writer.Flush()
 }
 
 // command IDs
