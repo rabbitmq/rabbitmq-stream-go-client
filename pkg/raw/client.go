@@ -1,6 +1,8 @@
 package raw
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -112,7 +114,7 @@ func (tc *Client) request(ctx context.Context, request internal.SyncCommandWrite
 	tc.storeCorrelation(request)
 	defer tc.removeCorrelation(ctx, request.CorrelationId())
 
-	logger.V(traceLevel).Info("writing command to the wire", "request", request)
+	logger.V(traceLevel).Info("writing sync command to the wire", "request", request)
 	err := internal.WriteCommand(request, tc.connection.GetWriter())
 	if err != nil {
 		return nil, err
@@ -128,6 +130,18 @@ func (tc *Client) request(ctx context.Context, request internal.SyncCommandWrite
 	case r := <-tc.getCorrelationById(request.CorrelationId()).chResponse:
 		return r, nil
 	}
+}
+
+// This makes an async-style request. We send the frame, and we don't wait for a response. The context is passed down from the
+// public functions. Context should have a deadline/timeout to avoid deadlocks on a non-responding RabbitMQ server.
+// `request` is the frame to send to the server that does not expect a response.
+func (tc *Client) requestFireAndForget(ctx context.Context, request internal.CommandWrite) error {
+	if ctx == nil {
+		return errNilContext
+	}
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.V(traceLevel).Info("writing command to the wire", "request", request)
+	return internal.WriteCommand(request, tc.connection.GetWriter())
 }
 
 func (tc *Client) handleResponse(ctx context.Context, read internal.CommandRead) {
@@ -236,7 +250,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				}
 				tc.handleResponse(ctx, createResp)
 			default:
-				log.Info("frame not implemented", "command ID", header.Command())
+				//log.Info("frame not implemented", "command ID", header.Command())
 			}
 		}
 	}
@@ -601,6 +615,23 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 		return err
 	}
 	return streamErrorOrNil(deleteResponse.ResponseCode())
+}
+
+func (tc *Client) Send(ctx context.Context, publisherId uint8, messages []common.StreamerMessage) error {
+	buff := new(bytes.Buffer)
+	writer := bufio.NewWriter(buff)
+
+	for _, msg := range messages {
+		_, err := msg.Write(writer)
+		if err != nil {
+			return err
+		}
+	}
+	err := writer.Flush()
+	if err != nil {
+		return err
+	}
+	return tc.requestFireAndForget(ctx, internal.NewPublishRequest(publisherId, uint32(len(messages)), buff.Bytes()))
 }
 
 // Close gracefully shutdowns the connection to RabbitMQ. The Client will send a

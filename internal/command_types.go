@@ -13,7 +13,7 @@ type CommandRead interface {
 // CommandWrite is the interface that wraps the Write method.
 // The interface is implemented by all commands that are sent to the server.
 // and that have no responses. Fire and forget style
-// Command like: Publish and Store Offset.
+// Command like: PublishRequest and Store Offset.
 type CommandWrite interface {
 	Write(writer *bufio.Writer) (int, error)
 	Key() uint16
@@ -29,14 +29,9 @@ type CommandWrite interface {
 // Command like: Create Stream, Delete Stream, Declare Publisher, etc.
 // SetCorrelationId CorrelationId is used to match the response with the request.
 type SyncCommandWrite interface {
-	Write(writer *bufio.Writer) (int, error)
-	Key() uint16
-	// SizeNeeded must return the size required to encode this SyncCommandWrite
-	// plus the size of the Header. The size of the Header is always 4 bytes
-	SizeNeeded() int
+	CommandWrite // Embedding the CommandWrite interface
 	SetCorrelationId(id uint32)
 	CorrelationId() uint32
-	Version() int16
 }
 
 // WriteCommand sends the Commands to the server.
@@ -64,6 +59,7 @@ func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
 // command IDs
 const (
 	CommandDeclarePublisher uint16 = 0x0001 // 1
+	CommandPublish          uint16 = 0x0002 // 2
 	CommandCreate           uint16 = 0x000d // 13
 	CommandDelete           uint16 = 0x000e // 14
 	CommandPeerProperties   uint16 = 0x0011 // 17
@@ -81,6 +77,7 @@ const (
 		streamProtocolCorrelationIdSizeBytes
 	streamProtocolKeySizeBytes                  = 2
 	streamProtocolKeySizeUint8                  = 1
+	streamProtocolKeySizeUint32                 = 4
 	streamProtocolVersionSizeBytes              = 2
 	streamProtocolCorrelationIdSizeBytes        = 4
 	streamProtocolStringLenSizeBytes            = 2
