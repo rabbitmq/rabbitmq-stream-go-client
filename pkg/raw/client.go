@@ -1,15 +1,12 @@
 package raw
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"math"
 	"net"
 	"strconv"
@@ -79,7 +76,7 @@ func (tc *Client) getCorrelationById(id uint32) *correlation {
 	return nil
 }
 
-func (tc *Client) storeCorrelation(request internal.SyncCommandWrite) {
+func (tc *Client) storeCorrelation(request internal.CommandWrite) {
 	request.SetCorrelationId(tc.getNextCorrelation())
 	tc.correlationsMap.Store(request.CorrelationId(), newCorrelation(request.CorrelationId()))
 }
@@ -104,26 +101,47 @@ func (tc *Client) getNextCorrelation() uint32 {
 
 // end correlation map section
 
+func (tc *Client) writeCommand(request internal.CommandWrite) error {
+	hWritten, err := internal.NewHeaderRequest(request).Write(tc.connection.GetWriter())
+	if err != nil {
+		return err
+	}
+	bWritten, err := request.Write(tc.connection.GetWriter())
+	if err != nil {
+		return err
+	}
+	if (bWritten + hWritten) != (request.SizeNeeded() + 4) {
+		panic("Write Command: Not all bytes written")
+	}
+	return tc.connection.GetWriter().Flush()
+}
+
 // This makes an RPC-style request. We send the frame, and we await for a response. The context is passed down from the
 // public functions. Context should have a deadline/timeout to avoid deadlocks on a non-responding RabbitMQ server.
-func (tc *Client) request(ctx context.Context, request internal.SyncCommandWrite) (internal.CommandRead, error) {
+func (tc *Client) request(ctx context.Context, request internal.CommandWrite) (internal.CommandRead, error) {
 	if ctx == nil {
 		return nil, errNilContext
 	}
+
+	select {
+	default:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
 	logger := logr.FromContextOrDiscard(ctx).WithName("request")
 
 	tc.storeCorrelation(request)
 	defer tc.removeCorrelation(ctx, request.CorrelationId())
 
-	logger.V(traceLevel).Info("writing sync command to the wire", "request", request)
-	err := internal.WriteCommand(request, tc.connection.GetWriter())
+	logger.V(traceLevel).Info("writing command to the wire", "request", request)
+	err := tc.writeCommand(request)
 	if err != nil {
 		logger.Error(err, "error writing command to the wire")
 		return nil, err
 	}
 
-	_, ok := ctx.Deadline()
-	if !ok {
+	if _, ok := ctx.Deadline(); !ok {
 		logger.Info("request does not have a timeout, consider adding a deadline to context")
 	}
 	select {
@@ -132,18 +150,6 @@ func (tc *Client) request(ctx context.Context, request internal.SyncCommandWrite
 	case r := <-tc.getCorrelationById(request.CorrelationId()).chResponse:
 		return r, nil
 	}
-}
-
-// This makes an async-style request. We send the frame, and we don't wait for a response. The context is passed down from the
-// public functions. Context should have a deadline/timeout to avoid deadlocks on a non-responding RabbitMQ server.
-// `request` is the frame to send to the server that does not expect a response.
-func (tc *Client) requestFireAndForget(ctx context.Context, request internal.CommandWrite) error {
-	if ctx == nil {
-		return errNilContext
-	}
-	logger := logr.FromContextOrDiscard(ctx)
-	logger.V(traceLevel).Info("writing command to the wire", "request", request)
-	return internal.WriteCommand(request, tc.connection.GetWriter())
 }
 
 func (tc *Client) handleResponse(ctx context.Context, read internal.CommandRead) {
@@ -183,6 +189,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			var header = new(internal.Header)
 			// TODO: set an I/O deadline to avoid deadlock on I/O
 			// 		renew the deadline at the beginning of each iteration
+			// 		clear the deadline after reading the header
 			err := header.Read(buffer)
 			if err != nil {
 				// TODO: some errors may be recoverable. We only need to return if reconnection
@@ -243,7 +250,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				}
 				tc.handleResponse(ctx, closeResp)
 			case internal.CommandCreate, internal.CommandDelete,
-				internal.CommandDeclarePublisher:
+				internal.CommandDeclarePublisher, internal.CommandDeletePublisher:
 				createResp := new(internal.SimpleResponse)
 				err = createResp.Read(buffer)
 				if err != nil {
@@ -251,8 +258,6 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return err
 				}
 				tc.handleResponse(ctx, createResp)
-			case internal.CommandPublishConfirm:
-				// TODO: IMPLEMENT IT
 			default:
 				log.Info("frame not implemented", "command ID", header.Command())
 			}
@@ -265,6 +270,7 @@ func (tc *Client) peerProperties(ctx context.Context) error {
 		return errNilContext
 	}
 	log := logr.FromContextOrDiscard(ctx).WithName("peer properties")
+	log.V(traceLevel).Info("starting peer properties")
 
 	serverPropertiesResponse, err := tc.request(ctx, internal.NewPeerPropertiesRequest())
 	if err != nil {
@@ -280,7 +286,7 @@ func (tc *Client) peerProperties(ctx context.Context) error {
 		"properties",
 		response.ServerProperties,
 	)
-	return err
+	return streamErrorOrNil(response.ResponseCode())
 }
 
 func (tc *Client) saslHandshake(ctx context.Context) error {
@@ -288,6 +294,8 @@ func (tc *Client) saslHandshake(ctx context.Context) error {
 		return errNilContext
 	}
 	log := logr.FromContextOrDiscard(ctx).WithName("sasl handshake")
+	log.V(traceLevel).Info("starting SASL handshake")
+
 	saslMechanisms, err := tc.request(ctx, internal.NewSaslHandshakeRequest())
 	saslMechanismResponse, ok := saslMechanisms.(*internal.SaslHandshakeResponse)
 	if !ok {
@@ -302,14 +310,16 @@ func (tc *Client) saslHandshake(ctx context.Context) error {
 		return err
 	}
 
-	// fixme: check response code
 	tc.configuration.authMechanism = saslMechanismResponse.Mechanisms
-	return nil
+	return streamErrorOrNil(saslMechanismResponse.ResponseCode())
 }
 
 func (tc *Client) saslAuthenticate(ctx context.Context) error {
+	// TODO: perhaps we could merge saslHandshake and saslAuthenticate in a single function?
 	// FIXME: make this pluggable to allow different authentication backends
 	log := logr.FromContextOrDiscard(ctx).WithName("sasl authenticate")
+	log.V(traceLevel).Info("starting SASL authenticate")
+
 	for _, mechanism := range tc.configuration.authMechanism {
 		if strings.EqualFold(mechanism, "PLAIN") {
 			log.V(debugLevel).Info("found PLAIN mechanism as supported")
@@ -325,20 +335,12 @@ func (tc *Client) saslAuthenticate(ctx context.Context) error {
 				return err
 			}
 
-			_, err = tc.request(ctx, saslAuthReq)
+			response, err := tc.request(ctx, saslAuthReq)
 			if err != nil {
-				log.Error(err, "error in SASL authenticate request")
+				// no need to log here. the caller logs the error
 				return err
 			}
-			//if saslAuthResp.ResponseCode() != internal.ResponseCodeOK {
-			//	errCode, ok := responseCodeToError[saslAuthResp.ResponseCode()]
-			//	if !ok {
-			//		// we should never enter this
-			//		return fmt.Errorf("unknown error code %d", saslAuthResp.ResponseCode())
-			//	}
-			//	return fmt.Errorf("error code %d: %w", saslAuthResp.ResponseCode(), errCode)
-			//}
-			return nil
+			return streamErrorOrNil(response.ResponseCode())
 		}
 	}
 	return errors.New("server does not support PLAIN SASL mechanism")
@@ -349,6 +351,8 @@ func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 		return errNilContext
 	}
 	log := logr.FromContextOrDiscard(ctx).WithName("open")
+	log.V(traceLevel).Info("starting open")
+
 	rabbit := tc.configuration.rabbitmqBrokers[brokerIndex]
 	openReq := internal.NewOpenRequest(rabbit.Vhost)
 	openRespCommand, err := tc.request(ctx, openReq)
@@ -368,7 +372,7 @@ func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 	)
 	tc.connectionProperties = openResp.ConnectionProperties()
 
-	return nil
+	return streamErrorOrNil(openResp.ResponseCode())
 }
 
 // public API
@@ -480,14 +484,21 @@ func (tc *Client) Connect(ctx context.Context) error {
 
 	go func(ctx context.Context) {
 		log := logr.FromContextOrDiscard(ctx).WithName("frame-listener")
-		log.V(debugLevel).Info("starting frame listener")
+		log.V(traceLevel).Info("starting frame listener")
+
+		select {
+		default:
+		case <-ctx.Done():
+			log.Info("context cancelled", "err", ctx.Err())
+			return
+		}
+
 		err := tc.handleIncoming(ctx)
 		if err != nil {
 			log.Error(err, "error handling incoming frames")
 		}
 	}(ctx)
 
-	// TODO: stop handshake if context is Done()
 	err := tc.peerProperties(ctx)
 	if err != nil {
 		// FIXME: wrap error in Connect-specific error
@@ -530,7 +541,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 			desiredHeartbeat,
 		)
 		tuneResp := internal.NewTuneResponse(uint32(desiredFrameSize), uint32(desiredHeartbeat))
-		err = internal.WriteCommand(tuneResp, tc.connection.GetWriter())
+		err = tc.writeCommand(tuneResp)
 		if err != nil {
 			logger.Error(err, "error in Tune")
 			tuneCancel()
@@ -565,7 +576,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 
 // DeclareStream sends a request to create a new Stream. If the error is nil, the
 // Stream was created successfully, and it is ready to use.
-func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration constants.StreamConfiguration) error {
+func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration common.StreamConfiguration) error {
 	if ctx == nil {
 		return errNilContext
 	}
@@ -575,7 +586,7 @@ func (tc *Client) DeclareStream(ctx context.Context, stream string, configuratio
 
 	createResponse, err := tc.request(ctx, internal.NewCreateRequest(stream, configuration))
 	if err != nil {
-		log.Error(err, "error creating declare stream request ")
+		log.Error(err, "error declaring stream", "stream", stream, "stream-args", configuration)
 		return err
 	}
 	return streamErrorOrNil(createResponse.ResponseCode())
@@ -593,7 +604,7 @@ func (tc *Client) DeleteStream(ctx context.Context, stream string) error {
 
 	deleteResponse, err := tc.request(ctx, internal.NewDeleteRequest(stream))
 	if err != nil {
-		log.Error(err, "error creating delete stream request ")
+		log.Error(err, "error deleting stream", "stream", stream)
 		return err
 	}
 	return streamErrorOrNil(deleteResponse.ResponseCode())
@@ -615,26 +626,31 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 
 	deleteResponse, err := tc.request(ctx, internal.NewDeclarePublisherRequest(publisherId, publisherReference, stream))
 	if err != nil {
-		log.Error(err, "error creating declare publisher request ")
+		log.Error(err, "error declaring publisher", "publisherId", publisherId, "publisherReference", publisherReference, "stream", stream)
 		return err
 	}
 	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
 
-func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessages []common.PublishingMessager) error {
-	buff := new(bytes.Buffer)
-	writer := bufio.NewWriter(buff)
-	for _, msg := range publishingMessages {
-		_, err := msg.Write(writer)
-		if err != nil {
-			return err
-		}
+// DeletePublisher sends a request to delete a Publisher. If the error is nil,
+// the Publisher was deleted successfully.
+// publisherId is the ID of the publisher to delete.
+// publisherId is not tracked in this level of the client.
+func (tc *Client) DeletePublisher(ctx context.Context, publisherId uint8) error {
+	if ctx == nil {
+		return errNilContext
 	}
-	err := writer.Flush()
+
+	log := logr.FromContextOrDiscard(ctx).WithName("DeletePublisher")
+	log.V(debugLevel).Info("starting delete publisher. ", "publisherId", publisherId)
+
+	deleteResponse, err := tc.request(ctx, internal.NewDeletePublisherRequest(publisherId))
 	if err != nil {
+		log.Error(err, "error creating delete publisher request ", "publisherId", publisherId)
 		return err
 	}
-	return tc.requestFireAndForget(ctx, internal.NewPublishRequest(publisherId, uint32(len(publishingMessages)), buff.Bytes()))
+	return streamErrorOrNil(deleteResponse.ResponseCode())
+
 }
 
 // Close gracefully shutdowns the connection to RabbitMQ. The Client will send a
@@ -649,7 +665,7 @@ func (tc *Client) Close(ctx context.Context) error {
 	log := logr.FromContextOrDiscard(ctx).WithName("close")
 	log.V(debugLevel).Info("starting connection close")
 
-	response, err := tc.request(ctx, internal.NewCloseRequest(constants.ResponseCodeOK, "kthxbye"))
+	response, err := tc.request(ctx, internal.NewCloseRequest(common.ResponseCodeOK, "kthxbye"))
 	if err != nil {
 		log.Error(err, "error sending close request")
 		return err

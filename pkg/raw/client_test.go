@@ -173,6 +173,9 @@ var _ = Describe("Client", func() {
 	})
 
 	It("cancels requests after a timeout", func(ctx SpecContext) {
+		// This test does not start a fake to mimic rabbitmq responses. By not starting a
+		// fake rabbitmq, we simulate "rabbit not responding" The expectation is to
+		// receive a timeout error
 		conf, err := raw.NewClientConfiguration()
 		Expect(err).ToNot(HaveOccurred())
 
@@ -240,5 +243,35 @@ var _ = Describe("Client", func() {
 					Should(BeFalse(), "expected connection to be closed")
 			}, SpecTimeout(1500*time.Millisecond))
 		})
+	})
+
+	When("the context is cancelled",  func() {
+		var client common.Clienter
+
+		BeforeEach(func() {
+			conf, err := raw.NewClientConfiguration()
+			Expect(err).ToNot(HaveOccurred())
+
+			client = raw.NewClient(fakeClientConn, conf)
+		})
+
+		It("does not start any work", func(ctx SpecContext) {
+			ctx2, cancel := context.WithCancel(ctx)
+			cancel()
+
+			By("not blocking in connect")
+			Expect(client.Connect(ctx2)).To(MatchError("context canceled"))
+
+			By("not blocking in stream declaration")
+			Expect(client.DeclareStream(ctx2, "not-created", common.StreamConfiguration{})).
+				To(MatchError("context canceled"))
+
+			By("not blocking on stream deletion")
+			Expect(client.DeleteStream(ctx2, "who-dat")).To(MatchError("context canceled"))
+
+			By("not blocking on declare publisher")
+			Expect(client.DeclarePublisher(ctx2, 123, "a-publisher", "some-stream")).
+				To(MatchError("context canceled"))
+		}, SpecTimeout(500*time.Millisecond))
 	})
 })
