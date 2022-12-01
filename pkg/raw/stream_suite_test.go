@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"io"
 	"net"
 	"os"
@@ -240,7 +239,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionClose(ctx context.Context) 
 	expectOffset1(rw.Flush()).To(Succeed())
 }
 
-func (rmq *fakeRabbitMQServer) fakeRabbitMQDeclareStream(ctx context.Context, name string, args common.StreamConfiguration) {
+func (rmq *fakeRabbitMQServer) fakeRabbitMQDeclareStream(ctx context.Context, name string, args costants.StreamConfiguration) {
 	defer GinkgoRecover()
 	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
 		To(Succeed())
@@ -366,7 +365,7 @@ func responseCodeFromContext(ctx context.Context, suffix ...string) (responseCod
 	}
 	v := ctx.Value(key)
 	if v == nil {
-		return common.ResponseCodeOK
+		return costants.ResponseCodeOK
 	}
 	responseCode = v.(uint16)
 	return

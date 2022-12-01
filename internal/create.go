@@ -3,16 +3,16 @@ package internal
 import (
 	"bufio"
 	"bytes"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 )
 
 type CreateRequest struct {
 	correlationId uint32
 	stream        string
-	arguments     common.StreamConfiguration
+	arguments     constants.StreamConfiguration
 }
 
-func (c *CreateRequest) Arguments() common.StreamConfiguration {
+func (c *CreateRequest) Arguments() constants.StreamConfiguration {
 	return c.arguments
 }
 

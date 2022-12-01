@@ -33,21 +33,30 @@ func main() {
 	log.Info("connection status", "open", streamClient.IsOpen())
 
 	err = streamClient.DeclareStream(ctx, stream, map[string]string{"name": "test-stream"})
-	if err != nil {
-		return
+	if err != nil && err.Error() != "stream already exists" {
+		log.Error(err, "error in declaring stream")
+		panic(err)
 	}
 
 	err = streamClient.DeclarePublisher(ctx, 1, "test-publisher", stream)
 	if err != nil {
+		log.Error(err, "error in declaring publisher")
 		panic(err)
 	}
-	var fakeMessages []common.StreamerMessage
+
+	var fakeMessages []common.PublishingMessager
 	for i := 0; i < 100; i++ {
-		fakeMessages = append(fakeMessages, NewFakeMessage(uint64(i), []byte(fmt.Sprintf("message %d", i))))
+		fakeMessages = append(fakeMessages,
+			raw.NewPublishingMessage(uint64(i), NewFakeMessage([]byte(fmt.Sprintf("message %d", i)))))
 	}
 
 	err = streamClient.Send(ctx, 1, fakeMessages)
 
+	err = streamClient.DeletePublisher(ctx, 1)
+	if err != nil {
+		log.Error(err, "error in deleting publisher")
+		panic(err)
+	}
 	fmt.Println("Press any key to stop ")
 	reader := bufio.NewReader(os.Stdin)
 	_, _ = reader.ReadString('\n')
@@ -66,19 +75,12 @@ func main() {
 }
 
 type FakeMessage struct {
-	publishingId uint64
-	body         []byte
+	body []byte
 }
 
 func (f *FakeMessage) Write(writer *bufio.Writer) (int, error) {
 	written := 0
-	err := binary.Write(writer, binary.BigEndian, f.publishingId)
-	if err != nil {
-		panic(err)
-	}
-	written += binary.Size(f.publishingId)
-
-	err = binary.Write(writer, binary.BigEndian, uint32(len(f.body)))
+	err := binary.Write(writer, binary.BigEndian, uint32(len(f.body)))
 	if err != nil {
 		panic(err)
 	}
@@ -89,16 +91,7 @@ func (f *FakeMessage) Write(writer *bufio.Writer) (int, error) {
 		panic(err)
 	}
 	written += binary.Size(f.body)
-
 	return written, nil
-}
-
-func (f *FakeMessage) SetPublishingId(publishingId uint64) {
-	f.publishingId = publishingId
-}
-
-func (f *FakeMessage) GetPublishingId() uint64 {
-	return f.publishingId
 }
 
 func (f *FakeMessage) SetBody(body []byte) {
@@ -109,6 +102,6 @@ func (f *FakeMessage) GetBody() []byte {
 	return f.body
 }
 
-func NewFakeMessage(publishingId uint64, body []byte) *FakeMessage {
-	return &FakeMessage{publishingId: publishingId, body: body}
+func NewFakeMessage(body []byte) *FakeMessage {
+	return &FakeMessage{body: body}
 }

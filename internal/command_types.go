@@ -60,6 +60,8 @@ func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
 const (
 	CommandDeclarePublisher uint16 = 0x0001 // 1
 	CommandPublish          uint16 = 0x0002 // 2
+	CommandPublishConfirm   uint16 = 0x0003 // 3
+	CommandDeletePublisher  uint16 = 0x0006 // 6
 	CommandCreate           uint16 = 0x000d // 13
 	CommandDelete           uint16 = 0x000e // 14
 	CommandPeerProperties   uint16 = 0x0011 // 17

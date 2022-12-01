@@ -9,6 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"math"
 	"net"
 	"strconv"
@@ -250,8 +251,10 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return err
 				}
 				tc.handleResponse(ctx, createResp)
+			case internal.CommandPublishConfirm:
+				// TODO: IMPLEMENT IT
 			default:
-				//log.Info("frame not implemented", "command ID", header.Command())
+				log.Info("frame not implemented", "command ID", header.Command())
 			}
 		}
 	}
@@ -562,7 +565,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 
 // DeclareStream sends a request to create a new Stream. If the error is nil, the
 // Stream was created successfully, and it is ready to use.
-func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration common.StreamConfiguration) error {
+func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration constants.StreamConfiguration) error {
 	if ctx == nil {
 		return errNilContext
 	}
@@ -618,11 +621,10 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
 
-func (tc *Client) Send(ctx context.Context, publisherId uint8, messages []common.StreamerMessage) error {
+func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessages []common.PublishingMessager) error {
 	buff := new(bytes.Buffer)
 	writer := bufio.NewWriter(buff)
-
-	for _, msg := range messages {
+	for _, msg := range publishingMessages {
 		_, err := msg.Write(writer)
 		if err != nil {
 			return err
@@ -632,7 +634,7 @@ func (tc *Client) Send(ctx context.Context, publisherId uint8, messages []common
 	if err != nil {
 		return err
 	}
-	return tc.requestFireAndForget(ctx, internal.NewPublishRequest(publisherId, uint32(len(messages)), buff.Bytes()))
+	return tc.requestFireAndForget(ctx, internal.NewPublishRequest(publisherId, uint32(len(publishingMessages)), buff.Bytes()))
 }
 
 // Close gracefully shutdowns the connection to RabbitMQ. The Client will send a
@@ -647,7 +649,7 @@ func (tc *Client) Close(ctx context.Context) error {
 	log := logr.FromContextOrDiscard(ctx).WithName("close")
 	log.V(debugLevel).Info("starting connection close")
 
-	response, err := tc.request(ctx, internal.NewCloseRequest(common.ResponseCodeOK, "kthxbye"))
+	response, err := tc.request(ctx, internal.NewCloseRequest(constants.ResponseCodeOK, "kthxbye"))
 	if err != nil {
 		log.Error(err, "error sending close request")
 		return err

@@ -104,6 +104,9 @@ func readAny(readerStream *bufio.Reader, arg interface{}) error {
 	}
 	return nil
 }
+func WriteMany(writer *bufio.Writer, args ...interface{}) (int, error) {
+	return writeMany(writer, args...)
+}
 
 func writeMany(writer *bufio.Writer, args ...interface{}) (int, error) {
 	var written int
