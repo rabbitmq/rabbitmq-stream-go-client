@@ -3,6 +3,7 @@ package internal
 import (
 	"bufio"
 	"bytes"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -54,7 +55,7 @@ var _ = Describe("Create", func() {
 			// we simulate a message aggregation
 			// that can be done by the client
 			// First loop to aggregate the messages
-			var fakeMessages []costants.StreamerMessage
+			var fakeMessages []common.StreamerMessage
 			fakeMessages = append(fakeMessages, NewFakeMessage(17, []byte("foo")))
 			fakeMessages = append(fakeMessages, NewFakeMessage(21, []byte("wine")))
 			fakeMessages = append(fakeMessages, NewFakeMessage(23, []byte("beer")))
