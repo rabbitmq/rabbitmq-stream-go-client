@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/go-logr/logr"
 	"github.com/golang/mock/gomock"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
@@ -208,8 +209,8 @@ var _ = Describe("Client", func() {
 				streamClient := raw.NewClient(fakeClientConn, c)
 				go streamClient.(*raw.Client).StartFrameListener(ctx2)
 
-				go fakeRabbitMQ.fakeRabbitMQDeclareStream(ctx2, "already-exists", common.StreamConfiguration{})
-				Expect(streamClient.DeclareStream(ctx, "already-exists", common.StreamConfiguration{})).To(MatchError("stream already exists"))
+				go fakeRabbitMQ.fakeRabbitMQDeclareStream(ctx2, "already-exists", constants.StreamConfiguration{})
+				Expect(streamClient.DeclareStream(ctx, "already-exists", constants.StreamConfiguration{})).To(MatchError("stream already exists"))
 			}, SpecTimeout(1500*time.Millisecond))
 		})
 
@@ -245,7 +246,7 @@ var _ = Describe("Client", func() {
 		})
 	})
 
-	When("the context is cancelled",  func() {
+	When("the context is cancelled", func() {
 		var client common.Clienter
 
 		BeforeEach(func() {
@@ -263,7 +264,7 @@ var _ = Describe("Client", func() {
 			Expect(client.Connect(ctx2)).To(MatchError("context canceled"))
 
 			By("not blocking in stream declaration")
-			Expect(client.DeclareStream(ctx2, "not-created", common.StreamConfiguration{})).
+			Expect(client.DeclareStream(ctx2, "not-created", constants.StreamConfiguration{})).
 				To(MatchError("context canceled"))
 
 			By("not blocking on stream deletion")
