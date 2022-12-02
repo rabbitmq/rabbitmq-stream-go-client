@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
+	"io"
 	"math"
 	"net"
 	"strconv"
@@ -191,14 +192,17 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			// 		renew the deadline at the beginning of each iteration
 			// 		clear the deadline after reading the header
 			err := header.Read(buffer)
+			if errors.Is(err, io.ErrClosedPipe) {
+				return nil
+			}
 			if err != nil {
 				// TODO: some errors may be recoverable. We only need to return if reconnection
 				// 	is needed
 				log.Error(err, "error reading header for incoming frame")
 				return err
 			}
-			switch internal.ExtractCommandCode(header.Command()) {
-			case internal.CommandPeerProperties:
+			switch header.Command() {
+			case internal.CommandPeerPropertiesResponse:
 				peerPropResponse := internal.NewPeerPropertiesResponse()
 				err = peerPropResponse.Read(buffer)
 				if err != nil {
@@ -206,7 +210,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return err
 				}
 				tc.handleResponse(ctx, peerPropResponse)
-			case internal.CommandSaslHandshake:
+			case internal.CommandSaslHandshakeResponse:
 				saslMechanismsResponse := internal.NewSaslHandshakeResponse()
 				err = saslMechanismsResponse.Read(buffer)
 				if err != nil {
@@ -214,7 +218,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return err
 				}
 				tc.handleResponse(ctx, saslMechanismsResponse)
-			case internal.CommandSaslAuthenticate:
+			case internal.CommandSaslAuthenticateResponse:
 				saslAuthResp := new(internal.SaslAuthenticateResponse)
 				err = saslAuthResp.Read(buffer)
 				if err != nil {
@@ -230,7 +234,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return err
 				}
 				tc.frameBodyListener <- tuneReq
-			case internal.CommandOpen:
+			case internal.CommandOpenResponse:
 				openResp := new(internal.OpenResponse)
 				err = openResp.Read(buffer)
 				if err != nil {
@@ -239,18 +243,32 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				}
 				tc.handleResponse(ctx, openResp)
 			case internal.CommandClose:
-				// FIXME: we may receive the request from the server
-				// 		in such case, we have to start the shutdown process
-				// 		we should stop decoding they key ID
-				closeResp := new(internal.CloseResponse)
-				err = closeResp.Read(buffer)
+				// server closed the connection
+				closeReq := new(internal.CloseRequest)
+				err = closeReq.Read(buffer)
 				if err != nil {
-					log.Error(err, "error decoding close")
+					log.Error(err, "error decoding close request")
 					return err
 				}
-				tc.handleResponse(ctx, closeResp)
-			case internal.CommandCreate, internal.CommandDelete,
-				internal.CommandDeclarePublisher, internal.CommandDeletePublisher:
+
+				log.Info("server requested connection close", "close-reason", closeReq.ClosingReason())
+				err = tc.handleClose(ctx, closeReq)
+				if err != nil {
+					log.Error(err, "error sending close response")
+					// we do not return here because we must execute the shutdown process and close the socket
+				}
+
+				err = tc.shutdown()
+				if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+					log.Error(err, "error in shutdown")
+					return err
+				}
+				return nil
+			case internal.CommandCreateResponse,
+				internal.CommandDeleteResponse,
+				internal.CommandDeclarePublisherResponse,
+				internal.CommandDeletePublisherResponse,
+				internal.CommandCloseResponse:
 				createResp := new(internal.SimpleResponse)
 				err = createResp.Read(buffer)
 				if err != nil {
@@ -259,7 +277,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				}
 				tc.handleResponse(ctx, createResp)
 			default:
-				log.Info("frame not implemented", "command ID", header.Command())
+				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 			}
 		}
 	}
@@ -360,7 +378,7 @@ func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 		log.Error(err, "error in open request")
 		return err
 	}
-	// TODO check response code
+
 	openResp, ok := openRespCommand.(*internal.OpenResponse)
 	if !ok {
 		panic("could not polymorph response")
@@ -373,6 +391,46 @@ func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 	tc.connectionProperties = openResp.ConnectionProperties()
 
 	return streamErrorOrNil(openResp.ResponseCode())
+}
+
+func (tc *Client) shutdown() error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.isOpen = false
+
+	return tc.connection.Close()
+}
+
+func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) error {
+	if ctx == nil {
+		return errNilContext
+	}
+
+	select {
+	default:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	var n int
+	hdr := internal.NewHeader(10, internal.CommandCloseResponse, 1)
+	bytesWritten, err := hdr.Write(tc.connection.GetWriter())
+	n += bytesWritten
+	if err != nil {
+		return err
+	}
+
+	bdy := internal.NewSimpleResponseWith(req.CorrelationId(), common.ResponseCodeOK)
+	b, err := bdy.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	bytesWritten, err = tc.connection.GetWriter().Write(b)
+	n += bytesWritten
+	if err != nil {
+		return err
+	}
+	return tc.connection.GetWriter().Flush()
 }
 
 // public API
@@ -671,18 +729,17 @@ func (tc *Client) Close(ctx context.Context) error {
 		return err
 	}
 
-	// TODO: check response code
+	err = streamErrorOrNil(response.ResponseCode())
 	log.V(debugLevel).Info("server response", "response code", response.ResponseCode())
-
-	err = tc.connection.Close()
 	if err != nil {
-		log.Error(err, "error closing tcp connection")
+		// TODO: should we continue with the shutdown process instead of returning?
 		return err
 	}
 
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	tc.isOpen = false
-
+	err = tc.shutdown()
+	if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+		log.Error(err, "error closing connection")
+		return err
+	}
 	return nil
 }

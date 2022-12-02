@@ -275,4 +275,23 @@ var _ = Describe("Client", func() {
 				To(MatchError("context canceled"))
 		}, SpecTimeout(500*time.Millisecond))
 	})
+
+	When("the server closes the connection",  func() {
+		It("responds back and shutdowns", func(ctx SpecContext) {
+			conf, err := raw.NewClientConfiguration()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+			streamClient := raw.NewClient(fakeClientConn, conf)
+			streamClient.(*raw.Client).SetIsOpen(true)
+
+			routineCtx := logr.NewContext(ctx, GinkgoLogr)
+			go streamClient.(*raw.Client).StartFrameListener(routineCtx)
+
+			go fakeRabbitMQ.fakeRabbitMQServerClosesConnection()
+			Eventually(streamClient.IsOpen).
+				WithTimeout(500*time.Millisecond).
+				WithPolling(100*time.Millisecond).
+				Should(BeFalse(), "expected connection to be closed")
+		})
+	})
 })

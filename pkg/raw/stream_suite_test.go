@@ -232,7 +232,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionClose(ctx context.Context) 
 	)
 	expectOffset1(headerResponse.Write(rw.Writer)).To(BeNumerically("==", 8))
 
-	response := internal.NewCloseResponse(rmq.correlationIdSeq.next(), responseCodeFromContext(ctx))
+	response := internal.NewSimpleResponseWith(rmq.correlationIdSeq.next(), responseCodeFromContext(ctx))
 	binaryResponse, err := response.MarshalBinary()
 	expectOffset1(err).ToNot(HaveOccurred())
 	_, err = rw.Write(binaryResponse)
@@ -349,6 +349,35 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQDeletePublisher(ctx context.Context, 
 	/// there server says ok! :)
 	/// writing the response to the client
 	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandDeletePublisher)
+}
+
+func (rmq *fakeRabbitMQServer) fakeRabbitMQServerClosesConnection() {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
+		To(Succeed())
+
+	rw := bufio.NewReadWriter(bufio.NewReader(rmq.connection), bufio.NewWriter(rmq.connection))
+
+	// server closes the connection
+	frameSize := 4 + // header
+		4 + // correlation id
+		2 + // closing code
+		2 + len("admin says bye!") // closing-reason_size + closing-reason
+	headerRequest := internal.NewHeader(frameSize, 0x0016, 1)
+	expectOffset1(headerRequest.Write(rw.Writer)).To(BeNumerically("==", 8)) // frame_size + commandId + version
+
+	bodyRequest := internal.NewCloseRequest(1, "admin says bye!")
+	bodyRequest.SetCorrelationId(rmq.correlationIdSeq.next())
+	expectOffset1(bodyRequest.Write(rw.Writer)).To(BeNumerically("==", frameSize-4)) // minus header size
+	expectOffset1(rw.Flush()).To(Succeed())
+
+	// client sends a response
+	responseHeader := new(internal.Header)
+	expectOffset1(responseHeader.Read(rw.Reader)).To(Succeed())
+
+	responseBody := new(internal.SimpleResponse)
+	expectOffset1(responseBody.Read(rw.Reader)).To(Succeed())
+	expectOffset1(responseBody.ResponseCode()).To(BeNumerically("==", 1))
 }
 
 func newContextWithResponseCode(ctx context.Context, respCode uint16, suffix ...string) context.Context {

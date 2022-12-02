@@ -72,44 +72,4 @@ var _ = Describe("Close", func() {
 			Expect(closeReq.closingReason).To(Equal("success"))
 		})
 	})
-
-	Context("Response", func() {
-		It("decodes itself from a binary sequence", func() {
-			byteSequence := []byte{
-				0x00, 0x00, 0x00, 0x0f, // correlation id
-				0x00, 0x7f, // response code
-			}
-			closeResp := new(CloseResponse)
-			Expect(closeResp.Read(bufio.NewReader(bytes.NewReader(byteSequence)))).To(Succeed())
-
-			Expect(closeResp.correlationId).To(BeNumerically("==", 15))
-			Expect(closeResp.responseCode).To(BeNumerically("==", 127))
-		})
-
-		It("has the expected attributes", func() {
-			closeResp := NewCloseResponse(42, 5)
-			Expect(closeResp.correlationId).To(BeNumerically("==", 42))
-			Expect(closeResp.responseCode).To(BeNumerically("==", 5))
-			Expect(closeResp.SizeNeeded()).To(BeNumerically("==", 10))
-		})
-
-		It("encodes itself into a binary sequence", func() {
-			closeResp := NewCloseResponse(4097, 65535)
-
-			buff := new(bytes.Buffer)
-			wr := bufio.NewWriter(buff)
-
-			bytesWritten, err := closeResp.Write(wr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(wr.Flush()).To(Succeed())
-
-			Expect(bytesWritten).To(BeNumerically("==", 6))
-
-			expectedByteSequence := []byte{
-				0x00, 0x00, 0x10, 0x01, // correlation id
-				0xff, 0xff, // response code
-			}
-			Expect(buff.Bytes()).To(Equal(expectedByteSequence))
-		})
-	})
 })

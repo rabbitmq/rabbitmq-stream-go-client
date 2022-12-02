@@ -23,3 +23,9 @@ func (tc *Client) StartFrameListener(ctx context.Context) {
 		log.Error(err, "error handling incoming frames")
 	}
 }
+
+// SetIsOpen sets the field isOpen. Useful during tests to simulate that the
+// connection is open.
+func (tc *Client) SetIsOpen(open bool) {
+	tc.isOpen = open
+}

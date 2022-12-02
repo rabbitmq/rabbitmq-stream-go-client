@@ -72,6 +72,19 @@ const (
 	CommandClose            uint16 = 0x0016 // 22
 )
 
+const (
+	CommandDeclarePublisherResponse uint16 = 0x8001
+	CommandDeletePublisherResponse  uint16 = 0x8006
+	CommandCreateResponse           uint16 = 0x800d
+	CommandDeleteResponse           uint16 = 0x800e
+	CommandPeerPropertiesResponse   uint16 = 0x8011
+	CommandSaslHandshakeResponse    uint16 = 0x8012
+	CommandSaslAuthenticateResponse uint16 = 0x8013
+	CommandTuneResponse             uint16 = 0x8014
+	CommandOpenResponse             uint16 = 0x8015
+	CommandCloseResponse            uint16 = 0x8016
+)
+
 // Stream protocol field sizes
 const (
 	streamProtocolHeader = streamProtocolKeySizeBytes +

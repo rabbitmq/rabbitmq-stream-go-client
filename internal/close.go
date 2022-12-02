@@ -3,7 +3,6 @@ package internal
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 )
 
@@ -75,74 +74,4 @@ func (c *CloseRequest) Version() int16 {
 func (c *CloseRequest) UnmarshalBinary(data []byte) error {
 	rd := bufio.NewReader(bytes.NewReader(data))
 	return readMany(rd, &c.correlationId, &c.closingCode, &c.closingReason)
-}
-
-type CloseResponse struct {
-	correlationId uint32
-	responseCode  uint16
-}
-
-func NewCloseResponse(correlationId uint32, responseCode uint16) *CloseResponse {
-	return &CloseResponse{correlationId: correlationId, responseCode: responseCode}
-}
-
-func (c *CloseResponse) MarshalBinary() (data []byte, err error) {
-	buff := new(bytes.Buffer)
-	wr := bufio.NewWriter(buff)
-	n, err := writeMany(wr, c.correlationId, c.responseCode)
-	if err != nil {
-		return nil, err
-	}
-	if n != 6 {
-		return nil, errors.New("did not write expected number of bytes")
-	}
-
-	err = wr.Flush()
-	if err != nil {
-		return nil, err
-	}
-	data = buff.Bytes()
-	return
-}
-
-func (c *CloseResponse) Write(writer *bufio.Writer) (int, error) {
-	n, err := writeMany(writer, c.correlationId, c.responseCode)
-	if err != nil {
-		return n, err
-	}
-	if n != (c.SizeNeeded() - 4) {
-		return n, fmt.Errorf("short write: expected %d wrote %d", c.SizeNeeded()-4, n)
-	}
-	return n, nil
-}
-
-func (c *CloseResponse) Key() uint16 {
-	return EncodeResponseCode(CommandClose)
-}
-
-func (c *CloseResponse) SizeNeeded() int {
-	return streamProtocolKeySizeBytes +
-		streamProtocolVersionSizeBytes +
-		streamProtocolCorrelationIdSizeBytes +
-		streamProtocolResponseCodeSizeBytes
-}
-
-func (c *CloseResponse) SetCorrelationId(id uint32) {
-	c.correlationId = id
-}
-
-func (c *CloseResponse) Version() int16 {
-	return Version1
-}
-
-func (c *CloseResponse) Read(reader *bufio.Reader) error {
-	return readMany(reader, &c.correlationId, &c.responseCode)
-}
-
-func (c *CloseResponse) CorrelationId() uint32 {
-	return c.correlationId
-}
-
-func (c *CloseResponse) ResponseCode() uint16 {
-	return c.responseCode
 }
