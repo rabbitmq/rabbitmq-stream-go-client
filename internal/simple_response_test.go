@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("SaslMechanisms", func() {
+var _ = Describe("Simple Response", func() {
 	Context("Response", func() {
 		It("decodes a binary sequence", func() {
 			buff := new(bytes.Buffer)

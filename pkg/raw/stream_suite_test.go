@@ -209,7 +209,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionClose(ctx context.Context) 
 
 	rw := bufio.NewReadWriter(bufio.NewReader(rmq.connection), bufio.NewWriter(rmq.connection))
 
-	// close request
+	// close syncRequest
 	headerRequest := new(internal.Header)
 	expectOffset1(headerRequest.Read(rw.Reader)).To(Succeed())
 	expectOffset1(headerRequest.Command()).To(BeNumerically("==", 0x0016))

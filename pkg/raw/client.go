@@ -1,12 +1,15 @@
 package raw
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"io"
 	"math"
 	"net"
@@ -18,11 +21,11 @@ import (
 
 type correlation struct {
 	id         uint32
-	chResponse chan internal.CommandRead
+	chResponse chan internal.SyncCommandRead
 }
 
 func newCorrelation(id uint32) *correlation {
-	return &correlation{chResponse: make(chan internal.CommandRead),
+	return &correlation{chResponse: make(chan internal.SyncCommandRead),
 		id: id}
 }
 
@@ -39,7 +42,7 @@ func (c *correlation) Close() {
 type Client struct {
 	mu sync.Mutex
 	// this channel is used for correlation-less incoming frames from the server
-	frameBodyListener    chan internal.CommandRead
+	frameBodyListener    chan internal.SyncCommandRead
 	isOpen               bool
 	connection           *internal.Connection
 	correlationsMap      sync.Map
@@ -59,7 +62,7 @@ func (tc *Client) IsOpen() bool {
 // to establish a connection to RabbitMQ servers.
 func NewClient(connection net.Conn, configuration *ClientConfiguration) common.Clienter {
 	rawClient := &Client{
-		frameBodyListener: make(chan internal.CommandRead),
+		frameBodyListener: make(chan internal.SyncCommandRead),
 		connection:        internal.NewConnection(connection),
 		isOpen:            false,
 		correlationsMap:   sync.Map{},
@@ -77,7 +80,7 @@ func (tc *Client) getCorrelationById(id uint32) *correlation {
 	return nil
 }
 
-func (tc *Client) storeCorrelation(request internal.CommandWrite) {
+func (tc *Client) storeCorrelation(request internal.SyncCommandWrite) {
 	request.SetCorrelationId(tc.getNextCorrelation())
 	tc.correlationsMap.Store(request.CorrelationId(), newCorrelation(request.CorrelationId()))
 }
@@ -102,24 +105,9 @@ func (tc *Client) getNextCorrelation() uint32 {
 
 // end correlation map section
 
-func (tc *Client) writeCommand(request internal.CommandWrite) error {
-	hWritten, err := internal.NewHeaderRequest(request).Write(tc.connection.GetWriter())
-	if err != nil {
-		return err
-	}
-	bWritten, err := request.Write(tc.connection.GetWriter())
-	if err != nil {
-		return err
-	}
-	if (bWritten + hWritten) != (request.SizeNeeded() + 4) {
-		panic("Write Command: Not all bytes written")
-	}
-	return tc.connection.GetWriter().Flush()
-}
-
-// This makes an RPC-style request. We send the frame, and we await for a response. The context is passed down from the
+// This makes an RPC-style syncRequest. We send the frame, and we await for a response. The context is passed down from the
 // public functions. Context should have a deadline/timeout to avoid deadlocks on a non-responding RabbitMQ server.
-func (tc *Client) request(ctx context.Context, request internal.CommandWrite) (internal.CommandRead, error) {
+func (tc *Client) syncRequest(ctx context.Context, request internal.SyncCommandWrite) (internal.SyncCommandRead, error) {
 	if ctx == nil {
 		return nil, errNilContext
 	}
@@ -130,20 +118,20 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) (i
 		return nil, ctx.Err()
 	}
 
-	logger := logr.FromContextOrDiscard(ctx).WithName("request")
+	logger := logr.FromContextOrDiscard(ctx).WithName("syncRequest")
 
 	tc.storeCorrelation(request)
 	defer tc.removeCorrelation(ctx, request.CorrelationId())
 
-	logger.V(traceLevel).Info("writing command to the wire", "request", request)
-	err := tc.writeCommand(request)
+	logger.V(traceLevel).Info("writing sync command to the wire", "syncRequest", request)
+	err := internal.WriteCommand(request, tc.connection.GetWriter())
 	if err != nil {
 		logger.Error(err, "error writing command to the wire")
 		return nil, err
 	}
 
 	if _, ok := ctx.Deadline(); !ok {
-		logger.Info("request does not have a timeout, consider adding a deadline to context")
+		logger.Info("syncRequest does not have a timeout, consider adding a deadline to context")
 	}
 	select {
 	case <-ctx.Done():
@@ -153,7 +141,19 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) (i
 	}
 }
 
-func (tc *Client) handleResponse(ctx context.Context, read internal.CommandRead) {
+// This makes an async-style syncRequest. We send the frame, and we don't wait for a response. The context is passed down from the
+// public functions. Context should have a deadline/timeout to avoid deadlocks on a non-responding RabbitMQ server.
+// `syncRequest` is the frame to send to the server that does not expect a response.
+func (tc *Client) request(ctx context.Context, request internal.CommandWrite) error {
+	if ctx == nil {
+		return errNilContext
+	}
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.V(traceLevel).Info("writing command to the wire", "syncRequest", request)
+	return internal.WriteCommand(request, tc.connection.GetWriter())
+}
+
+func (tc *Client) handleResponse(ctx context.Context, read internal.SyncCommandRead) {
 	var logger logr.Logger
 	if ctx != nil {
 		logger = logr.FromContextOrDiscard(ctx)
@@ -247,7 +247,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				closeReq := new(internal.CloseRequest)
 				err = closeReq.Read(buffer)
 				if err != nil {
-					log.Error(err, "error decoding close request")
+					log.Error(err, "error decoding close syncRequest")
 					return err
 				}
 
@@ -276,6 +276,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return err
 				}
 				tc.handleResponse(ctx, createResp)
+			case internal.CommandPublishConfirm:
+				publishConfirm := new(internal.PublishConfirmResponse)
+				err = publishConfirm.Read(buffer)
+				if err != nil {
+					log.Error(err, "error decoding publish confirm")
+					return err
+				}
+
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 			}
@@ -290,9 +298,9 @@ func (tc *Client) peerProperties(ctx context.Context) error {
 	log := logr.FromContextOrDiscard(ctx).WithName("peer properties")
 	log.V(traceLevel).Info("starting peer properties")
 
-	serverPropertiesResponse, err := tc.request(ctx, internal.NewPeerPropertiesRequest())
+	serverPropertiesResponse, err := tc.syncRequest(ctx, internal.NewPeerPropertiesRequest())
 	if err != nil {
-		log.Error(err, "error in request to server")
+		log.Error(err, "error in syncRequest to server")
 		return err
 	}
 	response, ok := serverPropertiesResponse.(*internal.PeerPropertiesResponse)
@@ -314,7 +322,7 @@ func (tc *Client) saslHandshake(ctx context.Context) error {
 	log := logr.FromContextOrDiscard(ctx).WithName("sasl handshake")
 	log.V(traceLevel).Info("starting SASL handshake")
 
-	saslMechanisms, err := tc.request(ctx, internal.NewSaslHandshakeRequest())
+	saslMechanisms, err := tc.syncRequest(ctx, internal.NewSaslHandshakeRequest())
 	saslMechanismResponse, ok := saslMechanisms.(*internal.SaslHandshakeResponse)
 	if !ok {
 		panic("could not polymorph response")
@@ -353,7 +361,7 @@ func (tc *Client) saslAuthenticate(ctx context.Context) error {
 				return err
 			}
 
-			response, err := tc.request(ctx, saslAuthReq)
+			response, err := tc.syncRequest(ctx, saslAuthReq)
 			if err != nil {
 				// no need to log here. the caller logs the error
 				return err
@@ -373,9 +381,9 @@ func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 
 	rabbit := tc.configuration.rabbitmqBrokers[brokerIndex]
 	openReq := internal.NewOpenRequest(rabbit.Vhost)
-	openRespCommand, err := tc.request(ctx, openReq)
+	openRespCommand, err := tc.syncRequest(ctx, openReq)
 	if err != nil {
-		log.Error(err, "error in open request")
+		log.Error(err, "error in open syncRequest")
 		return err
 	}
 
@@ -384,7 +392,7 @@ func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 		panic("could not polymorph response")
 	}
 	log.V(debugLevel).Info(
-		"open request success",
+		"open syncRequest success",
 		"connection properties",
 		openResp.ConnectionProperties(),
 	)
@@ -420,7 +428,7 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 		return err
 	}
 
-	bdy := internal.NewSimpleResponseWith(req.CorrelationId(), common.ResponseCodeOK)
+	bdy := internal.NewSimpleResponseWith(req.CorrelationId(), constants.ResponseCodeOK)
 	b, err := bdy.MarshalBinary()
 	if err != nil {
 		return err
@@ -585,7 +593,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 	case tuneReqCommand := <-tc.frameBodyListener:
 		tuneReq, ok := tuneReqCommand.(*internal.TuneRequest)
 		if !ok {
-			panic("could not polymorph CommandRead into TuneRequest")
+			panic("could not polymorph SyncCommandRead into TuneRequest")
 		}
 
 		desiredFrameSize := math.Min(float64(tuneReq.FrameMaxSize()), float64(tc.configuration.clientMaxFrameSize))
@@ -599,7 +607,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 			desiredHeartbeat,
 		)
 		tuneResp := internal.NewTuneResponse(uint32(desiredFrameSize), uint32(desiredHeartbeat))
-		err = tc.writeCommand(tuneResp)
+		err = internal.WriteCommand(tuneResp, tc.connection.GetWriter())
 		if err != nil {
 			logger.Error(err, "error in Tune")
 			tuneCancel()
@@ -632,9 +640,9 @@ func (tc *Client) Connect(ctx context.Context) error {
 	return nil
 }
 
-// DeclareStream sends a request to create a new Stream. If the error is nil, the
+// DeclareStream sends a syncRequest to create a new Stream. If the error is nil, the
 // Stream was created successfully, and it is ready to use.
-func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration common.StreamConfiguration) error {
+func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration constants.StreamConfiguration) error {
 	if ctx == nil {
 		return errNilContext
 	}
@@ -642,7 +650,7 @@ func (tc *Client) DeclareStream(ctx context.Context, stream string, configuratio
 	log := logr.FromContextOrDiscard(ctx).WithName("DeclareStream")
 	log.V(debugLevel).Info("starting declare stream. ", "stream", stream)
 
-	createResponse, err := tc.request(ctx, internal.NewCreateRequest(stream, configuration))
+	createResponse, err := tc.syncRequest(ctx, internal.NewCreateRequest(stream, configuration))
 	if err != nil {
 		log.Error(err, "error declaring stream", "stream", stream, "stream-args", configuration)
 		return err
@@ -650,7 +658,7 @@ func (tc *Client) DeclareStream(ctx context.Context, stream string, configuratio
 	return streamErrorOrNil(createResponse.ResponseCode())
 }
 
-// DeleteStream sends a request to delete a Stream. If the error is nil, the
+// DeleteStream sends a syncRequest to delete a Stream. If the error is nil, the
 // Stream was deleted successfully.
 func (tc *Client) DeleteStream(ctx context.Context, stream string) error {
 	if ctx == nil {
@@ -660,7 +668,7 @@ func (tc *Client) DeleteStream(ctx context.Context, stream string) error {
 	log := logr.FromContextOrDiscard(ctx).WithName("DeleteStream")
 	log.V(debugLevel).Info("starting delete stream. ", "stream", stream)
 
-	deleteResponse, err := tc.request(ctx, internal.NewDeleteRequest(stream))
+	deleteResponse, err := tc.syncRequest(ctx, internal.NewDeleteRequest(stream))
 	if err != nil {
 		log.Error(err, "error deleting stream", "stream", stream)
 		return err
@@ -668,7 +676,7 @@ func (tc *Client) DeleteStream(ctx context.Context, stream string) error {
 	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
 
-// DeclarePublisher sends a request to create a new Publisher. If the error is
+// DeclarePublisher sends a syncRequest to create a new Publisher. If the error is
 // nil, the Publisher was created successfully.
 // publisherId is the ID of the publisher to create. The publisherId is not tracked in this level of the client.
 // The publisherId is used to identify the publisher in the server. Per connection
@@ -682,7 +690,7 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 	log := logr.FromContextOrDiscard(ctx).WithName("DeclarePublisher")
 	log.V(debugLevel).Info("starting declare publisher. ", "publisherId", publisherId, "publisherReference", publisherReference, "stream", stream)
 
-	deleteResponse, err := tc.request(ctx, internal.NewDeclarePublisherRequest(publisherId, publisherReference, stream))
+	deleteResponse, err := tc.syncRequest(ctx, internal.NewDeclarePublisherRequest(publisherId, publisherReference, stream))
 	if err != nil {
 		log.Error(err, "error declaring publisher", "publisherId", publisherId, "publisherReference", publisherReference, "stream", stream)
 		return err
@@ -690,7 +698,23 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
 
-// DeletePublisher sends a request to delete a Publisher. If the error is nil,
+func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessages []common.PublishingMessager) error {
+	buff := new(bytes.Buffer)
+	writer := bufio.NewWriter(buff)
+	for _, msg := range publishingMessages {
+		_, err := msg.Write(writer)
+		if err != nil {
+			return err
+		}
+	}
+	err := writer.Flush()
+	if err != nil {
+		return err
+	}
+	return tc.request(ctx, internal.NewPublishRequest(publisherId, uint32(len(publishingMessages)), buff.Bytes()))
+}
+
+// DeletePublisher sends a syncRequest to delete a Publisher. If the error is nil,
 // the Publisher was deleted successfully.
 // publisherId is the ID of the publisher to delete.
 // publisherId is not tracked in this level of the client.
@@ -702,9 +726,9 @@ func (tc *Client) DeletePublisher(ctx context.Context, publisherId uint8) error 
 	log := logr.FromContextOrDiscard(ctx).WithName("DeletePublisher")
 	log.V(debugLevel).Info("starting delete publisher. ", "publisherId", publisherId)
 
-	deleteResponse, err := tc.request(ctx, internal.NewDeletePublisherRequest(publisherId))
+	deleteResponse, err := tc.syncRequest(ctx, internal.NewDeletePublisherRequest(publisherId))
 	if err != nil {
-		log.Error(err, "error creating delete publisher request ", "publisherId", publisherId)
+		log.Error(err, "error creating delete publisher syncRequest ", "publisherId", publisherId)
 		return err
 	}
 	return streamErrorOrNil(deleteResponse.ResponseCode())
@@ -712,7 +736,7 @@ func (tc *Client) DeletePublisher(ctx context.Context, publisherId uint8) error 
 }
 
 // Close gracefully shutdowns the connection to RabbitMQ. The Client will send a
-// close request to RabbitMQ, and it will await a response. It is recommended to
+// close syncRequest to RabbitMQ, and it will await a response. It is recommended to
 // set a deadline in the context, to avoid waiting forever on a non-responding
 // RabbitMQ server.
 func (tc *Client) Close(ctx context.Context) error {
@@ -723,9 +747,9 @@ func (tc *Client) Close(ctx context.Context) error {
 	log := logr.FromContextOrDiscard(ctx).WithName("close")
 	log.V(debugLevel).Info("starting connection close")
 
-	response, err := tc.request(ctx, internal.NewCloseRequest(common.ResponseCodeOK, "kthxbye"))
+	response, err := tc.syncRequest(ctx, internal.NewCloseRequest(constants.ResponseCodeOK, "kthxbye"))
 	if err != nil {
-		log.Error(err, "error sending close request")
+		log.Error(err, "error sending close syncRequest")
 		return err
 	}
 

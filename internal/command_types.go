@@ -4,8 +4,19 @@ import (
 	"bufio"
 )
 
+// CommandRead is the interface that wraps the Read method.
+// Read reads the command from the reader.
+// nto related to any correlation ID. for example publish confirm
 type CommandRead interface {
 	Read(reader *bufio.Reader) error
+}
+
+// SyncCommandRead reads the response from the stream.
+// It reads the header and then the response.
+// the Sync part is related to the correlation ID.
+// So the caller waits for the response based on correlation
+type SyncCommandRead interface {
+	CommandRead
 	CorrelationId() uint32
 	ResponseCode() uint16
 }

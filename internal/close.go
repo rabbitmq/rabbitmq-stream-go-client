@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// CloseRequest can be initiated from the Client or from the Server. This struct must implement both internal.CommandRead
+// CloseRequest can be initiated from the Client or from the Server. This struct must implement both internal.SyncCommandRead
 // and internal.SyncCommandWrite
 type CloseRequest struct {
 	correlationId uint32

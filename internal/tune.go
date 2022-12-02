@@ -6,7 +6,7 @@ import (
 )
 
 // TuneRequest is initiated by the server. It's the few commands where the request is initiated from the server
-// In this case, request implements the internal.CommandRead interface, as opposed to other requests.
+// In this case, request implements the internal.SyncCommandRead interface, as opposed to other requests.
 type TuneRequest struct {
 	frameMaxSize    uint32
 	heartbeatPeriod uint32
@@ -35,7 +35,7 @@ func (t *TuneRequest) Read(reader *bufio.Reader) error {
 }
 
 // CorrelationId always returns 0. Tune frames do not have a correlation ID. This function is a placeholder to conform
-// to the internal.CommandRead interface.
+// to the internal.SyncCommandRead interface.
 func (t *TuneRequest) CorrelationId() uint32 {
 	return 0
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"github.com/sirupsen/logrus"
 	"os"
+	"time"
 )
 
 func main() {
@@ -44,22 +45,36 @@ func main() {
 		panic(err)
 	}
 
-	var fakeMessages []common.PublishingMessager
-	for i := 0; i < 100; i++ {
-		fakeMessages = append(fakeMessages,
-			raw.NewPublishingMessage(uint64(i), NewFakeMessage([]byte(fmt.Sprintf("message %d", i)))))
+	fmt.Println("Start sending messages")
+	var id uint64
+	startTime := time.Now()
+	for j := 0; j < 10_000; j++ {
+		var fakeMessages []common.PublishingMessager
+		for i := 0; i < 100; i++ {
+			fakeMessages = append(fakeMessages,
+				raw.NewPublishingMessage(id, NewFakeMessage([]byte(fmt.Sprintf("message %d", i)))))
+
+			id++ // increment the id
+		}
+
+		err = streamClient.Send(ctx, 1, fakeMessages)
+		if err != nil {
+			log.Error(err, "error in sending messages")
+			panic(err)
+		}
 	}
+	fmt.Println("End sending messages")
+	fmt.Printf("Sent %d  in : %s \n", id, time.Since(startTime))
 
-	err = streamClient.Send(ctx, 1, fakeMessages)
-
+	fmt.Println("Press any key to stop ")
+	reader := bufio.NewReader(os.Stdin)
+	_, _ = reader.ReadString('\n')
 	err = streamClient.DeletePublisher(ctx, 1)
 	if err != nil {
 		log.Error(err, "error in deleting publisher")
 		panic(err)
 	}
-	fmt.Println("Press any key to stop ")
-	reader := bufio.NewReader(os.Stdin)
-	_, _ = reader.ReadString('\n')
+
 	err = streamClient.DeleteStream(ctx, stream)
 	if err != nil {
 		return
