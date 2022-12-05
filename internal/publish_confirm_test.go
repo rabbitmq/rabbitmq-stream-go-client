@@ -19,8 +19,8 @@ var _ = Describe("Publish Confirm Response", func() {
 			response := PublishConfirmResponse{}
 			Expect(response.Read(bufio.NewReader(buff))).To(Succeed())
 
-			Expect(response.publishID).To(BeNumerically("==", 12))
-			Expect(response.publishingIdCount).To(BeNumerically("==", 3))
+			Expect(response.publisherID).To(BeNumerically("==", 12))
+			Expect(len(response.publishingIds)).To(BeNumerically("==", 3))
 			Expect(response.publishingIds).To(HaveLen(3))
 			Expect(response.publishingIds[0]).To(BeNumerically("==", 12345))
 			Expect(response.publishingIds[1]).To(BeNumerically("==", 12346))

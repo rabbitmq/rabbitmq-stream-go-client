@@ -48,7 +48,7 @@ func main() {
 	fmt.Println("Start sending messages")
 	var id uint64
 	startTime := time.Now()
-	for j := 0; j < 10_000; j++ {
+	for j := 0; j < 100_000; j++ {
 		var fakeMessages []common.PublishingMessager
 		for i := 0; i < 100; i++ {
 			fakeMessages = append(fakeMessages,
