@@ -127,7 +127,7 @@ func (coordinator *Coordinator) ProducersCount() int {
 	return coordinator.count(coordinator.producers)
 }
 
-/// response
+// response
 func newResponse(commandDescription string) *Response {
 	res := &Response{}
 	res.commandDescription = commandDescription
@@ -187,7 +187,7 @@ func (coordinator *Coordinator) RemoveResponseByName(id string) error {
 	return nil
 }
 
-/// Consumer functions
+// Consumer functions
 func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 	parameters *ConsumerOptions) *Consumer {
 	coordinator.mutex.Lock()
