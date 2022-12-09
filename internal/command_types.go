@@ -34,7 +34,7 @@ type CommandWrite interface {
 	Version() int16
 }
 
-// SyncCommandWrite is the interface that wraps the Write method.
+// SyncCommandWrite is the interface that wraps the WriteTo method.
 // The interface is implemented by all commands that are sent to the server.
 // and that have responses in RPC style.
 // Command like: Create Stream, Delete Stream, Declare Publisher, etc.
@@ -62,7 +62,7 @@ func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
 		return err
 	}
 	if (bWritten + hWritten) != (request.SizeNeeded() + 4) {
-		panic("Write Command: Not all bytes written")
+		panic("WriteTo Command: Not all bytes written")
 	}
 	return writer.Flush()
 }

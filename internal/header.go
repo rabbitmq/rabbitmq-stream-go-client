@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 )
 
 type Header struct {
@@ -76,10 +77,10 @@ func NewHeaderRequest(command CommandWrite) *Header {
 	}
 }
 
-func (h *Header) Write(writer *bufio.Writer) (int, error) {
+func (h *Header) Write(writer io.Writer) (int, error) {
 	return writeMany(writer, h.length, h.command, h.version)
 }
 
-func (h *Header) Read(reader *bufio.Reader) error {
+func (h *Header) Read(reader io.Reader) error {
 	return readMany(reader, &h.length, &h.command, &h.version)
 }

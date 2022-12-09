@@ -3,15 +3,16 @@ package internal
 import (
 	"bufio"
 	"encoding/binary"
+	"io"
 )
 
-func readUShort(readerStream *bufio.Reader) (uint16, error) {
+func readUShort(readerStream io.Reader) (uint16, error) {
 	var res uint16
 	err := binary.Read(readerStream, binary.BigEndian, &res)
 	return res, err
 }
 
-func readUInt(readerStream *bufio.Reader) (uint32, error) {
+func readUInt(readerStream io.Reader) (uint32, error) {
 	var res uint32
 	err := binary.Read(readerStream, binary.BigEndian, &res)
 	return res, err
@@ -25,7 +26,7 @@ func peekByte(readerStream *bufio.Reader) (uint8, error) {
 	return res[0], nil
 }
 
-func readString(readerStream *bufio.Reader) string {
+func readString(readerStream io.Reader) string {
 	// FIXME: handle the potential error from readUShort
 	lenString, _ := readUShort(readerStream)
 	buff := make([]byte, lenString)
@@ -33,7 +34,7 @@ func readString(readerStream *bufio.Reader) string {
 	return string(buff)
 }
 
-func readByteSlice(readerStream *bufio.Reader) (data []byte, err error) {
+func readByteSlice(readerStream io.Reader) (data []byte, err error) {
 	numEntries, err := readUShort(readerStream)
 	if err != nil {
 		return nil, err
@@ -54,7 +55,7 @@ func ExtractCommandCode(code uint16) uint16 {
 	return code & 0b0111_1111_1111_1111
 }
 
-func readMany(readerStream *bufio.Reader, args ...interface{}) error {
+func readMany(readerStream io.Reader, args ...interface{}) error {
 	for _, arg := range args {
 		err := readAny(readerStream, arg)
 		if err != nil {
@@ -64,7 +65,7 @@ func readMany(readerStream *bufio.Reader, args ...interface{}) error {
 	return nil
 }
 
-func readAny(readerStream *bufio.Reader, arg interface{}) error {
+func readAny(readerStream io.Reader, arg interface{}) error {
 
 	switch arg.(type) {
 	case *int:
@@ -104,11 +105,11 @@ func readAny(readerStream *bufio.Reader, arg interface{}) error {
 	}
 	return nil
 }
-func WriteMany(writer *bufio.Writer, args ...interface{}) (int, error) {
+func WriteMany(writer io.Writer, args ...any) (int, error) {
 	return writeMany(writer, args...)
 }
 
-func writeMany(writer *bufio.Writer, args ...interface{}) (int, error) {
+func writeMany(writer io.Writer, args ...any) (int, error) {
 	var written int
 
 	for _, arg := range args {
@@ -155,7 +156,7 @@ func writeMany(writer *bufio.Writer, args ...interface{}) (int, error) {
 	return written, nil
 }
 
-func writeString(writer *bufio.Writer, value string) (nn int, err error) {
+func writeString(writer io.Writer, value string) (nn int, err error) {
 	shortLen, err := writeMany(writer, uint16(len(value)))
 	if err != nil {
 		return 0, err

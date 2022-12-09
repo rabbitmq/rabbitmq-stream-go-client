@@ -1,7 +1,6 @@
 package raw
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -148,6 +147,7 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) er
 	if ctx == nil {
 		return errNilContext
 	}
+	// TODO: check if context is canceled before proceeding to WriteCommand
 	logger := logr.FromContextOrDiscard(ctx)
 	logger.V(traceLevel).Info("writing command to the wire", "syncRequest", request)
 	return internal.WriteCommand(request, tc.connection.GetWriter())
@@ -699,17 +699,19 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 }
 
 func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessages []common.PublishingMessager) error {
+	if ctx == nil {
+		return errNilContext
+	}
+
+	logger := logr.FromContextOrDiscard(ctx).WithName("Send")
+	logger.V(debugLevel).Info("starting send", "publisherId", publisherId, "message-count", len(publishingMessages))
+
 	buff := new(bytes.Buffer)
-	writer := bufio.NewWriter(buff)
 	for _, msg := range publishingMessages {
-		_, err := msg.Write(writer)
+		_, err := msg.WriteTo(buff)
 		if err != nil {
 			return err
 		}
-	}
-	err := writer.Flush()
-	if err != nil {
-		return err
 	}
 	return tc.request(ctx, internal.NewPublishRequest(publisherId, uint32(len(publishingMessages)), buff.Bytes()))
 }

@@ -3,7 +3,7 @@
 package internal
 
 import (
-	"bufio"
+	"io"
 )
 
 type FakeMessage struct {
@@ -11,9 +11,9 @@ type FakeMessage struct {
 	body         []byte
 }
 
-func (f *FakeMessage) Write(writer *bufio.Writer) (int, error) {
-	return writeMany(writer, f.publishingId, len(f.body), f.body)
-
+func (f *FakeMessage) WriteTo(writer io.Writer) (int64, error) {
+	n, err := writeMany(writer, f.publishingId, len(f.body), f.body)
+	return int64(n), err
 }
 
 func (f *FakeMessage) SetPublishingId(publishingId uint64) {
@@ -28,7 +28,7 @@ func (f *FakeMessage) SetBody(body []byte) {
 	f.body = body
 }
 
-func (f *FakeMessage) GetBody() []byte {
+func (f *FakeMessage) Body() []byte {
 	return f.body
 }
 

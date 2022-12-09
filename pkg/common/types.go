@@ -1,9 +1,9 @@
 package common
 
 import (
-	"bufio"
 	"context"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
+	"io"
 )
 
 type Clienter interface {
@@ -18,15 +18,15 @@ type Clienter interface {
 }
 
 type StreamerMessage interface {
-	Write(writer *bufio.Writer) (int, error)
+	Write(writer io.Writer) (int, error)
 	SetBody(body []byte)
-	GetBody() []byte
+	Body() []byte
 }
 
 type PublishingMessager interface {
-	Write(writer *bufio.Writer) (int, error)
+	io.WriterTo
 	SetPublishingId(publishingId uint64)
-	GetPublishingId() uint64
+	PublishingId() uint64
 	SetMessage(message StreamerMessage)
-	GetMessage() StreamerMessage
+	Message() StreamerMessage
 }

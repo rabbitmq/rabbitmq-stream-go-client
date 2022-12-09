@@ -10,6 +10,7 @@ import (
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"github.com/sirupsen/logrus"
+	"io"
 	"os"
 	"time"
 )
@@ -93,7 +94,7 @@ type FakeMessage struct {
 	body []byte
 }
 
-func (f *FakeMessage) Write(writer *bufio.Writer) (int, error) {
+func (f *FakeMessage) WriteTo(writer io.Writer) (int64, error) {
 	written := 0
 	err := binary.Write(writer, binary.BigEndian, uint32(len(f.body)))
 	if err != nil {
@@ -113,7 +114,7 @@ func (f *FakeMessage) SetBody(body []byte) {
 	f.body = body
 }
 
-func (f *FakeMessage) GetBody() []byte {
+func (f *FakeMessage) Body() []byte {
 	return f.body
 }
 

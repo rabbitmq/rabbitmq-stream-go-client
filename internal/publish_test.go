@@ -63,7 +63,7 @@ var _ = Describe("Create", func() {
 
 			// It is time to prepare the buffer to send to the server
 			for _, fakeMessage := range fakeMessages {
-				Expect(fakeMessage.Write(writerFakeMessages)).To(BeNumerically("==", 8+4+len(fakeMessage.GetBody())))
+				Expect(fakeMessage.WriteTo(writerFakeMessages)).To(BeNumerically("==", 8+4+len(fakeMessage.Body())))
 			}
 			Expect(writerFakeMessages.Flush()).To(Succeed())
 
