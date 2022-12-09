@@ -32,11 +32,11 @@ func (m *PublishingMessage) WriteTo(writer io.Writer) (int64, error) {
 	if err != nil {
 		return int64(written), err
 	}
-	writtenM, err := m.message.Write(writer)
+	writtenM, err := m.message.WriteTo(writer)
 	if err != nil {
 		return int64(writtenM), err
 	}
-	return int64(written + writtenM), nil
+	return int64(written) + writtenM, nil
 }
 
 func NewPublishingMessage(publishingId uint64, message common.StreamerMessage) *PublishingMessage {

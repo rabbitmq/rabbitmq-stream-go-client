@@ -18,7 +18,7 @@ type Clienter interface {
 }
 
 type StreamerMessage interface {
-	Write(writer io.Writer) (int, error)
+	io.WriterTo
 	SetBody(body []byte)
 	Body() []byte
 }

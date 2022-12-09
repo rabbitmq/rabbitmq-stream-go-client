@@ -49,7 +49,7 @@ func main() {
 	fmt.Println("Start sending messages")
 	var id uint64
 	startTime := time.Now()
-	for j := 0; j < 10_000; j++ {
+	for j := 0; j < 100_000; j++ {
 		var fakeMessages []common.PublishingMessager
 		for i := 0; i < 100; i++ {
 			fakeMessages = append(fakeMessages,
@@ -94,7 +94,7 @@ type FakeMessage struct {
 	body []byte
 }
 
-func (f *FakeMessage) Write(writer io.Writer) (int, error) {
+func (f *FakeMessage) WriteTo(writer io.Writer) (int64, error) {
 	written := 0
 	err := binary.Write(writer, binary.BigEndian, uint32(len(f.body)))
 	if err != nil {
@@ -107,7 +107,7 @@ func (f *FakeMessage) Write(writer io.Writer) (int, error) {
 		panic(err)
 	}
 	written += binary.Size(f.body)
-	return written, nil
+	return int64(written), nil
 }
 
 func (f *FakeMessage) SetBody(body []byte) {
