@@ -55,7 +55,7 @@ go-mod-tidy: ## Run 'go mod tidy' with compatibility to Go 1.18
 
 .PHONY: go-generate-mocks
 go-generate-mocks: | $(MOCKGEN) ## Generate Mocks for testing
-	$(MOCKGEN) -destination=./pkg/stream/mock_conn_test.go -package=stream_test net Conn
+	$(MOCKGEN) -destination=./pkg/raw/mock_conn_test.go -package=raw_test net Conn
 
 ### build
 
