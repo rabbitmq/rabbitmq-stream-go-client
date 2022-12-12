@@ -78,7 +78,7 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.AddCommand(newSilent())
 }
 
-//Execute is the entrypoint of the commands
+// Execute is the entrypoint of the commands
 func Execute() {
 	cmd, _, err := rootCmd.Find(os.Args[1:])
 	if err == nil && cmd.Use == rootCmd.Use {
