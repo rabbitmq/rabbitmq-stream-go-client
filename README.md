@@ -516,6 +516,3 @@ make rabbitmq-server
 to run a ready rabbitmq-server with stream enabled for tests.
 
 then `make test`
-
-### Project status
-The client is a work in progress, the API(s) could change
