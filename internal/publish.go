@@ -2,25 +2,10 @@ package internal
 
 import "bufio"
 
-/// OUTGOING MESSAGE FRAME
-//   offset += WireFormatting.WriteByte(span[offset..], publisherId);
-//  // this assumes we never write an empty publish frame
-//  offset += WireFormatting.WriteInt32(span[offset..], MessageCount);
-//  offset += msg.WriteTo(mybytes[][offset..]); //1
-
-//  foreach (var (publishingId, msg) in messages) // AMQP 1.0 messages. it doesn't have a publishingId
-//  {
-//  offset += WireFormatting.WriteUInt64(span[offset..], publishingId);
-//                // this only write "simple" messages, we assume msg is just the binary body
-//                // not stream encoded data
-//  offset += WireFormatting.WriteUInt32(span[offset..], (uint)msg.Size);
-//  offset += msg.WriteTo(span[offset..]); //1
-//  }
-
 type PublishRequest struct {
 	publisherId  uint8
 	messageCount uint32
-	messages     []byte /////
+	messages     []byte
 }
 
 func (p *PublishRequest) Write(writer *bufio.Writer) (int, error) {

@@ -698,6 +698,20 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
 
+// Send publishes a batch of messages for a given publisher. The messages to be
+// published must have a publishing ID and a function to write the body to an
+// io.Writer. The first parameter is a context.Context. The context will be
+// checked before writing messages to the wire. This function publishes in a
+// "fire and forget" fashion; this means it will not wait for a response from the
+// server after sending the messages over the network.
+//
+// The publisher ID is the same ID used in a DeclarePublisher function call. The
+// application must keep track of this ID for sending messages.
+//
+// The slice of common.PublishingMessager is a batch of messages to be sent. Note
+// that RabbitMQ Stream protocol does not specify a format for the messages. This
+// flexibility allows to send, in a single "Publish" frame, a batch of
+// application messages; for example, a batch of AMQP 1.0 messages.
 func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessages []common.PublishingMessager) error {
 	if ctx == nil {
 		return errNilContext
