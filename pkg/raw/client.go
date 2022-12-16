@@ -454,10 +454,34 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 // A custom dial function can be set using ClientConfiguration.SetDial(). Check ClientConfiguration.SetDial()
 // for more information. If dial function is not provided, DefaultDial is used with a timeout of 30 seconds.
 // DefaultDial uses net.Dial
+//
+// The context passed to DialConfig will be used with in the background routine that listens for incoming frames
+// from the server. Cancelling this context will stop the background routine, causing the client to not read
+// any further communication from the server. Something like this would cause the client to not function correctly:
+//
+//		func connectToRabbit(ctx context.Context) (common.Clienter, error) {
+//			dialCtx, cancel := context.WithTimeout(ctx, time.Second)
+//			defer cancel()
+//			return raw.DialConfig(dialCtx, cfg)
+//		}
+//
+// This will be addressed in [issue#27]
+//
+// [issue#27]: https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
+//
+// The client returned by the above code will not function correctly, because the background routine won't
+// read any information from the server (since the context is cancelled after return). If you want to implement
+// a custom timeout or dial-retry mechanism, provide your own dial function using [raw.ClientConfiguration] SetDial().
+// A simple dial function could be as follows:
+//
+// 		cfg.SetDial(func(network, addr string) (net.Conn, error) {
+//			return net.DialTimeout(network, addr, time.Second)
+//		})
+//
 func DialConfig(ctx context.Context, config *ClientConfiguration) (common.Clienter, error) {
-	// FIXME: test this code path at system level
 	// FIXME: try to test this with net.Pipe fake
 	//		dialer should return the fakeClientConn from net.Pipe
+	// FIXME: comment about context cancellation
 	if config == nil {
 		return nil, errNilConfig
 	}
@@ -543,11 +567,14 @@ func (tc *Client) Connect(ctx context.Context) error {
 		return errNilContext
 	}
 
-	logger := logr.FromContextOrDiscard(ctx).WithName("connect")
-	logger.Info("starting connection")
+	log := logr.FromContextOrDiscard(ctx).WithName("connect")
+	log.Info("starting connection")
 
 	var i = 0 // broker index for chosen broker to dial to
 
+	// FIXME: handleIncoming should use its own context
+	//		we are making an incorrect use of context
+	// https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
 	go func(ctx context.Context) {
 		log := logr.FromContextOrDiscard(ctx).WithName("frame-listener")
 		log.V(traceLevel).Info("starting frame listener")
@@ -568,26 +595,26 @@ func (tc *Client) Connect(ctx context.Context) error {
 	err := tc.peerProperties(ctx)
 	if err != nil {
 		// FIXME: wrap error in Connect-specific error
-		logger.Error(err, "error exchanging peer properties")
+		log.Error(err, "error exchanging peer properties")
 		return err
 	}
 	err = tc.saslHandshake(ctx)
 	if err != nil {
-		logger.Error(err, "error in SASL handshake")
+		log.Error(err, "error in SASL handshake")
 		return err
 	}
 
 	err = tc.saslAuthenticate(ctx)
 	if err != nil {
-		logger.Error(err, "error in SASL authenticate")
+		log.Error(err, "error in SASL authenticate")
 		return err
 	}
 
-	logger.V(debugLevel).Info("awaiting Tune frame from server")
+	log.V(debugLevel).Info("awaiting Tune frame from server")
 	tuneCtx, tuneCancel := context.WithTimeout(ctx, time.Second*30)
 	select {
 	case <-tuneCtx.Done():
-		logger.Error(tuneCtx.Err(), "error awaiting for tune from server")
+		log.Error(tuneCtx.Err(), "error awaiting for tune from server")
 		tuneCancel()
 		return tuneCtx.Err()
 	case tuneReqCommand := <-tc.frameBodyListener:
@@ -599,7 +626,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 		desiredFrameSize := math.Min(float64(tuneReq.FrameMaxSize()), float64(tc.configuration.clientMaxFrameSize))
 		desiredHeartbeat := math.Min(float64(tuneReq.HeartbeatPeriod()), float64(tc.configuration.clientHeartbeat))
 
-		logger.V(debugLevel).Info(
+		log.V(debugLevel).Info(
 			"desired tune options",
 			"frame-size",
 			desiredFrameSize,
@@ -609,7 +636,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 		tuneResp := internal.NewTuneResponse(uint32(desiredFrameSize), uint32(desiredHeartbeat))
 		err = internal.WriteCommand(tuneResp, tc.connection.GetWriter())
 		if err != nil {
-			logger.Error(err, "error in Tune")
+			log.Error(err, "error in Tune")
 			tuneCancel()
 			return err
 		}
@@ -618,24 +645,24 @@ func (tc *Client) Connect(ctx context.Context) error {
 
 	err = tc.open(ctx, i)
 	if err != nil {
-		logger.Error(err, "error in open")
+		log.Error(err, "error in open")
 		return err
 	}
 
 	// clear any deadline set by Dial functions.
 	// Dial functions may set an i/o timeout for TLS and AMQP handshake.
 	// Such timeout should not apply to stream i/o operations
-	logger.V(debugLevel).Info("clearing connection I/O deadline")
+	log.V(debugLevel).Info("clearing connection I/O deadline")
 	err = tc.connection.SetDeadline(time.Time{})
 	if err != nil {
-		logger.Error(err, "error setting connection I/O deadline")
+		log.Error(err, "error setting connection I/O deadline")
 		return err
 	}
 
 	tc.mu.Lock()
 	tc.isOpen = true
 	defer tc.mu.Unlock()
-	logger.Info("connection is open")
+	log.Info("connection is open")
 
 	return nil
 }

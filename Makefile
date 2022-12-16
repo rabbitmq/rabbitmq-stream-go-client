@@ -62,13 +62,28 @@ go-generate-mocks: | $(MOCKGEN) ## Generate Mocks for testing
 build: ## Just compile all
 	$(GO) build -v ./...
 
-
-
 ### Tests
 
-GINKGO_RUN_FLAGS := -r --randomize-all -p --race --tags="rabbitmq.stream.test"
+GINKGO_RUN_SHARED_FLAGS := --randomize-all --race
+GINKGO_RUN_FLAGS := -r -p --tags="rabbitmq.stream.test"
 
 .PHONY: tests
 tests: | $(GINKGO) ## Run unit tests. Make sure you install-tools before running this target
 	@printf "$(GREEN)Running all tests in parallel$(NORMAL)\n"
-	$(GINKGO) $(GINKGO_RUN_FLAGS) $(GINKGO_EXTRA) .
+	$(GINKGO) $(GINKGO_RUN_SHARED_FLAGS) $(GINKGO_RUN_FLAGS) --skip-package "e2e" $(GINKGO_EXTRA) .
+
+.PHONY: e2e_tests ## Run end-to-end tests. Make sure you have a running Docker daemon and Docker socket in /var/run/docker.sock
+e2e_tests: | $(GINKGO)
+	@printf "$(GREEN)Running end-to-end tests$(NORMAL)\n"
+	$(GINKGO) $(GINKGO_RUN_SHARED_FLAGS) --tags="rabbitmq.stream.e2e" $(GINKGO_EXTRA) ./pkg/e2e
+
+### Containers
+
+CONTAINER_ENGINE ?= docker
+
+.PHONY: start_rabbitmq
+start_rabbitmq: ## Start a RabbitMQ container. This is not required for tests. E2E suite will start a container before running tests
+	./scripts/start-docker.bash -c $(CONTAINER_ENGINE)
+
+stop_rabbitmq: ## Stop a RabbitMQ
+	./scripts/stop-docker.bash -c $(CONTAINER_ENGINE)
