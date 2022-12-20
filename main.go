@@ -12,12 +12,13 @@ import (
 	"github.com/sirupsen/logrus"
 	"io"
 	"os"
+	"sync/atomic"
 	"time"
 )
 
 func main() {
 	logrusLog := logrus.New()
-	logrusLog.Level = logrus.DebugLevel
+	logrusLog.Level = logrus.InfoLevel
 	log := logrusr.New(logrusLog).WithName("rabbitmq-stream")
 	stream := "test-stream"
 	config, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost:5552")
@@ -40,6 +41,20 @@ func main() {
 		panic(err)
 	}
 
+	const bachSize = 100
+	const iterations = 10_000
+	const totalMessages = iterations * bachSize
+
+	publishChan := streamClient.NotifyPublish(make(chan *raw.PublishConfirm, 100))
+	go func() {
+		var confirmed int32
+		for c := range publishChan {
+			if (atomic.AddInt32(&confirmed, int32(len(c.PublishingIds()))) % totalMessages) == 0 {
+				log.Info("Confirmed", "messages ", confirmed)
+			}
+		}
+	}()
+
 	err = streamClient.DeclarePublisher(ctx, 1, "test-publisher", stream)
 	if err != nil {
 		log.Error(err, "error in declaring publisher")
@@ -49,12 +64,11 @@ func main() {
 	fmt.Println("Start sending messages")
 	var id uint64
 	startTime := time.Now()
-	for j := 0; j < 100_000; j++ {
+	for j := 0; j < iterations; j++ {
 		var fakeMessages []common.PublishingMessager
-		for i := 0; i < 100; i++ {
+		for i := 0; i < bachSize; i++ {
 			fakeMessages = append(fakeMessages,
 				raw.NewPublishingMessage(id, NewFakeMessage([]byte(fmt.Sprintf("message %d", i)))))
-
 			id++ // increment the id
 		}
 
