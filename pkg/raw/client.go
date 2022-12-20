@@ -50,6 +50,7 @@ type Client struct {
 	nextCorrelation      uint32
 	configuration        *ClientConfiguration
 	connectionProperties map[string]string
+	confirmsCh           chan *PublishConfirm
 }
 
 // IsOpen returns true if the connection is open, false otherwise
@@ -63,7 +64,7 @@ func (tc *Client) IsOpen() bool {
 // NewClient returns a common.Clienter implementation to interact with RabbitMQ stream using low level primitives.
 // NewClient requires an established net.Conn and a ClientConfiguration. Using DialConfig() is the preferred method
 // to establish a connection to RabbitMQ servers.
-func NewClient(connection net.Conn, configuration *ClientConfiguration) common.Clienter {
+func NewClient(connection net.Conn, configuration *ClientConfiguration) Clienter {
 	rawClient := &Client{
 		frameBodyListener: make(chan internal.SyncCommandRead),
 		connection:        internal.NewConnection(connection),
@@ -294,6 +295,17 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return err
 				}
 
+				if tc.confirmsCh == nil {
+					log.Info("confirmation channel is not registered. Use Client.NotifyPublish() to receive publish confirmations")
+					continue
+				}
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case tc.confirmsCh <- publishConfirm:
+					log.V(debugLevel).Info("sent a publish confirm", "publisherId", publishConfirm.PublisherID())
+				}
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 			}
@@ -416,6 +428,10 @@ func (tc *Client) shutdown() error {
 	defer tc.mu.Unlock()
 	tc.isOpen = false
 
+	if tc.confirmsCh != nil {
+		close(tc.confirmsCh)
+	}
+
 	return tc.connection.Close()
 }
 
@@ -487,7 +503,7 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 //	})
 //
 // [issue#27]: https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
-func DialConfig(ctx context.Context, config *ClientConfiguration) (common.Clienter, error) {
+func DialConfig(ctx context.Context, config *ClientConfiguration) (Clienter, error) {
 	// FIXME: try to test this with net.Pipe fake
 	//		dialer should return the fakeClientConn from net.Pipe
 	// FIXME: comment about context cancellation
@@ -821,4 +837,11 @@ func (tc *Client) Close(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (tc *Client) NotifyPublish(c chan *PublishConfirm) <-chan *PublishConfirm {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.confirmsCh = c
+	return c
 }

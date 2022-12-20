@@ -3,6 +3,7 @@
 package e2e_test
 
 import (
+	"flag"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
@@ -10,6 +11,15 @@ import (
 	"testing"
 	"time"
 )
+
+var keepRabbitContainer, rabbitDebugLog bool
+
+const containerName = "rabbitmq-stream-client-test"
+
+func init() {
+	flag.BoolVar(&keepRabbitContainer, "keep-rabbit-container", false, "Keep RabbitMQ container after suite run")
+	flag.BoolVar(&rabbitDebugLog, "rabbit-debug-log", false, "Configure debug log level in RabbitMQ")
+}
 
 func TestE2e(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -29,7 +39,11 @@ var _ = SynchronizedBeforeSuite(func(ctx SpecContext) {
 
 	// Defer container stop == docker stop <rabbitmq-container-id>
 	DeferCleanup(func() {
-		stopCommand := exec.Command("../../scripts/stop-docker.bash")
+		var cmdArgs []string
+		if keepRabbitContainer {
+			cmdArgs = []string{"-p"}
+		}
+		stopCommand := exec.Command("../../scripts/stop-docker.bash", cmdArgs...)
 		session, err := gexec.Start(stopCommand, GinkgoWriter, GinkgoWriter)
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(session).
@@ -48,4 +62,22 @@ var _ = SynchronizedBeforeSuite(func(ctx SpecContext) {
 		WithTimeout(time.Second * 15).
 		WithPolling(time.Second).
 		Should(Succeed())
+
+	if rabbitDebugLog {
+		debugCmd := exec.Command(
+			"docker",
+			"exec",
+			"--user=rabbitmq",
+			containerName,
+			"rabbitmqctl",
+			"set_log_level",
+			"debug",
+		)
+		session, err := gexec.Start(debugCmd, GinkgoWriter, GinkgoWriter)
+		Expect(err).ToNot(HaveOccurred())
+		Eventually(session).
+			WithTimeout(time.Second*5).
+			WithPolling(time.Second).
+			Should(gexec.Exit(0), "expected to enable rabbitmq debug logs")
+	}
 }, func() {})

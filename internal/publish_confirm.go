@@ -1,6 +1,9 @@
 package internal
 
-import "bufio"
+import (
+	"bufio"
+	"bytes"
+)
 
 // PublishConfirmResponse is a response that contains a publisher ID and a list of publishing IDs.
 // Publish commands return this type of response. It is used to confirm that the publishing was successful.
@@ -8,6 +11,28 @@ import "bufio"
 type PublishConfirmResponse struct {
 	publisherID   uint8 // publisher id
 	publishingIds []uint64
+}
+
+func NewPublishConfirmResponse(publisherID uint8, publishingIds []uint64) *PublishConfirmResponse {
+	return &PublishConfirmResponse{publisherID: publisherID, publishingIds: publishingIds}
+}
+
+func (p *PublishConfirmResponse) PublisherID() uint8 {
+	return p.publisherID
+}
+
+func (p *PublishConfirmResponse) PublishingIds() []uint64 {
+	return p.publishingIds
+}
+
+func (p *PublishConfirmResponse) MarshalBinary() (data []byte, err error) {
+	buff := &bytes.Buffer{}
+	_, err = writeMany(buff, p.publisherID, uint32(len(p.publishingIds)), p.publishingIds)
+	if err != nil {
+		return nil, err
+	}
+	data = buff.Bytes()
+	return
 }
 
 func (p *PublishConfirmResponse) Read(reader *bufio.Reader) error {

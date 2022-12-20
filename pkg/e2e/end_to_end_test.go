@@ -3,6 +3,7 @@
 package e2e_test
 
 import (
+	"fmt"
 	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
@@ -10,6 +11,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
+	"sync"
 	"time"
 )
 
@@ -55,8 +57,41 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		).To(Succeed())
 		stopWatch.Record("DeclarePublisher").Reset()
 
+		By("receiving confirmations")
+		c := streamClient.NotifyPublish(make(chan *raw.PublishConfirm, 100))
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		const numMessages = 100_000
+		go func() {
+			defer GinkgoRecover()
+			defer wg.Done()
+			confirmStopwatch := throughputExp.NewStopwatch()
+			defer confirmStopwatch.Record("publish confirmation")
+
+			confirmedIds := make(map[uint64]struct{}, numMessages)
+			for {
+				select {
+				case <-ctx.Done():
+					Fail(fmt.Sprintf("context timed out: expected to receive 1_000_000 confirmations: received %d", len(confirmedIds)))
+				case confirm, ok := <-c:
+					if !ok {
+						return
+					}
+					ids := confirm.PublishingIds()
+					for i := 0; i < len(ids); i++ {
+						confirmedIds[ids[i]] = struct{}{}
+					}
+
+					if len(confirmedIds) == numMessages {
+						return
+					}
+				}
+			}
+		}()
+
 		By("sending messages")
-		for i := uint64(0); i < 1_000_000; i++ {
+		for i := uint64(0); i < numMessages; i++ {
 			messageContainer := raw.NewPublishingMessage(i, &plainTextMessage{messageBody})
 			Expect(
 				streamClient.Send(itCtx, publisherId, wrap[common.PublishingMessager](messageContainer)),
@@ -64,8 +99,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		}
 		stopWatch.Record("Send").Reset()
 
-		By("receiving confirmations")
-		// TODO
+		wg.Wait()
 
 		By("deleting the publisher")
 		Expect(streamClient.DeletePublisher(ctx, publisherId)).To(Succeed())

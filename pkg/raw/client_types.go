@@ -1,8 +1,12 @@
 package raw
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"net"
 	"time"
 )
@@ -98,4 +102,18 @@ func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error
 		builder.rabbitmqBrokers = append(builder.rabbitmqBrokers, broker)
 	}
 	return builder, nil
+}
+
+type PublishConfirm = internal.PublishConfirmResponse
+
+type Clienter interface {
+	Connect(ctx context.Context) error
+	DeclareStream(ctx context.Context, stream string, configuration constants.StreamConfiguration) error
+	DeleteStream(ctx context.Context, stream string) error
+	DeclarePublisher(ctx context.Context, publisherId uint8, publisherReference string, stream string) error
+	Send(ctx context.Context, publisherId uint8, messages []common.PublishingMessager) error
+	DeletePublisher(ctx context.Context, publisherId uint8) error
+	IsOpen() bool
+	Close(ctx context.Context) error
+	NotifyPublish(chan *PublishConfirm) <-chan *PublishConfirm
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/go-logr/logr"
 	"github.com/golang/mock/gomock"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
@@ -42,6 +41,7 @@ var _ = Describe("Client", func() {
 		mockCtrl       *gomock.Controller
 		fakeConn       *MockConn
 		fakeRabbitMQ   *fakeRabbitMQServer
+		conf *raw.ClientConfiguration
 	)
 
 	BeforeEach(func() {
@@ -53,6 +53,10 @@ var _ = Describe("Client", func() {
 			connection:       fakeServerConn,
 			deadlineDelta:    time.Second,
 		}
+		// conf can be "global" as long as tests do not modify it
+		// if a test needs to modify the configuration, it shall
+		// make a local copy and then modify the configuration
+		conf, _ = raw.NewClientConfiguration()
 	})
 
 	AfterEach(func() {
@@ -68,9 +72,6 @@ var _ = Describe("Client", func() {
 			Times(0)
 
 		By("creating a new raw client")
-		conf, err := raw.NewClientConfiguration()
-		Expect(err).ToNot(HaveOccurred())
-
 		streamClient := raw.NewClient(fakeConn, conf)
 		Expect(streamClient).NotTo(BeNil())
 
@@ -86,9 +87,6 @@ var _ = Describe("Client", func() {
 
 		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*4)
 		defer cancel()
-
-		conf, err := raw.NewClientConfiguration()
-		Expect(err).ToNot(HaveOccurred())
 
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		Eventually(streamClient.Connect).
@@ -116,70 +114,55 @@ var _ = Describe("Client", func() {
 		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
 		defer cancel()
 
-		conf, err := raw.NewClientConfiguration()
-		Expect(err).ToNot(HaveOccurred())
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
 
 		go fakeRabbitMQ.fakeRabbitMQDeclareStream(newContextWithResponseCode(itCtx, 0x0001), "test-stream", constants.StreamConfiguration{"some-key": "some-value"})
 
-		err = streamClient.DeclareStream(itCtx, "test-stream", constants.StreamConfiguration{"some-key": "some-value"})
-		Expect(err).To(Succeed())
+		Expect(streamClient.DeclareStream(itCtx, "test-stream", constants.StreamConfiguration{"some-key": "some-value"})).To(Succeed())
 	})
 
 	It("Delete a stream", func(ctx SpecContext) {
 		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
 		defer cancel()
-		conf, err := raw.NewClientConfiguration()
-		Expect(err).ToNot(HaveOccurred())
 
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
 
 		go fakeRabbitMQ.fakeRabbitMQDeleteStream(newContextWithResponseCode(itCtx, 0x0001), "test-stream")
-		err = streamClient.DeleteStream(itCtx, "test-stream")
-		Expect(err).To(Succeed())
+		Expect(streamClient.DeleteStream(itCtx, "test-stream")).To(Succeed())
 	})
 
 	It("Declare new Publisher", func(ctx SpecContext) {
 		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
 		defer cancel()
-		conf, err := raw.NewClientConfiguration()
-		Expect(err).ToNot(HaveOccurred())
 
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
 
 		go fakeRabbitMQ.fakeRabbitMQNewPublisher(newContextWithResponseCode(itCtx, 0x0001), 12, "myPublisherRef", "test-stream")
-		err = streamClient.DeclarePublisher(itCtx, 12, "myPublisherRef", "test-stream")
-		Expect(err).To(Succeed())
+		Expect(streamClient.DeclarePublisher(itCtx, 12, "myPublisherRef", "test-stream")).To(Succeed())
 	})
 
 	It("Delete Publisher", func(ctx SpecContext) {
 		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
 		defer cancel()
-		conf, err := raw.NewClientConfiguration()
-		Expect(err).ToNot(HaveOccurred())
 
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
 
 		go fakeRabbitMQ.fakeRabbitMQDeletePublisher(newContextWithResponseCode(itCtx, 0x0001), 12)
-		err = streamClient.DeletePublisher(itCtx, 12)
-		Expect(err).To(Succeed())
+		Expect(streamClient.DeletePublisher(itCtx, 12)).To(Succeed())
 	})
 
 	It("cancels requests after a timeout", func(ctx SpecContext) {
 		// This test does not start a fake to mimic rabbitmq responses. By not starting a
-		// fake rabbitmq, we simulate "rabbit not responding" The expectation is to
+		// fake rabbitmq, we simulate "rabbit not responding". The expectation is to
 		// receive a timeout error
-		conf, err := raw.NewClientConfiguration()
-		Expect(err).ToNot(HaveOccurred())
-
 		routineCtx, rCancel := context.WithDeadline(ctx, time.Now().Add(time.Second*2))
 		defer rCancel()
 		go bufferDrainer(routineCtx, fakeServerConn)
@@ -193,12 +176,7 @@ var _ = Describe("Client", func() {
 	}, SpecTimeout(2*time.Second))
 
 	Context("server returns an error", func() {
-		var c *raw.ClientConfiguration
-
 		BeforeEach(func() {
-			var err error
-			c, err = raw.NewClientConfiguration()
-			Expect(err).ToNot(HaveOccurred())
 			Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		})
 
@@ -206,7 +184,7 @@ var _ = Describe("Client", func() {
 			It("returns a 'stream already exists' error", func(ctx SpecContext) {
 				ctx2 := newContextWithResponseCode(logr.NewContext(ctx, GinkgoLogr), streamResponseCodeStreamAlreadyExists)
 
-				streamClient := raw.NewClient(fakeClientConn, c)
+				streamClient := raw.NewClient(fakeClientConn, conf)
 				go streamClient.(*raw.Client).StartFrameListener(ctx2)
 
 				go fakeRabbitMQ.fakeRabbitMQDeclareStream(ctx2, "already-exists", constants.StreamConfiguration{})
@@ -218,7 +196,7 @@ var _ = Describe("Client", func() {
 			It("returns 'stream does not exist' error", func(ctx SpecContext) {
 				ctx2 := newContextWithResponseCode(logr.NewContext(ctx, GinkgoLogr), streamResponseCodeStreamDoesNotExist)
 
-				streamClient := raw.NewClient(fakeClientConn, c)
+				streamClient := raw.NewClient(fakeClientConn, conf)
 				go streamClient.(*raw.Client).StartFrameListener(ctx2)
 
 				By("deleting a non-existent stream")
@@ -237,7 +215,7 @@ var _ = Describe("Client", func() {
 				itCtx := logr.NewContext(newContextWithResponseCode(ctx, streamResponseCodeAuthFailure, "sasl-auth"), GinkgoLogr)
 				go fakeRabbitMQ.fakeRabbitMQConnectionOpen(itCtx)
 
-				streamClient := raw.NewClient(fakeClientConn, c)
+				streamClient := raw.NewClient(fakeClientConn, conf)
 				Expect(streamClient.Connect(itCtx)).
 					To(MatchError("authentication failure"))
 				Expect(streamClient.IsOpen()).
@@ -247,12 +225,9 @@ var _ = Describe("Client", func() {
 	})
 
 	When("the context is cancelled", func() {
-		var client common.Clienter
+		var client raw.Clienter
 
 		BeforeEach(func() {
-			conf, err := raw.NewClientConfiguration()
-			Expect(err).ToNot(HaveOccurred())
-
 			client = raw.NewClient(fakeClientConn, conf)
 		})
 
@@ -278,8 +253,6 @@ var _ = Describe("Client", func() {
 
 	When("the server closes the connection", func() {
 		It("responds back and shutdowns", func(ctx SpecContext) {
-			conf, err := raw.NewClientConfiguration()
-			Expect(err).ToNot(HaveOccurred())
 			Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 			streamClient := raw.NewClient(fakeClientConn, conf)
 			streamClient.(*raw.Client).SetIsOpen(true)
@@ -293,5 +266,50 @@ var _ = Describe("Client", func() {
 				WithPolling(100*time.Millisecond).
 				Should(BeFalse(), "expected connection to be closed")
 		})
+	})
+
+	It("receives publish confirmations", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second*2))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+
+		confirmsCh := make(chan *raw.PublishConfirm, 1)
+		streamClient.NotifyPublish(confirmsCh)
+
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+		fakeRabbitMQ.fakeRabbitMQPublisherConfirms(1, 5)
+
+		eventuallyCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+
+		// Had to mimic the 'eventually' behaviour because Eventually().Should(Receive()) is not passing,
+		// even though the channel is receiving
+		//Eventually(confirmsCh).WithTimeout(time.Second * 3).Should(Receive())
+		select {
+		case <-eventuallyCtx.Done():
+			Fail("did not receive from confirmation channel")
+		case c := <- confirmsCh:
+			Expect(c.PublisherID()).To(BeNumerically("==", 1))
+			Expect(c.PublishingIds()).To(HaveLen(5))
+			Expect(c.PublishingIds()).To(ConsistOf([]uint64{0, 1, 2, 3, 4}))
+		}
+	}, SpecTimeout(3*time.Second))
+
+	When("the connection closes",  func() {
+		It("closes the confirmation channel", func(ctx SpecContext) {
+			streamClient := raw.NewClient(fakeClientConn, conf)
+			streamClient.(*raw.Client).SetIsOpen(true)
+
+			go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+			c := make(chan *raw.PublishConfirm)
+			streamClient.NotifyPublish(c)
+			Expect(c).ToNot(BeClosed())
+
+			go fakeRabbitMQ.fakeRabbitMQConnectionClose(ctx)
+			Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+
+			Expect(streamClient.Close(ctx)).To(Succeed())
+			Expect(c).To(BeClosed())
+		}, SpecTimeout(time.Second*2))
 	})
 })

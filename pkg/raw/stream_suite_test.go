@@ -380,6 +380,31 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQServerClosesConnection() {
 	expectOffset1(responseBody.ResponseCode()).To(BeNumerically("==", 1))
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQPublisherConfirms(pubId uint8, numOfConfirms int) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
+		To(Succeed())
+
+	fakeConfirms := make([]uint64, numOfConfirms, numOfConfirms)
+	for i := 0; i < len(fakeConfirms); i++ {
+		fakeConfirms[i] = uint64(i)
+	}
+
+	// publish confirmation
+	frameSize := 4 + // header
+		1 + // publisher ID
+		2 + // publishingIds count
+		(8 * numOfConfirms) // N long uints
+	header := internal.NewHeader(frameSize, 0x0003, 1)
+	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
+		"expected to write 8 bytes")
+
+	bodyRequest, err := internal.NewPublishConfirmResponse(pubId, fakeConfirms).MarshalBinary()
+	expectOffset1(err).ToNot(HaveOccurred())
+	_, err = rmq.connection.Write(bodyRequest)
+	expectOffset1(err).ToNot(HaveOccurred())
+}
+
 func newContextWithResponseCode(ctx context.Context, respCode uint16, suffix ...string) context.Context {
 	var key = "rabbitmq-stream.response-code"
 	if suffix != nil {
