@@ -276,7 +276,7 @@ var _ = Describe("Client", func() {
 		}, SpecTimeout(500*time.Millisecond))
 	})
 
-	When("the server closes the connection",  func() {
+	When("the server closes the connection", func() {
 		It("responds back and shutdowns", func(ctx SpecContext) {
 			conf, err := raw.NewClientConfiguration()
 			Expect(err).ToNot(HaveOccurred())

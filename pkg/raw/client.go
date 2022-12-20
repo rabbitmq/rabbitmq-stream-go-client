@@ -38,6 +38,8 @@ func (c *correlation) Close() {
 // interface. Functions of this interface accept a context.Context. It is highly advised to provide a context with a
 // deadline/timeout to all function calls. When a context is cancelled, the function will cancel its work and return
 // a relevant error.
+// Client is not thread-safe. It is the responsibility of the caller to ensure that only one goroutine is using the
+// Client at a time.
 type Client struct {
 	mu sync.Mutex
 	// this channel is used for correlation-less incoming frames from the server
@@ -50,6 +52,8 @@ type Client struct {
 	connectionProperties map[string]string
 }
 
+// IsOpen returns true if the connection is open, false otherwise
+// IsOpen is thread-safe
 func (tc *Client) IsOpen() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -153,6 +157,9 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) er
 	return internal.WriteCommand(request, tc.connection.GetWriter())
 }
 
+// handleResponse is responsible for handling incoming frames from the server.
+// in this case the call is synchronous, so we need to correlate the response with the request
+// and send it to the right channel that is waiting for it.
 func (tc *Client) handleResponse(ctx context.Context, read internal.SyncCommandRead) {
 	var logger logr.Logger
 	if ctx != nil {
@@ -175,6 +182,9 @@ func (tc *Client) handleResponse(ctx context.Context, read internal.SyncCommandR
 }
 
 // TODO: Maybe Add a timeout
+// handleIncoming is responsible for handling incoming frames from the server.
+// each frame is handled by a specific handler function.
+// the frame must read the internal.Header to decode the frame body.
 func (tc *Client) handleIncoming(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
@@ -459,25 +469,24 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 // from the server. Cancelling this context will stop the background routine, causing the client to not read
 // any further communication from the server. Something like this would cause the client to not function correctly:
 //
-//		func connectToRabbit(ctx context.Context) (common.Clienter, error) {
-//			dialCtx, cancel := context.WithTimeout(ctx, time.Second)
-//			defer cancel()
-//			return raw.DialConfig(dialCtx, cfg)
-//		}
+//	func connectToRabbit(ctx context.Context) (common.Clienter, error) {
+//		dialCtx, cancel := context.WithTimeout(ctx, time.Second)
+//		defer cancel()
+//		return raw.DialConfig(dialCtx, cfg)
+//	}
 //
 // This will be addressed in [issue#27]
-//
-// [issue#27]: https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
 //
 // The client returned by the above code will not function correctly, because the background routine won't
 // read any information from the server (since the context is cancelled after return). If you want to implement
 // a custom timeout or dial-retry mechanism, provide your own dial function using [raw.ClientConfiguration] SetDial().
 // A simple dial function could be as follows:
 //
-// 		cfg.SetDial(func(network, addr string) (net.Conn, error) {
-//			return net.DialTimeout(network, addr, time.Second)
-//		})
+//	cfg.SetDial(func(network, addr string) (net.Conn, error) {
+//		return net.DialTimeout(network, addr, time.Second)
+//	})
 //
+// [issue#27]: https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
 func DialConfig(ctx context.Context, config *ClientConfiguration) (common.Clienter, error) {
 	// FIXME: try to test this with net.Pipe fake
 	//		dialer should return the fakeClientConn from net.Pipe
@@ -669,6 +678,9 @@ func (tc *Client) Connect(ctx context.Context) error {
 
 // DeclareStream sends a syncRequest to create a new Stream. If the error is nil, the
 // Stream was created successfully, and it is ready to use.
+// By default, the stream is created without any retention policy, so stream can grow indefinitely.
+// It is recommended to set a retention policy to avoid filling up the disk.
+// See also https://www.rabbitmq.com/streams.html#retention
 func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration constants.StreamConfiguration) error {
 	if ctx == nil {
 		return errNilContext
