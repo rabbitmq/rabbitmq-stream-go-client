@@ -1,7 +1,9 @@
 package raw_test
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"github.com/go-logr/logr"
 	"github.com/golang/mock/gomock"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
@@ -41,7 +43,7 @@ var _ = Describe("Client", func() {
 		mockCtrl       *gomock.Controller
 		fakeConn       *MockConn
 		fakeRabbitMQ   *fakeRabbitMQServer
-		conf *raw.ClientConfiguration
+		conf           *raw.ClientConfiguration
 	)
 
 	BeforeEach(func() {
@@ -78,6 +80,31 @@ var _ = Describe("Client", func() {
 		By("not starting a connection yet")
 		Consistently(streamClient.IsOpen).WithTimeout(time.Millisecond*200).Should(BeFalse(),
 			"expected stream client to not be open")
+	})
+
+	Context("request", func() {
+		When("the context is cancelled", func() {
+			var ctx context.Context
+			var fakeCommandWrite *MockCommandWrite
+
+			BeforeEach(func() {
+				fakeCommandWrite = NewMockCommandWrite(mockCtrl)
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(context.Background())
+				cancel()
+			})
+
+			It("does not do any work", func() {
+				fakeCommandWrite.
+					EXPECT().
+					Write(gomock.AssignableToTypeOf(&bufio.Writer{})).
+					Return(0, errors.New("not expected call")).
+					AnyTimes()
+
+				client := raw.NewClient(fakeConn, conf)
+				Expect(client.(*raw.Client).Request(ctx, fakeCommandWrite)).To(MatchError(context.Canceled))
+			})
+		})
 	})
 
 	It("establishes and closes a connection to RabbitMQ", func(ctx SpecContext) {
@@ -269,7 +296,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("receives publish confirmations", func(ctx SpecContext) {
-		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second*2))).To(Succeed())
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second * 2))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 
 		confirmsCh := make(chan *raw.PublishConfirm, 1)
@@ -287,14 +314,14 @@ var _ = Describe("Client", func() {
 		select {
 		case <-eventuallyCtx.Done():
 			Fail("did not receive from confirmation channel")
-		case c := <- confirmsCh:
+		case c := <-confirmsCh:
 			Expect(c.PublisherID()).To(BeNumerically("==", 1))
 			Expect(c.PublishingIds()).To(HaveLen(5))
 			Expect(c.PublishingIds()).To(ConsistOf([]uint64{0, 1, 2, 3, 4}))
 		}
 	}, SpecTimeout(3*time.Second))
 
-	When("the connection closes",  func() {
+	When("the connection closes", func() {
 		It("closes the confirmation channel", func(ctx SpecContext) {
 			streamClient := raw.NewClient(fakeClientConn, conf)
 			streamClient.(*raw.Client).SetIsOpen(true)

@@ -153,6 +153,13 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) er
 		return errNilContext
 	}
 	// TODO: check if context is canceled before proceeding to WriteCommand
+
+	select {
+	default:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
 	logger := logr.FromContextOrDiscard(ctx)
 	logger.V(traceLevel).Info("writing command to the wire", "syncRequest", request)
 	return internal.WriteCommand(request, tc.connection.GetWriter())

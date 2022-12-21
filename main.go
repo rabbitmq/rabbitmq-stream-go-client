@@ -26,7 +26,8 @@ func main() {
 		panic(err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	rabbitmqCtx := logr.NewContext(ctx, log)
 	streamClient, err := raw.DialConfig(rabbitmqCtx, config)
 	if err != nil {

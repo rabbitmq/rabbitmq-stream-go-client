@@ -4,6 +4,8 @@ import (
 	"bufio"
 )
 
+//go:generate mockgen -source command_types.go -destination ../pkg/raw/mock_internal_interfaces_test.go -package raw_test
+
 // CommandRead is the interface that wraps the Read method.
 // Read reads the command from the reader.
 // nto related to any correlation ID. for example publish confirm

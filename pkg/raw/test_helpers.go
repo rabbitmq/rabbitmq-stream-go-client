@@ -5,6 +5,7 @@ package raw
 import (
 	"context"
 	"github.com/go-logr/logr"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 )
 
 // StartFrameListener starts reading the Connection socket. It receives frames
@@ -28,4 +29,9 @@ func (tc *Client) StartFrameListener(ctx context.Context) {
 // connection is open.
 func (tc *Client) SetIsOpen(open bool) {
 	tc.isOpen = open
+}
+
+// Request to expose Client.request for testing purposes
+func (tc *Client) Request(ctx context.Context, write internal.CommandWrite) error {
+	return tc.request(ctx, write)
 }
