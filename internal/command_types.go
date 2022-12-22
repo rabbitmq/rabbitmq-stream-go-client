@@ -75,6 +75,7 @@ const (
 	CommandPublish          uint16 = 0x0002 // 2
 	CommandPublishConfirm   uint16 = 0x0003 // 3
 	CommandDeletePublisher  uint16 = 0x0006 // 6
+	CommandSubscribe        uint16 = 0x0007 // 7
 	CommandCreate           uint16 = 0x000d // 13
 	CommandDelete           uint16 = 0x000e // 14
 	CommandPeerProperties   uint16 = 0x0011 // 17
@@ -88,6 +89,7 @@ const (
 const (
 	CommandDeclarePublisherResponse uint16 = 0x8001
 	CommandDeletePublisherResponse  uint16 = 0x8006
+	CommandSubscribeResponse        uint16 = 0x8007
 	CommandCreateResponse           uint16 = 0x800d
 	CommandDeleteResponse           uint16 = 0x800e
 	CommandPeerPropertiesResponse   uint16 = 0x8011
@@ -105,7 +107,9 @@ const (
 		streamProtocolCorrelationIdSizeBytes
 	streamProtocolKeySizeBytes                  = 2
 	streamProtocolKeySizeUint8                  = 1
+	streamProtocolKeySizeUint16                 = 2
 	streamProtocolKeySizeUint32                 = 4
+	streamProtocolKeySizeUint64                 = 8
 	streamProtocolVersionSizeBytes              = 2
 	streamProtocolCorrelationIdSizeBytes        = 4
 	streamProtocolStringLenSizeBytes            = 2

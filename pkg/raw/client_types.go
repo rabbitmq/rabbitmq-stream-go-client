@@ -113,6 +113,9 @@ type Clienter interface {
 	DeclarePublisher(ctx context.Context, publisherId uint8, publisherReference string, stream string) error
 	Send(ctx context.Context, publisherId uint8, messages []common.PublishingMessager) error
 	DeletePublisher(ctx context.Context, publisherId uint8) error
+	DeclareConsumer(ctx context.Context, subscriptionId uint8, stream string, offsetType uint16,
+		offset uint64, credit uint16,
+		properties constants.SubscribeProperties) error
 	IsOpen() bool
 	Close(ctx context.Context) error
 	NotifyPublish(chan *PublishConfirm) <-chan *PublishConfirm

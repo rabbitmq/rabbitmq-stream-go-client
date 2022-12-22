@@ -50,3 +50,12 @@ const (
 )
 
 type StreamConfiguration = map[string]string
+type SubscribeProperties = map[string]string
+
+const (
+	OffsetTypeFirst     uint16 = 0x01
+	OffsetTypeLast      uint16 = 0x02
+	OffsetTypeNext      uint16 = 0x03
+	OffsetTypeOffset    uint16 = 0x04
+	OffsetTypeTimeStamp uint16 = 0x05
+)

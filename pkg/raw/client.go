@@ -286,7 +286,8 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				internal.CommandDeleteResponse,
 				internal.CommandDeclarePublisherResponse,
 				internal.CommandDeletePublisherResponse,
-				internal.CommandCloseResponse:
+				internal.CommandCloseResponse,
+				internal.CommandSubscribeResponse:
 				createResp := new(internal.SimpleResponse)
 				err = createResp.Read(buffer)
 				if err != nil {
@@ -810,7 +811,48 @@ func (tc *Client) DeletePublisher(ctx context.Context, publisherId uint8) error 
 		return err
 	}
 	return streamErrorOrNil(deleteResponse.ResponseCode())
+}
 
+// DeclareConsumer sends a syncRequest to create a new Consumer. If the error is
+// nil, the Consumer was created successfully.
+// subscriptionId is the ID of the subscriber to create. The subscriptionId is not tracked in this level of the client.
+// The subscriptionId is used to identify the consumer in the server.
+// stream is the name of the stream to subscribe to.
+// offsetType is the type of offset to start consuming from. See constants.OffsetType
+// for more information.
+//
+//	OffsetTypeFirst     uint16 = 0x01 // Start from the first message in the stream
+//	OffsetTypeLast      uint16 = 0x02 // Start from the last chunk in the stream
+//	OffsetTypeNext      uint16 = 0x03 // Start from the next chunk in the stream
+//	OffsetTypeOffset    uint16 = 0x04 // Start from a specific offset in the stream
+//	OffsetTypeTimeStamp uint16 = 0x05 // Start from a specific timestamp in the stream
+//
+// offset is the offset to start consuming from.
+// The offset is ignored if the offsetType is not OffsetTypeOffset or OffsetTypeTimeStamp.
+// See also https://www.rabbitmq.com/streams.html#consuming for more information.
+// properties is the configuration of the consumer. It is optional.
+// With properties is possible to configure values like:
+// - name of the consumer: "name" : "my-consumer"
+// - Super Stream : "super-stream" : "my-super-stream"
+// - Single Active Consumer: "single-active-consumer" : true
+func (tc *Client) DeclareConsumer(ctx context.Context, subscriptionId uint8, stream string, offsetType uint16,
+	offset uint64, credit uint16,
+	properties constants.SubscribeProperties) error {
+	if ctx == nil {
+		return errNilContext
+	}
+
+	log := logr.FromContextOrDiscard(ctx).WithName("DeclareConsumer")
+	log.V(debugLevel).Info("starting declare consumer. ", "subscriptionId", subscriptionId, "stream", stream,
+		"offsetType", offsetType, "offset", offset, "credit", credit, "properties", properties)
+
+	subscribeResponse, err := tc.syncRequest(ctx, internal.NewSubscribeRequestRequest(subscriptionId, stream, offsetType, offset, credit, properties))
+	if err != nil {
+		log.Error(err, "error  declaring consumer. ", "subscriptionId", subscriptionId, "stream", stream,
+			"offsetType", offsetType, "offset", offset, "credit", credit, "properties", properties)
+		return err
+	}
+	return streamErrorOrNil(subscribeResponse.ResponseCode())
 }
 
 // Close gracefully shutdowns the connection to RabbitMQ. The Client will send a

@@ -8,6 +8,7 @@ import (
 	"github.com/bombsimon/logrusr/v3"
 	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"github.com/sirupsen/logrus"
 	"io"
@@ -61,6 +62,8 @@ func main() {
 		log.Error(err, "error in declaring publisher")
 		panic(err)
 	}
+
+	err = streamClient.DeclareConsumer(ctx, 1, stream, constants.OffsetTypeTimeStamp, 10, 10, map[string]string{"name": "my_consumer"})
 
 	fmt.Println("Start sending messages")
 	var id uint64

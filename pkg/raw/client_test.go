@@ -186,6 +186,22 @@ var _ = Describe("Client", func() {
 		Expect(streamClient.DeletePublisher(itCtx, 12)).To(Succeed())
 	})
 
+	It("Declare new Consumer", func(ctx SpecContext) {
+		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
+		defer cancel()
+
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(itCtx)
+
+		go fakeRabbitMQ.fakeRabbitMQNewConsumer(newContextWithResponseCode(itCtx, 0x0001), 12, "mystream",
+			constants.OffsetTypeLast, 60_001, 5,
+			constants.SubscribeProperties{"some-config": "it-works"})
+		Expect(streamClient.DeclareConsumer(itCtx, 12, "mystream",
+			constants.OffsetTypeLast, 60_001, 5,
+			constants.SubscribeProperties{"some-config": "it-works"})).To(Succeed())
+	})
+
 	It("cancels requests after a timeout", func(ctx SpecContext) {
 		// This test does not start a fake to mimic rabbitmq responses. By not starting a
 		// fake rabbitmq, we simulate "rabbit not responding". The expectation is to

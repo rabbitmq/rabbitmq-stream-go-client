@@ -351,6 +351,39 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQDeletePublisher(ctx context.Context, 
 	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandDeletePublisher)
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQNewConsumer(ctx context.Context, subscriptionId uint8, stream string, offsetType uint16,
+	offset uint64, credit uint16,
+	properties constants.SubscribeProperties) {
+	defer GinkgoRecover()
+
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+
+	serverReader := bufio.NewReader(rmq.connection)
+
+	header := new(internal.Header)
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x0007))
+	expectOffset1(header.Version()).To(BeNumerically("==", 1))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
+
+	body := new(internal.SubscribeRequest)
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	expectOffset1(body.SubscriptionId()).To(BeNumerically("==", subscriptionId))
+	expectOffset1(body.Offset()).To(Equal(offset))
+	expectOffset1(body.OffsetType()).To(Equal(offsetType))
+	expectOffset1(body.Credit()).To(Equal(credit))
+	expectOffset1(body.Stream()).To(Equal(stream))
+	expectOffset1(body.Properties()).To(Equal(properties))
+
+	/// there server says ok! :)
+	/// writing the response to the client
+	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandSubscribe)
+}
+
 func (rmq *fakeRabbitMQServer) fakeRabbitMQServerClosesConnection() {
 	defer GinkgoRecover()
 	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
