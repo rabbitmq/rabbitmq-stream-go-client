@@ -292,6 +292,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		return
 
 	}
+
 	_ = readByte(r)
 	chunkType := readByte(r)
 	if chunkType != 0 {

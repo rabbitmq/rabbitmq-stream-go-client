@@ -702,6 +702,10 @@ func (c *Client) DeclareSubscriber(streamName string,
 		options = NewConsumerOptions()
 	}
 
+	if options.initialCredits <= 0 {
+		options.initialCredits = 10
+	}
+
 	if options.Offset.typeOfs <= 0 || options.Offset.typeOfs > 6 {
 		return nil, fmt.Errorf("specify a valid Offset")
 	}
@@ -762,7 +766,7 @@ func (c *Client) DeclareSubscriber(streamName string,
 		options.Offset.isTimestamp() {
 		writeLong(b, options.Offset.offset)
 	}
-	writeShort(b, 10)
+	writeShort(b, options.initialCredits)
 
 	err := c.handleWrite(b.Bytes(), resp)
 
