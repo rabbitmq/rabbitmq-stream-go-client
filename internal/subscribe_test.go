@@ -10,13 +10,13 @@ import (
 
 var _ = Describe("Subscribe", func() {
 	Context("Request", func() {
-		It("returns the expected attributes", func() {
+		It("returns the expected attributes offset", func() {
 			subscribeRequest := NewSubscribeRequestRequest(12, "mystream",
-				constants.OffsetTypeLast, 60_001, 5,
+				constants.OffsetTypeOffset, 60_001, 5,
 				map[string]string{"some-config": "it-works"})
 			Expect(subscribeRequest.Key()).To(BeNumerically("==", 0x0007))
 			Expect(subscribeRequest.Version()).To(BeNumerically("==", 1))
-			Expect(subscribeRequest.offsetType).To(BeNumerically("==", 2))
+			Expect(subscribeRequest.offsetType).To(BeNumerically("==", 4))
 			Expect(subscribeRequest.offset).To(BeNumerically("==", 60_001))
 			Expect(subscribeRequest.credit).To(BeNumerically("==", 5))
 			Expect(subscribeRequest.stream).To(Equal("mystream"))
@@ -50,14 +50,13 @@ var _ = Describe("Subscribe", func() {
 			expectedByteSequence := []byte{
 				0x00, 0x00, 0x00, 0x47, // correlation ID
 			}
-			expectedByteSequence = append(expectedByteSequence, []byte{0x0c}...)                                           // subscriptionId
-			expectedByteSequence = append(expectedByteSequence, []byte{0x00, 0x08}...)                                     // stream length
-			expectedByteSequence = append(expectedByteSequence, []byte("mystream")...)                                     // stream name
-			expectedByteSequence = append(expectedByteSequence, []byte{0x00, 0x01}...)                                     // offsetType
-			expectedByteSequence = append(expectedByteSequence, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEA, 0x61}...) // offset value
-			expectedByteSequence = append(expectedByteSequence, []byte{0x00, 0x05}...)                                     // credit
-			expectedByteSequence = append(expectedByteSequence, []byte{0x00, 0x00, 0x00, 0x01}...)                         // map size
-			expectedByteSequence = append(expectedByteSequence, 0x00, 0x05)                                                // myarg length
+			expectedByteSequence = append(expectedByteSequence, []byte{0x0c}...)                   // subscriptionId
+			expectedByteSequence = append(expectedByteSequence, []byte{0x00, 0x08}...)             // stream length
+			expectedByteSequence = append(expectedByteSequence, []byte("mystream")...)             // stream name
+			expectedByteSequence = append(expectedByteSequence, []byte{0x00, 0x01}...)             // offsetType
+			expectedByteSequence = append(expectedByteSequence, []byte{0x00, 0x05}...)             // credit
+			expectedByteSequence = append(expectedByteSequence, []byte{0x00, 0x00, 0x00, 0x01}...) // map size
+			expectedByteSequence = append(expectedByteSequence, 0x00, 0x05)                        // myarg length
 			expectedByteSequence = append(expectedByteSequence, []byte("myarg")...)
 			expectedByteSequence = append(expectedByteSequence, 0x00, 0x07) // myvalue length
 			expectedByteSequence = append(expectedByteSequence, []byte("myvalue")...)

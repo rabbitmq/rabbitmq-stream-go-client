@@ -48,8 +48,20 @@ func (s *SubscribeRequest) SubscriptionId() uint8 {
 func (s *SubscribeRequest) UnmarshalBinary(data []byte) error {
 	buff := bytes.NewReader(data)
 	rd := bufio.NewReader(buff)
-	return readMany(rd, &s.correlationId, &s.subscriptionId, &s.stream, &s.offsetType,
-		&s.offset, &s.credit, &s.properties)
+	err := readMany(rd, &s.correlationId, &s.subscriptionId, &s.stream, &s.offsetType)
+	if err != nil {
+		return err
+	}
+
+	if s.isOffsetType() {
+		err = readMany(rd, &s.offset)
+		if err != nil {
+			return err
+		}
+	}
+	err = readMany(rd, &s.credit, &s.properties)
+
+	return err
 }
 
 func NewSubscribeRequestRequest(subscriptionId uint8, stream string, offsetType uint16,

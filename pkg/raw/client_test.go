@@ -195,10 +195,10 @@ var _ = Describe("Client", func() {
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
 
 		go fakeRabbitMQ.fakeRabbitMQNewConsumer(newContextWithResponseCode(itCtx, 0x0001), 12, "mystream",
-			constants.OffsetTypeLast, 60_001, 5,
+			constants.OffsetTypeOffset, 60_001, 5,
 			constants.SubscribeProperties{"some-config": "it-works"})
 		Expect(streamClient.DeclareConsumer(itCtx, 12, "mystream",
-			constants.OffsetTypeLast, 60_001, 5,
+			constants.OffsetTypeOffset, 60_001, 5,
 			constants.SubscribeProperties{"some-config": "it-works"})).To(Succeed())
 	})
 
