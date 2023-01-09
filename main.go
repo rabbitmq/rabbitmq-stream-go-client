@@ -19,7 +19,7 @@ import (
 
 func main() {
 	logrusLog := logrus.New()
-	logrusLog.Level = logrus.InfoLevel
+	logrusLog.Level = logrus.DebugLevel
 	log := logrusr.New(logrusLog).WithName("rabbitmq-stream")
 	stream := "test-stream"
 	config, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost:5552")
@@ -63,8 +63,6 @@ func main() {
 		panic(err)
 	}
 
-	err = streamClient.DeclareConsumer(ctx, 1, stream, constants.OffsetTypeTimeStamp, 10, 10, map[string]string{"name": "my_consumer"})
-
 	fmt.Println("Start sending messages")
 	var id uint64
 	startTime := time.Now()
@@ -82,9 +80,10 @@ func main() {
 			panic(err)
 		}
 	}
+
 	fmt.Println("End sending messages")
 	fmt.Printf("Sent %d  in : %s \n", id, time.Since(startTime))
-
+	err = streamClient.DeclareConsumer(ctx, 1, stream, constants.OffsetTypeTimeStamp, 10, 10, map[string]string{"name": "my_consumer"})
 	fmt.Println("Press any key to stop ")
 	reader := bufio.NewReader(os.Stdin)
 	_, _ = reader.ReadString('\n')

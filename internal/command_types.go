@@ -76,6 +76,7 @@ const (
 	CommandPublishConfirm   uint16 = 0x0003 // 3
 	CommandDeletePublisher  uint16 = 0x0006 // 6
 	CommandSubscribe        uint16 = 0x0007 // 7
+	CommandDeliver          uint16 = 0x0008 // 8
 	CommandCreate           uint16 = 0x000d // 13
 	CommandDelete           uint16 = 0x000e // 14
 	CommandPeerProperties   uint16 = 0x0011 // 17

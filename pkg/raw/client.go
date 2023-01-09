@@ -314,6 +314,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				case tc.confirmsCh <- publishConfirm:
 					log.V(debugLevel).Info("sent a publish confirm", "publisherId", publishConfirm.PublisherID())
 				}
+			case internal.CommandDeliver:
+				chunkResponse := new(internal.ChunkResponse)
+				err = chunkResponse.Read(buffer)
+				log.V(debugLevel).Info("received a chunk", "chunk", chunkResponse.Timestamp)
+				if err != nil {
+					log.Error(err, "error decoding chunk Response")
+					return err
+				}
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 			}

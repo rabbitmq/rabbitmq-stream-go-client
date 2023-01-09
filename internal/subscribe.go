@@ -61,22 +61,42 @@ func NewSubscribeRequestRequest(subscriptionId uint8, stream string, offsetType 
 }
 
 func (s *SubscribeRequest) Write(writer *bufio.Writer) (int, error) {
-	return writeMany(writer, s.correlationId, s.subscriptionId, s.stream, s.offsetType,
-		s.offset, s.credit, s.properties)
+	written, err := writeMany(writer, s.correlationId, s.subscriptionId, s.stream, s.offsetType)
+	if err != nil {
+		return written, err
+	}
+
+	if s.isOffsetType() {
+		offsetWritten, _ := writeMany(writer, s.offset)
+		written += offsetWritten
+	}
+
+	lastWritten, err := writeMany(writer, s.credit, s.properties)
+	return written + lastWritten, err
 }
 
 func (s *SubscribeRequest) Key() uint16 {
 	return CommandSubscribe
 }
 
+func (s *SubscribeRequest) isOffsetType() bool {
+	return s.offsetType == constants.OffsetTypeOffset ||
+		s.offsetType == constants.OffsetTypeTimeStamp
+
+}
+
 func (s *SubscribeRequest) SizeNeeded() int {
+	additionalLen := 0
+	if s.isOffsetType() {
+		additionalLen += 8
+	}
+
 	return streamProtocolHeader +
 		streamProtocolKeySizeUint8 + // subscriptionId id
 		streamProtocolStringLenSizeBytes + len(s.stream) + // stream
 		streamProtocolKeySizeUint16 + // offsetType
-		streamProtocolKeySizeUint64 + // offset
 		streamProtocolKeySizeUint16 + // credit
-		sizeNeededForMap(s.properties)
+		sizeNeededForMap(s.properties) + additionalLen
 }
 
 func (s *SubscribeRequest) SetCorrelationId(id uint32) {
