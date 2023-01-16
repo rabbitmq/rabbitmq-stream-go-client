@@ -131,6 +131,7 @@ type ConsumerOptions struct {
 	autoCommitStrategy *AutoCommitStrategy
 	Offset             OffsetSpecification
 	CRCCheck           bool
+	initialCredits     int16
 }
 
 func NewConsumerOptions() *ConsumerOptions {
@@ -139,6 +140,7 @@ func NewConsumerOptions() *ConsumerOptions {
 		autocommit:         false,
 		autoCommitStrategy: NewAutoCommitStrategy(),
 		CRCCheck:           false,
+		initialCredits:     10,
 	}
 }
 
@@ -149,6 +151,11 @@ func (c *ConsumerOptions) SetConsumerName(consumerName string) *ConsumerOptions 
 
 func (c *ConsumerOptions) SetCRCCheck(CRCCheck bool) *ConsumerOptions {
 	c.CRCCheck = CRCCheck
+	return c
+}
+
+func (c *ConsumerOptions) SetInitialCredits(initialCredits int16) *ConsumerOptions {
+	c.initialCredits = initialCredits
 	return c
 }
 
