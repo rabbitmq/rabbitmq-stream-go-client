@@ -837,13 +837,12 @@ func (tc *Client) DeletePublisher(ctx context.Context, publisherId uint8) error 
 	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
 
-// DeclareConsumer sends a syncRequest to create a new Consumer. If the error is
-// nil, the Consumer was created successfully.
-// subscriptionId is the ID of the subscriber to create. The subscriptionId is not tracked in this level of the client.
-// The subscriptionId is used to identify the consumer in the server.
-// stream is the name of the stream to subscribe to.
-// offsetType is the type of offset to start consuming from. See constants.OffsetType
-// for more information.
+// Subscribe sends a syncRequest to create a new Consumer. If the error is nil,
+// the Consumer was created successfully. subscriptionId is the ID of the
+// subscriber to create. The subscriptionId is not tracked in this level of the
+// client. The subscriptionId is used to identify the consumer in the server.
+// stream is the name of the stream to subscribe to. offsetType is the type of
+// offset to start consuming from. See constants.OffsetType for more information.
 //
 //	OffsetTypeFirst     uint16 = 0x01 // Start from the first message in the stream
 //	OffsetTypeLast      uint16 = 0x02 // Start from the last chunk in the stream
@@ -859,14 +858,20 @@ func (tc *Client) DeletePublisher(ctx context.Context, publisherId uint8) error 
 // - name of the consumer: "name" : "my-consumer"
 // - Super Stream : "super-stream" : "my-super-stream"
 // - Single Active Consumer: "single-active-consumer" : true
-func (tc *Client) DeclareConsumer(ctx context.Context, subscriptionId uint8, stream string, offsetType uint16,
-	offset uint64, credit uint16,
-	properties constants.SubscribeProperties) error {
+func (tc *Client) Subscribe(
+	ctx context.Context,
+	stream string,
+	offsetType uint16,
+	subscriptionId uint8,
+	credit uint16,
+	properties constants.SubscribeProperties,
+	offset uint64,
+) error {
 	if ctx == nil {
 		return errNilContext
 	}
 
-	log := logr.FromContextOrDiscard(ctx).WithName("DeclareConsumer")
+	log := logr.FromContextOrDiscard(ctx).WithName("subscribe")
 	log.V(debugLevel).Info("starting declare consumer. ", "subscriptionId", subscriptionId, "stream", stream,
 		"offsetType", offsetType, "offset", offset, "credit", credit, "properties", properties)
 

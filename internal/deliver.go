@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 )
 
@@ -24,6 +25,32 @@ type ChunkResponse struct {
 	//Messages[StreamerMessage]        // no int32 for the size for this array; the size is defined by NumEntries field above
 	//Message  EntryTypeAndSize
 	//Data => bytes
+}
+
+func (c *ChunkResponse) MarshalBinary() (data []byte, err error) {
+	buff := &bytes.Buffer{}
+	nn, err := writeMany(
+		buff,
+		c.SubscriptionId,
+		c.MagicVersion,
+		c.ChunkType,
+		c.NumEntries,
+		c.NumRecords,
+		c.Timestamp,
+		c.Epoch,
+		c.ChunkFirstOffset,
+		c.ChunkCrc,
+		c.DataLength,
+		c.TrailerLength,
+		c.Reserved,
+		c.Messages,
+	)
+	if err != nil || nn != (49+len(c.Messages)) {
+		return nil, err
+	}
+
+	data = buff.Bytes()
+	return
 }
 
 func (c *ChunkResponse) Read(reader *bufio.Reader) error {

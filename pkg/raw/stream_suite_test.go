@@ -382,6 +382,37 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQNewConsumer(ctx context.Context, subs
 	/// there server says ok! :)
 	/// writing the response to the client
 	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandSubscribe)
+
+	// Send a delivery chunk
+	serverWriter := bufio.NewWriter(rmq.connection)
+
+	bodyResp := internal.ChunkResponse{
+		SubscriptionId:   subscriptionId,
+		MagicVersion:     42,
+		ChunkType:        0,
+		NumEntries:       1,
+		NumRecords:       1,
+		Timestamp:        11111111,
+		Epoch:            11111111000,
+		ChunkFirstOffset: 0,
+		ChunkCrc:         12345,
+		DataLength:       5,
+		TrailerLength:    54321,
+		Reserved:         0,
+		Messages:         []byte("hello"),
+	}
+	frameSize := 4 + // header
+		49 + // static chunk fields
+		4 // len("hello")
+	header = internal.NewHeader(frameSize, 0x0008, 2)
+
+	_, err := header.Write(serverWriter)
+	expectOffset1(err).ToNot(HaveOccurred())
+
+	data, err := bodyResp.MarshalBinary()
+	_, err = serverWriter.Write(data)
+	expectOffset1(err).ToNot(HaveOccurred())
+	expectOffset1(serverWriter.Flush()).To(Succeed())
 }
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQServerClosesConnection() {

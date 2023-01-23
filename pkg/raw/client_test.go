@@ -186,7 +186,7 @@ var _ = Describe("Client", func() {
 		Expect(streamClient.DeletePublisher(itCtx, 12)).To(Succeed())
 	})
 
-	It("Declare new Consumer", func(ctx SpecContext) {
+	It("receives messages", func(ctx SpecContext) {
 		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
 		defer cancel()
 
@@ -197,9 +197,17 @@ var _ = Describe("Client", func() {
 		go fakeRabbitMQ.fakeRabbitMQNewConsumer(newContextWithResponseCode(itCtx, 0x0001), 12, "mystream",
 			constants.OffsetTypeOffset, 60_001, 5,
 			constants.SubscribeProperties{"some-config": "it-works"})
-		Expect(streamClient.DeclareConsumer(itCtx, 12, "mystream",
-			constants.OffsetTypeOffset, 60_001, 5,
-			constants.SubscribeProperties{"some-config": "it-works"})).To(Succeed())
+
+		By("subscribing to a stream")
+		// must register channel before subscribing
+		delivery := streamClient.NotifyChunk(make(chan *raw.Chunk, 1))
+		Expect(streamClient.Subscribe(itCtx, "mystream", constants.OffsetTypeOffset, 12, 5, constants.SubscribeProperties{"some-config": "it-works"}, 60_001)).To(Succeed())
+
+		By("registering a channel")
+		var someChunk *raw.Chunk
+		Eventually(delivery).Should(Receive(&someChunk))
+		Expect(someChunk.Messages).To(BeEquivalentTo("hello"))
+		Expect(someChunk.SubscriptionId).To(BeNumerically("==", 12))
 	})
 
 	It("cancels requests after a timeout", func(ctx SpecContext) {
