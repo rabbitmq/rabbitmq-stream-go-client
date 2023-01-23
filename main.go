@@ -19,7 +19,7 @@ import (
 
 func main() {
 	logrusLog := logrus.New()
-	logrusLog.Level = logrus.DebugLevel
+	logrusLog.Level = logrus.InfoLevel
 	log := logrusr.New(logrusLog).WithName("rabbitmq-stream")
 	stream := "test-stream"
 	config, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost:5552")
@@ -44,7 +44,7 @@ func main() {
 	}
 
 	const bachSize = 100
-	const iterations = 10_000
+	const iterations = 2
 	const totalMessages = iterations * bachSize
 
 	publishChan := streamClient.NotifyPublish(make(chan *raw.PublishConfirm, 100))
@@ -80,10 +80,20 @@ func main() {
 			panic(err)
 		}
 	}
-
 	fmt.Println("End sending messages")
 	fmt.Printf("Sent %d  in : %s \n", id, time.Since(startTime))
-	err = streamClient.DeclareConsumer(ctx, 1, stream, constants.OffsetTypeTimeStamp, 10, 10, map[string]string{"name": "my_consumer"})
+
+	var received int32
+	chunkChan := streamClient.NotifyChunk(make(chan *raw.Chunk, 100))
+	go func() {
+		for c := range chunkChan {
+			if (atomic.AddInt32(&received, int32(c.NumEntries)) % totalMessages) == 0 {
+				log.Info("Received", "messages ", received)
+			}
+		}
+	}()
+
+	err = streamClient.DeclareConsumer(ctx, 1, stream, constants.OffsetTypeFirst, 10, 10, map[string]string{"name": "my_consumer"})
 	fmt.Println("Press any key to stop ")
 	reader := bufio.NewReader(os.Stdin)
 	_, _ = reader.ReadString('\n')

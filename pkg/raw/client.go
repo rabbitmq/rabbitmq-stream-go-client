@@ -51,6 +51,7 @@ type Client struct {
 	configuration        *ClientConfiguration
 	connectionProperties map[string]string
 	confirmsCh           chan *PublishConfirm
+	chunkCh              chan *Chunk
 }
 
 // IsOpen returns true if the connection is open, false otherwise
@@ -322,6 +323,17 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error(err, "error decoding chunk Response")
 					return err
 				}
+				if tc.chunkCh == nil {
+					log.Info("chunk channel is not registered. Use Client.NotifyChunk() to receive chunks")
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case tc.chunkCh <- chunkResponse:
+					log.V(debugLevel).Info("sent a subscription chunk", "subscriptionId", chunkResponse.SubscriptionId)
+				}
+
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 			}
@@ -446,6 +458,10 @@ func (tc *Client) shutdown() error {
 
 	if tc.confirmsCh != nil {
 		close(tc.confirmsCh)
+	}
+
+	if tc.chunkCh != nil {
+		close(tc.chunkCh)
 	}
 
 	return tc.connection.Close()
@@ -900,5 +916,16 @@ func (tc *Client) NotifyPublish(c chan *PublishConfirm) <-chan *PublishConfirm {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	tc.confirmsCh = c
+	return c
+}
+
+// NotifyChunk is used to receive notifications about new chunks in the stream.
+// Chunks are sent to the channel after a subscription. At this level the client does not
+// track the subscriptionId. The subscriptionId is used to identify the consumer in the server.
+// The channel is closed when the connection is closed.
+func (tc *Client) NotifyChunk(c chan *Chunk) <-chan *Chunk {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.chunkCh = c
 	return c
 }

@@ -105,6 +105,7 @@ func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error
 }
 
 type PublishConfirm = internal.PublishConfirmResponse
+type Chunk = internal.ChunkResponse
 
 type Clienter interface {
 	Connect(ctx context.Context) error
@@ -119,4 +120,5 @@ type Clienter interface {
 	IsOpen() bool
 	Close(ctx context.Context) error
 	NotifyPublish(chan *PublishConfirm) <-chan *PublishConfirm
+	NotifyChunk(c chan *Chunk) <-chan *Chunk
 }
