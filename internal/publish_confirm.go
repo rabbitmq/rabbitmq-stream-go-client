@@ -13,6 +13,18 @@ type PublishConfirmResponse struct {
 	publishingIds []uint64
 }
 
+func (p *PublishConfirmResponse) Key() uint16 {
+	return CommandPublishConfirm
+}
+
+func (p *PublishConfirmResponse) MinVersion() int16 {
+	return Version1
+}
+
+func (p *PublishConfirmResponse) MaxVersion() int16 {
+	return Version1
+}
+
 func NewPublishConfirmResponse(publisherID uint8, publishingIds []uint64) *PublishConfirmResponse {
 	return &PublishConfirmResponse{publisherID: publisherID, publishingIds: publishingIds}
 }

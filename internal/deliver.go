@@ -7,7 +7,8 @@ import (
 )
 
 type ChunkResponse struct {
-	SubscriptionId uint8
+	SubscriptionId   uint8
+	CommittedChunkId uint64
 	//OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
 	MagicVersion     int8
 	ChunkType        int8 // 0: user, 1: tracking delta, 2: tracking snapshot
@@ -27,11 +28,24 @@ type ChunkResponse struct {
 	//Data => bytes
 }
 
+func (c *ChunkResponse) Key() uint16 {
+	return CommandDeliver
+}
+
+func (c *ChunkResponse) MinVersion() int16 {
+	return Version2
+}
+
+func (c *ChunkResponse) MaxVersion() int16 {
+	return Version2
+}
+
 func (c *ChunkResponse) MarshalBinary() (data []byte, err error) {
 	buff := &bytes.Buffer{}
 	nn, err := writeMany(
 		buff,
 		c.SubscriptionId,
+		c.CommittedChunkId,
 		c.MagicVersion,
 		c.ChunkType,
 		c.NumEntries,
@@ -45,8 +59,11 @@ func (c *ChunkResponse) MarshalBinary() (data []byte, err error) {
 		c.Reserved,
 		c.Messages,
 	)
-	if err != nil || nn != (49+len(c.Messages)) {
+	if err != nil {
 		return nil, err
+	}
+	if nn != (57 + len(c.Messages)) {
+		return nil, errWriteShort
 	}
 
 	data = buff.Bytes()
@@ -54,7 +71,7 @@ func (c *ChunkResponse) MarshalBinary() (data []byte, err error) {
 }
 
 func (c *ChunkResponse) Read(reader *bufio.Reader) error {
-	err := readMany(reader, &c.SubscriptionId,
+	err := readMany(reader, &c.SubscriptionId, &c.CommittedChunkId,
 		&c.MagicVersion, &c.ChunkType, &c.NumEntries,
 		&c.NumRecords, &c.Timestamp, &c.Epoch, &c.ChunkFirstOffset, &c.ChunkCrc,
 		&c.DataLength, &c.TrailerLength, &c.Reserved)

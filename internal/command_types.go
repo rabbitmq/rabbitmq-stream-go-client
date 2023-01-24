@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"errors"
 )
 
 //go:generate mockgen -source command_types.go -destination ../pkg/raw/mock_internal_interfaces_test.go -package raw_test
@@ -69,36 +70,44 @@ func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
 	return writer.Flush()
 }
 
+type commandInformation interface {
+	Key() uint16
+	MinVersion() int16
+	MaxVersion() int16
+}
+
 // command IDs
 const (
-	CommandDeclarePublisher uint16 = 0x0001 // 1
-	CommandPublish          uint16 = 0x0002 // 2
-	CommandPublishConfirm   uint16 = 0x0003 // 3
-	CommandDeletePublisher  uint16 = 0x0006 // 6
-	CommandSubscribe        uint16 = 0x0007 // 7
-	CommandDeliver          uint16 = 0x0008 // 8
-	CommandCreate           uint16 = 0x000d // 13
-	CommandDelete           uint16 = 0x000e // 14
-	CommandPeerProperties   uint16 = 0x0011 // 17
-	CommandSaslHandshake    uint16 = 0x0012 // 18
-	CommandSaslAuthenticate uint16 = 0x0013 // 19
-	CommandTune             uint16 = 0x0014 // 20
-	CommandOpen             uint16 = 0x0015 // 21
-	CommandClose            uint16 = 0x0016 // 22
+	CommandDeclarePublisher        uint16 = 0x0001 // 1
+	CommandPublish                 uint16 = 0x0002 // 2
+	CommandPublishConfirm          uint16 = 0x0003 // 3
+	CommandDeletePublisher         uint16 = 0x0006 // 6
+	CommandSubscribe               uint16 = 0x0007 // 7
+	CommandDeliver                 uint16 = 0x0008 // 8
+	CommandCreate                  uint16 = 0x000d // 13
+	CommandDelete                  uint16 = 0x000e // 14
+	CommandPeerProperties          uint16 = 0x0011 // 17
+	CommandSaslHandshake           uint16 = 0x0012 // 18
+	CommandSaslAuthenticate        uint16 = 0x0013 // 19
+	CommandTune                    uint16 = 0x0014 // 20
+	CommandOpen                    uint16 = 0x0015 // 21
+	CommandClose                   uint16 = 0x0016 // 22
+	CommandExchangeCommandVersions uint16 = 0x001b // 27
 )
 
 const (
-	CommandDeclarePublisherResponse uint16 = 0x8001
-	CommandDeletePublisherResponse  uint16 = 0x8006
-	CommandSubscribeResponse        uint16 = 0x8007
-	CommandCreateResponse           uint16 = 0x800d
-	CommandDeleteResponse           uint16 = 0x800e
-	CommandPeerPropertiesResponse   uint16 = 0x8011
-	CommandSaslHandshakeResponse    uint16 = 0x8012
-	CommandSaslAuthenticateResponse uint16 = 0x8013
-	CommandTuneResponse             uint16 = 0x8014
-	CommandOpenResponse             uint16 = 0x8015
-	CommandCloseResponse            uint16 = 0x8016
+	CommandDeclarePublisherResponse        uint16 = 0x8001
+	CommandDeletePublisherResponse         uint16 = 0x8006
+	CommandSubscribeResponse               uint16 = 0x8007
+	CommandCreateResponse                  uint16 = 0x800d
+	CommandDeleteResponse                  uint16 = 0x800e
+	CommandPeerPropertiesResponse          uint16 = 0x8011
+	CommandSaslHandshakeResponse           uint16 = 0x8012
+	CommandSaslAuthenticateResponse        uint16 = 0x8013
+	CommandTuneResponse                    uint16 = 0x8014
+	CommandOpenResponse                    uint16 = 0x8015
+	CommandCloseResponse                   uint16 = 0x8016
+	CommandExchangeCommandVersionsResponse uint16 = 0x801b
 )
 
 // Stream protocol field sizes
@@ -114,6 +123,7 @@ const (
 	streamProtocolVersionSizeBytes              = 2
 	streamProtocolCorrelationIdSizeBytes        = 4
 	streamProtocolStringLenSizeBytes            = 2
+	streamProtocolSliceLenBytes                 = 4
 	streamProtocolMapLenBytes                   = 4
 	streamProtocolMapKeyLengthBytes             = 2
 	streamProtocolMapValueLengthBytes           = 2
@@ -126,5 +136,8 @@ const (
 )
 
 const (
-	Version1 = int16(1)
+	Version1 int16 = iota + 1
+	Version2
 )
+
+var errWriteShort = errors.New("wrote less bytes than expected")

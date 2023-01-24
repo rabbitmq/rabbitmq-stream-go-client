@@ -338,7 +338,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
 				if err != nil {
-					log.V(debugLevel).Error(err, "error discarding bytes from unknown frame", "discard")
+					log.V(debugLevel).Error(err, "error discarding bytes from unknown frame", "discard", int(header.Length()-4))
 				}
 			}
 		}

@@ -388,6 +388,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQNewConsumer(ctx context.Context, subs
 
 	bodyResp := internal.ChunkResponse{
 		SubscriptionId:   subscriptionId,
+		CommittedChunkId: 123456789,
 		MagicVersion:     42,
 		ChunkType:        0,
 		NumEntries:       1,
@@ -402,7 +403,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQNewConsumer(ctx context.Context, subs
 		Messages:         []byte("hello"),
 	}
 	frameSize := 4 + // header
-		49 + // static chunk fields
+		49 + 8 + // static chunk fields
 		4 // len("hello")
 	header = internal.NewHeader(frameSize, 0x0008, 2)
 

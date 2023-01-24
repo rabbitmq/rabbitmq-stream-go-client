@@ -18,6 +18,14 @@ func NewCloseRequest(closingCode uint16, closingReason string) *CloseRequest {
 	return &CloseRequest{closingCode: closingCode, closingReason: closingReason}
 }
 
+func (c *CloseRequest) MinVersion() int16 {
+	return Version1
+}
+
+func (c *CloseRequest) MaxVersion() int16 {
+	return Version1
+}
+
 func (c *CloseRequest) ClosingCode() uint16 {
 	return c.closingCode
 }
