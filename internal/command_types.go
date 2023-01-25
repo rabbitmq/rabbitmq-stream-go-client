@@ -70,7 +70,7 @@ func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
 	return writer.Flush()
 }
 
-type commandInformation interface {
+type commandInformer interface {
 	Key() uint16
 	MinVersion() int16
 	MaxVersion() int16

@@ -4,7 +4,7 @@ import (
 	"bufio"
 )
 
-var commandsInitiatedServerSide = []commandInformation{
+var commandsInitiatedServerSide = []commandInformer{
 	&PublishConfirmResponse{},
 	// TODO: PublishError frame
 	&ChunkResponse{},
@@ -14,14 +14,14 @@ var commandsInitiatedServerSide = []commandInformation{
 
 type ExchangeCommandVersionsRequest struct {
 	correlationId uint32
-	commands      []commandInformation
+	commands      []commandInformer
 }
 
 func NewExchangeCommandVersionsRequest(correlationId uint32) *ExchangeCommandVersionsRequest {
 	return &ExchangeCommandVersionsRequest{correlationId: correlationId, commands: commandsInitiatedServerSide}
 }
 
-func NewExchangeCommandVersionsRequestWith(correlationId uint32, commands []commandInformation) *ExchangeCommandVersionsRequest {
+func NewExchangeCommandVersionsRequestWith(correlationId uint32, commands []commandInformer) *ExchangeCommandVersionsRequest {
 	return &ExchangeCommandVersionsRequest{
 		correlationId: correlationId,
 		commands:      commands,
@@ -63,4 +63,64 @@ func (e *ExchangeCommandVersionsRequest) SetCorrelationId(id uint32) {
 
 func (e *ExchangeCommandVersionsRequest) CorrelationId() uint32 {
 	return e.correlationId
+}
+
+// commandInformation is used to decode the exchange command versions response
+// it implements commandInformer, and it holds the min-max versions of a command
+type commandInformation struct {
+	key                    uint16
+	minVersion, maxVersion int16
+}
+
+func (c *commandInformation) Key() uint16 {
+	return c.key
+}
+
+func (c *commandInformation) MinVersion() int16 {
+	return c.minVersion
+}
+
+func (c *commandInformation) MaxVersion() int16 {
+	return c.maxVersion
+}
+
+// ExchangeCommandVersionsResponse is used to decode a response from the server
+// to ExchangeCommandVersionsRequest
+type ExchangeCommandVersionsResponse struct {
+	correlationId uint32
+	responseCode  uint16
+	commands      []commandInformer
+}
+
+func (e *ExchangeCommandVersionsResponse) Read(r *bufio.Reader) error {
+	var sliceLen uint32
+	err := readMany(r, &e.correlationId, &e.responseCode, &sliceLen)
+	if err != nil {
+		return err
+	}
+
+	if sliceLen == 0 {
+		return nil
+	}
+	e.commands = make([]commandInformer, sliceLen)
+
+	for i := uint32(0); i < sliceLen; i++ {
+		var key uint16
+		var min, max int16
+		err = readMany(r, &key, &min, &max)
+		if err != nil {
+			return err
+		}
+		e.commands[i] = &commandInformation{key, min, max}
+	}
+
+	return nil
+}
+
+func (e *ExchangeCommandVersionsResponse) CorrelationId() uint32 {
+	return e.correlationId
+}
+
+func (e *ExchangeCommandVersionsResponse) ResponseCode() uint16 {
+	return e.responseCode
 }
