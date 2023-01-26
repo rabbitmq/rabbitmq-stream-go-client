@@ -333,7 +333,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				case tc.chunkCh <- chunkResponse:
 					log.V(debugLevel).Info("sent a subscription chunk", "subscriptionId", chunkResponse.SubscriptionId)
 				}
-
+			case internal.CommandExchangeCommandVersionsResponse:
+				exchangeResponse := new(internal.ExchangeCommandVersionsResponse)
+				err = exchangeResponse.Read(buffer)
+				log.V(debugLevel).Info("received exchange command versions response")
+				if err != nil {
+					log.Error(err, "error ")
+				}
+				tc.handleResponse(ctx, exchangeResponse)
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
@@ -921,6 +928,24 @@ func (tc *Client) Close(ctx context.Context) error {
 	return nil
 }
 
+// ExchangeCommandVersions TODO: godocs
+func (tc *Client) ExchangeCommandVersions(ctx context.Context) error {
+	if ctx == nil {
+		return errNilContext
+	}
+
+	logger := logr.FromContextOrDiscard(ctx).WithName("ExchangeCommandVersions")
+	logger.V(debugLevel).Info("starting exchange command versions")
+	response, err := tc.syncRequest(ctx, internal.NewExchangeCommandVersionsRequest())
+	if err != nil {
+		logger.Error(err, "error sending sync request for exchange command versions")
+		return err
+	}
+
+	return streamErrorOrNil(response.ResponseCode())
+}
+
+// NotifyPublish TODO: godocs
 func (tc *Client) NotifyPublish(c chan *PublishConfirm) <-chan *PublishConfirm {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()

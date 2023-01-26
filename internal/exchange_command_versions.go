@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"bytes"
 )
 
 var commandsInitiatedServerSide = []commandInformer{
@@ -17,8 +18,8 @@ type ExchangeCommandVersionsRequest struct {
 	commands      []commandInformer
 }
 
-func NewExchangeCommandVersionsRequest(correlationId uint32) *ExchangeCommandVersionsRequest {
-	return &ExchangeCommandVersionsRequest{correlationId: correlationId, commands: commandsInitiatedServerSide}
+func NewExchangeCommandVersionsRequest() *ExchangeCommandVersionsRequest {
+	return &ExchangeCommandVersionsRequest{commands: commandsInitiatedServerSide}
 }
 
 func NewExchangeCommandVersionsRequestWith(correlationId uint32, commands []commandInformer) *ExchangeCommandVersionsRequest {
@@ -26,6 +27,28 @@ func NewExchangeCommandVersionsRequestWith(correlationId uint32, commands []comm
 		correlationId: correlationId,
 		commands:      commands,
 	}
+}
+
+func (e *ExchangeCommandVersionsRequest) UnmarshalBinary(data []byte) error {
+	b := bytes.NewReader(data)
+	var n uint32
+	err := readMany(b, &e.correlationId, &n)
+	if err != nil {
+		return err
+	}
+
+	if n == 0 {
+		return nil
+	}
+
+	for i := uint32(0); i < n; i++ {
+		commandInf := &commandInformation{}
+		err = readMany(b, &commandInf.key, &commandInf.minVersion, &commandInf.maxVersion)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (e *ExchangeCommandVersionsRequest) Write(w *bufio.Writer) (int, error) {
@@ -90,6 +113,38 @@ type ExchangeCommandVersionsResponse struct {
 	correlationId uint32
 	responseCode  uint16
 	commands      []commandInformer
+}
+
+func NewExchangeCommandVersionsResponse(id uint32, responseCode uint16, commands ...commandInformer) *ExchangeCommandVersionsResponse {
+	e := &ExchangeCommandVersionsResponse{correlationId: id, responseCode: responseCode}
+	for _, c := range commands {
+		e.commands = append(e.commands, c)
+	}
+	return e
+}
+
+func (e *ExchangeCommandVersionsResponse) MarshalBinary() (data []byte, err error) {
+	b := &bytes.Buffer{}
+	nn, err := writeMany(b, &e.correlationId, &e.responseCode, len(e.commands))
+	if err != nil {
+		return nil, err
+	}
+	// correlation-id 4b + response-code 2b + slice-len 4b
+	if nn != 10 {
+		return nil, errWriteShort
+	}
+
+	for i := 0; i < len(e.commands); i++ {
+		n, err := writeMany(b, e.commands[i].Key(), e.commands[i].MinVersion(), e.commands[i].MaxVersion())
+		if err != nil {
+			return nil, err
+		}
+		if n != 6 {
+			return nil, errWriteShort
+		}
+	}
+	data = b.Bytes()
+	return
 }
 
 func (e *ExchangeCommandVersionsResponse) Read(r *bufio.Reader) error {

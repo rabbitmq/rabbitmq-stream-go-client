@@ -201,7 +201,15 @@ var _ = Describe("Client", func() {
 		By("subscribing to a stream")
 		// must register channel before subscribing
 		delivery := streamClient.NotifyChunk(make(chan *raw.Chunk, 1))
-		Expect(streamClient.Subscribe(itCtx, "mystream", constants.OffsetTypeOffset, 12, 5, constants.SubscribeProperties{"some-config": "it-works"}, 60_001)).To(Succeed())
+		Expect(streamClient.Subscribe(
+			itCtx,
+			"mystream",
+			constants.OffsetTypeOffset,
+			12,
+			5,
+			constants.SubscribeProperties{"some-config": "it-works"},
+			60_001,
+		)).To(Succeed())
 
 		By("registering a channel")
 		var someChunk *raw.Chunk
@@ -209,6 +217,16 @@ var _ = Describe("Client", func() {
 		Expect(someChunk.Messages).To(BeEquivalentTo("hello"))
 		Expect(someChunk.SubscriptionId).To(BeNumerically("==", 12))
 	})
+
+	It("exchanges commands information", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+		go fakeRabbitMQ.fakeRabbitMQExchangeCommandVersions(ctx)
+
+		Expect(streamClient.ExchangeCommandVersions(ctx)).To(Succeed())
+	}, SpecTimeout(time.Second*3))
 
 	It("cancels requests after a timeout", func(ctx SpecContext) {
 		// This test does not start a fake to mimic rabbitmq responses. By not starting a

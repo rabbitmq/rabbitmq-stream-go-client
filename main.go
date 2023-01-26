@@ -42,6 +42,13 @@ func main() {
 		panic(err)
 	}
 
+	log.Info("exchanging command versions with server")
+	err = streamClient.ExchangeCommandVersions(ctx)
+	if err != nil {
+		log.Error(err, "error in exchange command versions")
+		panic(err)
+	}
+
 	const bachSize = 100
 	const iterations = 2
 	const totalMessages = iterations * bachSize
@@ -52,7 +59,7 @@ func main() {
 		for c := range publishChan {
 			confirmed += len(c.PublishingIds())
 			if (confirmed % totalMessages) == 0 {
-				log.Info("Confirmed", "messages ", confirmed)
+				log.Info("Confirmed", "messages", confirmed)
 			}
 		}
 	}()

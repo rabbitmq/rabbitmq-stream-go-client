@@ -33,7 +33,9 @@ func (c *ChunkResponse) Key() uint16 {
 }
 
 func (c *ChunkResponse) MinVersion() int16 {
-	return Version2
+	// TODO: change this to version 2 after the bug in the server is fixed
+	// 		https://vmware.slack.com/archives/C039S4USVPG/p1674748275224219
+	return Version1
 }
 
 func (c *ChunkResponse) MaxVersion() int16 {
