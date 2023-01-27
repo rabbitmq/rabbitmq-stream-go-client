@@ -512,6 +512,49 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQPublisherConfirms(pubId uint8, numOfC
 	expectOffset1(err).ToNot(HaveOccurred())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQCredit(subscriptionId uint8, credits uint16) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+
+	serverReader := bufio.NewReader(rmq.connection)
+
+	header := new(internal.Header)
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x0009))
+	expectOffset1(header.Version()).To(BeNumerically("==", 1))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
+
+	body := new(internal.CreditRequest)
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	expectOffset1(body.SubscriptionId()).To(Equal(subscriptionId))
+	expectOffset1(body.Credit()).To(Equal(credits))
+}
+
+func (rmq *fakeRabbitMQServer) fakeRabbitMQCreditResponse(ctx context.Context, subscriptionId uint8) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+
+	serverWriter := bufio.NewWriter(rmq.connection)
+
+	header := internal.NewHeader(4, 0x8009, 1)
+	expectOffset1(header.Write(serverWriter)).To(BeNumerically("==", 8))
+
+	body := internal.NewCreditResponse(responseCodeFromContext(ctx, "credit"), subscriptionId)
+	creditResponse, err := body.MarshalBinary()
+	expectOffset1(err).NotTo(HaveOccurred())
+
+	n, err := serverWriter.Write(creditResponse)
+	expectOffset1(err).NotTo(HaveOccurred())
+	expectOffset1(n).To(BeNumerically("==", 3))
+
+	expectOffset1(serverWriter.Flush()).To(Succeed())
+}
+
 func newContextWithResponseCode(ctx context.Context, respCode uint16, suffix ...string) context.Context {
 	var key = "rabbitmq-stream.response-code"
 	if suffix != nil {

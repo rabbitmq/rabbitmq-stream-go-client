@@ -52,6 +52,7 @@ type Client struct {
 	connectionProperties map[string]string
 	confirmsCh           chan *PublishConfirm
 	chunkCh              chan *Chunk
+	notifyCh             chan *CreditError
 }
 
 // IsOpen returns true if the connection is open, false otherwise
@@ -341,6 +342,23 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error(err, "error ")
 				}
 				tc.handleResponse(ctx, exchangeResponse)
+			case internal.CommandCreditResponse:
+				creditResp := new(CreditError)
+				err = creditResp.Read(buffer)
+				log.V(debugLevel).Info("received credit response")
+				if err != nil {
+					log.Error(err, "error in credit response")
+				}
+				tc.mu.Lock()
+				if tc.notifyCh != nil {
+					select {
+					case <-ctx.Done():
+						tc.mu.Unlock()
+						return ctx.Err()
+					case tc.notifyCh <- creditResp:
+					}
+				}
+				tc.mu.Unlock()
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
@@ -945,6 +963,17 @@ func (tc *Client) ExchangeCommandVersions(ctx context.Context) error {
 	return streamErrorOrNil(response.ResponseCode())
 }
 
+// Credit TODO: go docs
+func (tc *Client) Credit(ctx context.Context, subscriptionID uint8, credits uint16) error {
+	if ctx == nil {
+		return errNilContext
+	}
+	logger := logr.FromContextOrDiscard(ctx).WithName("Credit")
+	logger.V(debugLevel).Info("starting credit")
+
+	return tc.request(ctx, internal.NewCreditRequest(subscriptionID, credits))
+}
+
 // NotifyPublish TODO: godocs
 func (tc *Client) NotifyPublish(c chan *PublishConfirm) <-chan *PublishConfirm {
 	tc.mu.Lock()
@@ -962,4 +991,12 @@ func (tc *Client) NotifyChunk(c chan *Chunk) <-chan *Chunk {
 	defer tc.mu.Unlock()
 	tc.chunkCh = c
 	return c
+}
+
+// NotifyCreditError TODO: go docs
+func (tc *Client) NotifyCreditError(notification chan *CreditError) <-chan *CreditError {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.notifyCh = notification
+	return notification
 }

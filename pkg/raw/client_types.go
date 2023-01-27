@@ -106,6 +106,7 @@ func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error
 
 type PublishConfirm = internal.PublishConfirmResponse
 type Chunk = internal.ChunkResponse
+type CreditError = internal.CreditResponse
 
 type Clienter interface {
 	Connect(ctx context.Context) error
@@ -120,4 +121,6 @@ type Clienter interface {
 	NotifyPublish(chan *PublishConfirm) <-chan *PublishConfirm
 	NotifyChunk(c chan *Chunk) <-chan *Chunk
 	ExchangeCommandVersions(ctx context.Context) error
+	Credit(ctx context.Context, subscriptionId uint8, credit uint16) error
+	NotifyCreditError(notification chan *CreditError) <-chan *CreditError
 }

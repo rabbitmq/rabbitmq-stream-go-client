@@ -150,6 +150,36 @@ var _ = Describe("Client", func() {
 		Expect(streamClient.DeclareStream(itCtx, "test-stream", constants.StreamConfiguration{"some-key": "some-value"})).To(Succeed())
 	})
 
+	Context("credits", func() {
+		It("sends credits to the server", func(ctx SpecContext) {
+			Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+			streamClient := raw.NewClient(fakeClientConn, conf)
+
+			go fakeRabbitMQ.fakeRabbitMQCredit(2, 100)
+
+			Expect(streamClient.Credit(ctx, 2, 100)).To(Succeed())
+		})
+
+		When("sending credits for non-existing subscription", func() {
+			It("returns an error", func(ctx SpecContext) {
+				Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+				streamClient := raw.NewClient(fakeClientConn, conf)
+				go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+				go fakeRabbitMQ.fakeRabbitMQCreditResponse(
+					newContextWithResponseCode(ctx, streamResponseCodeSubscriptionIdDoesNotExist, "credit"),
+					123,
+				)
+				var notification *raw.CreditError
+				notificationCh := streamClient.NotifyCreditError(make(chan *raw.CreditError))
+				Eventually(notificationCh).Should(Receive(&notification))
+				Expect(notification).To(BeAssignableToTypeOf(&raw.CreditError{}))
+				Expect(notification.ResponseCode()).To(BeNumerically("==", streamResponseCodeSubscriptionIdDoesNotExist))
+				Expect(notification.SubscriptionId()).To(BeNumerically("==", 123))
+			})
+		})
+	})
+
 	It("Delete a stream", func(ctx SpecContext) {
 		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
 		defer cancel()
