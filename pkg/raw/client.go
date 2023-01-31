@@ -345,10 +345,19 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			case internal.CommandCreditResponse:
 				creditResp := new(CreditError)
 				err = creditResp.Read(buffer)
-				log.V(debugLevel).Info("received credit response")
+				log.Error(
+					errUnknownSubscription,
+					"received credit response for unknown subscription",
+					"responseCode",
+					creditResp.ResponseCode(),
+					"subscriptionId",
+					creditResp.SubscriptionId(),
+				)
 				if err != nil {
 					log.Error(err, "error in credit response")
+					return err
 				}
+
 				tc.mu.Lock()
 				if tc.notifyCh != nil {
 					select {

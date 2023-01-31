@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	errURIScheme     = errors.New("RabbitMQ Stream scheme must be either 'rabbitmq-stream://' or 'rabbitmq-stream+tls://'")
-	errURIWhitespace = errors.New("URI must not contain whitespace")
-	errNilContext    = errors.New("context cannot be nil")
-	errNilConfig     = errors.New("RabbitmqConfiguration cannot be nil")
+	errURIScheme           = errors.New("RabbitMQ Stream scheme must be either 'rabbitmq-stream://' or 'rabbitmq-stream+tls://'")
+	errURIWhitespace       = errors.New("URI must not contain whitespace")
+	errNilContext          = errors.New("context cannot be nil")
+	errNilConfig           = errors.New("RabbitmqConfiguration cannot be nil")
+	errUnknownSubscription = errors.New("unknown subscription ID")
 )
 
 var schemePorts = map[string]int{"rabbitmq-stream": 5552, "rabbitmq-stream+tls": 5551}

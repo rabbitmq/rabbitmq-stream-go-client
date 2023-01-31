@@ -95,11 +95,18 @@ func main() {
 	go func() {
 		for c := range chunkChan {
 			received += int(c.NumEntries)
+			err := streamClient.Credit(ctx, 1, 1)
+			if err != nil {
+				log.Error(err, "error sending credits")
+			}
 			if (received % totalMessages) == 0 {
 				log.Info("Received", "messages ", received)
 			}
 		}
 	}()
+
+	// this should log a warning message: subscription does not exist
+	_ = streamClient.Credit(ctx, 123, 1)
 
 	err = streamClient.Subscribe(ctx, stream, constants.OffsetTypeFirst, 1, 10, map[string]string{"name": "my_consumer"}, 10)
 	fmt.Println("Press any key to stop ")
