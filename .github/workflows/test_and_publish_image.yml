@@ -24,7 +24,7 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
-      - run: make test
+      - run: make test GO_VERSION=${{ matrix.go }}
       - name: Upload code coverage to Codecov
         run: bash <(curl -s https://codecov.io/bash)
   test-win32:
@@ -49,7 +49,7 @@ jobs:
         run: ./.ci/install.ps1
       - name: Install GNU make
         run: choco install make
-      - run: make test
+      - run: make test GO_VERSION=${{ matrix.go }}
   publish:
     runs-on: ubuntu-latest
     needs: [test, test-win32]
