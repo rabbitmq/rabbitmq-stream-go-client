@@ -5,6 +5,15 @@ else
 GOBIN = $(shell go env GOBIN)
 endif
 
+ifdef GO_VERSION
+	ifeq ($(GO_VERSION),1.18)
+		STATICCHECK_VERSION=2022.1.3
+	endif
+	ifeq ($(GO_VERSION),1.17)
+		STATICCHECK_VERSION=2021.1.2
+	endif
+endif
+
 VERSION ?= latest
 LDFLAGS = "-X main.Version=$(VERSION)"
 
@@ -17,8 +26,9 @@ fmt:
 	go fmt ./...
 
 STATICCHECK ?= $(GOBIN)/staticcheck
+STATICCHECK_VERSION ?= latest
 $(STATICCHECK):
-	go install honnef.co/go/tools/cmd/staticcheck@latest
+	go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
 check: $(STATICCHECK)
 	$(STATICCHECK) ./pkg/stream
 
@@ -58,7 +68,7 @@ perf-test-run: perf-test-build
 perf-test-help: perf-test-build
 	go run perfTest/perftest.go help
 
-perf-test-build: vet fmt check
+perf-test-build:
 	go build -ldflags=$(LDFLAGS) -o bin/stream-perf-test perfTest/perftest.go
 
 BUILDKIT ?= docker
