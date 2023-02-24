@@ -53,6 +53,7 @@ type Client struct {
 	confirmsCh           chan *PublishConfirm
 	chunkCh              chan *Chunk
 	notifyCh             chan *CreditError
+	metadataCh           chan *MetadataResponse
 }
 
 // IsOpen returns true if the connection is open, false otherwise
@@ -368,6 +369,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					}
 				}
 				tc.mu.Unlock()
+			case internal.CommandMetadataResponse:
+				metadataResp := new(internal.MetadataResponse)
+				err := metadataResp.Read(buffer)
+				log.V(debugLevel).Info("received metadata response")
+				if err != nil {
+					log.Error(err, "error ")
+				}
+				tc.handleResponse(ctx, metadataResp)
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
@@ -981,6 +990,27 @@ func (tc *Client) Credit(ctx context.Context, subscriptionID uint8, credits uint
 	logger.V(debugLevel).Info("starting credit")
 
 	return tc.request(ctx, internal.NewCreditRequest(subscriptionID, credits))
+}
+
+// MetadataQuery TODO: go docs
+func (tc *Client) MetadataQuery(ctx context.Context, stream string) (*MetadataResponse, error) {
+	if ctx == nil {
+		return nil, errNilContext
+	}
+
+	logger := logr.FromContextOrDiscard(ctx).WithName("MetadataQuery")
+	logger.V(debugLevel).Info("starting metadata query")
+	response, err := tc.syncRequest(ctx, internal.NewMetadataQuery(stream))
+	if err != nil {
+		logger.Error(err, "error getting metadata", "stream", stream)
+		return nil, err
+	}
+
+	if response.ResponseCode() != 0 {
+		return nil, streamErrorOrNil(response.ResponseCode())
+	}
+
+	return response.(*MetadataResponse), nil
 }
 
 // NotifyPublish TODO: godocs

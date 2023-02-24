@@ -87,6 +87,7 @@ const (
 	CommandCredit                  uint16 = 0x0009 // 9
 	CommandCreate                  uint16 = 0x000d // 13
 	CommandDelete                  uint16 = 0x000e // 14
+	CommandMetadata                uint16 = 0x000f // 15
 	CommandPeerProperties          uint16 = 0x0011 // 17
 	CommandSaslHandshake           uint16 = 0x0012 // 18
 	CommandSaslAuthenticate        uint16 = 0x0013 // 19
@@ -103,6 +104,7 @@ const (
 	CommandCreditResponse                  uint16 = 0x8009
 	CommandCreateResponse                  uint16 = 0x800d
 	CommandDeleteResponse                  uint16 = 0x800e
+	CommandMetadataResponse                uint16 = 0x800f
 	CommandPeerPropertiesResponse          uint16 = 0x8011
 	CommandSaslHandshakeResponse           uint16 = 0x8012
 	CommandSaslAuthenticateResponse        uint16 = 0x8013

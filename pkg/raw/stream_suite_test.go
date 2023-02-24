@@ -512,6 +512,121 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQPublisherConfirms(pubId uint8, numOfC
 	expectOffset1(err).ToNot(HaveOccurred())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(stream string) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+	serverReader := bufio.NewReader(rmq.connection)
+
+	header := new(internal.Header)
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x000f))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
+
+	body := new(internal.MetadataQuery)
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	expectOffset1(body.Stream()).To(Equal(stream))
+
+	// metadataResponse
+	frameSize := 4 + // header
+		4 + // correlationID
+		2 + // broker refernce
+		9 + // broker host
+		4 + // broker port
+		8 + // streamMetadata streamName
+		2 + // streamMetadata responseCode
+		2 + // streamMetadata leaderReference
+		8 // streamMetadata replicasreferences
+
+	header = internal.NewHeader(frameSize, 0x800f, 1)
+	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
+		"expected to write 8 bytes")
+
+	bodyRequest, err := internal.NewMetadataResponse(rmq.correlationIdSeq.next(),
+		5678,
+		1,
+		0,
+		2,
+		"1.1.1.1",
+		"stream",
+		[]uint16{1, 2},
+	).MarshalBinary()
+
+	expectOffset1(err).ToNot(HaveOccurred())
+	_, err = rmq.connection.Write(bodyRequest)
+	expectOffset1(err).ToNot(HaveOccurred())
+}
+
+func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataResponse(ctx context.Context, streamName string) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+
+	serverReader := bufio.NewReader(rmq.connection)
+
+	header := new(internal.Header)
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x000f))
+	expectOffset1(header.Version()).To(BeNumerically("==", 1))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
+
+	query := internal.NewMetadataQuery("stream-exists")
+	err := query.UnmarshalBinary(buff)
+	Expect(err).NotTo(HaveOccurred())
+
+	serverWriter := bufio.NewWriter(rmq.connection)
+	header = internal.NewHeader(4, 0x800f, 1)
+	expectOffset1(header.Write(serverWriter)).To(BeNumerically("==", 8))
+
+	// If the streamName does not match what's on the 'server', then we return a nil metadataResponse, and an error.
+	if query.Stream() != streamName {
+		nilBody := internal.NewMetadataResponse(0,
+			0,
+			0,
+			responseCodeFromContext(ctx, "metadata"),
+			0,
+			"",
+			streamName,
+			[]uint16{},
+		)
+		metadataResponse, err := nilBody.MarshalBinary()
+		expectOffset1(err).NotTo(HaveOccurred())
+		_, err = serverWriter.Write(metadataResponse)
+		expectOffset1(err).NotTo(HaveOccurred())
+
+		return
+	}
+
+	// Server says "OK" and returns a populated metadataResponse
+	host := "1.1.1.1"
+	replicasReferences := []uint16{1, 2, 3}
+	body := internal.NewMetadataResponse(1,
+		5678, 1,
+		responseCodeFromContext(ctx, "metadata"),
+		1,
+		host,
+		streamName,
+		replicasReferences,
+	)
+	metadataResponse, err := body.MarshalBinary()
+	expectOffset1(err).NotTo(HaveOccurred())
+
+	n, err := serverWriter.Write(metadataResponse)
+	expectOffset1(err).NotTo(HaveOccurred())
+
+	lenReplicas := len(replicasReferences) * 2 // multiply x2 since each element is 2 bytes
+	lenBytes := internal.LenNilMetaDataResponse + len(host) + len(streamName) + lenReplicas
+	expectOffset1(n).To(BeNumerically("==", lenBytes))
+
+	expectOffset1(serverWriter.Flush()).To(Succeed())
+}
+
 func (rmq *fakeRabbitMQServer) fakeRabbitMQCredit(subscriptionId uint8, credits uint16) {
 	defer GinkgoRecover()
 	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).

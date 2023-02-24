@@ -180,6 +180,37 @@ var _ = Describe("Client", func() {
 		})
 	})
 
+	Context("metadata", func() {
+		It("sends a metadata query to the server", func(ctx SpecContext) {
+			Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+			streamClient := raw.NewClient(fakeClientConn, conf)
+			go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+			go fakeRabbitMQ.fakeRabbitMQMetadataQuery("stream-exists")
+
+			metadataResponse, err := streamClient.MetadataQuery(ctx, "stream-exists")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", 0))
+			Expect(metadataResponse.CorrelationId()).To(BeNumerically("==", 1))
+		})
+
+		Context("when a metadata query is sent for a non existent stream name", func() {
+			It("returns an error", func(ctx SpecContext) {
+				Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+				streamClient := raw.NewClient(fakeClientConn, conf)
+				go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+				go fakeRabbitMQ.fakeRabbitMQMetadataResponse(
+					newContextWithResponseCode(ctx, streamResponseCodeStreamDoesNotExist, "metadata"),
+					"stream-does-not-exist",
+				)
+
+				_, err := streamClient.MetadataQuery(ctx, "stream-does-not-exist")
+				Expect(err).To(MatchError("stream does not exist"))
+			})
+		})
+	})
+
 	It("Delete a stream", func(ctx SpecContext) {
 		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
 		defer cancel()
