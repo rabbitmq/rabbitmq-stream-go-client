@@ -23,6 +23,7 @@ func saveMessageToFile(filename string, data []byte) {
 	if err != nil {
 		fmt.Printf("can't write file: %s", err)
 	}
+
 	err = outf.Close()
 	if err != nil {
 		fmt.Printf("can't close file: %s", err)
@@ -45,6 +46,8 @@ func generateString(n int) string {
 }
 
 func main() {
+	chineseStringTest :=
+		"Alan Mathison Turing（1912 年 6 月 23 日 - 1954 年 6 月 7 日）是英国数学家、计算机科学家、逻辑学家、密码分析家、哲学家和理论生物学家。 [6] 图灵在理论计算机科学的发展中具有很大的影响力，用图灵机提供了算法和计算概念的形式化，可以被认为是通用计算机的模型。[7][8][9] 他被广泛认为是理论计算机科学和人工智能之父。 [10]"
 
 	getwd, err := os.Getwd()
 	if err != nil {
@@ -67,6 +70,20 @@ func main() {
 		return
 	}
 	saveMessageToFile("message_body_250", binary)
+
+	msg = amqp.NewMessage([]byte("this_is_a_amqp_message"))
+	binary, err = msg.MarshalBinary()
+	if err != nil {
+		return
+	}
+	saveMessageToFile("message_body_this_is_a_amqp_message", binary)
+
+	msg = amqp.NewMessage([]byte(chineseStringTest))
+	binary, err = msg.MarshalBinary()
+	if err != nil {
+		return
+	}
+	saveMessageToFile("message_body_unicode_500_body", binary)
 
 	msg = amqp.NewMessage([]byte(generateString(700)))
 	binary, err = msg.MarshalBinary()
@@ -161,8 +178,6 @@ func main() {
 	saveMessageToFile("static_test_message_compare", binary)
 
 	byteString := "Alan  Mathison Turing  ( 23 June 1912 – 7 June 1954 ) was an English  mathematician, computer scientist, logician, cryptanalyst,  philosopher, and theoretical biologist. Turing  was   highly  influential in the development of theoretical computer science."
-	chineseStringTest :=
-		"Alan Mathison Turing（1912 年 6 月 23 日 - 1954 年 6 月 7 日）是英国数学家、计算机科学家、逻辑学家、密码分析家、哲学家和理论生物学家。 [6] 图灵在理论计算机科学的发展中具有很大的影响力，用图灵机提供了算法和计算概念的形式化，可以被认为是通用计算机的模型。[7][8][9] 他被广泛认为是理论计算机科学和人工智能之父。 [10]"
 
 	greekTest := "Ο Άλαν Μάθισον Τούρινγκ (23 Ιουνίου 1912 – 7 Ιουνίου 1954) ήταν Άγγλος μαθηματικός, επιστήμονας υπολογιστών, λογικός, κρυπαναλυτής, φιλόσοφος και θεωρητικός βιολόγος. Ο Τούρινγκ είχε μεγάλη επιρροή στην ανάπτυξη της θεωρητικής επιστήμης των υπολογιστών."
 	msg = amqp.NewMessage([]byte(byteString))
