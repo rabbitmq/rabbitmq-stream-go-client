@@ -186,6 +186,20 @@ func (env *Environment) QuerySequence(publisherReference string, streamName stri
 	return client.queryPublisherSequence(publisherReference, streamName)
 }
 
+func (env *Environment) StreamStats(streamName string) (*StreamStats, error) {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		err := client.Close()
+		if err != nil {
+			return
+		}
+	}(client)
+	if err != nil {
+		return nil, err
+	}
+	return client.StreamStats(streamName)
+}
+
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
