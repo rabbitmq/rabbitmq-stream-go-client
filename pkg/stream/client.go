@@ -820,5 +820,5 @@ func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
 		return nil, err.Err
 	}
 	m := offset.(map[string]int64)
-	return &StreamStats{m, streamName}, nil
+	return newStreamStats(m, streamName), nil
 }
