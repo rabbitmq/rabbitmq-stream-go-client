@@ -3,10 +3,10 @@
 ---
 <div align="center">
 
-    ![Build](https://github.com/rabbitmq/rabbitmq-stream-go-client/workflows/Build/badge.svg)
-    [![codecov](https://codecov.io/gh/rabbitmq/rabbitmq-stream-go-client/branch/main/graph/badge.svg?token=HZD4S71QIM)](https://codecov.io/gh/rabbitmq/rabbitmq-stream-go-client)
+![Build](https://github.com/rabbitmq/rabbitmq-stream-go-client/workflows/Build/badge.svg)
+[![codecov](https://codecov.io/gh/rabbitmq/rabbitmq-stream-go-client/branch/main/graph/badge.svg?token=HZD4S71QIM)](https://codecov.io/gh/rabbitmq/rabbitmq-stream-go-client)
 
-    Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
+Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 </div>
 
 # Table of Contents
@@ -17,25 +17,25 @@
 - [Getting started for impatient](#getting-started-for-impatient)
 - [Examples](#examples)
 - [Usage](#usage)
-* [Connect](#connect)
-* [Multi hosts](#multi-hosts)
-* [Load Balancer](#load-balancer)
-* [TLS](#tls)
-* [Streams](#streams)
-* [Statistics](#streams-statistics)
-* [Publish messages](#publish-messages)
-* [`Send` vs `BatchSend`](#send-vs-batchsend)
-* [Publish Confirmation](#publish-confirmation)
-* [Deduplication](#deduplication)
-* [Sub Entries Batching](#sub-entries-batching)
-* [HA producer - Experimental](#ha-producer-experimental)
-* [Consume messages](#consume-messages)
-* [Manual Track Offset](#manual-track-offset)
-* [Automatic Track Offset](#automatic-track-offset)
-* [Get consumer Offset](#get-consumer-offset)
-* [Handle Close](#handle-close)
+    * [Connect](#connect)
+        * [Multi hosts](#multi-hosts)
+        * [Load Balancer](#load-balancer)
+        * [TLS](#tls)
+      * [Streams](#streams)
+		* [Statistics](#streams-statistics)
+    * [Publish messages](#publish-messages)
+        * [`Send` vs `BatchSend`](#send-vs-batchsend)
+        * [Publish Confirmation](#publish-confirmation)
+        * [Deduplication](#deduplication)
+        * [Sub Entries Batching](#sub-entries-batching)
+        * [HA producer - Experimental](#ha-producer-experimental)
+    * [Consume messages](#consume-messages)
+        * [Manual Track Offset](#manual-track-offset)
+        * [Automatic Track Offset](#automatic-track-offset)
+        * [Get consumer Offset](#get-consumer-offset)
+    * [Handle Close](#handle-close)
 - [Performance test tool](#performance-test-tool)
-* [Performance test tool Docker](#performance-test-tool-docker)
+    * [Performance test tool Docker](#performance-test-tool-docker)
 - [Build form source](#build-form-source)
 - [Project status](#project-status)
 
@@ -46,7 +46,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
 ### Installing
 
 ```shell
-go get -u github.com/rabbitmq/rabbitmq-stream-go-client
+ go get -u github.com/rabbitmq/rabbitmq-stream-go-client
 ```
 
 imports:
@@ -61,8 +61,8 @@ imports:
 You may need a server to test locally. Let's start the broker:
 ```shell
 docker run -it --rm --name rabbitmq -p 5552:5552 -p 15672:15672\
--e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS='-rabbitmq_stream advertised_host localhost -rabbit loopback_users "none"' \
-rabbitmq:3.9-management
+    -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS='-rabbitmq_stream advertised_host localhost -rabbit loopback_users "none"' \
+    rabbitmq:3.9-management
 ```
 The broker should start in a few seconds. When it’s ready, enable the `stream` plugin and `stream_management`:
 ```shell
@@ -87,12 +87,12 @@ See [examples](./examples/) directory for more use cases.
 Standard way to connect single node:
 ```golang
 env, err := stream.NewEnvironment(
-stream.NewEnvironmentOptions().
-SetHost("localhost").
-SetPort(5552).
-SetUser("guest").
-SetPassword("guest"))
-CheckErr(err)
+		stream.NewEnvironmentOptions().
+			SetHost("localhost").
+			SetPort(5552).
+			SetUser("guest").
+			SetPassword("guest"))
+	CheckErr(err)
 ```
 
 you can define the number of producers per connections, the default value is 1:
@@ -117,12 +117,12 @@ It is possible to define multi hosts, in case one fails to connect the clients t
 
 ```golang
 addresses := []string{
-"rabbitmq-stream://guest:guest@host1:5552/%2f",
-"rabbitmq-stream://guest:guest@host2:5552/%2f",
-"rabbitmq-stream://guest:guest@host3:5552/%2f"}
+		"rabbitmq-stream://guest:guest@host1:5552/%2f",
+		"rabbitmq-stream://guest:guest@host2:5552/%2f",
+		"rabbitmq-stream://guest:guest@host3:5552/%2f"}
 
 env, err := stream.NewEnvironment(
-stream.NewEnvironmentOptions().SetUris(addresses))
+			stream.NewEnvironmentOptions().SetUris(addresses))
 ```
 
 ### Load Balancer
@@ -132,14 +132,14 @@ in case of load balancer you can use the `stream.AddressResolver` parameter in t
 
 ```golang
 addressResolver := stream.AddressResolver{
-Host: "load-balancer-ip",
-Port: 5552,
-}
+		Host: "load-balancer-ip",
+		Port: 5552,
+	}
 env, err := stream.NewEnvironment(
-stream.NewEnvironmentOptions().
-SetHost(addressResolver.Host).
-SetPort(addressResolver.Port).
-SetAddressResolver(addressResolver).
+		stream.NewEnvironmentOptions().
+			SetHost(addressResolver.Host).
+			SetPort(addressResolver.Port).
+			SetAddressResolver(addressResolver).
 ```
 
 In this configuration the client tries the connection until reach the right node.
@@ -153,14 +153,14 @@ See also "Using a load balancer" example in the [examples](./examples/) director
 To configure TLS you need to set the `IsTLS` parameter:
 ```golang
 env, err := stream.NewEnvironment(
-stream.NewEnvironmentOptions().
-SetHost("localhost").
-SetPort(5551). // standard TLS port
-SetUser("guest").
-SetPassword("guest").
-IsTLS(true).
-SetTLSConfig(&tls.Config{}),
-)
+		stream.NewEnvironmentOptions().
+			SetHost("localhost").
+			SetPort(5551). // standard TLS port
+			SetUser("guest").
+			SetPassword("guest").
+			IsTLS(true).
+			SetTLSConfig(&tls.Config{}),
+	)
 ```
 
 The `tls.Config` is the standard golang tls library https://pkg.go.dev/crypto/tls </br>
@@ -175,8 +175,8 @@ It is highly recommended to define stream retention policies during the stream c
 
 ```golang
 err = env.DeclareStream(streamName,
-stream.NewStreamOptions().
-SetMaxLengthBytes(stream.ByteCapacity{}.GB(2)))
+		stream.NewStreamOptions().
+		SetMaxLengthBytes(stream.ByteCapacity{}.GB(2)))
 ```
 
 The function `DeclareStream` doesn't return errors if a stream is already defined with the same parameters.
@@ -213,7 +213,6 @@ lastOffset, err := stats.LastOffset() // last offset of the stream
 committedChunkId, err := statsAfter.CommittedChunkId()
 ```
 
-
 ### Publish messages
 
 To publish a message you need a `*stream.Producer` instance:
@@ -224,10 +223,10 @@ producer, err :=  env.NewProducer("my-stream", nil)
 With `ProducerOptions` is possible to customize the Producer behaviour:
 ```golang
 type ProducerOptions struct {
-Name       string // Producer name, it is useful to handle deduplication messages
-QueueSize  int // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
-BatchSize  int // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
-BatchPublishingDelay int    // Period to send a batch of messages.
+	Name       string // Producer name, it is useful to handle deduplication messages
+	QueueSize  int // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
+	BatchSize  int // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
+	BatchPublishingDelay int    // Period to send a batch of messages.
 }
 ```
 
@@ -242,7 +241,7 @@ and `BatchSend`:
 ```golang
 var messages []message.StreamMessage
 for z := 0; z < 10; z++ {
-messages = append(messages, amqp.NewMessage([]byte("hello")))
+  messages = append(messages, amqp.NewMessage([]byte("hello")))
 }
 err = producer.BatchSend(messages)
 ```
@@ -281,17 +280,17 @@ chPublishConfirm := producer.NotifyPublishConfirmation()
 handlePublishConfirm(chPublishConfirm)
 
 func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
-go func() {
-for confirmed := range confirms {
-for _, msg := range confirmed {
-if msg.IsConfirmed() {
-fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
-} else {
-fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
-}
-}
-}
-}()
+	go func() {
+		for confirmed := range confirms {
+			for _, msg := range confirmed {
+				if msg.IsConfirmed() {
+					fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
+				} else {
+					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
+				}
+			}
+		}
+	}()
 }
 ```
 
@@ -319,6 +318,7 @@ the values `messageStatus.GetMessage().GetPublishingId()` and `messageStatus.Get
 See also "Getting started" example in the [examples](./examples/) directory
 
 
+
 ### Deduplication
 
 The stream plugin can handle deduplication data, see this blog post for more details:
@@ -343,25 +343,25 @@ Compression is valid only is `SubEntrySize > 1`
 
 ```golang
 producer, err := env.NewProducer(streamName, stream.NewProducerOptions().
-SetSubEntrySize(100).
-SetCompression(stream.Compression{}.Gzip()))
+		SetSubEntrySize(100).
+		SetCompression(stream.Compression{}.Gzip()))
 ```
 
 ### Ha Producer Experimental
 The ha producer is built up the standard producer. </br>
 Features:
-- auto-reconnect in case of disconnection
-- handle the unconfirmed messages automatically in case of fail.
+ - auto-reconnect in case of disconnection
+ - handle the unconfirmed messages automatically in case of fail.
 
 You can find a "HA producer" example in the [examples](./examples/) directory. </br>
 
 ```golang
 haproducer := NewHAProducer(
-env *stream.Environment, // mandatory
-streamName string, // mandatory
-producerOptions *stream.ProducerOptions, //optional
-confirmMessageHandler ConfirmMessageHandler // mandatory
-)
+	env *stream.Environment, // mandatory
+	streamName string, // mandatory
+	producerOptions *stream.ProducerOptions, //optional
+	confirmMessageHandler ConfirmMessageHandler // mandatory
+	)
 ```
 
 ### Consume messages
@@ -369,21 +369,21 @@ confirmMessageHandler ConfirmMessageHandler // mandatory
 In order to consume messages from a stream you need to use the `NewConsumer` interface, ex:
 ```golang
 handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
+	fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
 }
 
 consumer, err := env.NewConsumer(
-"my-stream",
-handleMessages,
-....
+		"my-stream",
+		handleMessages,
+		....
 ```
 
 With `ConsumerOptions` it is possible to customize the consumer behaviour.
 ```golang
-stream.NewConsumerOptions().
-SetConsumerName("my_consumer").                  // set a consumer name
-SetCRCCheck(false).  // Enable/Disable the CRC control.
-SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
+  stream.NewConsumerOptions().
+  SetConsumerName("my_consumer").                  // set a consumer name
+  SetCRCCheck(false).  // Enable/Disable the CRC control.
+  SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 ```
 Disabling the CRC control can increase the performances.
 
@@ -397,14 +397,14 @@ other consumers
 The server can store the current delivered offset given a consumer, in this way:
 ```golang
 handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-if atomic.AddInt32(&count, 1)%1000 == 0 {
-err := consumerContext.Consumer.StoreOffset()  // commit all messages up to the current message's offset
-....
+		if atomic.AddInt32(&count, 1)%1000 == 0 {
+			err := consumerContext.Consumer.StoreOffset()  // commit all messages up to the current message's offset
+			....
 
 consumer, err := env.NewConsumer(
 ..
 stream.NewConsumerOptions().
-SetConsumerName("my_consumer"). <------
+			SetConsumerName("my_consumer"). <------
 ```
 A consumer must have a name to be able to store offsets. <br>
 Note: *AVOID to store the offset for each single message, it will reduce the performances*
@@ -414,9 +414,9 @@ See also "Offset Tracking" example in the [examples](./examples/) directory
 The server can also store a previous delivered offset rather than the current delivered offset, in this way:
 ```golang
 processMessageAsync := func(consumer stream.Consumer, message *amqp.Message, offset int64) {
-....
-err := consumer.StoreCustomOffset(offset)  // commit all messages up to this offset
-....
+    ....
+    err := consumer.StoreCustomOffset(offset)  // commit all messages up to this offset
+    ....
 ```
 This is useful in situations where we have to process messages asynchronously and we cannot block the original message
 handler. Which means we cannot store the current or latest delivered offset as we saw in the `handleMessages` function
@@ -427,15 +427,15 @@ above.
 The following snippet shows how to enable automatic tracking with the defaults:
 ```golang
 stream.NewConsumerOptions().
-SetConsumerName("my_consumer").
-SetAutoCommit(stream.NewAutoCommitStrategy() ...
+			SetConsumerName("my_consumer").
+			SetAutoCommit(stream.NewAutoCommitStrategy() ...
 ```
 `nil` is also a valid value. Default values will be used
 
 ```golang
 stream.NewConsumerOptions().
-SetConsumerName("my_consumer").
-SetAutoCommit(nil) ...
+			SetConsumerName("my_consumer").
+			SetAutoCommit(nil) ...
 ```
 Set the consumer name (mandatory for offset tracking) </br>
 
@@ -449,12 +449,12 @@ This avoids having pending, not stored offsets in case of inactivity.  The defau
 Those settings are configurable, as shown in the following snippet:
 ```golang
 stream.NewConsumerOptions().
-// set a consumerOffsetNumber name
-SetConsumerName("my_consumer").
-SetAutoCommit(stream.NewAutoCommitStrategy().
-SetCountBeforeStorage(50). // store each 50 messages stores
-SetFlushInterval(10*time.Second)). // store each 10 seconds
-SetOffset(stream.OffsetSpecification{}.First()))
+	// set a consumerOffsetNumber name
+	SetConsumerName("my_consumer").
+	SetAutoCommit(stream.NewAutoCommitStrategy().
+		SetCountBeforeStorage(50). // store each 50 messages stores
+		SetFlushInterval(10*time.Second)). // store each 10 seconds
+	SetOffset(stream.OffsetSpecification{}.First()))
 ```
 
 See also "Automatic Offset Tracking" example in the [examples](./examples/) directory
@@ -475,8 +475,8 @@ Client provides an interface to handle the producer/consumer close.
 channelClose := consumer.NotifyClose()
 defer consumerClose(channelClose)
 func consumerClose(channelClose stream.ChannelClose) {
-event := <-channelClose
-fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", event.Name, event.StreamName, event.Reason)
+	event := <-channelClose
+	fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", event.Name, event.StreamName, event.Reason)
 }
 ```
 In this way it is possible to handle fail-over
@@ -516,12 +516,12 @@ A docker image is available: `pivotalrabbitmq/go-stream-perf-test`, to test it:
 
 Run the server is host mode:
 ```shell
-docker run -it --rm --name rabbitmq --network host \
-rabbitmq:3.9-management
+ docker run -it --rm --name rabbitmq --network host \
+    rabbitmq:3.9-management
 ```
 enable the plugin:
 ```
-docker exec rabbitmq rabbitmq-plugins enable rabbitmq_stream
+ docker exec rabbitmq rabbitmq-plugins enable rabbitmq_stream
 ```
 then run the docker image:
 ```shell
