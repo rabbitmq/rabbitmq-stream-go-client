@@ -814,11 +814,13 @@ func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
 
 	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
 	offset := <-resp.data
-
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	if err.Err != nil {
 		return nil, err.Err
 	}
-	m := offset.(map[string]int64)
+	m, ok := offset.(map[string]int64)
+	if !ok {
+		return nil, fmt.Errorf("invalid response, expected map[string]int64 but got %T", offset)
+	}
 	return newStreamStats(m, streamName), nil
 }

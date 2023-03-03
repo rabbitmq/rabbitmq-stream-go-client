@@ -497,7 +497,7 @@ func (c *Client) streamStatusFrameHandler(readProtocol *ReaderProtocol,
 	}
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
 	if err != nil {
-		// TODO handle response
+		logs.LogWarn("stream status response not found")
 		return
 	}
 	res.code <- Code{id: readProtocol.ResponseCode}

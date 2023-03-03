@@ -122,6 +122,10 @@ var _ = Describe("Streaming testEnvironment", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(stats).NotTo(BeNil())
 
+		DeferCleanup(func() {
+			Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
+		})
+
 		_, err = stats.FirstOffset()
 		Expect(fmt.Sprintf("%s", err)).
 			To(ContainSubstring("FirstOffset not found for"))
@@ -155,8 +159,6 @@ var _ = Describe("Streaming testEnvironment", func() {
 		offset, err = statsAfter.CommittedChunkId()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(offset > 0).To(BeTrue())
-
-		Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
 	})
 
 	It("Create two times Stream precondition fail", func() {
