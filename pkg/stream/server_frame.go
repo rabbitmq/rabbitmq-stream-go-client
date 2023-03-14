@@ -99,6 +99,10 @@ func (c *Client) handleResponse() {
 				c.queryOffsetFrameHandler(readerProtocol, buffer)
 
 			}
+		case commandStreamStatus:
+			{
+				c.streamStatusFrameHandler(readerProtocol, buffer)
+			}
 		case commandMetadata:
 			{
 				c.metadataFrameHandler(readerProtocol, buffer)
@@ -476,6 +480,29 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 		//TODO handle the error, see the java code
 		logs.LogWarn("unsupported metadata update code %d", code)
 	}
+}
+
+func (c *Client) streamStatusFrameHandler(readProtocol *ReaderProtocol,
+	r *bufio.Reader) {
+
+	c.handleGenericResponse(readProtocol, r)
+
+	count, _ := readUInt(r)
+	streamStatus := make(map[string]int64)
+
+	for i := 0; i < int(count); i++ {
+		key := readString(r)
+		value := readInt64(r)
+		streamStatus[key] = value
+	}
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	if err != nil {
+		logs.LogWarn("stream status response not found")
+		return
+	}
+	res.code <- Code{id: readProtocol.ResponseCode}
+	res.data <- streamStatus
+
 }
 
 func (c *Client) metadataFrameHandler(readProtocol *ReaderProtocol,

@@ -22,6 +22,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
         * [Load Balancer](#load-balancer)
         * [TLS](#tls)
       * [Streams](#streams)
+		* [Statistics](#streams-statistics)
     * [Publish messages](#publish-messages)
         * [`Send` vs `BatchSend`](#send-vs-batchsend)
         * [Publish Confirmation](#publish-confirmation)
@@ -58,7 +59,7 @@ imports:
 ### Run server with Docker
 ---
 You may need a server to test locally. Let's start the broker:
-```shell 
+```shell
 docker run -it --rm --name rabbitmq -p 5552:5552 -p 15672:15672\
     -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS='-rabbitmq_stream advertised_host localhost -rabbit loopback_users "none"' \
     rabbitmq:3.9-management
@@ -182,6 +183,35 @@ The function `DeclareStream` doesn't return errors if a stream is already define
 Note that it returns the precondition failed when it doesn't have the same parameters
 Use `StreamExists` to check if a stream exists.
 
+### Streams Statistics
+
+To get stream statistics you need to use the the `environment.StreamStats` method.
+
+```golang
+stats, err := environment.StreamStats(testStreamName)
+
+// FirstOffset - The first offset in the stream.
+// return first offset in the stream /
+// Error if there is no first offset yet
+
+firstOffset, err := stats.FirstOffset() // first offset of the stream
+
+// LastOffset - The last offset in the stream.
+// return last offset in the stream
+// error if there is no first offset yet
+lastOffset, err := stats.LastOffset() // last offset of the stream
+
+// CommittedChunkId - The ID (offset) of the committed chunk (block of messages) in the stream.
+//
+//	It is the offset of the first message in the last chunk confirmed by a quorum of the stream
+//	cluster members (leader and replicas).
+//
+//	The committed chunk ID is a good indication of what the last offset of a stream can be at a
+//	given time. The value can be stale as soon as the application reads it though, as the committed
+//	chunk ID for a stream that is published to changes all the time.
+
+committedChunkId, err := statsAfter.CommittedChunkId()
+```
 
 ### Publish messages
 
@@ -241,14 +271,14 @@ The `Send` interface works in most of the cases, In some condition is about 15/2
 
 ### Publish Confirmation
 
-For each publish the server sends back to the client the confirmation or an error. 
+For each publish the server sends back to the client the confirmation or an error.
 The client provides an interface to receive the confirmation:
 
 ```golang
 //optional publish confirmation channel
 chPublishConfirm := producer.NotifyPublishConfirmation()
 handlePublishConfirm(chPublishConfirm)
-	
+
 func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 	go func() {
 		for confirmed := range confirms {
@@ -264,7 +294,7 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 }
 ```
 
-In the MessageStatus struct you can find two `publishingId`:  
+In the MessageStatus struct you can find two `publishingId`:
 ```golang
 //first one
 messageStatus.GetMessage().GetPublishingId()
@@ -277,12 +307,12 @@ The second one is assigned automatically by the client.
 In case the user specifies the `publishingId` with:
 ```golang
 msg = amqp.NewMessage([]byte("mymessage"))
-msg.SetPublishingId(18) // <---  
+msg.SetPublishingId(18) // <---
 ```
 
 
 The filed: `messageStatus.GetMessage().HasPublishingId()` is true and </br>
-the values `messageStatus.GetMessage().GetPublishingId()` and `messageStatus.GetPublishingId()` are the same. 
+the values `messageStatus.GetMessage().GetPublishingId()` and `messageStatus.GetPublishingId()` are the same.
 
 
 See also "Getting started" example in the [examples](./examples/) directory
@@ -303,8 +333,8 @@ publishingId, err := producer.GetLastPublishingId()
 
 ### Sub Entries Batching
 
-The number of messages to put in a sub-entry. A sub-entry is one "slot" in a publishing frame, 
-meaning outbound messages are not only batched in publishing frames, but in sub-entries as well. 
+The number of messages to put in a sub-entry. A sub-entry is one "slot" in a publishing frame,
+meaning outbound messages are not only batched in publishing frames, but in sub-entries as well.
 Use this feature to increase throughput at the cost of increased latency. </br>
 You can find a "Sub Entries Batching" example in the [examples](./examples/) directory. </br>
 
@@ -319,7 +349,7 @@ producer, err := env.NewProducer(streamName, stream.NewProducerOptions().
 
 ### Ha Producer Experimental
 The ha producer is built up the standard producer. </br>
-Features: 
+Features:
  - auto-reconnect in case of disconnection
  - handle the unconfirmed messages automatically in case of fail.
 
@@ -329,7 +359,7 @@ You can find a "HA producer" example in the [examples](./examples/) directory. <
 haproducer := NewHAProducer(
 	env *stream.Environment, // mandatory
 	streamName string, // mandatory
-	producerOptions *stream.ProducerOptions, //optional 
+	producerOptions *stream.ProducerOptions, //optional
 	confirmMessageHandler ConfirmMessageHandler // mandatory
 	)
 ```
@@ -352,7 +382,7 @@ With `ConsumerOptions` it is possible to customize the consumer behaviour.
 ```golang
   stream.NewConsumerOptions().
   SetConsumerName("my_consumer").                  // set a consumer name
-  SetCRCCheck(false).  // Enable/Disable the CRC control.  
+  SetCRCCheck(false).  // Enable/Disable the CRC control.
   SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 ```
 Disabling the CRC control can increase the performances.
@@ -374,7 +404,7 @@ handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Mes
 consumer, err := env.NewConsumer(
 ..
 stream.NewConsumerOptions().
-			SetConsumerName("my_consumer"). <------ 
+			SetConsumerName("my_consumer"). <------
 ```
 A consumer must have a name to be able to store offsets. <br>
 Note: *AVOID to store the offset for each single message, it will reduce the performances*
@@ -388,9 +418,9 @@ processMessageAsync := func(consumer stream.Consumer, message *amqp.Message, off
     err := consumer.StoreCustomOffset(offset)  // commit all messages up to this offset
     ....
 ```
-This is useful in situations where we have to process messages asynchronously and we cannot block the original message 
+This is useful in situations where we have to process messages asynchronously and we cannot block the original message
 handler. Which means we cannot store the current or latest delivered offset as we saw in the `handleMessages` function
-above. 
+above.
 
 ### Automatic Track Offset
 
@@ -422,9 +452,9 @@ stream.NewConsumerOptions().
 	// set a consumerOffsetNumber name
 	SetConsumerName("my_consumer").
 	SetAutoCommit(stream.NewAutoCommitStrategy().
-		SetCountBeforeStorage(50). // store each 50 messages stores 
+		SetCountBeforeStorage(50). // store each 50 messages stores
 		SetFlushInterval(10*time.Second)). // store each 10 seconds
-	SetOffset(stream.OffsetSpecification{}.First())) 
+	SetOffset(stream.OffsetSpecification{}.First()))
 ```
 
 See also "Automatic Offset Tracking" example in the [examples](./examples/) directory
@@ -453,7 +483,7 @@ In this way it is possible to handle fail-over
 
 ### Performance test tool
 
-Performance test tool it is useful to execute tests. 
+Performance test tool it is useful to execute tests.
 See also the [Java Performance](https://rabbitmq.github.io/rabbitmq-stream-java-client/stable/htmlsingle/#the-performance-tool) tool
 
 

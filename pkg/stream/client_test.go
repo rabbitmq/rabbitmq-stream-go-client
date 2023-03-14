@@ -115,6 +115,52 @@ var _ = Describe("Streaming testEnvironment", func() {
 		Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
 	})
 
+	It("Stream Status", func() {
+		Expect(testEnvironment.DeclareStream(testStreamName, nil)).
+			NotTo(HaveOccurred())
+		stats, err := testEnvironment.StreamStats(testStreamName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(stats).NotTo(BeNil())
+
+		DeferCleanup(func() {
+			Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
+		})
+
+		_, err = stats.FirstOffset()
+		Expect(fmt.Sprintf("%s", err)).
+			To(ContainSubstring("FirstOffset not found for"))
+
+		_, err = stats.LastOffset()
+		Expect(fmt.Sprintf("%s", err)).
+			To(ContainSubstring("LastOffset not found for"))
+
+		_, err = stats.CommittedChunkId()
+		Expect(fmt.Sprintf("%s", err)).
+			To(ContainSubstring("CommittedChunkId not found for"))
+
+		producer, err := testEnvironment.NewProducer(testStreamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.BatchSend(CreateArrayMessagesForTesting(1_000))).NotTo(HaveOccurred())
+		time.Sleep(time.Millisecond * 800)
+		Expect(producer.Close()).NotTo(HaveOccurred())
+
+		statsAfter, err := testEnvironment.StreamStats(testStreamName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(statsAfter).NotTo(BeNil())
+
+		offset, err := statsAfter.FirstOffset()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset == 0).To(BeTrue())
+
+		offset, err = statsAfter.LastOffset()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset > 0).To(BeTrue())
+
+		offset, err = statsAfter.CommittedChunkId()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset > 0).To(BeTrue())
+	})
+
 	It("Create two times Stream precondition fail", func() {
 		Expect(testEnvironment.DeclareStream(testStreamName, nil)).NotTo(HaveOccurred())
 		err := testEnvironment.DeclareStream(testStreamName,

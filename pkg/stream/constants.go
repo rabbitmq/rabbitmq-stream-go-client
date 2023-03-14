@@ -44,6 +44,7 @@ const (
 	commandOpen                   = 21
 	CommandClose                  = 22
 	commandHeartbeat              = 23
+	commandStreamStatus           = 28
 
 	/// used only for tests
 	commandUnitTest = 99

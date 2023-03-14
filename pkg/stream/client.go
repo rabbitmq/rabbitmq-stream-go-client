@@ -799,3 +799,28 @@ func (c *Client) DeclareSubscriber(streamName string,
 	}()
 	return consumer, err.Err
 }
+
+func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
+
+	resp := c.coordinator.NewResponse(commandStreamStatus)
+	correlationId := resp.correlationid
+
+	length := 2 + 2 + 4 + 2 + len(streamName)
+
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandStreamStatus,
+		correlationId)
+	writeString(b, streamName)
+
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	offset := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	if err.Err != nil {
+		return nil, err.Err
+	}
+	m, ok := offset.(map[string]int64)
+	if !ok {
+		return nil, fmt.Errorf("invalid response, expected map[string]int64 but got %T", offset)
+	}
+	return newStreamStats(m, streamName), nil
+}
