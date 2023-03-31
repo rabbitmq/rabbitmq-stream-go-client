@@ -390,7 +390,10 @@ func startConsumer(consumerName string, streamName string) error {
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName(consumerName).SetOffset(offsetSpec).SetCRCCheck(crcCheck))
+			SetConsumerName(consumerName).
+			SetOffset(offsetSpec).
+			SetCRCCheck(crcCheck).
+			SetInitialCredits(int16(initialCredits)))
 	if err != nil {
 		return err
 	}
