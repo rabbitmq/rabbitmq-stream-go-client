@@ -437,7 +437,7 @@ var _ = Describe("Streaming Consumers", func() {
 			}
 		}(chConfirm, producer)
 		Expect(err).NotTo(HaveOccurred())
-		msg := amqp.NewMessage([]byte("message"))
+		msg := amqp.NewMessage([]byte{0x00, 0x0e, 0x01, 0x0f, 0x05, 0x08, 0x04, 0x03})
 		msg.Properties = &amqp.MessageProperties{
 			MessageID:          nil,
 			UserID:             nil,
@@ -466,6 +466,7 @@ var _ = Describe("Streaming Consumers", func() {
 				Expect(message.Properties.To).To(Equal("ToTest"))
 				Expect(message.Properties.ContentType).To(Equal("ContentTypeTest"))
 				Expect(message.Properties.ContentEncoding).To(Equal("ContentEncodingTest"))
+				Expect(message.Data[0]).To(Equal([]byte{0x00, 0x0e, 0x01, 0x0f, 0x05, 0x08, 0x04, 0x03}))
 
 			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
