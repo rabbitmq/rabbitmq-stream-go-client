@@ -164,8 +164,16 @@ env, err := stream.NewEnvironment(
 ```
 
 The `tls.Config` is the standard golang tls library https://pkg.go.dev/crypto/tls </br>
-See also "Getting started TLS" example in the [examples](./examples/) directory
+See also "Getting started TLS" example in the [examples](./examples/) directory. </br>
 
+It is also possible to configure TLS using the Schema URI like:
+```golang
+env, err := stream.NewEnvironment(
+				stream.NewEnvironmentOptions().
+				SetUri("rabbitmq-stream+tls://guest:guest@localhost:5551/").
+				SetTLSConfig(&tls.Config{}),
+)
+```
 
 ### Streams
 

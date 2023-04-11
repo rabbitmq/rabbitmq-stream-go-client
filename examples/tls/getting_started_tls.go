@@ -60,6 +60,14 @@ func main() {
 			// for tests you may need InsecureSkipVerify: true
 			SetTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
+	/// TLS connection
+	// it is also possible to configure the TLS connection using the URI
+	//env, err := stream.NewEnvironment(
+	//	stream.NewEnvironmentOptions().
+	//		SetUri("rabbitmq-stream+tls://guest:guest@localhost:5551/").
+	//		SetTLSConfig(&tls.Config{}),
+	//)
+
 	CheckErr(err)
 	// Create a stream, you can create streams without any option like:
 	// err = env.DeclareStream(streamName, nil)
