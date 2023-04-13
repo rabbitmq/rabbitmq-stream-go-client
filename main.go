@@ -105,9 +105,6 @@ func main() {
 		}
 	}()
 
-	// this should log a warning message: subscription does not exist
-	_ = streamClient.Credit(ctx, 123, 1)
-
 	err = streamClient.Subscribe(ctx, stream, constants.OffsetTypeFirst, 1, 10, map[string]string{"name": "my_consumer"}, 10)
 	fmt.Println("Press any key to stop ")
 	reader := bufio.NewReader(os.Stdin)
