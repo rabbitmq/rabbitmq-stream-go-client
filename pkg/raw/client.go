@@ -992,7 +992,25 @@ func (tc *Client) Credit(ctx context.Context, subscriptionID uint8, credits uint
 	return tc.request(ctx, internal.NewCreditRequest(subscriptionID, credits))
 }
 
-// MetadataQuery TODO: go docs
+// MetadataQuery sends a syncRequest to get metadata for a given stream. If the error is nil,
+// the MetadataResponse is returned which has the following structure:-
+//
+//	MetadataResponse{
+//		correlationID uint32
+//		broker Broker{
+//			reference uint16
+//			host string
+//			port uint32
+//		}
+//		streamMetadata StreamMetadata{
+//			streamName string
+//			responseCode uint16
+//			leaderReference uint16
+//			replicasReferences []uint16
+//		}
+//	}
+//
+// stream is the name of the stream.
 func (tc *Client) MetadataQuery(ctx context.Context, stream string) (*MetadataResponse, error) {
 	if ctx == nil {
 		return nil, errNilContext
@@ -1006,11 +1024,7 @@ func (tc *Client) MetadataQuery(ctx context.Context, stream string) (*MetadataRe
 		return nil, err
 	}
 
-	if response.ResponseCode() != 0 {
-		return nil, streamErrorOrNil(response.ResponseCode())
-	}
-
-	return response.(*MetadataResponse), nil
+	return response.(*MetadataResponse), streamErrorOrNil(response.ResponseCode())
 }
 
 // NotifyPublish TODO: godocs

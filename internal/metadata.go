@@ -48,7 +48,7 @@ func (m *MetadataQuery) SizeNeeded() int {
 func (m *MetadataQuery) Write(w *bufio.Writer) (int, error) {
 	n, err := writeMany(w, m.correlationId, m.stream)
 	if err != nil {
-		return 0, err
+		return n, err
 	}
 
 	expectedBytesWritten := streamProtocolCorrelationIdSizeBytes +

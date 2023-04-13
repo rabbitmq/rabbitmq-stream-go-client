@@ -4,14 +4,15 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"net"
+	"time"
+
 	"github.com/go-logr/logr"
 	"github.com/golang/mock/gomock"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"net"
-	"time"
 )
 
 const (
@@ -186,11 +187,11 @@ var _ = Describe("Client", func() {
 			streamClient := raw.NewClient(fakeClientConn, conf)
 			go streamClient.(*raw.Client).StartFrameListener(ctx)
 
-			go fakeRabbitMQ.fakeRabbitMQMetadataQuery("stream-exists")
+			go fakeRabbitMQ.fakeRabbitMQMetadataQuery(ctx, "stream-exists")
 
 			metadataResponse, err := streamClient.MetadataQuery(ctx, "stream-exists")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", 0))
+			Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", 1))
 			Expect(metadataResponse.CorrelationId()).To(BeNumerically("==", 1))
 		})
 
@@ -200,14 +201,15 @@ var _ = Describe("Client", func() {
 				streamClient := raw.NewClient(fakeClientConn, conf)
 				go streamClient.(*raw.Client).StartFrameListener(ctx)
 
-				go fakeRabbitMQ.fakeRabbitMQMetadataResponse(
+				go fakeRabbitMQ.fakeRabbitMQMetadataQuery(
 					newContextWithResponseCode(ctx, streamResponseCodeStreamDoesNotExist, "metadata"),
 					"stream-does-not-exist",
 				)
 
-				_, err := streamClient.MetadataQuery(ctx, "stream-does-not-exist")
+				metadataResponse, err := streamClient.MetadataQuery(ctx, "stream")
 				Expect(err).To(MatchError("stream does not exist"))
-			})
+				Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", streamResponseCodeStreamDoesNotExist))
+			}, SpecTimeout(time.Second*3))
 		})
 	})
 
