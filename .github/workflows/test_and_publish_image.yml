@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        go: [ '1.17', '1.18' ]
+        go: [ 'stable', 'oldstable' ]
     services:
       rabbitmq-streaming:
         image: pivotalrabbitmq/rabbitmq-stream
@@ -20,21 +20,23 @@ jobs:
           - 15672:15672
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
+        id: setup_go
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
-      - run: make test GO_VERSION=${{ matrix.go }}
+      - run: make test GO_VERSION=${{ steps.setup_go.outputs.go-version }}
       - name: Upload code coverage to Codecov
         run: bash <(curl -s https://codecov.io/bash)
   test-win32:
     runs-on: windows-latest
     strategy:
       matrix:
-        go: [ '1.17', '1.18' ]
+        go: [ 'stable', 'oldstable' ]
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
+        id: setup_go
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
@@ -49,7 +51,7 @@ jobs:
         run: ./.ci/install.ps1
       - name: Install GNU make
         run: choco install make
-      - run: make test GO_VERSION=${{ matrix.go }}
+      - run: make test GO_VERSION=${{ steps.setup_go.outputs.go-version }}
   publish:
     runs-on: ubuntu-latest
     needs: [test, test-win32]
