@@ -23,7 +23,7 @@ var ResponseCodeToError = map[uint16]error{
 	ResponseCodeAccessRefused:               errors.New("access refused"),
 	ResponseCodePreconditionFailed:          errors.New("precondition failed"),
 	ResponseCodePublisherDoesNotExist:       errors.New("publisher does not exist"),
-	ResponseCodeNoOffset:                    errors.New("no offset"),
+	ResponseCodeNoOffset:                    errors.New("no offset found"),
 }
 
 // Stream protocol response codes

@@ -291,6 +291,18 @@ var _ = Describe("Client", func() {
 		Expect(streamClient.ExchangeCommandVersions(ctx)).To(Succeed())
 	}, SpecTimeout(time.Second*3))
 
+	It("query offset", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+		go fakeRabbitMQ.fakeRabbitMQQueryOffset(ctx, 123)
+
+		offset, err := streamClient.QueryOffset(ctx, "reference", "stream")
+		Expect(err).To(Succeed())
+		Expect(offset).To(BeNumerically("==", 123))
+	}, SpecTimeout(time.Second*3))
+
 	It("cancels requests after a timeout", func(ctx SpecContext) {
 		// This test does not start a fake to mimic rabbitmq responses. By not starting a
 		// fake rabbitmq, we simulate "rabbit not responding". The expectation is to

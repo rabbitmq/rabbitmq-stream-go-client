@@ -1065,7 +1065,7 @@ func (tc *Client) NotifyCreditError(notification chan *CreditError) <-chan *Cred
 
 // QueryOffset retrieves the last consumer offset stored for a given consumer Reference and stream.
 // Useful for as consumer wants to know the last stored offset.
-// NoOffsetFound is returned if no offset is stored for the given consumer Reference and stream.
+// "no offset found"  error is returned if no offset is stored for the given consumer Reference and stream.
 // Zero (0) is a valid offset.
 func (tc *Client) QueryOffset(ctx context.Context, reference string, stream string) (uint64, error) {
 	if ctx == nil {
@@ -1075,11 +1075,11 @@ func (tc *Client) QueryOffset(ctx context.Context, reference string, stream stri
 	logger.V(debugLevel).Info("starting query offset", "reference", reference, "stream", stream)
 	response, err := tc.syncRequest(ctx, internal.NewQueryOffsetRequest(reference, stream))
 	if err != nil {
-		logger.Error(err, "error sending sync request for query offset")
+		logger.Error(err, "error sending sync request for query offset", "reference", reference, "stream", stream)
 		return 0, err
 	}
 	var offsetResponse *internal.QueryOffsetResponse
-	if reflect.TypeOf(response) == reflect.TypeOf(offsetResponse) {
+	if reflect.TypeOf(response) != reflect.TypeOf(offsetResponse) {
 		return 0, errors.New("response is not of type *internal.QueryOffsetResponse")
 	}
 	offsetResponse = response.(*internal.QueryOffsetResponse)

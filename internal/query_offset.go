@@ -85,6 +85,19 @@ func (c *QueryOffsetResponse) Offset() uint64 {
 	return c.offset
 }
 
+func (c *QueryOffsetResponse) MarshalBinary() ([]byte, error) {
+	var buff bytes.Buffer
+	wr := bufio.NewWriter(&buff)
+	_, err := writeMany(wr, c.correlationId, c.responseCode, c.offset)
+	if err != nil {
+		return nil, err
+	}
+	if err = wr.Flush(); err != nil {
+		return nil, err
+	}
+	return buff.Bytes(), nil
+}
+
 func NewQueryOffsetResponseWith(correlationId uint32, responseCode uint16, offset uint64) *QueryOffsetResponse {
 	return &QueryOffsetResponse{correlationId: correlationId, responseCode: responseCode, offset: offset}
 }

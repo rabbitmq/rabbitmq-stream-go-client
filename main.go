@@ -106,6 +106,14 @@ func main() {
 	}()
 
 	err = streamClient.Subscribe(ctx, stream, constants.OffsetTypeFirst, 1, 10, map[string]string{"name": "my_consumer"}, 10)
+
+	offset, err := streamClient.QueryOffset(ctx, "my_consumer", stream)
+	if err != nil {
+		log.Error(err, "error querying offset")
+	} else {
+		log.Info("offset", "offset", offset)
+	}
+
 	fmt.Println("Press any key to stop ")
 	reader := bufio.NewReader(os.Stdin)
 	_, _ = reader.ReadString('\n')

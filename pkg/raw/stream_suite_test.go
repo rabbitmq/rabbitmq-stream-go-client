@@ -362,6 +362,43 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQExchangeCommandVersions(ctx context.C
 	expectOffset1(serverRW.Flush()).To(Succeed())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQQueryOffset(ctx context.Context, offset uint64) {
+	defer GinkgoRecover()
+
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+
+	serverRW := bufio.NewReadWriter(bufio.NewReader(rmq.connection), bufio.NewWriter(rmq.connection))
+
+	header := &internal.Header{}
+	expectOffset1(header.Read(serverRW.Reader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x000b))
+	expectOffset1(header.Version()).To(BeNumerically("==", 1))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverRW, buff)).To(BeNumerically("==", header.Length()-4))
+
+	body := &internal.QueryOffsetRequest{}
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	Expect(body.Stream()).To(Equal("stream"))
+	Expect(body.ConsumerReference()).To(Equal("reference"))
+
+	// there server says ok! :)
+	// writing the response to the client
+	frameSize := 4 + // header
+		4 + // correlation ID
+		2 + // response code
+		8 // offset
+	header = internal.NewHeader(frameSize, 0x800b, 1)
+	expectOffset1(header.Write(serverRW)).To(BeNumerically("==", 8))
+
+	bodyResp := internal.NewQueryOffsetResponseWith(rmq.correlationIdSeq.next(), responseCodeFromContext(ctx, "query_offset"), offset)
+	b, err := bodyResp.MarshalBinary()
+	expectOffset1(err).ToNot(HaveOccurred())
+	expectOffset1(serverRW.Write(b)).To(BeNumerically("==", frameSize-4))
+	expectOffset1(serverRW.Flush()).To(Succeed())
+}
+
 func (rmq *fakeRabbitMQServer) fakeRabbitMQDeletePublisher(ctx context.Context, publisherId uint8) {
 	defer GinkgoRecover()
 
