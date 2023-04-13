@@ -49,4 +49,23 @@ var _ = Describe("QueryOffset", func() {
 		})
 
 	})
+
+	Describe("QueryOffsetResponse", func() {
+		It("decodes a binary sequence into a struct", func() {
+			someResponse := NewQueryOffsetResponse()
+			binaryQueryOffset := []byte{
+				0x00, 0x00, 0x00, 0xFF, // correlation id
+				0x00, 0x0a, // response code
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, // offset
+			}
+
+			buff := bytes.NewBuffer(binaryQueryOffset)
+			reader := bufio.NewReader(buff)
+			Expect(someResponse.Read(reader)).To(Succeed())
+
+			Expect(someResponse.CorrelationId()).To(BeNumerically("==", 0xFF))
+			Expect(someResponse.ResponseCode()).To(BeNumerically("==", 0x0a))
+			Expect(someResponse.Offset()).To(BeNumerically("==", 7))
+		})
+	})
 })

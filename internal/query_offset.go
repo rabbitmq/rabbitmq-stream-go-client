@@ -77,6 +77,18 @@ func (c *QueryOffsetResponse) CorrelationId() uint32 {
 	return c.correlationId
 }
 
+func (c *QueryOffsetResponse) ResponseCode() uint16 {
+	return c.responseCode
+}
+
+func (c *QueryOffsetResponse) Offset() uint64 {
+	return c.offset
+}
+
 func NewQueryOffsetResponseWith(correlationId uint32, responseCode uint16, offset uint64) *QueryOffsetResponse {
 	return &QueryOffsetResponse{correlationId: correlationId, responseCode: responseCode, offset: offset}
+}
+
+func NewQueryOffsetResponse() *QueryOffsetResponse {
+	return &QueryOffsetResponse{}
 }
