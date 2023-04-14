@@ -44,8 +44,10 @@ func (c *correlation) Close() {
 type Client struct {
 	mu sync.Mutex
 	// this channel is used for correlation-less incoming frames from the server
-	frameBodyListener    chan internal.SyncCommandRead
-	isOpen               bool
+	frameBodyListener chan internal.SyncCommandRead
+	isOpen            bool
+	// this function is used during shutdown to stop the background loop that reads from the network
+	ioLoopCancelFn       context.CancelFunc
 	connection           *internal.Connection
 	correlationsMap      sync.Map
 	nextCorrelation      uint32
@@ -504,6 +506,7 @@ func (tc *Client) shutdown() error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	tc.isOpen = false
+	tc.ioLoopCancelFn()
 
 	if tc.confirmsCh != nil {
 		close(tc.confirmsCh)
@@ -680,9 +683,16 @@ func (tc *Client) Connect(ctx context.Context) error {
 
 	var i = 0 // broker index for chosen broker to dial to
 
-	// FIXME: handleIncoming should use its own context
-	//		we are making an incorrect use of context
+	// We have to create a new context here and keep a reference to the cancelling function.
+	// This context controls the i/o loop that reads from the network socket, and it is
+	// cancelled after calling `Client.Close()`.
+	// We can't use the ctx passed as parameter because that context is tied to the lifecycle
+	// of this function call. In other words, the context may have a deadline, representing a timeout
+	// to execute Connect(). The i/o loop in handleIncoming() must not be tight to the same deadline.
+	//
 	// https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
+	ioLoopCtx, cancel := context.WithCancel(ctx)
+	tc.ioLoopCancelFn = cancel
 	go func(ctx context.Context) {
 		log := loggerFromCtxOrDiscard(ctx).WithGroup("frame-listener")
 		log.Debug("starting frame listener")
@@ -698,7 +708,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 		if err != nil {
 			log.Error("error handling incoming frames", "error", err)
 		}
-	}(ctx)
+	}(ioLoopCtx)
 
 	err := tc.peerProperties(ctx)
 	if err != nil {
@@ -986,9 +996,12 @@ func (tc *Client) Subscribe(
 }
 
 // Close gracefully shutdowns the connection to RabbitMQ. The Client will send a
-// close syncRequest to RabbitMQ, and it will await a response. It is recommended to
+// close request to RabbitMQ, and it will await a response. It is recommended to
 // set a deadline in the context, to avoid waiting forever on a non-responding
 // RabbitMQ server.
+//
+// Regardless of the returned error of this function, the client should be considered
+// closed and must not be used after calling this function.
 func (tc *Client) Close(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext

@@ -15,9 +15,19 @@ func (tc *Client) StartFrameListener(ctx context.Context) {
 	if ctx == nil {
 		panic(errNilContext)
 	}
+
 	log := loggerFromCtxOrDiscard(ctx).WithGroup("frame-listener")
 	log.Debug("starting frame listener")
-	err := tc.handleIncoming(ctx)
+
+	// it is ok to derive from ctx because this function
+	// is used only in tests. It is not the same context
+	// used in connection setup (because we use a fake rabbit)
+	// In other words, this function is not affected by:
+	// https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
+	ioLoopCtx, cancel := context.WithCancel(ctx)
+	tc.ioLoopCancelFn = cancel
+
+	err := tc.handleIncoming(ioLoopCtx)
 	if err != nil {
 		// FIXME: handle error, possibly shutdown or reconnect
 		log.Error("error handling incoming frames", "error", err)
