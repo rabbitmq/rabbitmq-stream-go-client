@@ -85,6 +85,7 @@ const (
 	CommandSubscribe               uint16 = 0x0007 // 7
 	CommandDeliver                 uint16 = 0x0008 // 8
 	CommandCredit                  uint16 = 0x0009 // 9
+	CommandStoreOffset             uint16 = 0x000a // 10
 	CommandQueryOffset             uint16 = 0x000b // 11
 	CommandCreate                  uint16 = 0x000d // 13
 	CommandDelete                  uint16 = 0x000e // 14
