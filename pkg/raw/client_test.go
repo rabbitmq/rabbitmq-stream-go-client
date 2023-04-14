@@ -291,6 +291,16 @@ var _ = Describe("Client", func() {
 		Expect(streamClient.ExchangeCommandVersions(ctx)).To(Succeed())
 	}, SpecTimeout(time.Second*3))
 
+	It("stores offset", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+		go fakeRabbitMQ.fakeRabbitMQStoreOffset(ctx, "ref", "stream", 1)
+
+		err := streamClient.StoreOffset(ctx, "ref", "stream", 1)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("query offset", func(ctx SpecContext) {
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)

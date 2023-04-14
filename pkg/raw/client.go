@@ -1063,6 +1063,26 @@ func (tc *Client) NotifyCreditError(notification chan *CreditError) <-chan *Cred
 	return notification
 }
 
+// StoreOffset sends the desired offset to the given stream with a given reference. No response is given
+// by a RabbitMQ server to this request.
+// https://github.com/rabbitmq/rabbitmq-server/blob/main/deps/rabbitmq_stream/docs/PROTOCOL.adoc#queryoffset
+// To query the offset for a stream, see "QueryOffset"
+// https://github.com/rabbitmq/rabbitmq-server/blob/main/deps/rabbitmq_stream/docs/PROTOCOL.adoc#queryoffset
+func (tc *Client) StoreOffset(ctx context.Context, reference, stream string, offset uint64) error {
+	if ctx == nil {
+		return errNilContext
+	}
+	logger := logr.FromContextOrDiscard(ctx).WithName("StoreOffset")
+	logger.V(debugLevel).Info("starting store offset", "reference", reference, "stream", stream)
+	err := tc.request(ctx, internal.NewStoreOffsetRequest(reference, stream, offset))
+	if err != nil {
+		logger.Error(err, "error sending request for store offset", "reference", reference, "stream", stream)
+		return err
+	}
+
+	return nil
+}
+
 // QueryOffset retrieves the last consumer offset stored for a given consumer Reference and stream.
 // Useful for as consumer wants to know the last stored offset.
 // "no offset found"  error is returned if no offset is stored for the given consumer Reference and stream.

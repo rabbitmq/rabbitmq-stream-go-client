@@ -1,6 +1,9 @@
 package internal
 
-import "bufio"
+import (
+	"bufio"
+	"bytes"
+)
 
 // StoreOffsetRequest sends the offset for a given stream.
 // ref: https://github.com/rabbitmq/rabbitmq-server/blob/main/deps/rabbitmq_stream/docs/PROTOCOL.adoc#storeoffset
@@ -53,4 +56,10 @@ func (s *StoreOffsetRequest) Write(writer *bufio.Writer) (int, error) {
 		s.stream,
 		s.offset,
 	)
+}
+
+func (s *StoreOffsetRequest) UnmarshalBinary(data []byte) error {
+	buff := bytes.NewReader(data)
+	r := bufio.NewReader(buff)
+	return readMany(r, &s.reference, &s.stream, &s.offset)
 }

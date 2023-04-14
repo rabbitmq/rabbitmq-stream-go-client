@@ -362,6 +362,28 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQExchangeCommandVersions(ctx context.C
 	expectOffset1(serverRW.Flush()).To(Succeed())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQStoreOffset(ctx context.Context, reference, stream string, offset uint64) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+
+	// Declare a server reader only, there is no response to StoreOffset
+	serverReader := bufio.NewReader(bufio.NewReader(rmq.connection))
+
+	header := &internal.Header{}
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x000a))
+	expectOffset1(header.Version()).To(BeNumerically("==", 1))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).To(BeNumerically("==", header.Length()-4))
+
+	body := &internal.StoreOffsetRequest{}
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	Expect(body.Stream()).To(Equal(stream))
+	Expect(body.Reference()).To(Equal(reference))
+	Expect(body.Offset()).To(Equal(offset))
+}
+
 func (rmq *fakeRabbitMQServer) fakeRabbitMQQueryOffset(ctx context.Context, offset uint64) {
 	defer GinkgoRecover()
 
