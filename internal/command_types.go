@@ -97,6 +97,7 @@ const (
 	CommandOpen                    uint16 = 0x0015 // 21
 	CommandClose                   uint16 = 0x0016 // 22
 	CommandExchangeCommandVersions uint16 = 0x001b // 27
+	CommandStreamStats             uint16 = 0x001c // 28
 )
 
 const (
