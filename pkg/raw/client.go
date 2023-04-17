@@ -1076,7 +1076,6 @@ func (tc *Client) StoreOffset(ctx context.Context, reference, stream string, off
 	logger.V(debugLevel).Info("starting store offset", "reference", reference, "stream", stream)
 	err := tc.request(ctx, internal.NewStoreOffsetRequest(reference, stream, offset))
 	if err != nil {
-		logger.Error(err, "error sending request for store offset", "reference", reference, "stream", stream)
 		return err
 	}
 
