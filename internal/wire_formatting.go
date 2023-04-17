@@ -18,6 +18,12 @@ func readUInt(readerStream io.Reader) (uint32, error) {
 	return res, err
 }
 
+func readInt64(readerStream io.Reader) (int64, error) {
+	var res int64
+	err := binary.Read(readerStream, binary.BigEndian, &res)
+	return res, err
+}
+
 func peekByte(readerStream *bufio.Reader) (uint8, error) {
 	res, err := readerStream.Peek(1)
 	if err != nil {
