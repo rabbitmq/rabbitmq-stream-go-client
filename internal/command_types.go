@@ -116,6 +116,7 @@ const (
 	CommandOpenResponse                    uint16 = 0x8015
 	CommandCloseResponse                   uint16 = 0x8016
 	CommandExchangeCommandVersionsResponse uint16 = 0x801b
+	CommandStreamStatsResponse             uint16 = 0x801c
 )
 
 // Stream protocol field sizes
@@ -128,6 +129,7 @@ const (
 	streamProtocolKeySizeUint16                 = 2
 	streamProtocolKeySizeUint32                 = 4
 	streamProtocolKeySizeUint64                 = 8
+	streamProtocolKeySizeInt64                  = 8
 	streamProtocolVersionSizeBytes              = 2
 	streamProtocolCorrelationIdSizeBytes        = 4
 	streamProtocolStringLenSizeBytes            = 2

@@ -26,7 +26,7 @@ var _ = Describe("StreamStats", func() {
 			Expect(streamStatsRequest.Key()).To(BeNumerically("==", 0x001c))
 			Expect(streamStatsRequest.Version()).To(BeNumerically("==", 1))
 			Expect(streamStatsRequest.CorrelationId()).To(BeNumerically("==", 3))
-			Expect(streamStatsRequest.stream).To(Equal("mystream"))
+			Expect(streamStatsRequest.Stream()).To(Equal("mystream"))
 		})
 
 		It("can calculate the size needed to binary encode itself", func() {

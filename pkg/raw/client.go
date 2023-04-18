@@ -386,6 +386,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error(err, "error ")
 				}
 				tc.handleResponse(ctx, metadataResp)
+			case internal.CommandStreamStatsResponse:
+				streamStatsResp := new(internal.StreamStatsResponse)
+				err := streamStatsResp.Read(buffer)
+				log.V(debugLevel).Info("received stream stats response")
+				if err != nil {
+					log.Error(err, "error ")
+				}
+				tc.handleResponse(ctx, streamStatsResp)
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
@@ -1103,4 +1111,20 @@ func (tc *Client) QueryOffset(ctx context.Context, reference string, stream stri
 	}
 	offsetResponse = response.(*internal.QueryOffsetResponse)
 	return offsetResponse.Offset(), streamErrorOrNil(response.ResponseCode())
+}
+
+// StreamStats gets the current stats for a given stream name. A map of statistics is returned, in the format
+// map[string]int64
+func (tc *Client) StreamStats(ctx context.Context, stream string) (*StreamStatsResponse, error) {
+	if ctx == nil {
+		return &StreamStatsResponse{}, errNilContext
+	}
+	logger := logr.FromContextOrDiscard(ctx).WithName("StreamStats")
+	logger.V(debugLevel).Info("starting stream stats", "stream", stream)
+	streamStatsResponse, err := tc.syncRequest(ctx, internal.NewStreamStatsRequest(stream))
+	if err != nil {
+		logger.Error(err, "error sending sync request for stream stats", "stream", stream)
+		return &StreamStatsResponse{}, err
+	}
+	return streamStatsResponse.(*StreamStatsResponse), streamErrorOrNil(streamStatsResponse.ResponseCode())
 }

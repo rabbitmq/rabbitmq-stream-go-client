@@ -313,6 +313,20 @@ var _ = Describe("Client", func() {
 		Expect(offset).To(BeNumerically("==", 123))
 	}, SpecTimeout(time.Second*3))
 
+	It("gets stream stats", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+		go fakeRabbitMQ.fakeRabbitMQStreamStats(ctx, "stream")
+
+		stats, err := streamClient.StreamStats(ctx, "stream")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(stats.ResponseCode()).To(BeNumerically("==", 1))
+		Expect(stats.CorrelationId()).To(BeNumerically("==", 1))
+		Expect(stats.Stats).To(Equal(map[string]int64{"cpu": 50, "mem": 25}))
+	}, SpecTimeout(time.Second*3))
+
 	It("cancels requests after a timeout", func(ctx SpecContext) {
 		// This test does not start a fake to mimic rabbitmq responses. By not starting a
 		// fake rabbitmq, we simulate "rabbit not responding". The expectation is to

@@ -109,6 +109,7 @@ type PublishConfirm = internal.PublishConfirmResponse
 type Chunk = internal.ChunkResponse
 type CreditError = internal.CreditResponse
 type MetadataResponse = internal.MetadataResponse
+type StreamStatsResponse = internal.StreamStatsResponse
 
 type Clienter interface {
 	Connect(ctx context.Context) error
@@ -128,4 +129,5 @@ type Clienter interface {
 	MetadataQuery(ctx context.Context, stream string) (*MetadataResponse, error)
 	StoreOffset(ctx context.Context, reference, stream string, offset uint64) error
 	QueryOffset(ctx context.Context, reference string, stream string) (uint64, error)
+	StreamStats(ctx context.Context, stream string) (*StreamStatsResponse, error)
 }

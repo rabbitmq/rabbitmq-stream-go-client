@@ -1,6 +1,10 @@
 package internal
 
-import "bufio"
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+)
 
 type StreamStatsRequest struct {
 	correlationId uint32
@@ -8,9 +12,7 @@ type StreamStatsRequest struct {
 }
 
 func NewStreamStatsRequest(stream string) *StreamStatsRequest {
-	return &StreamStatsRequest{
-		stream: stream,
-	}
+	return &StreamStatsRequest{stream: stream}
 }
 
 func (s *StreamStatsRequest) Key() uint16 {
@@ -23,6 +25,10 @@ func (s *StreamStatsRequest) Version() int16 {
 
 func (s *StreamStatsRequest) CorrelationId() uint32 {
 	return s.correlationId
+}
+
+func (s *StreamStatsRequest) Stream() string {
+	return s.stream
 }
 
 func (s *StreamStatsRequest) SetCorrelationId(id uint32) {
@@ -40,16 +46,21 @@ func (s *StreamStatsRequest) Write(writer *bufio.Writer) (int, error) {
 	return writeMany(writer, s.correlationId, s.stream)
 }
 
+func (s *StreamStatsRequest) UnmarshalBinary(data []byte) error {
+	return readMany(bytes.NewReader(data), &s.correlationId, &s.stream)
+}
+
 type StreamStatsResponse struct {
 	correlationId uint32
 	responseCode  uint16
 	Stats         map[string]int64
 }
 
-func NewStreamStatsResponseWith(correlationId uint32, responseCode uint16) *StreamStatsResponse {
+func NewStreamStatsResponseWith(correlationId uint32, responseCode uint16, stats map[string]int64) *StreamStatsResponse {
 	return &StreamStatsResponse{
 		correlationId: correlationId,
 		responseCode:  responseCode,
+		Stats:         stats,
 	}
 }
 
@@ -89,4 +100,46 @@ func (sr *StreamStatsResponse) Read(reader *bufio.Reader) error {
 	}
 
 	return nil
+}
+
+func (sr *StreamStatsResponse) MarshalBinary() (data []byte, err error) {
+	buff := &bytes.Buffer{}
+	wr := bufio.NewWriter(buff)
+
+	n, err := writeMany(wr, sr.correlationId, sr.responseCode, uint32(len(sr.Stats)))
+	if err != nil {
+		return nil, err
+	}
+
+	for k, v := range sr.Stats {
+		kBytes, err := writeString(wr, k)
+		if err != nil {
+			return nil, err
+		}
+		vBytes, err := writeMany(wr, v)
+		if err != nil {
+			return nil, err
+		}
+
+		n += kBytes + vBytes
+	}
+
+	expectedBytesWritten := streamProtocolCorrelationIdSizeBytes + streamProtocolResponseCodeSizeBytes +
+		streamProtocolMapLenBytes +
+		(streamProtocolStringLenSizeBytes * len(sr.Stats)) + // 2 bytes for each string length
+		(streamProtocolKeySizeInt64 * len(sr.Stats)) // 8 bytes for each stat value
+
+	for k, _ := range sr.Stats {
+		expectedBytesWritten += len(k) // length of each string
+	}
+
+	if n != expectedBytesWritten {
+		return nil, fmt.Errorf("did not write expected number of bytes: wanted %d, wrote %d", expectedBytesWritten, n)
+	}
+
+	if err = wr.Flush(); err != nil {
+		return nil, err
+	}
+	data = buff.Bytes()
+	return
 }
