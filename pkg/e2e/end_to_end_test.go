@@ -117,7 +117,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 })
 
 func wrap[T any](v T) []T {
-	r := make([]T, 1, 1)
+	r := make([]T, 1)
 	r[0] = v
 	return r
 }

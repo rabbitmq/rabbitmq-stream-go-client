@@ -117,9 +117,7 @@ type ExchangeCommandVersionsResponse struct {
 
 func NewExchangeCommandVersionsResponse(id uint32, responseCode uint16, commands ...commandInformer) *ExchangeCommandVersionsResponse {
 	e := &ExchangeCommandVersionsResponse{correlationId: id, responseCode: responseCode}
-	for _, c := range commands {
-		e.commands = append(e.commands, c)
-	}
+	e.commands = append(e.commands, commands...)
 	return e
 }
 

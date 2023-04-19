@@ -71,9 +71,12 @@ func (o *OpenResponse) MarshalBinary() (data []byte, err error) {
 		return nil, fmt.Errorf("error in binary marshal: wrote %d expected %d", n, 6)
 	}
 
-	if o.connectionProperties != nil && len(o.connectionProperties) > 0 {
+	if len(o.connectionProperties) > 0 {
 		// FIXME: check how many bytes were written
 		_, err = writeMany(wr, o.connectionProperties)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = wr.Flush()

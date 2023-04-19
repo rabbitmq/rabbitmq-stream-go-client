@@ -61,7 +61,6 @@ func main() {
 				if (confirmed % totalMessages) == 0 {
 					log.Info("Confirmed", "messages", confirmed)
 				}
-				break
 			case 2:
 				confirmed += len(c.PublishingIds())
 				log.Info("Sub Entry Send Confirmed", "messages", confirmed)
@@ -112,6 +111,9 @@ func main() {
 	}()
 
 	err = streamClient.Subscribe(ctx, stream, constants.OffsetTypeFirst, 1, 10, map[string]string{"name": "my_consumer"}, 10)
+	if err != nil {
+		panic(err)
+	}
 
 	offset, err := streamClient.QueryOffset(ctx, "my_consumer", stream)
 	if err != nil {

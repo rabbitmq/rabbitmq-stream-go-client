@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"bufio"
 	"encoding/binary"
 	"io"
 )
@@ -16,20 +15,6 @@ func readUInt(readerStream io.Reader) (uint32, error) {
 	var res uint32
 	err := binary.Read(readerStream, binary.BigEndian, &res)
 	return res, err
-}
-
-func readInt64(readerStream io.Reader) (int64, error) {
-	var res int64
-	err := binary.Read(readerStream, binary.BigEndian, &res)
-	return res, err
-}
-
-func peekByte(readerStream *bufio.Reader) (uint8, error) {
-	res, err := readerStream.Peek(1)
-	if err != nil {
-		return 0, err
-	}
-	return res[0], nil
 }
 
 func readString(readerStream io.Reader) string {
@@ -73,23 +58,21 @@ func readMany(readerStream io.Reader, args ...interface{}) error {
 
 func readAny(readerStream io.Reader, arg interface{}) error {
 
-	switch arg.(type) {
+	switch arg := arg.(type) {
 	case *int:
 		uInt, err := readUInt(readerStream)
 		if err != nil {
 			return err
 		}
-		*arg.(*int) = int(uInt)
-		break
+		*arg = int(uInt)
 	case *string:
-		*arg.(*string) = readString(readerStream)
-		break
+		*arg = readString(readerStream)
 	case *[]byte:
 		byteSlice, err := readByteSlice(readerStream)
 		if err != nil {
 			return err
 		}
-		*arg.(*[]byte) = byteSlice
+		*arg = byteSlice
 	case *map[string]string:
 		mapLen, err := readUInt(readerStream)
 		if err != nil {
@@ -101,7 +84,7 @@ func readAny(readerStream io.Reader, arg interface{}) error {
 			v := readString(readerStream)
 			myMap[k] = v
 		}
-		*arg.(*map[string]string) = myMap
+		*arg = myMap
 	default:
 		err := binary.Read(readerStream, binary.BigEndian, arg)
 		if err != nil {
@@ -119,31 +102,31 @@ func writeMany(writer io.Writer, args ...any) (int, error) {
 	var written int
 
 	for _, arg := range args {
-		switch arg.(type) {
+		switch arg := arg.(type) {
 		case int:
-			err := binary.Write(writer, binary.BigEndian, int32(arg.(int)))
+			err := binary.Write(writer, binary.BigEndian, int32(arg))
 			if err != nil {
 				return written, err
 			}
-			written += binary.Size(int32(arg.(int)))
-			break
+			written += binary.Size(int32(arg))
 		case string:
-			n, err := writeString(writer, arg.(string))
+			n, err := writeString(writer, arg)
 			if err != nil {
 				return written, err
 			}
 			written += n
-			break
 		case map[string]string:
-			m := arg.(map[string]string)
-			n, err := writeMany(writer, len(m))
+			n, err := writeMany(writer, len(arg))
 			if err != nil {
 				return n, err
 			}
 			written += n
-			for key, value := range m {
+			for key, value := range arg {
 				n, err := writeString(writer, key)
 				written += n
+				if err != nil {
+					return n, err
+				}
 				n, err = writeString(writer, value)
 				written += n
 				if err != nil {

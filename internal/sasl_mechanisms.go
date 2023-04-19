@@ -66,6 +66,9 @@ func (s *SaslHandshakeResponse) MarshalBinary() (data []byte, err error) {
 
 	for _, mechanism := range s.Mechanisms {
 		n, err = writeString(wr, mechanism)
+		if err != nil {
+			return nil, err
+		}
 		if n != (len(mechanism) + 2) {
 			return nil, fmt.Errorf("error marshalling: wrote %d, expected %d", n, len(mechanism)+2)
 		}

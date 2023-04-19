@@ -523,6 +523,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQNewConsumer(
 	expectOffset1(err).ToNot(HaveOccurred())
 
 	data, err := bodyResp.MarshalBinary()
+	expectOffset1(err).ToNot(HaveOccurred())
 	_, err = serverWriter.Write(data)
 	expectOffset1(err).ToNot(HaveOccurred())
 	expectOffset1(serverWriter.Flush()).To(Succeed())
@@ -562,7 +563,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQPublisherConfirms(pubId uint8, numOfC
 	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
 		To(Succeed())
 
-	fakeConfirms := make([]uint64, numOfConfirms, numOfConfirms)
+	fakeConfirms := make([]uint64, numOfConfirms)
 	for i := 0; i < len(fakeConfirms); i++ {
 		fakeConfirms[i] = uint64(i)
 	}
@@ -642,7 +643,6 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(ctx context.Context, st
 	expectOffset1(err).ToNot(HaveOccurred())
 	_, err = rmq.connection.Write(responseBody)
 	expectOffset1(err).ToNot(HaveOccurred())
-
 }
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQCredit(subscriptionId uint8, credits uint16) {
@@ -688,64 +688,26 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQCreditResponse(ctx context.Context, s
 	expectOffset1(serverWriter.Flush()).To(Succeed())
 }
 
-func (rmq *fakeRabbitMQServer) fakeRabbitMQStreamStats(ctx context.Context, stream string) {
-	defer GinkgoRecover()
-	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
-		To(Succeed())
-	serverReader := bufio.NewReader(rmq.connection)
-
-	header := new(internal.Header)
-	expectOffset1(header.Read(serverReader)).To(Succeed())
-	expectOffset1(header.Command()).To(BeNumerically("==", 0x001c))
-
-	buff := make([]byte, header.Length()-4)
-	expectOffset1(io.ReadFull(serverReader, buff)).
-		To(BeNumerically("==", header.Length()-4))
-
-	body := internal.NewStreamStatsRequest(stream)
-	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
-	expectOffset1(body.Stream()).To(Equal(stream))
-
-	frameSize := 8 + // header (key size=2 + correlation=4 + version=2)
-		2 + // responseCode
-		4 + // length of stats map
-		2 + // 1st key string length
-		3 + // 1st key string bytes
-		8 + // 1st value
-		2 + // 2nd key string length
-		3 + // 2nd key string bytes
-		8 // 2nd value
-
-	header = internal.NewHeader(frameSize, 0x801c, 1)
-	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
-		"expected to write 8 bytes")
-
-	responseCode := responseCodeFromContext(ctx, "streamStats")
-	var responseBody []byte
-	var err error
-
-	responseBody, err = internal.NewStreamStatsResponseWith(rmq.correlationIdSeq.next(),
-		responseCode,
-		map[string]int64{"cpu": 50, "mem": 25},
-	).MarshalBinary()
-
-	expectOffset1(err).ToNot(HaveOccurred())
-	_, err = rmq.connection.Write(responseBody)
-	expectOffset1(err).ToNot(HaveOccurred())
+type ctxKey struct {
+	string
 }
 
 func newContextWithResponseCode(ctx context.Context, respCode uint16, suffix ...string) context.Context {
-	var key = "rabbitmq-stream.response-code"
+	var key ctxKey
 	if suffix != nil {
-		key += suffix[0]
+		key = ctxKey{"rabbitmq-stream.response-code" + suffix[0]}
+	} else {
+		key = ctxKey{"rabbitmq-stream.response-code"}
 	}
 	return context.WithValue(ctx, key, respCode)
 }
 
 func responseCodeFromContext(ctx context.Context, suffix ...string) (responseCode uint16) {
-	var key = "rabbitmq-stream.response-code"
+	var key ctxKey
 	if suffix != nil {
-		key += suffix[0]
+		key = ctxKey{"rabbitmq-stream.response-code" + suffix[0]}
+	} else {
+		key = ctxKey{"rabbitmq-stream.response-code"}
 	}
 	v := ctx.Value(key)
 	if v == nil {

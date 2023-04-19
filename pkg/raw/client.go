@@ -54,7 +54,6 @@ type Client struct {
 	confirmsCh           chan *PublishConfirm
 	chunkCh              chan *Chunk
 	notifyCh             chan *CreditError
-	metadataCh           chan *MetadataResponse
 }
 
 // IsOpen returns true if the connection is open, false otherwise
@@ -545,6 +544,9 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 	n += bytesWritten
 	if err != nil {
 		return err
+	}
+	if n != 14 { // simple response is always 10 bytes + 4 bytes for frame len
+		return errWriteShort
 	}
 	return tc.connection.GetWriter().Flush()
 }

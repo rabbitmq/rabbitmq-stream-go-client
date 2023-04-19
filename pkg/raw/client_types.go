@@ -18,6 +18,7 @@ var (
 	errNilConfig           = errors.New("RabbitmqConfiguration cannot be nil")
 	errUnknownSubscription = errors.New("unknown subscription ID")
 	errNoMoreBrokersToTry  = errors.New("failed to dial RabbitMQ: no more brokers to try")
+	errWriteShort          = errors.New("wrote less bytes than expected")
 )
 
 var schemePorts = map[string]int{"rabbitmq-stream": 5552, "rabbitmq-stream+tls": 5551}
@@ -91,7 +92,7 @@ func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error
 		clientMaxFrameSize: 1_048_576,
 	}
 
-	if rabbitmqUrls == nil || len(rabbitmqUrls) == 0 {
+	if len(rabbitmqUrls) == 0 {
 		builder.rabbitmqBrokers = append(builder.rabbitmqBrokers, defaultBroker)
 		return builder, nil
 	}
