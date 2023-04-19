@@ -3,6 +3,7 @@ package internal
 import (
 	"bufio"
 	"errors"
+	"sync"
 )
 
 //go:generate mockgen -source command_types.go -destination ../pkg/raw/mock_internal_interfaces_test.go -package raw_test
@@ -55,7 +56,11 @@ type SyncCommandWrite interface {
 // 3. Flush
 // The flush is required to make sure that the commands are sent to the server.
 // WriteCommand doesn't care about the response.
+var mutex = &sync.Mutex{} // it is needed because the bufio.Writer is not thread safe
+
 func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
+	mutex.Lock()
+	defer mutex.Unlock()
 	hWritten, err := NewHeaderRequest(request).Write(writer)
 	if err != nil {
 		return err
