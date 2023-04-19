@@ -4,7 +4,6 @@ package raw
 
 import (
 	"context"
-	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 )
 
@@ -16,12 +15,12 @@ func (tc *Client) StartFrameListener(ctx context.Context) {
 	if ctx == nil {
 		panic(errNilContext)
 	}
-	log := logr.FromContextOrDiscard(ctx).WithName("frame-listener")
-	log.V(debugLevel).Info("starting frame listener")
+	log := loggerFromCtxOrDiscard(ctx).WithGroup("frame-listener")
+	log.Debug("starting frame listener")
 	err := tc.handleIncoming(ctx)
 	if err != nil {
 		// FIXME: handle error, possibly shutdown or reconnect
-		log.Error(err, "error handling incoming frames")
+		log.Error("error handling incoming frames", "error", err)
 	}
 }
 

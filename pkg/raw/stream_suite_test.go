@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"golang.org/x/exp/slog"
 	"io"
 	"net"
 	"os"
@@ -18,10 +19,19 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var logger *slog.Logger
+
 func TestStream(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Stream Suite")
 }
+
+var _ = BeforeSuite(func() {
+	h := slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}.NewTextHandler(GinkgoWriter)
+	logger = slog.New(h)
+})
 
 type autoIncrementingSequence struct {
 	last uint32

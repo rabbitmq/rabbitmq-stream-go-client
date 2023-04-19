@@ -7,7 +7,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/golang/mock/gomock"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
@@ -113,7 +112,7 @@ var _ = Describe("Client", func() {
 		go fakeRabbitMQ.fakeRabbitMQConnectionOpen(ctx)
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 
-		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*4)
+		itCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(ctx, *logger), time.Second*4)
 		defer cancel()
 
 		streamClient := raw.NewClient(fakeClientConn, conf)
@@ -139,7 +138,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("creates a new stream", func(ctx SpecContext) {
-		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
+		itCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(ctx, *logger), time.Second*3)
 		defer cancel()
 
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
@@ -214,7 +213,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("Delete a stream", func(ctx SpecContext) {
-		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
+		itCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(ctx, *logger), time.Second*3)
 		defer cancel()
 
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
@@ -226,7 +225,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("Declare new Publisher", func(ctx SpecContext) {
-		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
+		itCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(ctx, *logger), time.Second*3)
 		defer cancel()
 
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
@@ -238,7 +237,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("Delete Publisher", func(ctx SpecContext) {
-		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
+		itCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(ctx, *logger), time.Second*3)
 		defer cancel()
 
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
@@ -250,7 +249,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("receives messages", func(ctx SpecContext) {
-		itCtx, cancel := context.WithTimeout(logr.NewContext(ctx, GinkgoLogr), time.Second*3)
+		itCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(ctx, *logger), time.Second*3)
 		defer cancel()
 
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
@@ -336,7 +335,7 @@ var _ = Describe("Client", func() {
 
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
-		connectCtx, cancel := context.WithDeadline(logr.NewContext(ctx, GinkgoLogr), time.Now().Add(time.Millisecond*500))
+		connectCtx, cancel := context.WithDeadline(raw.NewContextWithLogger(ctx, *logger), time.Now().Add(time.Millisecond*500))
 		defer cancel()
 
 		Expect(streamClient.Connect(connectCtx)).To(MatchError("timed out waiting for server response"))
@@ -349,7 +348,7 @@ var _ = Describe("Client", func() {
 
 		When("stream already exists", func() {
 			It("returns a 'stream already exists' error", func(ctx SpecContext) {
-				ctx2 := newContextWithResponseCode(logr.NewContext(ctx, GinkgoLogr), streamResponseCodeStreamAlreadyExists)
+				ctx2 := newContextWithResponseCode(raw.NewContextWithLogger(ctx, *logger), streamResponseCodeStreamAlreadyExists)
 
 				streamClient := raw.NewClient(fakeClientConn, conf)
 				go streamClient.(*raw.Client).StartFrameListener(ctx2)
@@ -361,7 +360,7 @@ var _ = Describe("Client", func() {
 
 		When("stream does not exist", func() {
 			It("returns 'stream does not exist' error", func(ctx SpecContext) {
-				ctx2 := newContextWithResponseCode(logr.NewContext(ctx, GinkgoLogr), streamResponseCodeStreamDoesNotExist)
+				ctx2 := newContextWithResponseCode(raw.NewContextWithLogger(ctx, *logger), streamResponseCodeStreamDoesNotExist)
 
 				streamClient := raw.NewClient(fakeClientConn, conf)
 				go streamClient.(*raw.Client).StartFrameListener(ctx2)
@@ -379,7 +378,7 @@ var _ = Describe("Client", func() {
 
 		When("authentication fails", func() {
 			It("returns 'authentication failed' error", func(ctx SpecContext) {
-				itCtx := logr.NewContext(newContextWithResponseCode(ctx, streamResponseCodeAuthFailure, "sasl-auth"), GinkgoLogr)
+				itCtx := raw.NewContextWithLogger(newContextWithResponseCode(ctx, streamResponseCodeAuthFailure, "sasl-auth"), *logger)
 				go fakeRabbitMQ.fakeRabbitMQConnectionOpen(itCtx)
 
 				streamClient := raw.NewClient(fakeClientConn, conf)
@@ -424,7 +423,7 @@ var _ = Describe("Client", func() {
 			streamClient := raw.NewClient(fakeClientConn, conf)
 			streamClient.(*raw.Client).SetIsOpen(true)
 
-			routineCtx := logr.NewContext(ctx, GinkgoLogr)
+			routineCtx := raw.NewContextWithLogger(ctx, *logger)
 			go streamClient.(*raw.Client).StartFrameListener(routineCtx)
 
 			go fakeRabbitMQ.fakeRabbitMQServerClosesConnection()

@@ -5,21 +5,18 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/bombsimon/logrusr/v3"
-	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
-	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slog"
 	"io"
 	"os"
 	"time"
 )
 
 func main() {
-	logrusLog := logrus.New()
-	logrusLog.Level = logrus.InfoLevel
-	log := logrusr.New(logrusLog).WithName("rabbitmq-stream")
+	log := slog.New(slog.NewTextHandler(os.Stdout))
+
 	stream := "test-stream"
 	config, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost:5552")
 	if err != nil {
@@ -28,24 +25,24 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	rabbitmqCtx := logr.NewContext(ctx, log)
+	rabbitmqCtx := raw.NewContextWithLogger(ctx, *log)
 	streamClient, err := raw.DialConfig(rabbitmqCtx, config)
 	if err != nil {
-		log.Error(err, "error in dial")
+		log.Error("error in dial", "error", err)
 		panic(err)
 	}
 	log.Info("connection status", "open", streamClient.IsOpen())
 
 	err = streamClient.DeclareStream(ctx, stream, map[string]string{"name": "test-stream"})
 	if err != nil && err.Error() != "stream already exists" {
-		log.Error(err, "error in declaring stream")
+		log.Error("error in declaring stream", "error", err)
 		panic(err)
 	}
 
 	log.Info("exchanging command versions with server")
 	err = streamClient.ExchangeCommandVersions(ctx)
 	if err != nil {
-		log.Error(err, "error in exchange command versions")
+		log.Error("error in exchange command versions", "error", err)
 		panic(err)
 	}
 
@@ -75,7 +72,7 @@ func main() {
 
 	err = streamClient.DeclarePublisher(ctx, 1, "test-publisher", stream)
 	if err != nil {
-		log.Error(err, "error in declaring publisher")
+		log.Error("error in declaring publisher", "error", err)
 		panic(err)
 	}
 
@@ -92,7 +89,7 @@ func main() {
 
 		err = streamClient.Send(ctx, 1, fakeMessages)
 		if err != nil {
-			log.Error(err, "error in sending messages")
+			log.Error("error in sending messages", "error", err)
 			panic(err)
 		}
 	}
@@ -106,7 +103,7 @@ func main() {
 			received += int(c.NumEntries)
 			err := streamClient.Credit(ctx, 1, 1)
 			if err != nil {
-				log.Error(err, "error sending credits")
+				log.Error("error sending credits", "error", err)
 			}
 			if (received % totalMessages) == 0 {
 				log.Info("Received", "messages ", received)
@@ -118,7 +115,7 @@ func main() {
 
 	offset, err := streamClient.QueryOffset(ctx, "my_consumer", stream)
 	if err != nil {
-		log.Error(err, "error querying offset")
+		log.Error("error querying offset", "error", err)
 	} else {
 		log.Info("offset", "offset", offset)
 	}
@@ -133,7 +130,7 @@ func main() {
 
 	err = streamClient.DeclarePublisher(ctx, 2, "test-publisher-subEntry", stream)
 	if err != nil {
-		log.Error(err, "error in declaring publisher")
+		log.Error("error in declaring publisher", "error", err)
 		panic(err)
 	}
 	var idSub uint64 = 0
@@ -145,7 +142,7 @@ func main() {
 		subEntryFakeMessages)
 
 	if err != nil {
-		log.Error(err, "error in SendSubEntryBatch")
+		log.Error("error in SendSubEntryBatch", "error", err)
 		panic(err)
 	}
 
@@ -157,7 +154,7 @@ func main() {
 		subEntryFakeMessages)
 
 	if err != nil {
-		log.Error(err, "error in SendSubEntryBatch")
+		log.Error("error in SendSubEntryBatch", "error", err)
 		panic(err)
 	}
 
@@ -166,7 +163,7 @@ func main() {
 	_, _ = reader.ReadString('\n')
 	err = streamClient.DeletePublisher(ctx, 1)
 	if err != nil {
-		log.Error(err, "error in deleting publisher")
+		log.Error("error in deleting publisher", "error", err)
 		panic(err)
 	}
 
@@ -178,7 +175,7 @@ func main() {
 	log.Info("closing connection")
 	err = streamClient.Close(ctx)
 	if err != nil {
-		log.Error(err, "error closing connection")
+		log.Error("error closing connection", "error", err)
 		panic(err)
 	}
 	log.Info("connection status", "open", streamClient.IsOpen())

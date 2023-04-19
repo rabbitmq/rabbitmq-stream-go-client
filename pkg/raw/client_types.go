@@ -17,6 +17,7 @@ var (
 	errNilContext          = errors.New("context cannot be nil")
 	errNilConfig           = errors.New("RabbitmqConfiguration cannot be nil")
 	errUnknownSubscription = errors.New("unknown subscription ID")
+	errNoMoreBrokersToTry  = errors.New("failed to dial RabbitMQ: no more brokers to try")
 )
 
 var schemePorts = map[string]int{"rabbitmq-stream": 5552, "rabbitmq-stream+tls": 5551}

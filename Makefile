@@ -68,7 +68,7 @@ GINKGO_RUN_SHARED_FLAGS := --randomize-all --race
 GINKGO_RUN_FLAGS := -r -p --tags="rabbitmq.stream.test"
 
 .PHONY: tests
-tests: | $(GINKGO) ## Run unit tests. Make sure you install-tools before running this target
+tests: | $(GINKGO) ## Run unit tests. Make sure you install-tools before running this target. Use GINKGO_EXTRA to add extra flags to ginkgo
 	@printf "$(GREEN)Running all tests in parallel$(NORMAL)\n"
 	$(GINKGO) $(GINKGO_RUN_SHARED_FLAGS) $(GINKGO_RUN_FLAGS) --skip-package "e2e" $(GINKGO_EXTRA) .
 

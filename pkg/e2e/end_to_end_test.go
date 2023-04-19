@@ -4,16 +4,18 @@ package e2e_test
 
 import (
 	"fmt"
-	"github.com/go-logr/logr"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
+	"golang.org/x/exp/slog"
 	"sync"
 	"time"
 )
+
+var e2eLogger = slog.New(slog.NewTextHandler(GinkgoWriter))
 
 var _ = Describe("E2E", Serial, Label("e2e"), func() {
 	const (
@@ -23,7 +25,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 	)
 
 	It("connects, creates, publishes, deletes and closes", Label("measurement"), func(ctx SpecContext) {
-		itCtx := logr.NewContext(ctx, GinkgoLogr)
+		itCtx := raw.NewContextWithLogger(ctx, *e2eLogger)
 		streamClientConfiguration, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost/%2F")
 		Expect(err).ToNot(HaveOccurred())
 
