@@ -26,7 +26,7 @@ func main() {
 		panic(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	rabbitmqCtx := logr.NewContext(ctx, log)
 	streamClient, err := raw.DialConfig(rabbitmqCtx, config)
@@ -49,18 +49,27 @@ func main() {
 		panic(err)
 	}
 
-	const bachSize = 100
+	const batchSize = 100
 	const iterations = 2
-	const totalMessages = iterations * bachSize
-
+	const totalMessages = iterations * batchSize
+	// PublishingId 555 --> [] messages 551, 552, 553, 554, 555
+	// ONLY 555
 	publishChan := streamClient.NotifyPublish(make(chan *raw.PublishConfirm, 100))
 	go func() {
 		var confirmed int
 		for c := range publishChan {
-			confirmed += len(c.PublishingIds())
-			if (confirmed % totalMessages) == 0 {
-				log.Info("Confirmed", "messages", confirmed)
+			switch c.PublisherID() {
+			case 1:
+				confirmed += len(c.PublishingIds())
+				if (confirmed % totalMessages) == 0 {
+					log.Info("Confirmed", "messages", confirmed)
+				}
+				break
+			case 2:
+				confirmed += len(c.PublishingIds())
+				log.Info("Sub Entry Send Confirmed", "messages", confirmed)
 			}
+
 		}
 	}()
 
@@ -75,7 +84,7 @@ func main() {
 	startTime := time.Now()
 	for j := 0; j < iterations; j++ {
 		var fakeMessages []common.PublishingMessager
-		for i := 0; i < bachSize; i++ {
+		for i := 0; i < batchSize; i++ {
 			fakeMessages = append(fakeMessages,
 				raw.NewPublishingMessage(id, NewFakeMessage([]byte(fmt.Sprintf("message %d", i)))))
 			id++ // increment the id
@@ -112,6 +121,44 @@ func main() {
 		log.Error(err, "error querying offset")
 	} else {
 		log.Info("offset", "offset", offset)
+	}
+
+	// sending sub-entry batch to the server
+	var subEntryFakeMessages []common.PublishingMessager
+	for i := 0; i < batchSize; i++ {
+		subEntryFakeMessages = append(subEntryFakeMessages,
+			raw.NewPublishingMessage(id, NewFakeMessage([]byte(fmt.Sprintf("message %d", i)))))
+		id++ // increment the id
+	}
+
+	err = streamClient.DeclarePublisher(ctx, 2, "test-publisher-subEntry", stream)
+	if err != nil {
+		log.Error(err, "error in declaring publisher")
+		panic(err)
+	}
+	var idSub uint64 = 0
+
+	err = streamClient.SendSubEntryBatch(ctx,
+		2,
+		idSub,
+		&common.CompressNONE{},
+		subEntryFakeMessages)
+
+	if err != nil {
+		log.Error(err, "error in SendSubEntryBatch")
+		panic(err)
+	}
+
+	idSub = idSub + 1
+	err = streamClient.SendSubEntryBatch(ctx,
+		2,
+		idSub,
+		&common.CompressGZIP{},
+		subEntryFakeMessages)
+
+	if err != nil {
+		log.Error(err, "error in SendSubEntryBatch")
+		panic(err)
 	}
 
 	fmt.Println("Press any key to stop ")

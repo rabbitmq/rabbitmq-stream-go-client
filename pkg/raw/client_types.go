@@ -117,6 +117,7 @@ type Clienter interface {
 	DeleteStream(ctx context.Context, stream string) error
 	DeclarePublisher(ctx context.Context, publisherId uint8, publisherReference string, stream string) error
 	Send(ctx context.Context, publisherId uint8, messages []common.PublishingMessager) error
+	SendSubEntryBatch(ctx context.Context, publisherId uint8, publishingId uint64, compress common.CompresserCodec, publishingMessages []common.PublishingMessager) error
 	DeletePublisher(ctx context.Context, publisherId uint8) error
 	Subscribe(ctx context.Context, stream string, offsetType uint16, subscriptionId uint8, credit uint16, properties constants.SubscribeProperties, offset uint64) error
 	IsOpen() bool

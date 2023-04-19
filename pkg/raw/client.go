@@ -881,6 +881,52 @@ func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessage
 	return tc.request(ctx, internal.NewPublishRequest(publisherId, uint32(len(publishingMessages)), buff.Bytes()))
 }
 
+// SendSubEntryBatch aggregates, compress and publishes a batch of messages.
+// Similar to Send, but it aggregates the messages for a single publishingId.
+// For a single publishingId there could be multiple messages (max ushort).
+// The compression is done via common.CompresserCodec interface see common.CompresserCodec for more details.
+// The use case for SendSubEntryBatch is to compress a batch of messages for example sending logs.
+
+// SendSubEntryBatch is fire and forget, like the send function the client will receive the confirmation from the server.
+// The server sends only the confirmation for the `publishingId`.
+
+// The publishingId should be the last id of []common.PublishingMessager but we leave the api open to allow
+// the caller to choose the publishingId.
+
+func (tc *Client) SendSubEntryBatch(ctx context.Context, publisherId uint8,
+	publishingId uint64, compress common.CompresserCodec, publishingMessages []common.PublishingMessager) error {
+	if ctx == nil {
+		return errNilContext
+	}
+	logger := logr.FromContextOrDiscard(ctx).WithName("SendSubEntryBatch")
+	logger.V(debugLevel).Info("starting send-sub-entry", "publisherId", publisherId, "message-count", len(publishingMessages))
+
+	buff := new(bytes.Buffer)
+	for _, msg := range publishingMessages {
+		_, err := msg.WriteTo(buff)
+		if err != nil {
+			return err
+		}
+	}
+
+	uncompressedDataSize := len(buff.Bytes())
+
+	compressed, err := compress.Compress(buff.Bytes())
+	if err != nil {
+		return err
+	}
+	compressedDataSize := len(compressed)
+
+	return tc.request(ctx, internal.NewSubBatchPublishRequest(publisherId,
+		1,
+		publishingId,
+		compress.GetType(),
+		uint16(len(publishingMessages)),
+		uncompressedDataSize,
+		compressedDataSize,
+		compressed))
+}
+
 // DeletePublisher sends a syncRequest to delete a Publisher. If the error is nil,
 // the Publisher was deleted successfully.
 // publisherId is the ID of the publisher to delete.
