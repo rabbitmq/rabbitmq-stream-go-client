@@ -1115,16 +1115,16 @@ func (tc *Client) QueryOffset(ctx context.Context, reference string, stream stri
 
 // StreamStats gets the current stats for a given stream name. A map of statistics is returned, in the format
 // map[string]int64
-func (tc *Client) StreamStats(ctx context.Context, stream string) (*StreamStatsResponse, error) {
+func (tc *Client) StreamStats(ctx context.Context, stream string) (map[string]int64, error) {
 	if ctx == nil {
-		return &StreamStatsResponse{}, errNilContext
+		return nil, errNilContext
 	}
 	logger := logr.FromContextOrDiscard(ctx).WithName("StreamStats")
 	logger.V(debugLevel).Info("starting stream stats", "stream", stream)
 	streamStatsResponse, err := tc.syncRequest(ctx, internal.NewStreamStatsRequest(stream))
 	if err != nil {
 		logger.Error(err, "error sending sync request for stream stats", "stream", stream)
-		return &StreamStatsResponse{}, err
+		return nil, err
 	}
-	return streamStatsResponse.(*StreamStatsResponse), streamErrorOrNil(streamStatsResponse.ResponseCode())
+	return streamStatsResponse.(*StreamStatsResponse).Stats, streamErrorOrNil(streamStatsResponse.ResponseCode())
 }

@@ -127,13 +127,6 @@ func writeMany(writer io.Writer, args ...any) (int, error) {
 			}
 			written += binary.Size(int32(arg.(int)))
 			break
-		case int64:
-			err := binary.Write(writer, binary.BigEndian, arg)
-			if err != nil {
-				return written, err
-			}
-			written += binary.Size(arg)
-			break
 		case string:
 			n, err := writeString(writer, arg.(string))
 			if err != nil {

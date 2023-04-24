@@ -322,9 +322,8 @@ var _ = Describe("Client", func() {
 
 		stats, err := streamClient.StreamStats(ctx, "stream")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(stats.ResponseCode()).To(BeNumerically("==", 1))
-		Expect(stats.CorrelationId()).To(BeNumerically("==", 1))
-		Expect(stats.Stats).To(Equal(map[string]int64{"cpu": 50, "mem": 25}))
+		Expect(stats["cpu"]).To(BeNumerically("==", 50))
+		Expect(stats["mem"]).To(BeNumerically("==", 25))
 	}, SpecTimeout(time.Second*3))
 
 	It("cancels requests after a timeout", func(ctx SpecContext) {
