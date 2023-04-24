@@ -25,6 +25,7 @@ var _ = Describe("Route", func() {
 			superStream = "sStream"
 			correlationId = 42
 		})
+
 		It("returns the size needed to encode the frame", func() {
 			routeQuery := NewRouteQuery(routingKey, superStream)
 			routeQuery.SetCorrelationId(correlationId)
@@ -65,6 +66,32 @@ var _ = Describe("Route", func() {
 			}
 
 			Expect(buff.Bytes()).To(Equal(expectedByteSequence))
+		})
+	})
+
+	//RouteResponse => Key Version CorrelationId ResponseCode [Stream]
+	//Key => uint16 // 0x8018
+	//Version => uint16
+	//CorrelationId => uint32
+	//ResponseCode => uint16
+	//Stream => string
+	Describe("RouteResponse", func() {
+		It("successfully decodes a binary sequence into itself", func() {
+			byteSequence := []byte{
+				0x00, 0x00, 0x00, 0x2A, // correlation id
+				0x00, 0x01, // response code
+				0x00, 0x07, // stream string length
+				byte('s'), byte('S'), byte('t'), byte('r'), byte('e'), byte('a'), byte('m'), // stream string
+			}
+
+			routeResponse := NewRouteResponse(42, 1, "sStream")
+			buff := bytes.NewBuffer(byteSequence)
+			reader := bufio.NewReader(buff)
+			Expect(routeResponse.Read(reader)).To(Succeed())
+
+			Expect(routeResponse.CorrelationId()).To(BeNumerically("==", 42))
+			Expect(routeResponse.ResponseCode()).To(BeNumerically("==", 1))
+			Expect(routeResponse.Stream()).To(Equal("sStream"))
 		})
 	})
 })

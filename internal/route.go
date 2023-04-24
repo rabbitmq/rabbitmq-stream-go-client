@@ -18,7 +18,6 @@ func (r *RouteQuery) SizeNeeded() int {
 		streamProtocolCorrelationIdSizeBytes + // correlationID
 		streamProtocolStringLenSizeBytes + len(r.routingKey) + // routingKey
 		streamProtocolStringLenSizeBytes + len(r.superStream) // superStream
-
 }
 
 func (r *RouteQuery) Key() uint16 {
@@ -46,4 +45,29 @@ func (r *RouteQuery) SuperStream() string {
 
 func (r *RouteQuery) Write(writer *bufio.Writer) (int, error) {
 	return writeMany(writer, r.correlationId, r.routingKey, r.superStream)
+}
+
+type RouteResponse struct {
+	correlationId uint32
+	responseCode  uint16
+	stream        string
+}
+
+func NewRouteResponse(correlationId uint32, responseCode uint16, stream string) *RouteResponse {
+	return &RouteResponse{correlationId: correlationId, responseCode: responseCode, stream: stream}
+}
+
+func (r *RouteResponse) Read(reader *bufio.Reader) error {
+	return readMany(reader, &r.correlationId, &r.responseCode, &r.stream)
+}
+
+func (r *RouteResponse) CorrelationId() uint32 {
+	return r.correlationId
+}
+func (r *RouteResponse) ResponseCode() uint16 {
+	return r.responseCode
+}
+
+func (r *RouteResponse) Stream() string {
+	return r.stream
 }
