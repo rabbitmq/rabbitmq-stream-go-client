@@ -1172,5 +1172,5 @@ func (tc *Client) StreamStats(ctx context.Context, stream string) (map[string]in
 		logger.Error("error sending sync request for stream stats", "stream", stream)
 		return nil, err
 	}
-	return streamStatsResponse.(*StreamStatsResponse).Stats, streamErrorOrNil(streamStatsResponse.ResponseCode())
+	return streamStatsResponse.(*internal.StreamStatsResponse).Stats, streamErrorOrNil(streamStatsResponse.ResponseCode())
 }

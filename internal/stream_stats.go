@@ -129,8 +129,8 @@ func (sr *StreamStatsResponse) MarshalBinary() (data []byte, err error) {
 		(streamProtocolStringLenSizeBytes * len(sr.Stats)) + // 2 bytes for each string length
 		(streamProtocolKeySizeInt64 * len(sr.Stats)) // 8 bytes for each stat value
 
-	for k, _ := range sr.Stats {
-		expectedBytesWritten += len(k) // length of each string
+	for statName := range sr.Stats {
+		expectedBytesWritten += len(statName) // length of each string
 	}
 
 	if n != expectedBytesWritten {

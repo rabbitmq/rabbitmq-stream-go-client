@@ -111,7 +111,6 @@ type PublishConfirm = internal.PublishConfirmResponse
 type Chunk = internal.ChunkResponse
 type CreditError = internal.CreditResponse
 type MetadataResponse = internal.MetadataResponse
-type StreamStatsResponse = internal.StreamStatsResponse
 
 type Clienter interface {
 	Connect(ctx context.Context) error
