@@ -102,6 +102,7 @@ const (
 	CommandTune                    uint16 = 0x0014 // 20
 	CommandOpen                    uint16 = 0x0015 // 21
 	CommandClose                   uint16 = 0x0016 // 22
+	CommandRoute                   uint16 = 0x0018 // 24
 	CommandExchangeCommandVersions uint16 = 0x001b // 27
 	CommandStreamStats             uint16 = 0x001c // 28
 )
