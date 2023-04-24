@@ -379,9 +379,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			case internal.CommandStreamStatsResponse:
 				streamStatsResp := new(internal.StreamStatsResponse)
 				err := streamStatsResp.Read(buffer)
-				log.V(debugLevel).Info("received stream stats response")
+				log.Debug("received stream stats response")
 				if err != nil {
-					log.Error(err, "error ")
+					log.Error("error in stream stats response", "error", err)
 				}
 				tc.handleResponse(ctx, streamStatsResp)
 			default:
@@ -1165,11 +1165,11 @@ func (tc *Client) StreamStats(ctx context.Context, stream string) (map[string]in
 	if ctx == nil {
 		return nil, errNilContext
 	}
-	logger := logr.FromContextOrDiscard(ctx).WithName("StreamStats")
-	logger.V(debugLevel).Info("starting stream stats", "stream", stream)
+	logger := loggerFromCtxOrDiscard(ctx).WithGroup("StreamStats")
+	logger.Debug("starting stream stats", "stream", stream)
 	streamStatsResponse, err := tc.syncRequest(ctx, internal.NewStreamStatsRequest(stream))
 	if err != nil {
-		logger.Error(err, "error sending sync request for stream stats", "stream", stream)
+		logger.Error("error sending sync request for stream stats", "stream", stream)
 		return nil, err
 	}
 	return streamStatsResponse.(*StreamStatsResponse).Stats, streamErrorOrNil(streamStatsResponse.ResponseCode())

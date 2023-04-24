@@ -17,6 +17,12 @@ func readUInt(readerStream io.Reader) (uint32, error) {
 	return res, err
 }
 
+func readInt64(readerStream io.Reader) (int64, error) {
+	var res int64
+	err := binary.Read(readerStream, binary.BigEndian, &res)
+	return res, err
+}
+
 func readString(readerStream io.Reader) string {
 	// FIXME: handle the potential error from readUShort
 	lenString, _ := readUShort(readerStream)
