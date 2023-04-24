@@ -384,14 +384,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error("error in stream stats response", "error", err)
 				}
 				tc.handleResponse(ctx, streamStatsResp)
-			case internal.CommandQueryPublisherSequenceResponse:
-				queryPublisherSequenceResp := new(internal.QueryPublisherSequenceResponse)
-				err := queryPublisherSequenceResp.Read(buffer)
-				log.Debug("received publisher sequence response")
+			case internal.CommandRouteResponse:
+				routeResp := new(internal.RouteResponse)
+				err := routeResp.Read(buffer)
+				log.Debug("received route response")
 				if err != nil {
-					log.Error("error in publisher sequence response", "error", err)
+					log.Error("error in route response", "error", err)
 				}
-				tc.handleResponse(ctx, queryPublisherSequenceResp)
+				tc.handleResponse(ctx, routeResp)
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
@@ -1183,15 +1183,21 @@ func (tc *Client) StreamStats(ctx context.Context, stream string) (map[string]in
 	return streamStatsResponse.(*internal.StreamStatsResponse).Stats, streamErrorOrNil(streamStatsResponse.ResponseCode())
 }
 
-// QueryPublisherSequence returns the sequence for a given publisher reference and stream
-func (tc *Client) QueryPublisherSequence(ctx context.Context, ref, stream string) (uint64, error) {
+func (tc *Client) RouteQuery(ctx context.Context, routingKey, superStream string) (string, error) {
 	if ctx == nil {
-		return 0, errNilContext
+		return "", errNilContext
 	}
-	queryPublisherSequence, err := tc.syncRequest(ctx, internal.NewQueryPublisherSequenceRequest(ref, stream))
+	logger := loggerFromCtxOrDiscard(ctx).WithGroup("routeQuery")
+	logger.Debug("starting route query", "routingKey", routingKey, "superStream", superStream)
+	response, err := tc.syncRequest(ctx, internal.NewRouteQuery(routingKey, superStream))
 	if err != nil {
-		return 0, err
+		logger.Error("error sending sync request to route", "routingKey", routingKey, "superStream", superStream)
+		return "", err
 	}
-
-	return queryPublisherSequence.(*internal.QueryPublisherSequenceResponse).Sequence(), nil
+	var routeResponse *internal.RouteResponse
+	if reflect.TypeOf(response) != reflect.TypeOf(routeResponse) {
+		return "", errors.New("response is not of type *internal.RouteResponse")
+	}
+	routeResponse = response.(*internal.RouteResponse)
+	return routeResponse.Stream(), streamErrorOrNil(response.ResponseCode())
 }

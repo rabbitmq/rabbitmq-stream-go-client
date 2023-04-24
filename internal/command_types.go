@@ -123,6 +123,7 @@ const (
 	CommandTuneResponse                    uint16 = 0x8014
 	CommandOpenResponse                    uint16 = 0x8015
 	CommandCloseResponse                   uint16 = 0x8016
+	CommandRouteResponse                   uint16 = 0x8018
 	CommandExchangeCommandVersionsResponse uint16 = 0x801b
 	CommandStreamStatsResponse             uint16 = 0x801c
 )

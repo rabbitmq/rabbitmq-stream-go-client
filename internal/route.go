@@ -1,6 +1,9 @@
 package internal
 
-import "bufio"
+import (
+	"bufio"
+	"bytes"
+)
 
 type RouteQuery struct {
 	correlationId uint32
@@ -47,6 +50,12 @@ func (r *RouteQuery) Write(writer *bufio.Writer) (int, error) {
 	return writeMany(writer, r.correlationId, r.routingKey, r.superStream)
 }
 
+func (r *RouteQuery) UnmarshalBinary(data []byte) error {
+	buff := bytes.NewReader(data)
+	rd := bufio.NewReader(buff)
+	return readMany(rd, &r.correlationId, &r.routingKey, &r.superStream)
+}
+
 type RouteResponse struct {
 	correlationId uint32
 	responseCode  uint16
@@ -70,4 +79,17 @@ func (r *RouteResponse) ResponseCode() uint16 {
 
 func (r *RouteResponse) Stream() string {
 	return r.stream
+}
+
+func (r *RouteResponse) MarshalBinary() ([]byte, error) {
+	var buff bytes.Buffer
+	wr := bufio.NewWriter(&buff)
+	_, err := writeMany(wr, r.correlationId, r.responseCode, r.stream)
+	if err != nil {
+		return nil, err
+	}
+	if err = wr.Flush(); err != nil {
+		return nil, err
+	}
+	return buff.Bytes(), nil
 }
