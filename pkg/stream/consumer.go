@@ -88,6 +88,13 @@ func (consumer *Consumer) updateLastStoredOffset() bool {
 	return false
 }
 
+func (consumer *Consumer) GetCloseHandler() chan Event {
+	consumer.mutex.Lock()
+	res := consumer.closeHandler
+	consumer.mutex.Unlock()
+	return res
+}
+
 func (consumer *Consumer) NotifyClose() ChannelClose {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()

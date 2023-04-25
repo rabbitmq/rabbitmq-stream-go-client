@@ -82,9 +82,9 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 	reason.StreamName = consumer.GetStreamName()
 	reason.Name = consumer.GetName()
 
-	if consumer.closeHandler != nil {
-		consumer.closeHandler <- reason
-		close(consumer.closeHandler)
+	if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
+		closeHandler <- reason
+		close(closeHandler)
 	}
 
 	return coordinator.removeById(id, coordinator.consumers)
