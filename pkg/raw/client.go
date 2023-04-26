@@ -1183,6 +1183,8 @@ func (tc *Client) StreamStats(ctx context.Context, stream string) (map[string]in
 	return streamStatsResponse.(*internal.StreamStatsResponse).Stats, streamErrorOrNil(streamStatsResponse.ResponseCode())
 }
 
+// RouteQuery retrieves the stream name for a given routing key and superStream. If a stream is found
+// the name is returned as a string.
 func (tc *Client) RouteQuery(ctx context.Context, routingKey, superStream string) (string, error) {
 	if ctx == nil {
 		return "", errNilContext
