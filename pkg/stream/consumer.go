@@ -66,16 +66,14 @@ func (consumer *Consumer) setCurrentOffset(offset int64) {
 
 func (consumer *Consumer) GetOffset() int64 {
 	consumer.mutex.Lock()
-	res := consumer.currentOffset
-	consumer.mutex.Unlock()
-	return res
+	defer consumer.mutex.Unlock()
+	return consumer.currentOffset
 }
 
 func (consumer *Consumer) GetLastStoredOffset() int64 {
 	consumer.mutex.Lock()
-	res := consumer.lastStoredOffset
-	consumer.mutex.Unlock()
-	return res
+	defer consumer.mutex.Unlock()
+	return consumer.lastStoredOffset
 }
 
 func (consumer *Consumer) updateLastStoredOffset() bool {
@@ -90,9 +88,8 @@ func (consumer *Consumer) updateLastStoredOffset() bool {
 
 func (consumer *Consumer) GetCloseHandler() chan Event {
 	consumer.mutex.Lock()
-	res := consumer.closeHandler
-	consumer.mutex.Unlock()
-	return res
+	defer consumer.mutex.Unlock()
+	return consumer.closeHandler
 }
 
 func (consumer *Consumer) NotifyClose() ChannelClose {
