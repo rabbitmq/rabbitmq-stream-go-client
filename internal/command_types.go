@@ -86,6 +86,7 @@ const (
 	CommandDeclarePublisher        uint16 = 0x0001 // 1
 	CommandPublish                 uint16 = 0x0002 // 2
 	CommandPublishConfirm          uint16 = 0x0003 // 3
+	CommandQueryPublisherSequence  uint16 = 0x0005 // 5
 	CommandDeletePublisher         uint16 = 0x0006 // 6
 	CommandSubscribe               uint16 = 0x0007 // 7
 	CommandDeliver                 uint16 = 0x0008 // 8
