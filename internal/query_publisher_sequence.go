@@ -77,12 +77,7 @@ func NewQueryPublisherSequenceResponseWith(correlationId uint32, responseCode ui
 }
 
 func (qr *QueryPublisherSequenceResponse) Read(reader *bufio.Reader) error {
-	err := readMany(reader, &qr.correlationId, &qr.responseCode, &qr.sequence)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return readMany(reader, &qr.correlationId, &qr.responseCode, &qr.sequence)
 }
 
 func (qr *QueryPublisherSequenceResponse) CorrelationId() uint32 {
