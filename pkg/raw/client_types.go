@@ -132,4 +132,5 @@ type Clienter interface {
 	StoreOffset(ctx context.Context, reference, stream string, offset uint64) error
 	QueryOffset(ctx context.Context, reference string, stream string) (uint64, error)
 	StreamStats(ctx context.Context, stream string) (map[string]int64, error)
+	QueryPublisherSequence(ctx context.Context, reference, stream string) (uint64, error)
 }

@@ -108,6 +108,7 @@ const (
 
 const (
 	CommandDeclarePublisherResponse        uint16 = 0x8001
+	CommandQueryPublisherSequenceResponse  uint16 = 0x8005
 	CommandDeletePublisherResponse         uint16 = 0x8006
 	CommandSubscribeResponse               uint16 = 0x8007
 	CommandCreditResponse                  uint16 = 0x8009

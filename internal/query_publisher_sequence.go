@@ -1,6 +1,10 @@
 package internal
 
-import "bufio"
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+)
 
 type QueryPublisherSequenceRequest struct {
 	correlationId      uint32
@@ -47,14 +51,29 @@ func (q *QueryPublisherSequenceRequest) SizeNeeded() int {
 		streamProtocolStringLenSizeBytes + len(q.stream) // stream
 }
 
+func (q *QueryPublisherSequenceRequest) Write(writer *bufio.Writer) (int, error) {
+	return writeMany(writer, q.correlationId, q.publisherReference, q.stream)
+}
+
+func (q *QueryPublisherSequenceRequest) UnmarshalBinary(data []byte) error {
+	return readMany(bytes.NewReader(data), &q.correlationId, &q.publisherReference, &q.stream)
+}
+
 type QueryPublisherSequenceResponse struct {
 	correlationId uint32
-	responseCode  int16
+	responseCode  uint16
 	sequence      uint64
 }
 
-func NewQueryPublisherResponse() *QueryPublisherSequenceResponse {
+func NewQueryPublisherSequenceResponse() *QueryPublisherSequenceResponse {
 	return &QueryPublisherSequenceResponse{}
+}
+func NewQueryPublisherSequenceResponseWith(correlationId uint32, responseCode uint16, sequence uint64) *QueryPublisherSequenceResponse {
+	return &QueryPublisherSequenceResponse{
+		correlationId: correlationId,
+		responseCode:  responseCode,
+		sequence:      sequence,
+	}
 }
 
 func (qr *QueryPublisherSequenceResponse) Read(reader *bufio.Reader) error {
@@ -70,10 +89,34 @@ func (qr *QueryPublisherSequenceResponse) CorrelationId() uint32 {
 	return qr.correlationId
 }
 
-func (qr *QueryPublisherSequenceResponse) ResponseCode() int16 {
+func (qr *QueryPublisherSequenceResponse) ResponseCode() uint16 {
 	return qr.responseCode
 }
 
 func (qr *QueryPublisherSequenceResponse) Sequence() uint64 {
 	return qr.sequence
+}
+
+func (qr *QueryPublisherSequenceResponse) MarshalBinary() (data []byte, err error) {
+	buff := &bytes.Buffer{}
+	wr := bufio.NewWriter(buff)
+
+	n, err := writeMany(wr, qr.correlationId, qr.responseCode, qr.sequence)
+	if err != nil {
+		return nil, err
+	}
+
+	expectedBytesWritten := streamProtocolCorrelationIdSizeBytes + streamProtocolResponseCodeSizeBytes +
+		streamProtocolKeySizeUint64 // sequence
+
+	if n != expectedBytesWritten {
+		return nil, fmt.Errorf("did not write expected number of bytes: wanted %d, wrote %d", expectedBytesWritten, n)
+	}
+
+	if err = wr.Flush(); err != nil {
+		return nil, err
+	}
+
+	data = buff.Bytes()
+	return
 }

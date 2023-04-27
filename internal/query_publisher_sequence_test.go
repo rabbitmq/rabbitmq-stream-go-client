@@ -47,7 +47,7 @@ var _ = Describe("QueryPublisherSequence", func() {
 	//Sequence => uint64
 	Describe("Response", func() {
 		It("decodes a binary sequence into itself", func() {
-			queryPublisherResponse := NewQueryPublisherResponse()
+			queryPublisherResponse := NewQueryPublisherSequenceResponse()
 			binaryQueryPubSub := []byte{
 
 				0x00, 0x00, 0x00, 0x03, // correlation id

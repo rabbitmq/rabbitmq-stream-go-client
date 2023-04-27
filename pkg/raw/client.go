@@ -384,6 +384,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error("error in stream stats response", "error", err)
 				}
 				tc.handleResponse(ctx, streamStatsResp)
+			case internal.CommandQueryPublisherSequenceResponse:
+				queryPublisherSequenceResp := new(internal.QueryPublisherSequenceResponse)
+				err := queryPublisherSequenceResp.Read(buffer)
+				log.Debug("received publisher sequence response")
+				if err != nil {
+					log.Error("error in publisher sequence response", "error", err)
+				}
+				tc.handleResponse(ctx, queryPublisherSequenceResp)
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
@@ -1173,4 +1181,17 @@ func (tc *Client) StreamStats(ctx context.Context, stream string) (map[string]in
 		return nil, err
 	}
 	return streamStatsResponse.(*internal.StreamStatsResponse).Stats, streamErrorOrNil(streamStatsResponse.ResponseCode())
+}
+
+// QueryPublisherSequence returns the sequence for a given publisher reference and stream
+func (tc *Client) QueryPublisherSequence(ctx context.Context, ref, stream string) (uint64, error) {
+	if ctx == nil {
+		return 0, errNilContext
+	}
+	queryPublisherSequence, err := tc.syncRequest(ctx, internal.NewQueryPublisherSequenceRequest(ref, stream))
+	if err != nil {
+		return 0, err
+	}
+
+	return queryPublisherSequence.(*internal.QueryPublisherSequenceResponse).Sequence(), nil
 }
