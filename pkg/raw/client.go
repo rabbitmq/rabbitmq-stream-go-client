@@ -384,6 +384,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error("error in stream stats response", "error", err)
 				}
 				tc.handleResponse(ctx, streamStatsResp)
+			case internal.CommandQueryPublisherSequenceResponse:
+				queryPublisherSequenceResp := new(internal.QueryPublisherSequenceResponse)
+				err := queryPublisherSequenceResp.Read(buffer)
+				log.Debug("received publisher sequence response")
+				if err != nil {
+					log.Error("error in publisher sequence response", "error", err)
+				}
+				tc.handleResponse(ctx, queryPublisherSequenceResp)
 			case internal.CommandRouteResponse:
 				routeResp := new(internal.RouteResponse)
 				err := routeResp.Read(buffer)
@@ -392,6 +400,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error("error in route response", "error", err)
 				}
 				tc.handleResponse(ctx, routeResp)
+			case internal.CommandPartitionsResponse:
+				partitionsResp := new(internal.PartitionsResponse)
+				err := partitionsResp.Read(buffer)
+				log.Debug("received stream stats response")
+				if err != nil {
+					log.Error("error in stream stats response", "error", err)
+				}
+				tc.handleResponse(ctx, partitionsResp)
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
@@ -1183,6 +1199,19 @@ func (tc *Client) StreamStats(ctx context.Context, stream string) (map[string]in
 	return streamStatsResponse.(*internal.StreamStatsResponse).Stats, streamErrorOrNil(streamStatsResponse.ResponseCode())
 }
 
+// QueryPublisherSequence returns the sequence for a given publisher reference and stream
+func (tc *Client) QueryPublisherSequence(ctx context.Context, ref, stream string) (uint64, error) {
+	if ctx == nil {
+		return 0, errNilContext
+	}
+	queryPublisherSequence, err := tc.syncRequest(ctx, internal.NewQueryPublisherSequenceRequest(ref, stream))
+	if err != nil {
+		return 0, err
+	}
+
+	return queryPublisherSequence.(*internal.QueryPublisherSequenceResponse).Sequence(), nil
+}
+
 // RouteQuery retrieves the stream name for a given routing key and superStream. If a stream is found
 // the name is returned as a string.
 func (tc *Client) RouteQuery(ctx context.Context, routingKey, superStream string) (string, error) {
@@ -1199,4 +1228,15 @@ func (tc *Client) RouteQuery(ctx context.Context, routingKey, superStream string
 	}
 	routeResponse = response.(*internal.RouteResponse)
 	return routeResponse.Stream(), streamErrorOrNil(response.ResponseCode())
+}
+
+func (tc *Client) Partitions(ctx context.Context, superStream string) ([]string, error) {
+	if ctx == nil {
+		return nil, errNilContext
+	}
+	partitionsResponse, err := tc.syncRequest(ctx, internal.NewPartitionsQuery(superStream))
+	if err != nil {
+		return nil, err
+	}
+	return partitionsResponse.(*internal.PartitionsResponse).Streams(), err
 }

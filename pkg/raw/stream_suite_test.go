@@ -810,6 +810,48 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQQueryPublisherSequence(ctx context.Co
 	expectOffset1(err).ToNot(HaveOccurred())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQPartitions(ctx context.Context, superStream string) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+	serverReader := bufio.NewReader(rmq.connection)
+
+	header := new(internal.Header)
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x0019))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
+
+	body := internal.NewPartitionsQuery(superStream)
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	expectOffset1(body.SuperStream()).To(Equal(superStream))
+
+	frameSize := 8 + // header (key size=2 + correlation=4 + version=2)
+		2 + // responseCode
+		4 + // length of string slice
+		2 + // 1st key string length
+		2 + // 1st key string bytes
+		2 + // 2nd key string length
+		2 // 2nd key string bytes
+
+	header = internal.NewHeader(frameSize, 0x8019, 1)
+	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
+		"expected to write 8 bytes")
+
+	responseCode := responseCodeFromContext(ctx, "partitions")
+
+	responseBody, err := internal.NewPartitionsResponseWith(rmq.correlationIdSeq.next(),
+		responseCode,
+		[]string{"s1", "s2"},
+	).MarshalBinary()
+
+	expectOffset1(err).ToNot(HaveOccurred())
+	_, err = rmq.connection.Write(responseBody)
+	expectOffset1(err).ToNot(HaveOccurred())
+}
+
 type ctxKey struct {
 	string
 }

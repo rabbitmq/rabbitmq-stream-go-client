@@ -325,16 +325,38 @@ var _ = Describe("Client", func() {
 		Expect(stats["mem"]).To(BeNumerically("==", 25))
 	}, SpecTimeout(time.Second*3))
 
+	It("gets query publisher sequence", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+		go fakeRabbitMQ.fakeRabbitMQQueryPublisherSequence(ctx, "pubref", "stream")
+
+		qps, err := streamClient.QueryPublisherSequence(ctx, "pubref", "stream")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(qps).To(BeNumerically("==", 42))
+	}, SpecTimeout(time.Second*3))
+
 	It("route", func(ctx SpecContext) {
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(ctx)
-
 		go fakeRabbitMQ.fakeRabbitMQRouteQuery(ctx, "sStream")
 
 		route, err := streamClient.RouteQuery(ctx, "routingKey", "sStream")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(route).To(Equal("sStream"))
+	}, SpecTimeout(time.Second*3))
+
+	It("gets partitions of a superstream", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+		go fakeRabbitMQ.fakeRabbitMQPartitions(ctx, "sStream")
+
+		p, err := streamClient.Partitions(ctx, "sStream")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p).To(Equal([]string{"s1", "s2"}))
 	}, SpecTimeout(time.Second*3))
 
 	It("cancels requests after a timeout", func(ctx SpecContext) {

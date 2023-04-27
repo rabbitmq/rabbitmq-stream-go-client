@@ -2,6 +2,8 @@ package internal
 
 import (
 	"bufio"
+	"bytes"
+	"fmt"
 )
 
 type PartitionsQuery struct {
@@ -46,9 +48,13 @@ func (p *PartitionsQuery) Write(writer *bufio.Writer) (int, error) {
 	return writeMany(writer, p.correlationId, p.superStream)
 }
 
+func (p *PartitionsQuery) UnmarshalBinary(data []byte) error {
+	return readMany(bytes.NewReader(data), &p.correlationId, &p.superStream)
+}
+
 type PartitionsResponse struct {
 	correlationId uint32
-	responseCode  int16
+	responseCode  uint16
 	streams       []string
 }
 
@@ -56,11 +62,19 @@ func NewPartitionsResponse() *PartitionsResponse {
 	return &PartitionsResponse{}
 }
 
+func NewPartitionsResponseWith(correlationId uint32, responseCode uint16, streams []string) *PartitionsResponse {
+	return &PartitionsResponse{
+		correlationId: correlationId,
+		responseCode:  responseCode,
+		streams:       streams,
+	}
+}
+
 func (pr *PartitionsResponse) CorrelationId() uint32 {
 	return pr.correlationId
 }
 
-func (pr *PartitionsResponse) ResponseCode() int16 {
+func (pr *PartitionsResponse) ResponseCode() uint16 {
 	return pr.responseCode
 }
 
@@ -86,4 +100,40 @@ func (pr *PartitionsResponse) Read(reader *bufio.Reader) error {
 	}
 
 	return nil
+}
+
+func (pr *PartitionsResponse) MarshalBinary() (data []byte, err error) {
+	buff := &bytes.Buffer{}
+	wr := bufio.NewWriter(buff)
+
+	n, err := writeMany(wr, pr.correlationId, pr.responseCode, uint32(len(pr.streams)))
+	if err != nil {
+		return nil, err
+	}
+
+	for _, stream := range pr.streams {
+		sBytes, err := writeString(wr, stream)
+		if err != nil {
+			return nil, err
+		}
+
+		n += sBytes
+	}
+
+	expectedBytesWritten := streamProtocolCorrelationIdSizeBytes + streamProtocolResponseCodeSizeBytes +
+		streamProtocolSliceLenBytes
+
+	for _, stream := range pr.streams {
+		expectedBytesWritten += streamProtocolStringLenSizeBytes + len(stream)
+	}
+
+	if n != expectedBytesWritten {
+		return nil, fmt.Errorf("did not write expected number of bytes: wanted %d, wrote %d", expectedBytesWritten, n)
+	}
+
+	if err = wr.Flush(); err != nil {
+		return nil, err
+	}
+	data = buff.Bytes()
+	return
 }

@@ -133,4 +133,5 @@ type Clienter interface {
 	QueryOffset(ctx context.Context, reference string, stream string) (uint64, error)
 	StreamStats(ctx context.Context, stream string) (map[string]int64, error)
 	RouteQuery(ctx context.Context, routingKey, superStream string) (string, error)
+	Partitions(ctx context.Context, superStream string) ([]string, error)
 }
