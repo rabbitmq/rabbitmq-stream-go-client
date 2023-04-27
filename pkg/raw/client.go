@@ -1189,11 +1189,8 @@ func (tc *Client) RouteQuery(ctx context.Context, routingKey, superStream string
 	if ctx == nil {
 		return "", errNilContext
 	}
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("routeQuery")
-	logger.Debug("starting route query", "routingKey", routingKey, "superStream", superStream)
 	response, err := tc.syncRequest(ctx, internal.NewRouteQuery(routingKey, superStream))
 	if err != nil {
-		logger.Error("error sending sync request to route", "routingKey", routingKey, "superStream", superStream)
 		return "", err
 	}
 	var routeResponse *internal.RouteResponse
