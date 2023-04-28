@@ -80,18 +80,21 @@ var _ = Describe("Route", func() {
 			byteSequence := []byte{
 				0x00, 0x00, 0x00, 0x2A, // correlation id
 				0x00, 0x01, // response code
-				0x00, 0x07, // stream string length
-				byte('s'), byte('S'), byte('t'), byte('r'), byte('e'), byte('a'), byte('m'), // stream string
+				0x00, 0x00, 0x00, 0x02, // slice len
+				0x00, 0x02, // string len
+				byte('s'), byte('1'), // stream 1 string
+				0x00, 0x02, // string len
+				byte('s'), byte('2'), // stream 2 string
 			}
 
-			routeResponse := NewRouteResponse(42, 1, "sStream")
+			routeResponse := NewRouteResponse()
 			buff := bytes.NewBuffer(byteSequence)
 			reader := bufio.NewReader(buff)
 			Expect(routeResponse.Read(reader)).To(Succeed())
 
 			Expect(routeResponse.CorrelationId()).To(BeNumerically("==", 42))
 			Expect(routeResponse.ResponseCode()).To(BeNumerically("==", 1))
-			Expect(routeResponse.Stream()).To(Equal("sStream"))
+			Expect(routeResponse.Streams()).To(Equal([]string{"s1", "s2"}))
 		})
 	})
 })

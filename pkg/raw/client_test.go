@@ -340,11 +340,11 @@ var _ = Describe("Client", func() {
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(ctx)
-		go fakeRabbitMQ.fakeRabbitMQRouteQuery(ctx, "sStream")
+		go fakeRabbitMQ.fakeRabbitMQRouteQuery(ctx, []string{"s1", "s2"})
 
-		route, err := streamClient.RouteQuery(ctx, "routingKey", "sStream")
+		routes, err := streamClient.RouteQuery(ctx, "routingKey", "sStream")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(route).To(Equal("sStream"))
+		Expect(routes).To(Equal([]string{"s1", "s2"}))
 	}, SpecTimeout(time.Second*3))
 
 	It("gets partitions of a superstream", func(ctx SpecContext) {

@@ -83,20 +83,9 @@ func (pr *PartitionsResponse) Streams() []string {
 }
 
 func (pr *PartitionsResponse) Read(reader *bufio.Reader) error {
-	err := readMany(reader, &pr.correlationId, &pr.responseCode)
+	err := readMany(reader, &pr.correlationId, &pr.responseCode, &pr.streams)
 	if err != nil {
 		return err
-	}
-
-	sliceLen, err := readUInt(reader)
-	if err != nil {
-		return err
-	}
-
-	pr.streams = make([]string, sliceLen)
-	for i := uint32(0); i < sliceLen; i++ {
-		v := readString(reader)
-		pr.streams[i] = v
 	}
 
 	return nil
@@ -106,18 +95,9 @@ func (pr *PartitionsResponse) MarshalBinary() (data []byte, err error) {
 	buff := &bytes.Buffer{}
 	wr := bufio.NewWriter(buff)
 
-	n, err := writeMany(wr, pr.correlationId, pr.responseCode, uint32(len(pr.streams)))
+	n, err := writeMany(wr, pr.correlationId, pr.responseCode, pr.streams)
 	if err != nil {
 		return nil, err
-	}
-
-	for _, stream := range pr.streams {
-		sBytes, err := writeString(wr, stream)
-		if err != nil {
-			return nil, err
-		}
-
-		n += sBytes
 	}
 
 	expectedBytesWritten := streamProtocolCorrelationIdSizeBytes + streamProtocolResponseCodeSizeBytes +

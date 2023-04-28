@@ -73,6 +73,17 @@ func readAny(readerStream io.Reader, arg interface{}) error {
 		*arg = int(uInt)
 	case *string:
 		*arg = readString(readerStream)
+	case *[]string:
+		sliceLen, err := readUInt(readerStream)
+		if err != nil {
+			return err
+		}
+		mySlice := make([]string, sliceLen)
+		for i := uint32(0); i < sliceLen; i++ {
+			v := readString(readerStream)
+			mySlice[i] = v
+		}
+		*arg = mySlice
 	case *[]byte:
 		byteSlice, err := readByteSlice(readerStream)
 		if err != nil {
@@ -121,6 +132,19 @@ func writeMany(writer io.Writer, args ...any) (int, error) {
 				return written, err
 			}
 			written += n
+		case []string:
+			n, err := writeMany(writer, len(arg))
+			if err != nil {
+				return n, err
+			}
+			written += n
+			for _, s := range arg {
+				n, err := writeString(writer, s)
+				written += n
+				if err != nil {
+					return n, err
+				}
+			}
 		case map[string]string:
 			n, err := writeMany(writer, len(arg))
 			if err != nil {

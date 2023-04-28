@@ -431,7 +431,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQQueryOffset(ctx context.Context, offs
 	expectOffset1(serverRW.Flush()).To(Succeed())
 }
 
-func (rmq *fakeRabbitMQServer) fakeRabbitMQRouteQuery(ctx context.Context, stream string) {
+func (rmq *fakeRabbitMQServer) fakeRabbitMQRouteQuery(ctx context.Context, streams []string) {
 	defer GinkgoRecover()
 
 	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
@@ -455,12 +455,16 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQRouteQuery(ctx context.Context, strea
 	frameSize := 4 + // header
 		4 + // correlation ID
 		2 + // response code
-		2 + // stream sting len
-		7 // stream contents
+		4 + // length of string slice
+		2 + // stream string len
+		2 + // stream contents
+		2 + // stream string len
+		2 // stream contents
+
 	header = internal.NewHeader(frameSize, 0x8018, 1)
 	expectOffset1(header.Write(serverRW)).To(BeNumerically("==", 8))
 
-	bodyResp := internal.NewRouteResponse(rmq.correlationIdSeq.next(), responseCodeFromContext(ctx, "query_offset"), stream)
+	bodyResp := internal.NewRouteResponseWith(rmq.correlationIdSeq.next(), responseCodeFromContext(ctx, "query_offset"), streams)
 	b, err := bodyResp.MarshalBinary()
 	expectOffset1(err).ToNot(HaveOccurred())
 	expectOffset1(serverRW.Write(b)).To(BeNumerically("==", frameSize-4))

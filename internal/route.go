@@ -59,15 +59,19 @@ func (r *RouteQuery) UnmarshalBinary(data []byte) error {
 type RouteResponse struct {
 	correlationId uint32
 	responseCode  uint16
-	stream        string
+	streams       []string
 }
 
-func NewRouteResponse(correlationId uint32, responseCode uint16, stream string) *RouteResponse {
-	return &RouteResponse{correlationId: correlationId, responseCode: responseCode, stream: stream}
+func NewRouteResponse() *RouteResponse {
+	return &RouteResponse{}
+}
+
+func NewRouteResponseWith(correlationId uint32, responseCode uint16, streams []string) *RouteResponse {
+	return &RouteResponse{correlationId: correlationId, responseCode: responseCode, streams: streams}
 }
 
 func (r *RouteResponse) Read(reader *bufio.Reader) error {
-	return readMany(reader, &r.correlationId, &r.responseCode, &r.stream)
+	return readMany(reader, &r.correlationId, &r.responseCode, &r.streams)
 }
 
 func (r *RouteResponse) CorrelationId() uint32 {
@@ -77,14 +81,14 @@ func (r *RouteResponse) ResponseCode() uint16 {
 	return r.responseCode
 }
 
-func (r *RouteResponse) Stream() string {
-	return r.stream
+func (r *RouteResponse) Streams() []string {
+	return r.streams
 }
 
 func (r *RouteResponse) MarshalBinary() ([]byte, error) {
 	var buff bytes.Buffer
 	wr := bufio.NewWriter(&buff)
-	_, err := writeMany(wr, r.correlationId, r.responseCode, r.stream)
+	_, err := writeMany(wr, r.correlationId, r.responseCode, r.streams)
 	if err != nil {
 		return nil, err
 	}

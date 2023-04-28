@@ -111,7 +111,6 @@ type PublishConfirm = internal.PublishConfirmResponse
 type Chunk = internal.ChunkResponse
 type CreditError = internal.CreditResponse
 type MetadataResponse = internal.MetadataResponse
-type MetadataUpdate = internal.MetadataUpdateResponse
 
 type Clienter interface {
 	Connect(ctx context.Context) error
@@ -133,7 +132,7 @@ type Clienter interface {
 	StoreOffset(ctx context.Context, reference, stream string, offset uint64) error
 	QueryOffset(ctx context.Context, reference string, stream string) (uint64, error)
 	StreamStats(ctx context.Context, stream string) (map[string]int64, error)
-	RouteQuery(ctx context.Context, routingKey, superStream string) (string, error)
+	QueryPublisherSequence(ctx context.Context, reference, stream string) (uint64, error)
 	Partitions(ctx context.Context, superStream string) ([]string, error)
-	NotifyMetadata(chan *MetadataUpdate) <-chan *MetadataUpdate
+	RouteQuery(ctx context.Context, routingKey, superStream string) ([]string, error)
 }

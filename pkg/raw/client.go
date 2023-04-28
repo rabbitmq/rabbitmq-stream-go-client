@@ -1245,20 +1245,20 @@ func (tc *Client) QueryPublisherSequence(ctx context.Context, ref, stream string
 
 // RouteQuery retrieves the stream name for a given routing key and superStream. If a stream is found
 // the name is returned as a string.
-func (tc *Client) RouteQuery(ctx context.Context, routingKey, superStream string) (string, error) {
+func (tc *Client) RouteQuery(ctx context.Context, routingKey, superStream string) ([]string, error) {
 	if ctx == nil {
-		return "", errNilContext
+		return nil, errNilContext
 	}
 	response, err := tc.syncRequest(ctx, internal.NewRouteQuery(routingKey, superStream))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var routeResponse *internal.RouteResponse
 	if reflect.TypeOf(response) != reflect.TypeOf(routeResponse) {
-		return "", errors.New("response is not of type *internal.RouteResponse")
+		return nil, errors.New("response is not of type *internal.RouteResponse")
 	}
 	routeResponse = response.(*internal.RouteResponse)
-	return routeResponse.Stream(), streamErrorOrNil(response.ResponseCode())
+	return routeResponse.Streams(), streamErrorOrNil(response.ResponseCode())
 }
 
 // Partitions returns the partition streams for a given superStream
