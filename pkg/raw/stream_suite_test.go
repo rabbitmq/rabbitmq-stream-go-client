@@ -569,6 +569,29 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQNewConsumer(
 	expectOffset1(serverWriter.Flush()).To(Succeed())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQUnsubscribe(ctx context.Context, subscriptionId uint8) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+	serverReader := bufio.NewReader(rmq.connection)
+
+	header := new(internal.Header)
+	expectOffset1(header.Read(serverReader)).To(Succeed())
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x000c))
+
+	buff := make([]byte, header.Length()-4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", header.Length()-4))
+
+	body := internal.NewUnsubscribe(subscriptionId)
+	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
+	expectOffset1(body.SubscriptionId()).To(Equal(subscriptionId))
+
+	/// there server says ok! :)
+	/// writing the response to the client
+	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandCreate)
+}
+
 func (rmq *fakeRabbitMQServer) fakeRabbitMQServerClosesConnection() {
 	defer GinkgoRecover()
 	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).

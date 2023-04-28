@@ -1,6 +1,9 @@
 package internal
 
-import "bufio"
+import (
+	"bufio"
+	"bytes"
+)
 
 type Unsubscribe struct {
 	correlationId  uint32
@@ -19,6 +22,14 @@ func (u *Unsubscribe) Version() int16 {
 	return Version1
 }
 
+func (u *Unsubscribe) CorrelationId() uint32 {
+	return u.correlationId
+}
+
+func (u *Unsubscribe) SubscriptionId() uint8 {
+	return u.subscriptionId
+}
+
 func (u *Unsubscribe) SetCorrelationId(id uint32) {
 	u.correlationId = id
 }
@@ -30,4 +41,10 @@ func (u *Unsubscribe) SizeNeeded() int {
 
 func (u *Unsubscribe) Write(wr *bufio.Writer) (int, error) {
 	return writeMany(wr, u.correlationId, u.subscriptionId)
+}
+
+func (u *Unsubscribe) UnmarshalBinary(data []byte) error {
+	buff := bytes.NewReader(data)
+	rd := bufio.NewReader(buff)
+	return readMany(rd, &u.correlationId, &u.subscriptionId)
 }

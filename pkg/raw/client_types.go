@@ -121,6 +121,7 @@ type Clienter interface {
 	SendSubEntryBatch(ctx context.Context, publisherId uint8, publishingId uint64, compress common.CompresserCodec, publishingMessages []common.PublishingMessager) error
 	DeletePublisher(ctx context.Context, publisherId uint8) error
 	Subscribe(ctx context.Context, stream string, offsetType uint16, subscriptionId uint8, credit uint16, properties constants.SubscribeProperties, offset uint64) error
+	Unsubscribe(ctx context.Context, subscriptionId uint8) error
 	IsOpen() bool
 	Close(ctx context.Context) error
 	NotifyPublish(chan *PublishConfirm) <-chan *PublishConfirm

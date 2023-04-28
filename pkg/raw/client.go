@@ -1040,6 +1040,17 @@ func (tc *Client) Subscribe(
 	return streamErrorOrNil(subscribeResponse.ResponseCode())
 }
 
+func (tc *Client) Unsubscribe(ctx context.Context, subscriptionId uint8) error {
+	if ctx == nil {
+		return errNilContext
+	}
+	unSubscribeResponse, err := tc.syncRequest(ctx, internal.NewUnsubscribe(subscriptionId))
+	if err != nil {
+		return err
+	}
+	return streamErrorOrNil(unSubscribeResponse.ResponseCode())
+}
+
 // Close gracefully shutdowns the connection to RabbitMQ. The Client will send a
 // close request to RabbitMQ, and it will await a response. It is recommended to
 // set a deadline in the context, to avoid waiting forever on a non-responding
