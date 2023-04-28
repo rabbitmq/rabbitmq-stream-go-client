@@ -1230,6 +1230,7 @@ func (tc *Client) RouteQuery(ctx context.Context, routingKey, superStream string
 	return routeResponse.Stream(), streamErrorOrNil(response.ResponseCode())
 }
 
+// Partitions returns the partition streams for a given superStream
 func (tc *Client) Partitions(ctx context.Context, superStream string) ([]string, error) {
 	if ctx == nil {
 		return nil, errNilContext
