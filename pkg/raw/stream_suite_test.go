@@ -583,7 +583,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQUnsubscribe(ctx context.Context, subs
 	expectOffset1(io.ReadFull(serverReader, buff)).
 		To(BeNumerically("==", header.Length()-4))
 
-	body := internal.NewUnsubscribe(subscriptionId)
+	body := internal.NewUnsubscribeRequest(subscriptionId)
 	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
 	expectOffset1(body.SubscriptionId()).To(Equal(subscriptionId))
 

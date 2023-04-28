@@ -1040,11 +1040,13 @@ func (tc *Client) Subscribe(
 	return streamErrorOrNil(subscribeResponse.ResponseCode())
 }
 
+// Unsubscribe sends a sync request with a subscriptionId, to identify a consumer on the
+// server, and unsubscribe.
 func (tc *Client) Unsubscribe(ctx context.Context, subscriptionId uint8) error {
 	if ctx == nil {
 		return errNilContext
 	}
-	unSubscribeResponse, err := tc.syncRequest(ctx, internal.NewUnsubscribe(subscriptionId))
+	unSubscribeResponse, err := tc.syncRequest(ctx, internal.NewUnsubscribeRequest(subscriptionId))
 	if err != nil {
 		return err
 	}

@@ -5,45 +5,45 @@ import (
 	"bytes"
 )
 
-type Unsubscribe struct {
+type UnsubscribeRequest struct {
 	correlationId  uint32
 	subscriptionId uint8
 }
 
-func NewUnsubscribe(subscriptionId uint8) *Unsubscribe {
-	return &Unsubscribe{subscriptionId: subscriptionId}
+func NewUnsubscribeRequest(subscriptionId uint8) *UnsubscribeRequest {
+	return &UnsubscribeRequest{subscriptionId: subscriptionId}
 }
 
-func (u *Unsubscribe) Key() uint16 {
+func (u *UnsubscribeRequest) Key() uint16 {
 	return CommandUnsubscribe
 }
 
-func (u *Unsubscribe) Version() int16 {
+func (u *UnsubscribeRequest) Version() int16 {
 	return Version1
 }
 
-func (u *Unsubscribe) CorrelationId() uint32 {
+func (u *UnsubscribeRequest) CorrelationId() uint32 {
 	return u.correlationId
 }
 
-func (u *Unsubscribe) SubscriptionId() uint8 {
+func (u *UnsubscribeRequest) SubscriptionId() uint8 {
 	return u.subscriptionId
 }
 
-func (u *Unsubscribe) SetCorrelationId(id uint32) {
+func (u *UnsubscribeRequest) SetCorrelationId(id uint32) {
 	u.correlationId = id
 }
 
-func (u *Unsubscribe) SizeNeeded() int {
+func (u *UnsubscribeRequest) SizeNeeded() int {
 	return streamProtocolHeader + // Key Version CorrelationId
 		streamProtocolKeySizeUint8 // SubscriptionId
 }
 
-func (u *Unsubscribe) Write(wr *bufio.Writer) (int, error) {
+func (u *UnsubscribeRequest) Write(wr *bufio.Writer) (int, error) {
 	return writeMany(wr, u.correlationId, u.subscriptionId)
 }
 
-func (u *Unsubscribe) UnmarshalBinary(data []byte) error {
+func (u *UnsubscribeRequest) UnmarshalBinary(data []byte) error {
 	buff := bytes.NewReader(data)
 	rd := bufio.NewReader(buff)
 	return readMany(rd, &u.correlationId, &u.subscriptionId)
