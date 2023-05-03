@@ -340,11 +340,11 @@ var _ = Describe("Client", func() {
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(ctx)
-		go fakeRabbitMQ.fakeRabbitMQRouteQuery(ctx, "sStream")
+		go fakeRabbitMQ.fakeRabbitMQRouteQuery(ctx, []string{"s1", "s2"})
 
-		route, err := streamClient.RouteQuery(ctx, "routingKey", "sStream")
+		routes, err := streamClient.RouteQuery(ctx, "routingKey", "sStream")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(route).To(Equal("sStream"))
+		Expect(routes).To(Equal([]string{"s1", "s2"}))
 	}, SpecTimeout(time.Second*3))
 
 	It("gets partitions of a superstream", func(ctx SpecContext) {
@@ -358,6 +358,27 @@ var _ = Describe("Client", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p).To(Equal([]string{"s1", "s2"}))
 	}, SpecTimeout(time.Second*3))
+
+	It("receives metadata updates", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second * 2))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+
+		mUpdateCh := streamClient.NotifyMetadata()
+
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+		fakeRabbitMQ.fakeRabbitMQMetadataUpdate(1, "stream")
+
+		eventuallyCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+
+		select {
+		case <-eventuallyCtx.Done():
+			Fail("did not receive from metadata update channel")
+		case m := <-mUpdateCh:
+			Expect(m.Code()).To(BeNumerically("==", 1))
+			Expect(m.Stream()).To(Equal("stream"))
+		}
+	}, SpecTimeout(3*time.Second))
 
 	It("unsubscribes", func(ctx SpecContext) {
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())

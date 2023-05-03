@@ -9,7 +9,7 @@ var commandsInitiatedServerSide = []commandInformer{
 	&PublishConfirmResponse{},
 	// TODO: PublishError frame
 	&ChunkResponse{},
-	// TODO: MetadataUpdate frame
+	&MetadataUpdateResponse{},
 	&CloseRequest{},
 }
 

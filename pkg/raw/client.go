@@ -1151,9 +1151,11 @@ func (tc *Client) MetadataQuery(ctx context.Context, stream string) (*MetadataRe
 // NotifyMetadata receives notifications about updates to metadata for a stream.
 // Updates are sent to the channel when they occur. The channel is closed when
 // the connection is closed
-func (tc *Client) NotifyMetadata(m chan *MetadataUpdate) <-chan *MetadataUpdate {
+func (tc *Client) NotifyMetadata() <-chan *MetadataUpdate {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	m := make(chan *MetadataUpdate, 1)
 	tc.metadataUpdateCh = m
 	return m
 }
