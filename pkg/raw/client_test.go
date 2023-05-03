@@ -359,6 +359,28 @@ var _ = Describe("Client", func() {
 		Expect(p).To(Equal([]string{"s1", "s2"}))
 	}, SpecTimeout(time.Second*3))
 
+	It("receives metadata updates", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second * 2))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+
+		mUpdateCh := make(chan *raw.MetadataUpdate, 1)
+		streamClient.NotifyMetadata(mUpdateCh)
+
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+		fakeRabbitMQ.fakeRabbitMQMetadataUpdate(1, "stream")
+
+		eventuallyCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+
+		select {
+		case <-eventuallyCtx.Done():
+			Fail("did not receive from metadata update channel")
+		case m := <-mUpdateCh:
+			Expect(m.Code()).To(BeNumerically("==", 1))
+			Expect(m.Stream()).To(Equal("stream"))
+		}
+	}, SpecTimeout(3*time.Second))
+
 	It("cancels requests after a timeout", func(ctx SpecContext) {
 		// This test does not start a fake to mimic rabbitmq responses. By not starting a
 		// fake rabbitmq, we simulate "rabbit not responding". The expectation is to

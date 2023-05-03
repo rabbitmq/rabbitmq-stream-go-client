@@ -56,6 +56,7 @@ type Client struct {
 	confirmsCh           chan *PublishConfirm
 	chunkCh              chan *Chunk
 	notifyCh             chan *CreditError
+	metadataUpdateCh     chan *MetadataUpdate
 }
 
 // IsOpen returns true if the connection is open, false otherwise
@@ -308,6 +309,26 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return ctx.Err()
 				case tc.confirmsCh <- publishConfirm:
 					log.Debug("sent a publish confirm", "publisherId", publishConfirm.PublisherID())
+				}
+			case internal.CommandMetadataUpdate:
+				metadataUpdate := new(internal.MetadataUpdateResponse)
+				err = metadataUpdate.Read(buffer)
+				if err != nil {
+					return err
+				}
+
+				if tc.metadataUpdateCh == nil {
+					log.Info("metadata channel is not registered. Use Client.NotifyMetadata() to receive metadata updates")
+					continue
+				}
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case tc.metadataUpdateCh <- metadataUpdate:
+					log.Debug("sent a metadata update for stream",
+						"code", metadataUpdate.Code(),
+						"stream", metadataUpdate.Stream())
 				}
 			case internal.CommandDeliver:
 				chunkResponse := new(internal.ChunkResponse)
@@ -1112,6 +1133,16 @@ func (tc *Client) MetadataQuery(ctx context.Context, stream string) (*MetadataRe
 	}
 
 	return response.(*MetadataResponse), streamErrorOrNil(response.ResponseCode())
+}
+
+// NotifyMetadata receives notifications about updates to metadata for a stream.
+// Updates are sent to the channel when they occur. The channel is closed when
+// the connection is closed
+func (tc *Client) NotifyMetadata(m chan *MetadataUpdate) <-chan *MetadataUpdate {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.metadataUpdateCh = m
+	return m
 }
 
 // NotifyPublish TODO: godocs

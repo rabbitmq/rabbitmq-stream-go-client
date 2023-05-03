@@ -852,6 +852,26 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQPartitions(ctx context.Context, super
 	expectOffset1(err).ToNot(HaveOccurred())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataUpdate(code uint16, stream string) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
+		To(Succeed())
+
+	// metadata update
+	frameSize := 4 + // header
+		2 + // code
+		2 + // string len
+		len(stream) // stream contents
+	header := internal.NewHeader(frameSize, 0x0010, 1)
+	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
+		"expected to write 8 bytes")
+
+	bodyRequest, err := internal.NewMetadataUpdateResponse(code, stream).MarshalBinary()
+	expectOffset1(err).ToNot(HaveOccurred())
+	_, err = rmq.connection.Write(bodyRequest)
+	expectOffset1(err).ToNot(HaveOccurred())
+}
+
 type ctxKey struct {
 	string
 }
