@@ -457,6 +457,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error("error in stream stats response", "error", err)
 				}
 				tc.handleResponse(ctx, partitionsResp)
+			case internal.CommandConsumerUpdateResponse:
+				resp := new(internal.ConsumerUpdateResponse)
+				err := resp.Read(buffer)
+				log.Debug("received consumer update response")
+				if err != nil {
+					log.Error("error in consumer updateresponse", "error", err)
+				}
+				tc.handleResponse(ctx, resp)
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
@@ -1327,4 +1335,21 @@ func (tc *Client) Partitions(ctx context.Context, superStream string) ([]string,
 		return nil, err
 	}
 	return partitionsResponse.(*internal.PartitionsResponse).Streams(), err
+}
+
+// ConsumerUpdateQuery returns the OffsetType and the Offset for a given subscription id, and a uint8 value,
+// to illustrate if the consumer is active. (0 = false, 1 = true)
+func (tc *Client) ConsumerUpdateQuery(ctx context.Context, subscriptionId, active uint8) (uint16, uint64, error) {
+	if ctx == nil {
+		return 0, 0, errNilContext
+	}
+
+	resp, err := tc.syncRequest(ctx, internal.NewConsumerUpdateQuery(subscriptionId, active))
+	if ctx == nil {
+		return 0, 0, err
+	}
+
+	return resp.(*internal.ConsumerUpdateResponse).OffsetType(),
+		resp.(*internal.ConsumerUpdateResponse).Offset(),
+		streamErrorOrNil(resp.ResponseCode())
 }

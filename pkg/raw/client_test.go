@@ -212,6 +212,21 @@ var _ = Describe("Client", func() {
 		})
 	})
 
+	It("Consumer Update Request", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+		fakeOffsetType := uint16(42)
+		fakeOffset := uint64(123)
+		go fakeRabbitMQ.fakeRabbitMQConsumerUpdateQuery(ctx, fakeOffsetType, fakeOffset)
+
+		offsetType, offset, err := streamClient.ConsumerUpdateQuery(ctx, 42, 1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offsetType).To(BeNumerically("==", 42))
+		Expect(offset).To(BeNumerically("==", 123))
+	})
+
 	It("Delete a stream", func(ctx SpecContext) {
 		itCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(ctx, *logger), time.Second*3)
 		defer cancel()

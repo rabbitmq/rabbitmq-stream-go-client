@@ -107,6 +107,7 @@ const (
 	CommandClose                   uint16 = 0x0016 // 22
 	CommandRoute                   uint16 = 0x0018 // 24
 	CommandPartitions              uint16 = 0x0019 // 25
+	CommandConsumerUpdate          uint16 = 0x001a // 26
 	CommandExchangeCommandVersions uint16 = 0x001b // 27
 	CommandStreamStats             uint16 = 0x001c // 28
 )
@@ -130,6 +131,7 @@ const (
 	CommandCloseResponse                   uint16 = 0x8016
 	CommandRouteResponse                   uint16 = 0x8018
 	CommandPartitionsResponse              uint16 = 0x8019
+	CommandConsumerUpdateResponse          uint16 = 0x801a
 	CommandExchangeCommandVersionsResponse uint16 = 0x801b
 	CommandStreamStatsResponse             uint16 = 0x801c
 )
