@@ -1,10 +1,13 @@
 package internal
 
-import "bufio"
+import (
+	"bufio"
+	"bytes"
+)
 
 type PublishErrorResponse struct {
-	publisherId      uint8 // publisher id
-	publishingErrors []PublishingError
+	publisherId     uint8 // publisher id
+	publishingError PublishingError
 }
 
 type PublishingError struct {
@@ -12,10 +15,10 @@ type PublishingError struct {
 	code         uint16
 }
 
-func NewPublishErrorResponse(publisherId uint8, publishingErrors []PublishingError) *PublishErrorResponse {
+func NewPublishErrorResponse(publisherId uint8, publishingId uint64, code uint16) *PublishErrorResponse {
 	return &PublishErrorResponse{
-		publisherId:      publisherId,
-		publishingErrors: publishingErrors,
+		publisherId:     publisherId,
+		publishingError: PublishingError{publishingId: publishingId, code: code},
 	}
 }
 
@@ -35,23 +38,29 @@ func (p *PublishErrorResponse) PublisherId() uint8 {
 	return p.publisherId
 }
 
-func (p *PublishErrorResponse) PublishingErrors() []PublishingError {
-	return p.publishingErrors
+func (p *PublishErrorResponse) PublishingId() uint64 {
+	return p.publishingError.publishingId
+}
+
+func (p *PublishErrorResponse) Code() uint16 {
+	return p.publishingError.code
 }
 
 func (p *PublishErrorResponse) Read(rd *bufio.Reader) error {
-	var publishingErrorsCount uint32
-	err := readMany(rd, &p.publisherId, &publishingErrorsCount)
+	err := readMany(rd, &p.publisherId, &p.publishingError.publishingId, &p.publishingError.code)
 	if err != nil {
 		return err
 	}
 
-	p.publishingErrors = make([]PublishingError, publishingErrorsCount)
-	for i := uint32(0); i < publishingErrorsCount; i++ {
-		err = readMany(rd, &p.publishingErrors[i].publishingId, &p.publishingErrors[i].code)
-		if err != nil {
-			return err
-		}
-	}
 	return nil
+}
+
+func (p *PublishErrorResponse) MarshalBinary() (data []byte, err error) {
+	buff := &bytes.Buffer{}
+	_, err = writeMany(buff, p.publisherId, p.publishingError.publishingId, p.publishingError.code)
+	if err != nil {
+		return nil, err
+	}
+	data = buff.Bytes()
+	return
 }

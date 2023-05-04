@@ -7,7 +7,7 @@ import (
 
 var commandsInitiatedServerSide = []commandInformer{
 	&PublishConfirmResponse{},
-	// TODO: PublishError frame
+	&PublishErrorResponse{},
 	&ChunkResponse{},
 	&MetadataUpdateResponse{},
 	&CloseRequest{},

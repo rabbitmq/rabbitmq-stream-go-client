@@ -899,6 +899,26 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataUpdate(code uint16, stream st
 	expectOffset1(err).ToNot(HaveOccurred())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQPublishError(publisherId uint8, publishingId uint64, code uint16) {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
+		To(Succeed())
+
+	// publish error frame size
+	frameSize := 4 + // header
+		1 + // uint8 publisherId
+		8 + // publishingId
+		2 // publishing Error code
+	header := internal.NewHeader(frameSize, 0x0004, 1)
+	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
+		"expected to write 8 bytes")
+
+	bodyRequest, err := internal.NewPublishErrorResponse(publisherId, publishingId, code).MarshalBinary()
+	expectOffset1(err).ToNot(HaveOccurred())
+	_, err = rmq.connection.Write(bodyRequest)
+	expectOffset1(err).ToNot(HaveOccurred())
+}
+
 type ctxKey struct {
 	string
 }

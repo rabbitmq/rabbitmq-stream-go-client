@@ -54,6 +54,7 @@ type Client struct {
 	configuration        *ClientConfiguration
 	connectionProperties map[string]string
 	confirmsCh           chan *PublishConfirm
+	publishErrorCh       chan *PublishError
 	chunkCh              chan *Chunk
 	notifyCh             chan *CreditError
 	metadataUpdateCh     chan *MetadataUpdate
@@ -309,6 +310,26 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return ctx.Err()
 				case tc.confirmsCh <- publishConfirm:
 					log.Debug("sent a publish confirm", "publisherId", publishConfirm.PublisherID())
+				}
+			case internal.CommandPublishError:
+				publishError := new(internal.PublishErrorResponse)
+				err = publishError.Read(buffer)
+				if err != nil {
+					return err
+				}
+				if tc.publishErrorCh == nil {
+					log.Info("error channel is not registered. Use Client.NotifyPublishError() to receive publish errors")
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case tc.publishErrorCh <- publishError:
+					log.Debug("sent a publish error",
+						"publisherId", publishError.PublisherId(),
+						"publishingId", publishError.PublishingId(),
+						"code", publishError.Code(),
+					)
 				}
 			case internal.CommandMetadataUpdate:
 				metadataUpdate := new(internal.MetadataUpdateResponse)
@@ -1166,6 +1187,17 @@ func (tc *Client) NotifyPublish(c chan *PublishConfirm) <-chan *PublishConfirm {
 	defer tc.mu.Unlock()
 	tc.confirmsCh = c
 	return c
+}
+
+// NotifyPublishError receives notifications about publishing errors. The publishingID
+// and code is returned. The channel is closed when the connection is closed
+func (tc *Client) NotifyPublishError() <-chan *PublishError {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	p := make(chan *PublishError, 1)
+	tc.publishErrorCh = p
+	return p
 }
 
 // NotifyChunk is used to receive notifications about new chunks in the stream.

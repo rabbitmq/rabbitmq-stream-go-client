@@ -380,6 +380,27 @@ var _ = Describe("Client", func() {
 		}
 	}, SpecTimeout(3*time.Second))
 
+	It("receives publish errors", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second * 2))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+
+		pubErrsCh := streamClient.NotifyPublishError()
+
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+		fakeRabbitMQ.fakeRabbitMQPublishError(1, 5, 42)
+
+		eventuallyCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		select {
+		case <-eventuallyCtx.Done():
+			Fail("did not receive from confirmation channel")
+		case p := <-pubErrsCh:
+			Expect(p.PublisherId()).To(BeNumerically("==", 1))
+			Expect(p.PublishingId()).To(BeNumerically("==", 5))
+			Expect(p.Code()).To(BeNumerically("==", 42))
+		}
+	}, SpecTimeout(3*time.Second))
+
 	It("unsubscribes", func(ctx SpecContext) {
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)

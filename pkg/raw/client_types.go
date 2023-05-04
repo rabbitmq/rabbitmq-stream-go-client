@@ -108,6 +108,7 @@ func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error
 }
 
 type PublishConfirm = internal.PublishConfirmResponse
+type PublishError = internal.PublishErrorResponse
 type Chunk = internal.ChunkResponse
 type CreditError = internal.CreditResponse
 type MetadataResponse = internal.MetadataResponse
@@ -138,4 +139,5 @@ type Clienter interface {
 	Partitions(ctx context.Context, superStream string) ([]string, error)
 	RouteQuery(ctx context.Context, routingKey, superStream string) ([]string, error)
 	NotifyMetadata() <-chan *MetadataUpdate
+	NotifyPublishError() <-chan *PublishError
 }
