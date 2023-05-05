@@ -118,6 +118,7 @@ const (
 	CommandSubscribeResponse               uint16 = 0x8007
 	CommandCreditResponse                  uint16 = 0x8009
 	CommandQueryOffsetResponse             uint16 = 0x800b
+	CommandUnsubscribeResponse             uint16 = 0x800c
 	CommandCreateResponse                  uint16 = 0x800d
 	CommandDeleteResponse                  uint16 = 0x800e
 	CommandMetadataResponse                uint16 = 0x800f

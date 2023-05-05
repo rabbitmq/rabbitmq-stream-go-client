@@ -286,7 +286,8 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				internal.CommandDeclarePublisherResponse,
 				internal.CommandDeletePublisherResponse,
 				internal.CommandCloseResponse,
-				internal.CommandSubscribeResponse:
+				internal.CommandSubscribeResponse,
+				internal.CommandUnsubscribeResponse:
 				createResp := new(internal.SimpleResponse)
 				err = createResp.Read(buffer)
 				if err != nil {
@@ -366,7 +367,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				case <-ctx.Done():
 					return ctx.Err()
 				case tc.chunkCh <- chunkResponse:
-					log.Debug("sent a subscription chunk", "subscriptionId", chunkResponse.SubscriptionId)
+					log.Debug("received a chunk", "subscriptionId", chunkResponse.SubscriptionId)
 				}
 			case internal.CommandExchangeCommandVersionsResponse:
 				exchangeResponse := new(internal.ExchangeCommandVersionsResponse)
@@ -1071,6 +1072,7 @@ func (tc *Client) Unsubscribe(ctx context.Context, subscriptionId uint8) error {
 	if err != nil {
 		return err
 	}
+	// FIXME: close subscription channel
 	return streamErrorOrNil(unSubscribeResponse.ResponseCode())
 }
 

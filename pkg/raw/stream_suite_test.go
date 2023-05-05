@@ -589,7 +589,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQUnsubscribe(ctx context.Context, subs
 
 	/// there server says ok! :)
 	/// writing the response to the client
-	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandCreate)
+	writeResponse(ctx, rmq, bufio.NewWriter(rmq.connection), internal.CommandUnsubscribeResponse)
 }
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQServerClosesConnection() {
