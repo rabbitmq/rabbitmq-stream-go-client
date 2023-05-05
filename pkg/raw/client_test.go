@@ -54,6 +54,7 @@ var _ = Describe("Client", func() {
 			correlationIdSeq: autoIncrementingSequence{0},
 			connection:       fakeServerConn,
 			deadlineDelta:    time.Second,
+			done:             make(chan struct{}, 1),
 		}
 		// conf can be "global" as long as tests do not modify it
 		// if a test needs to modify the configuration, it shall
@@ -210,21 +211,6 @@ var _ = Describe("Client", func() {
 				Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", streamResponseCodeStreamDoesNotExist))
 			}, SpecTimeout(time.Second*3))
 		})
-	})
-
-	It("Consumer Update Request", func(ctx SpecContext) {
-		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
-		streamClient := raw.NewClient(fakeClientConn, conf)
-		go streamClient.(*raw.Client).StartFrameListener(ctx)
-
-		fakeOffsetType := uint16(42)
-		fakeOffset := uint64(123)
-		go fakeRabbitMQ.fakeRabbitMQConsumerUpdateQuery(ctx, fakeOffsetType, fakeOffset)
-
-		offsetType, offset, err := streamClient.ConsumerUpdateQuery(ctx, 42, 1)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(offsetType).To(BeNumerically("==", 42))
-		Expect(offset).To(BeNumerically("==", 123))
 	})
 
 	It("Delete a stream", func(ctx SpecContext) {
@@ -560,6 +546,33 @@ var _ = Describe("Client", func() {
 			Expect(c.PublishingIds()).To(HaveLen(5))
 			Expect(c.PublishingIds()).To(ConsistOf([]uint64{0, 1, 2, 3, 4}))
 		}
+	}, SpecTimeout(3*time.Second))
+
+	It("receives consumer updates", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second * 2))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+
+		consumerUpdate := make(chan *raw.ConsumerUpdate, 1)
+		streamClient.NotifyConsumerUpdate(consumerUpdate)
+
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+		go fakeRabbitMQ.fakeRabbitMQConsumerUpdateQuery(ctx, 42, 1, 16, 64)
+
+		eventuallyCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+
+		select {
+		case <-eventuallyCtx.Done():
+			Fail("did not receive from consumer update channel")
+		case c := <-consumerUpdate:
+			Expect(c.SubscriptionId()).To(BeNumerically("==", 42))
+			Expect(c.Active()).To(BeNumerically("==", 1))
+			Expect(c.CorrelationId()).To(BeNumerically("==", 1))
+		}
+
+		err := streamClient.ConsumerUpdateResponse(ctx, 1, 1, 16, 64)
+		Expect(err).Should(Succeed())
+		Expect(fakeRabbitMQ.awaitFake(ctx)).To(Succeed())
 	}, SpecTimeout(3*time.Second))
 
 	When("the connection closes", func() {

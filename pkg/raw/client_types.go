@@ -112,6 +112,7 @@ type Chunk = internal.ChunkResponse
 type CreditError = internal.CreditResponse
 type MetadataResponse = internal.MetadataResponse
 type MetadataUpdate = internal.MetadataUpdateResponse
+type ConsumerUpdate = internal.ConsumerUpdateQuery
 
 type Clienter interface {
 	Connect(ctx context.Context) error
@@ -138,5 +139,6 @@ type Clienter interface {
 	Partitions(ctx context.Context, superStream string) ([]string, error)
 	RouteQuery(ctx context.Context, routingKey, superStream string) ([]string, error)
 	NotifyMetadata() <-chan *MetadataUpdate
-	ConsumerUpdateQuery(ctx context.Context, subscriptionId, active uint8) (uint16, uint64, error)
+	NotifyConsumerUpdate(chan *ConsumerUpdate) <-chan *ConsumerUpdate
+	ConsumerUpdateResponse(ctx context.Context, correlationId uint32, responseCode uint16, offsetType uint16, offset uint64) error
 }

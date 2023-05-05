@@ -58,6 +58,7 @@ type Client struct {
 	chunkCh              chan *Chunk
 	notifyCh             chan *CreditError
 	metadataUpdateCh     chan *MetadataUpdate
+	consumerUpdateCh     chan *ConsumerUpdate
 }
 
 // IsOpen returns true if the connection is open, false otherwise
@@ -375,6 +376,23 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					return ctx.Err()
 				case tc.chunkCh <- chunkResponse:
 				}
+			case internal.CommandConsumerUpdateQuery:
+				consumerUpdate := new(internal.ConsumerUpdateQuery)
+				err = consumerUpdate.Read(buffer)
+				log.Debug("received consumer update query")
+				if err != nil {
+					return err
+				}
+				if tc.consumerUpdateCh == nil {
+					log.Info("consumer update channel is not registered. Use Client.NotifyConsumerUpdate() to receive updates")
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case tc.consumerUpdateCh <- consumerUpdate:
+					log.Debug("received a consumer update", "subscriptionId", consumerUpdate.SubscriptionId())
+				}
 			case internal.CommandExchangeCommandVersionsResponse:
 				exchangeResponse := new(internal.ExchangeCommandVersionsResponse)
 				err = exchangeResponse.Read(buffer)
@@ -457,14 +475,6 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Error("error in stream stats response", "error", err)
 				}
 				tc.handleResponse(ctx, partitionsResp)
-			case internal.CommandConsumerUpdateResponse:
-				resp := new(internal.ConsumerUpdateResponse)
-				err := resp.Read(buffer)
-				log.Debug("received consumer update response")
-				if err != nil {
-					log.Error("error in consumer updateresponse", "error", err)
-				}
-				tc.handleResponse(ctx, resp)
 			default:
 				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
 				_, err := buffer.Discard(header.Length() - 4)
@@ -1236,6 +1246,14 @@ func (tc *Client) NotifyCreditError(notification chan *CreditError) <-chan *Cred
 	return notification
 }
 
+// NotifyConsumerUpdate TODO: go docs
+func (tc *Client) NotifyConsumerUpdate(c chan *ConsumerUpdate) <-chan *ConsumerUpdate {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.consumerUpdateCh = c
+	return c
+}
+
 // StoreOffset sends the desired offset to the given stream with a given reference. No response is given
 // by a RabbitMQ server to this request.
 // https://github.com/rabbitmq/rabbitmq-server/blob/main/deps/rabbitmq_stream/docs/PROTOCOL.adoc#queryoffset
@@ -1337,19 +1355,17 @@ func (tc *Client) Partitions(ctx context.Context, superStream string) ([]string,
 	return partitionsResponse.(*internal.PartitionsResponse).Streams(), err
 }
 
-// ConsumerUpdateQuery returns the OffsetType and the Offset for a given subscription id, and a uint8 value,
-// to illustrate if the consumer is active. (0 = false, 1 = true)
-func (tc *Client) ConsumerUpdateQuery(ctx context.Context, subscriptionId, active uint8) (uint16, uint64, error) {
+// ConsumerUpdateResponse sends a request to the broker in response to a ConsumerUpdateQuery. The user must
+// calculate the required offset and offsetType.
+func (tc *Client) ConsumerUpdateResponse(ctx context.Context, correlationId uint32, responseCode uint16, offsetType uint16, offset uint64) error {
 	if ctx == nil {
-		return 0, 0, errNilContext
+		return errNilContext
 	}
 
-	resp, err := tc.syncRequest(ctx, internal.NewConsumerUpdateQuery(subscriptionId, active))
-	if ctx == nil {
-		return 0, 0, err
+	err := tc.request(ctx, internal.NewConsumerUpdateResponse(correlationId, responseCode, offsetType, offset))
+	if err != nil {
+		return err
 	}
 
-	return resp.(*internal.ConsumerUpdateResponse).OffsetType(),
-		resp.(*internal.ConsumerUpdateResponse).Offset(),
-		streamErrorOrNil(resp.ResponseCode())
+	return err
 }

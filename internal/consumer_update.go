@@ -3,20 +3,34 @@ package internal
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 )
 
+// ConsumerUpdateQuery is a frame received by the client to change the active state of a consumer.
+// the consumer is identified by the subscriptionId.
 type ConsumerUpdateQuery struct {
 	correlationId  uint32
 	subscriptionId uint8
 	active         uint8
 }
 
-func NewConsumerUpdateQuery(subscriptionId, active uint8) *ConsumerUpdateQuery {
+func NewConsumerUpdateQuery(correlationId uint32, subscriptionId, active uint8) *ConsumerUpdateQuery {
 	return &ConsumerUpdateQuery{
+		correlationId:  correlationId,
 		subscriptionId: subscriptionId,
 		active:         active,
 	}
+}
+
+func (c *ConsumerUpdateQuery) Key() uint16 {
+	return CommandConsumerUpdateQuery
+}
+
+func (c *ConsumerUpdateQuery) MinVersion() int16 {
+	return Version1
+}
+
+func (c *ConsumerUpdateQuery) MaxVersion() int16 {
+	return Version1
 }
 
 func (c *ConsumerUpdateQuery) SetCorrelationId(id uint32) {
@@ -27,40 +41,34 @@ func (c *ConsumerUpdateQuery) CorrelationId() uint32 {
 	return c.correlationId
 }
 
-func (c *ConsumerUpdateQuery) Key() uint16 {
-	return CommandConsumerUpdate
+func (c *ConsumerUpdateQuery) ResponseCode() uint16 {
+	return uint16(1)
 }
 
-func (c *ConsumerUpdateQuery) Version() int16 {
-	return Version1
+func (c *ConsumerUpdateQuery) SubscriptionId() uint8 {
+	return c.subscriptionId
 }
 
-func (c *ConsumerUpdateQuery) SizeNeeded() int {
-	return streamProtocolHeader +
-		(streamProtocolKeySizeUint8 * 2) // subscription Id and active are same size
+func (c *ConsumerUpdateQuery) Active() uint8 {
+	return c.active
 }
 
-func (c *ConsumerUpdateQuery) Write(w *bufio.Writer) (int, error) {
-	n, err := writeMany(w, c.correlationId, c.subscriptionId, c.active)
+func (c *ConsumerUpdateQuery) Read(rd *bufio.Reader) error {
+	return readMany(rd, &c.correlationId, &c.subscriptionId, &c.active)
+}
 
+func (c *ConsumerUpdateQuery) MarshalBinary() (data []byte, err error) {
+	buff := &bytes.Buffer{}
+	_, err = writeMany(buff, c.correlationId, c.subscriptionId, c.active)
 	if err != nil {
-		return n, err
+		return nil, err
 	}
-
-	expectedBytesWritten := streamProtocolCorrelationIdSizeBytes +
-		(streamProtocolKeySizeUint8 * 2)
-
-	if n != expectedBytesWritten {
-		return n, fmt.Errorf("did not write expected amount of bytes: wrote %d expected %d", n, expectedBytesWritten)
-	}
-
-	return n, nil
+	data = buff.Bytes()
+	return
 }
 
-func (c *ConsumerUpdateQuery) UnmarshalBinary(data []byte) error {
-	return readMany(bytes.NewReader(data), &c.correlationId, &c.subscriptionId, &c.active)
-}
-
+// ConsumerUpdateResponse is a frame sent by the client to in response to an active state change of a
+// consumer. The offsetType and offset are calculated by the client.
 type ConsumerUpdateResponse struct {
 	correlationId       uint32
 	responseCode        uint16
@@ -82,6 +90,13 @@ func NewConsumerUpdateResponse(correlationId uint32, responseCode, offsetType ui
 		},
 	}
 }
+func (c *ConsumerUpdateResponse) Key() uint16 {
+	return CommandConsumerUpdateResponse
+}
+
+func (c *ConsumerUpdateResponse) Version() int16 {
+	return Version1
+}
 
 func (c *ConsumerUpdateResponse) CorrelationId() uint32 {
 	return c.correlationId
@@ -99,34 +114,28 @@ func (c *ConsumerUpdateResponse) Offset() uint64 {
 	return c.offsetSpecification.offset
 }
 
-func (c *ConsumerUpdateResponse) Read(rd *bufio.Reader) error {
-	err := readMany(rd, &c.correlationId, &c.responseCode,
-		&c.offsetSpecification.offsetType, &c.offsetSpecification.offset)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+func (c *ConsumerUpdateResponse) SizeNeeded() int {
+	return streamProtocolHeader +
+		streamProtocolResponseCodeSizeBytes +
+		streamProtocolKeySizeUint16 +
+		streamProtocolKeySizeUint64
 }
 
-func (c *ConsumerUpdateResponse) MarshalBinary() ([]byte, error) {
-	var buff bytes.Buffer
-	wr := bufio.NewWriter(&buff)
-	_, err := writeMany(
-		wr,
+func (c *ConsumerUpdateResponse) Write(w *bufio.Writer) (int, error) {
+	return writeMany(
+		w,
 		c.correlationId,
 		c.responseCode,
 		c.offsetSpecification.offsetType,
 		c.offsetSpecification.offset,
 	)
+}
 
-	if err != nil {
-		return nil, err
-	}
-
-	if err = wr.Flush(); err != nil {
-		return nil, err
-	}
-	return buff.Bytes(), nil
+func (c *ConsumerUpdateResponse) UnmarshalBinary(data []byte) error {
+	return readMany(bytes.NewReader(data),
+		&c.correlationId,
+		&c.responseCode,
+		&c.offsetSpecification.offsetType,
+		&c.offsetSpecification.offset,
+	)
 }

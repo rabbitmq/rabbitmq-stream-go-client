@@ -46,6 +46,16 @@ type fakeRabbitMQServer struct {
 	correlationIdSeq autoIncrementingSequence
 	connection       net.Conn
 	deadlineDelta    time.Duration
+	done             chan struct{}
+}
+
+func (rmq *fakeRabbitMQServer) awaitFake(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-rmq.done:
+		return nil
+	}
 }
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionOpen(ctx context.Context) {
@@ -708,45 +718,45 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(ctx context.Context, st
 	expectOffset1(err).ToNot(HaveOccurred())
 }
 
-func (rmq *fakeRabbitMQServer) fakeRabbitMQConsumerUpdateQuery(ctx context.Context, offsetType uint16, offset uint64) {
+func (rmq *fakeRabbitMQServer) fakeRabbitMQConsumerUpdateQuery(ctx context.Context, subscriptionId, active uint8, offsetType uint16, offset uint64) {
 	defer GinkgoRecover()
-	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
 		To(Succeed())
+
+	frameSize := 4 + // header
+		4 + // correlationId
+		1 + // subscriptionId
+		1 // active
+	header := internal.NewHeader(frameSize, 0x001a, 1)
+	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
+		"expected to write 8 bytes")
+
+	nextCorrelation := rmq.correlationIdSeq.next()
+	bodyRequest, err := internal.NewConsumerUpdateQuery(nextCorrelation, subscriptionId, active).MarshalBinary()
+	expectOffset1(err).ToNot(HaveOccurred())
+	_, err = rmq.connection.Write(bodyRequest)
+	expectOffset1(err).ToNot(HaveOccurred())
+
 	serverReader := bufio.NewReader(rmq.connection)
 
-	header := new(internal.Header)
+	header = new(internal.Header)
 	expectOffset1(header.Read(serverReader)).To(Succeed())
-	expectOffset1(header.Command()).To(BeNumerically("==", 0x001a))
+	expectOffset1(header.Command()).To(BeNumerically("==", 0x801a))
+	expectOffset1(header.Version()).To(BeNumerically("==", 1))
 
 	buff := make([]byte, header.Length()-4)
 	expectOffset1(io.ReadFull(serverReader, buff)).
 		To(BeNumerically("==", header.Length()-4))
 
-	body := new(internal.ConsumerUpdateQuery)
-	expectOffset1(body.UnmarshalBinary(buff)).To(Succeed())
-
-	// consumerUpdateResponse
-	frameSize := 4 + // header
-		4 + // correlationID
-		2 + // responseCode
-		2 + // OffsetType
-		8 // Offset
-
-	header = internal.NewHeader(frameSize, 0x801a, 1)
-	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
-		"expected to write 8 bytes")
-
-	responseCode := responseCodeFromContext(ctx, "consumerUpdate")
-	responseBody, err := internal.NewConsumerUpdateResponse(
-		rmq.correlationIdSeq.next(),
-		responseCode,
-		offsetType,
-		offset,
-	).MarshalBinary()
-
+	consumerUpdateResponse := internal.ConsumerUpdateResponse{}
+	err = consumerUpdateResponse.UnmarshalBinary(buff)
 	expectOffset1(err).ToNot(HaveOccurred())
-	_, err = rmq.connection.Write(responseBody)
-	expectOffset1(err).ToNot(HaveOccurred())
+
+	expectOffset1(consumerUpdateResponse.CorrelationId()).To(Equal(nextCorrelation))
+	expectOffset1(consumerUpdateResponse.ResponseCode()).To(Equal(responseCodeFromContext(ctx, "consumer-update")))
+	expectOffset1(consumerUpdateResponse.OffsetType()).To(BeNumerically("==", offsetType))
+	expectOffset1(consumerUpdateResponse.Offset()).To(Equal(offset))
+	rmq.done <- struct{}{}
 }
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQCredit(subscriptionId uint8, credits uint16) {
