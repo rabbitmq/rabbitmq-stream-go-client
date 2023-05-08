@@ -179,7 +179,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		var numOfEntries uint16 = 0
 		for chunk := range chunks {
 			numOfEntries += chunk.NumEntries
-			debugLogger.Info("chunk received", "chunk", chunk)
+			debugLogger.Info("chunk received", slog.Any("subscription", chunk.SubscriptionId), slog.Any("numEntries", chunk.NumEntries))
 
 			m := &plainTextMessage{}
 			for i := uint16(0); i < chunk.NumEntries; i++ {

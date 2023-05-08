@@ -167,6 +167,7 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) er
 	}
 
 	logger := loggerFromCtxOrDiscard(ctx)
+	// FIXME: Perhaps too verbose. May need to exclude the request, and log only the request command ID
 	logger.Debug("writing command to the wire", "request", request)
 	return internal.WriteCommand(request, tc.connection.GetWriter())
 }
@@ -355,7 +356,13 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			case internal.CommandDeliver:
 				chunkResponse := new(internal.ChunkResponse)
 				err = chunkResponse.Read(buffer)
-				log.Debug("received a chunk", "chunk", chunkResponse.Timestamp)
+				log.WithGroup("deliver").
+					Debug(
+						"received a chunk",
+						slog.Uint64("chunkId", chunkResponse.CommittedChunkId),
+						slog.Int64("chunkTimestamp", chunkResponse.Timestamp),
+						slog.Any("subscriptionId", chunkResponse.SubscriptionId),
+					)
 				if err != nil {
 					return err
 				}
@@ -367,7 +374,6 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				case <-ctx.Done():
 					return ctx.Err()
 				case tc.chunkCh <- chunkResponse:
-					log.Debug("received a chunk", "subscriptionId", chunkResponse.SubscriptionId)
 				}
 			case internal.CommandExchangeCommandVersionsResponse:
 				exchangeResponse := new(internal.ExchangeCommandVersionsResponse)

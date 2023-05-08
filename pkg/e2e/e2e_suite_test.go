@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -27,6 +28,12 @@ func TestE2e(t *testing.T) {
 }
 
 var _ = SynchronizedBeforeSuite(func(ctx SpecContext) {
+
+	skipContainerStart := os.Getenv("RMQ_E2E_SKIP_CONTAINER_START")
+	if skipContainerStart != "" {
+		return
+	}
+
 	startCommand := exec.Command("../../scripts/start-docker.bash")
 	session, err := gexec.Start(startCommand, GinkgoWriter, GinkgoWriter)
 	Expect(err).ToNot(HaveOccurred())

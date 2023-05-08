@@ -76,9 +76,14 @@ tests: | $(GINKGO) ## Run unit tests. Make sure you install-tools before running
 #### -keep-rabbit-container=true does not delete the rabbit container after the suite run. It is useful to examine rabbit logs after a test failure
 #### -rabbit-debug-log=true enables debug log level in rabbitmq before the tests start
 .PHONY: e2e_tests
-e2e_tests: | $(GINKGO) ## Run end-to-end tests. Make sure you have a running Docker daemon and Docker socket in /var/run/docker.sock
+e2e_tests: | $(GINKGO) ## Run end-to-end tests. Make sure you have a running Docker daemon and Docker socket in /var/run/docker.sock or set RMQ_E2E_SKIP_CONTAINER_START
 	@printf "$(GREEN)Running end-to-end tests$(NORMAL)\n"
-	$(GINKGO) $(GINKGO_RUN_SHARED_FLAGS) --tags="rabbitmq.stream.e2e" $(GINKGO_EXTRA) ./pkg/e2e
+	$(GINKGO) $(GINKGO_RUN_SHARED_FLAGS) --tags="rabbitmq.stream.e2e" --label-filter "!measurement" $(GINKGO_EXTRA) ./pkg/e2e
+
+.PHONY: benchmarks
+benchmarks: | $(GINKGO) ## Run benchmarks. Make sure you have a running Docker. Or set RMQ_E2E_SKIP_CONTAINER_START
+	@printf "$(GREEN)Running benchmark tests$(NORMAL)\n"
+	$(GINKGO) $(GINKGO_RUN_SHARED_FLAGS) --nodes 1 --tags="rabbitmq.stream.e2e" --label-filter "measurement" ./pkg/e2e
 
 ### Containers
 
