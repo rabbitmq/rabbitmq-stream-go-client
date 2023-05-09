@@ -36,6 +36,12 @@ jobs:
         ports:
           - 5552
           - 5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics check_running"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 10s
 
     steps:
       - uses: actions/checkout@v3
@@ -46,4 +52,6 @@ jobs:
           go-version: oldstable
 
       - name: E2E Tests
+        env:
+          RABBITMQ_CONTAINER_NAME: ${{ job.services.rabbitmq.id }}
         run: make e2e_tests RMQ_E2E_SKIP_CONTAINER_START="please" RABBITMQ_URI="rabbitmq-stream://guest:guest@localhost:${{ job.services.rabbitmq.ports[5552] }}/%2F"

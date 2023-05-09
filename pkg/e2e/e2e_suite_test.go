@@ -15,7 +15,7 @@ import (
 
 var keepRabbitContainer, rabbitDebugLog bool
 
-const containerName = "rabbitmq-stream-client-test"
+const defaultContainerName = "rabbitmq-stream-client-test"
 
 func init() {
 	flag.BoolVar(&keepRabbitContainer, "keep-rabbit-container", false, "Keep RabbitMQ container after suite run")
@@ -28,47 +28,65 @@ func TestE2e(t *testing.T) {
 }
 
 var _ = SynchronizedBeforeSuite(func(ctx SpecContext) {
-
 	skipContainerStart := os.Getenv("RMQ_E2E_SKIP_CONTAINER_START")
-	if skipContainerStart != "" {
-		return
-	}
-
-	startCommand := exec.Command("../../scripts/start-docker.bash")
-	session, err := gexec.Start(startCommand, GinkgoWriter, GinkgoWriter)
-	Expect(err).ToNot(HaveOccurred())
-
-	// long timeout because docker pull may take a while
-	Eventually(session).
-		WithTimeout(time.Second*20).
-		WithPolling(time.Second).
-		Should(gexec.Exit(0), "expected rabbit container to be started")
-
-	// Defer container stop == docker stop <rabbitmq-container-id>
-	DeferCleanup(func() {
-		var cmdArgs []string
-		if keepRabbitContainer {
-			cmdArgs = []string{"-p"}
-		}
-		stopCommand := exec.Command("../../scripts/stop-docker.bash", cmdArgs...)
-		session, err := gexec.Start(stopCommand, GinkgoWriter, GinkgoWriter)
+	if skipContainerStart == "" {
+		startCommand := exec.Command("../../scripts/start-docker.bash")
+		session, err := gexec.Start(startCommand, GinkgoWriter, GinkgoWriter)
 		Expect(err).ToNot(HaveOccurred())
+
+		// long timeout because docker pull may take a while
 		Eventually(session).
 			WithTimeout(time.Second*20).
 			WithPolling(time.Second).
-			Should(gexec.Exit(0), "expected rabbit container to stop")
-	})
+			Should(gexec.Exit(0), "expected rabbit container to be started")
 
-	Eventually(func(g Gomega) {
-		readyCmd := exec.Command("../../scripts/readiness-check.bash")
-		session, err = gexec.Start(readyCmd, GinkgoWriter, GinkgoWriter)
-		g.Expect(err).ToNot(HaveOccurred())
-		session.Wait(time.Second * 5)
-		g.Expect(session).Should(gexec.Exit(0), "expected rabbitmq to be ready on port 5552")
-	}).
-		WithTimeout(time.Second * 15).
+		// Defer container stop == docker stop <rabbitmq-container-id>
+		DeferCleanup(func() {
+			var cmdArgs []string
+			if keepRabbitContainer {
+				cmdArgs = []string{"-p"}
+			}
+			stopCommand := exec.Command("../../scripts/stop-docker.bash", cmdArgs...)
+			session, err := gexec.Start(stopCommand, GinkgoWriter, GinkgoWriter)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(session).
+				WithTimeout(time.Second*20).
+				WithPolling(time.Second).
+				Should(gexec.Exit(0), "expected rabbit container to stop")
+		})
+
+		Eventually(func(g Gomega) {
+			readyCmd := exec.Command("../../scripts/readiness-check.bash")
+			session, err := gexec.Start(readyCmd, GinkgoWriter, GinkgoWriter)
+			g.Expect(err).ToNot(HaveOccurred())
+			session.Wait(time.Second * 5)
+			g.Expect(session).Should(gexec.Exit(0), "expected rabbitmq to be ready on port 5552")
+		}).
+			WithTimeout(time.Second * 15).
+			WithPolling(time.Second * 5).
+			Should(Succeed())
+	}
+
+	containerName, found := os.LookupEnv("RABBITMQ_CONTAINER_NAME")
+	if !found {
+		containerName = defaultContainerName
+	}
+
+	pluginsCmd := exec.Command(
+		"docker",
+		"exec",
+		"--user=rabbitmq",
+		containerName,
+		"rabbitmq-plugins",
+		"enable",
+		"rabbitmq_stream",
+	)
+	session, err := gexec.Start(pluginsCmd, GinkgoWriter, GinkgoWriter)
+	Expect(err).ToNot(HaveOccurred())
+	Eventually(session).
+		WithTimeout(time.Second*15).
 		WithPolling(time.Second).
-		Should(Succeed())
+		Should(gexec.Exit(0), "expected to enable stream plugin")
 
 	if rabbitDebugLog {
 		debugCmd := exec.Command(
