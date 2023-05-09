@@ -1,7 +1,7 @@
 # This workflow will build a golang project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
 
-name: Go
+name: Go Tests
 
 on:
   push:
@@ -11,6 +11,7 @@ on:
 
 jobs:
   build:
+    name: Build and unit-test
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -25,3 +26,24 @@ jobs:
 
     - name: Test
       run: make tests
+
+  e2e_test:
+    name: E2E Test
+    runs-on: ubuntu-latest
+    services:
+      rabbitmq:
+        image: "rabbitmq:3"
+        ports:
+          - 5552
+          - 5672
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: oldstable
+
+      - name: E2E Tests
+        run: make e2e_tests RMQ_E2E_SKIP_CONTAINER_START="please" RABBITMQ_URI="rabbitmq-stream://guest:guest@localhost:${{ job.services.rabbitmq.ports[5552] }}/%2F"

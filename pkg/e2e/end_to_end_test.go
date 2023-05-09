@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
 	"golang.org/x/exp/slog"
+	"os"
 	"sync"
 	"time"
 )
@@ -21,12 +22,23 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 	const (
 		stream = "e2e-stream-test"
 		// 100 byte message
-		messageBody = "Rabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesome!!!!!"
+		messageBody        = "Rabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesome!!!!!"
+		defaultRabbitmqUri = "rabbitmq-stream://guest:guest@localhost/%2F"
 	)
+
+	var rabbitmqUri string
+
+	BeforeEach(func() {
+		if u := os.Getenv("RABBITMQ_URI"); len(u) > 0 {
+			rabbitmqUri = u
+		} else {
+			rabbitmqUri = defaultRabbitmqUri
+		}
+	})
 
 	It("connects, creates, publishes, deletes and closes", Label("measurement"), func(ctx SpecContext) {
 		itCtx := raw.NewContextWithLogger(ctx, *e2eLogger)
-		streamClientConfiguration, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost/%2F")
+		streamClientConfiguration, err := raw.NewClientConfiguration(rabbitmqUri)
 		Expect(err).ToNot(HaveOccurred())
 
 		By("dialing the server")
@@ -121,7 +133,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		h := slog.HandlerOptions{Level: slog.LevelDebug}.NewTextHandler(GinkgoWriter)
 		debugLogger := slog.New(h)
 		itCtx := raw.NewContextWithLogger(ctx, *debugLogger)
-		streamClientConfiguration, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost/%2F")
+		streamClientConfiguration, err := raw.NewClientConfiguration(rabbitmqUri)
 		Expect(err).ToNot(HaveOccurred())
 
 		By("preparing the environment")
