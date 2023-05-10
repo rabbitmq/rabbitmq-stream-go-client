@@ -33,4 +33,4 @@ set -ex
   -p 127.0.0.1:5552:5552 \
   --name ${container_name} "${RABBITMQ_IMAGE:-rabbitmq:3.11}"
 
-"${CONTAINER_RUNTIME:-docker}" exec --user rabbitmq ${container_name} rabbitmq-plugins enable rabbitmq_stream
+"${CONTAINER_RUNTIME:-docker}" exec --user rabbitmq ${container_name} rabbitmq-plugins enable rabbitmq_stream rabbitmq_management rabbitmq_stream_management

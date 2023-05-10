@@ -80,6 +80,8 @@ var _ = SynchronizedBeforeSuite(func(ctx SpecContext) {
 		"rabbitmq-plugins",
 		"enable",
 		"rabbitmq_stream",
+		"rabbitmq_stream_management",
+		"rabbitmq_management",
 	)
 	session, err := gexec.Start(pluginsCmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).ToNot(HaveOccurred())
