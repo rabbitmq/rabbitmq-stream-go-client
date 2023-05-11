@@ -58,6 +58,7 @@ type ClientConfiguration struct {
 	clientHeartbeat    uint32
 	authMechanism      []string
 	tlsConfig          *tls.Config
+	connectionName     string
 	dial               func(network, addr string) (net.Conn, error)
 }
 
@@ -85,11 +86,16 @@ func (r *ClientConfiguration) SetClientHeartbeat(clientHeartbeat uint32) {
 	r.clientHeartbeat = clientHeartbeat
 }
 
+func (r *ClientConfiguration) SetConnectionName(connectionName string) {
+	r.connectionName = connectionName
+}
+
 func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error) {
 	builder := &ClientConfiguration{
 		rabbitmqBrokers:    make([]broker, 0, 9),
 		clientHeartbeat:    60,
 		clientMaxFrameSize: 1_048_576,
+		connectionName:     "stream-go-connection",
 	}
 
 	if len(rabbitmqUrls) == 0 {

@@ -23,6 +23,7 @@ func main() {
 		panic(err)
 	}
 
+	config.SetConnectionName("test-connection")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	rabbitmqCtx := raw.NewContextWithLogger(ctx, *log)

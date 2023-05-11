@@ -11,16 +11,16 @@ type PeerPropertiesRequest struct {
 	correlationId    uint32
 }
 
-func NewPeerPropertiesRequest() *PeerPropertiesRequest {
+func NewPeerPropertiesRequest(connectionName string) *PeerPropertiesRequest {
 	p := &PeerPropertiesRequest{
 		clientProperties: make(map[string]string, 6),
 	}
-	p.clientProperties["connection_name"] = "go-stream-locator"
+	p.clientProperties["connection_name"] = connectionName
 	p.clientProperties["product"] = "RabbitMQ Stream"
-	p.clientProperties["copyright"] = "Copyright (c) 2021 VMware, Inc. or its affiliates."
+	p.clientProperties["copyright"] = "Copyright (c) 2023 VMware, Inc. or its affiliates."
 	p.clientProperties["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
 	//c.clientProperties.items["version"] = ClientVersion
-	p.clientProperties["platform"] = "Golang"
+	p.clientProperties["platform"] = "Golang V2"
 	return p
 }
 

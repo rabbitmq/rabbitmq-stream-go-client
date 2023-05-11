@@ -472,10 +472,11 @@ func (tc *Client) peerProperties(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
 	}
+
 	log := loggerFromCtxOrDiscard(ctx).WithGroup("peer properties")
 	log.Debug("starting peer properties")
-
-	serverPropertiesResponse, err := tc.syncRequest(ctx, internal.NewPeerPropertiesRequest())
+	serverPropertiesResponse, err := tc.syncRequest(ctx,
+		internal.NewPeerPropertiesRequest(tc.configuration.connectionName))
 	if err != nil {
 		return err
 	}
