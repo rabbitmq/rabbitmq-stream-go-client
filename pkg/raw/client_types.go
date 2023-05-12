@@ -59,6 +59,7 @@ type ClientConfiguration struct {
 	clientHeartbeat    uint32
 	authMechanism      []string
 	tlsConfig          *tls.Config
+	connectionName     string
 	dial               func(network, addr string) (net.Conn, error)
 }
 
@@ -86,11 +87,16 @@ func (r *ClientConfiguration) SetClientHeartbeat(clientHeartbeat uint32) {
 	r.clientHeartbeat = clientHeartbeat
 }
 
+func (r *ClientConfiguration) SetConnectionName(connectionName string) {
+	r.connectionName = connectionName
+}
+
 func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error) {
 	builder := &ClientConfiguration{
 		rabbitmqBrokers:    make([]broker, 0, 9),
 		clientHeartbeat:    60,
 		clientMaxFrameSize: 1_048_576,
+		connectionName:     "stream-go-connection",
 	}
 
 	if len(rabbitmqUrls) == 0 {
@@ -109,11 +115,13 @@ func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error
 }
 
 type PublishConfirm = internal.PublishConfirmResponse
+type PublishError = internal.PublishErrorResponse
 type Chunk = internal.ChunkResponse
 type CreditError = internal.CreditResponse
 type MetadataResponse = internal.MetadataResponse
 type MetadataUpdate = internal.MetadataUpdateResponse
 type ConsumerUpdate = internal.ConsumerUpdateQuery
+type Heartbeat = internal.Heartbeat
 
 type Clienter interface {
 	Connect(ctx context.Context) error
@@ -143,4 +151,7 @@ type Clienter interface {
 	NotifyMetadata() <-chan *MetadataUpdate
 	NotifyConsumerUpdate() <-chan *ConsumerUpdate
 	ConsumerUpdateResponse(ctx context.Context, correlationId uint32, responseCode uint16, offsetType uint16, offset uint64) error
+	NotifyPublishError() <-chan *PublishError
+	SendHeartbeat() error
+	NotifyHeartbeat() <-chan *Heartbeat
 }

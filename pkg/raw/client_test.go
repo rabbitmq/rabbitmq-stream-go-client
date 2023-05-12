@@ -592,4 +592,33 @@ var _ = Describe("Client", func() {
 			Expect(c).To(BeClosed())
 		}, SpecTimeout(time.Second*2))
 	})
+
+	It("Sends heartbeats", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+
+		go fakeRabbitMQ.fakeRabbitMQSendHeartbeat()
+
+		Expect(streamClient.SendHeartbeat()).To(Succeed())
+	}, SpecTimeout(time.Second*2))
+
+	It("receives heartbeats", func(ctx SpecContext) {
+		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second * 2))).To(Succeed())
+		streamClient := raw.NewClient(fakeClientConn, conf)
+
+		hbCh := streamClient.NotifyHeartbeat()
+
+		go streamClient.(*raw.Client).StartFrameListener(ctx)
+		fakeRabbitMQ.fakeRabbitMQHeartbeat()
+
+		eventuallyCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		select {
+		case <-eventuallyCtx.Done():
+			Fail("did not receive from confirmation channel")
+		case hb := <-hbCh:
+			Expect(hb.Key()).To(BeNumerically("==", 23))
+		}
+	}, SpecTimeout(3*time.Second))
 })

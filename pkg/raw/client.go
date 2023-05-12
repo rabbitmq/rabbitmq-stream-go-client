@@ -56,6 +56,7 @@ type Client struct {
 	publishErrorCh       chan *PublishError
 	chunkCh              chan *Chunk
 	notifyCh             chan *CreditError
+
 	// see constants states of the connection
 	// we need different states to handle the case where the connection is closed by the server
 	// Open/ConnectionClosing/Closed
@@ -65,6 +66,7 @@ type Client struct {
 	socketClosedCh   chan error
 	metadataUpdateCh chan *MetadataUpdate
 	consumerUpdateCh chan *ConsumerUpdate
+	heartbeatCh      chan *Heartbeat
 }
 
 // IsOpen returns true if the connection is open, false otherwise
@@ -142,7 +144,7 @@ func (tc *Client) syncRequest(ctx context.Context, request internal.SyncCommandW
 	defer tc.removeCorrelation(ctx, request.CorrelationId())
 
 	logger.Debug("writing sync command to the wire", "syncRequest", request)
-	err := internal.WriteCommand(request, tc.connection.GetWriter())
+	err := internal.WriteCommandWithHeader(request, tc.connection.GetWriter())
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +178,7 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) er
 	logger := loggerFromCtxOrDiscard(ctx)
 	// FIXME: Perhaps too verbose. May need to exclude the request, and log only the request command ID
 	logger.Debug("writing command to the wire", "request", request)
-	return internal.WriteCommand(request, tc.connection.GetWriter())
+	return internal.WriteCommandWithHeader(request, tc.connection.GetWriter())
 }
 
 // handleResponse is responsible for handling incoming frames from the server.
@@ -377,6 +379,23 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Debug("sent a metadata update for stream",
 						"code", metadataUpdate.Code(),
 						"stream", metadataUpdate.Stream())
+				}
+			case internal.CommandHeartbeat:
+				hb := new(internal.Heartbeat)
+				err = hb.Read(buffer)
+				if err != nil {
+					return err
+				}
+				if tc.heartbeatCh == nil {
+					log.Info("heartbeat channel is not registered. Use Client.NotifyHeartbeat() to receive heartbeats")
+					continue
+				}
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case tc.heartbeatCh <- hb:
+					log.Debug("heartbeat received")
 				}
 			case internal.CommandDeliver:
 				chunkResponse := new(internal.ChunkResponse)
@@ -877,7 +896,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 			desiredHeartbeat,
 		)
 		tuneResp := internal.NewTuneResponse(uint32(desiredFrameSize), uint32(desiredHeartbeat))
-		err = internal.WriteCommand(tuneResp, tc.connection.GetWriter())
+		err = internal.WriteCommandWithHeader(tuneResp, tc.connection.GetWriter())
 		if err != nil {
 			tuneCancel()
 			return fmt.Errorf("error in Tune: %w", err)
@@ -1310,6 +1329,15 @@ func (tc *Client) NotifyConsumerUpdate() <-chan *ConsumerUpdate {
 	return c
 }
 
+// NotifyHeartbeat is used to detect when heartbeats are received from the RabbitMQ server.
+func (tc *Client) NotifyHeartbeat() <-chan *Heartbeat {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	hb := make(chan *Heartbeat, 1)
+	tc.heartbeatCh = hb
+	return hb
+}
+
 // StoreOffset sends the desired offset to the given stream with a given reference. No response is given
 // by a RabbitMQ server to this request.
 // https://github.com/rabbitmq/rabbitmq-server/blob/main/deps/rabbitmq_stream/docs/PROTOCOL.adoc#queryoffset
@@ -1424,4 +1452,10 @@ func (tc *Client) ConsumerUpdateResponse(ctx context.Context, correlationId uint
 	}
 
 	return err
+}
+
+// SendHeartbeat sends heartbeat frames to the server. We don't wait for a response. Context should have a deadline
+// or timeout to avoid deadlock scenario if RabbitMQ server is unresponsive.
+func (tc *Client) SendHeartbeat() error {
+	return internal.WriteCommand(internal.NewHeartbeat(), tc.connection.GetWriter())
 }

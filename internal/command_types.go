@@ -51,16 +51,36 @@ type SyncCommandWrite interface {
 
 // WriteCommand sends the Commands to the server.
 // The commands are sent in the following order:
+// 1. Command
+// 2. Flush
+// The flush is required to make sure that the commands are sent to the server.
+// WriteCommand doesn't care about the response.
+var mutex = &sync.Mutex{} // it is needed because the bufio.Writer is not thread safe
+func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	bWritten, err := request.Write(writer)
+	if err != nil {
+		return err
+	}
+	if (bWritten) != (request.SizeNeeded()) {
+		panic("WriteTo Command: Not all bytes written")
+	}
+	return writer.Flush()
+}
+
+// WriteCommandWithheader sends the Commands to the server with included header.
+// The commands are sent in the following order:
 // 1. Header
 // 2. Command
 // 3. Flush
 // The flush is required to make sure that the commands are sent to the server.
-// WriteCommand doesn't care about the response.
-var mutex = &sync.Mutex{} // it is needed because the bufio.Writer is not thread safe
-
-func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
+// WriteCommandWithHeader doesn't care about the response.
+func WriteCommandWithHeader[T CommandWrite](request T, writer *bufio.Writer) error {
 	mutex.Lock()
 	defer mutex.Unlock()
+
 	hWritten, err := NewHeaderRequest(request).Write(writer)
 	if err != nil {
 		return err
@@ -105,6 +125,7 @@ const (
 	CommandTune                    uint16 = 0x0014 // 20
 	CommandOpen                    uint16 = 0x0015 // 21
 	CommandClose                   uint16 = 0x0016 // 22
+	CommandHeartbeat               uint16 = 0x0017 // 23
 	CommandRoute                   uint16 = 0x0018 // 24
 	CommandPartitions              uint16 = 0x0019 // 25
 	CommandConsumerUpdateQuery     uint16 = 0x001a // 26

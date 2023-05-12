@@ -969,6 +969,40 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQPublishError(publisherId uint8, publi
 	expectOffset1(err).ToNot(HaveOccurred())
 }
 
+func (rmq *fakeRabbitMQServer) fakeRabbitMQSendHeartbeat() {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
+		To(Succeed())
+	serverReader := bufio.NewReader(rmq.connection)
+
+	heartbeat := internal.NewHeartbeat()
+	expectOffset1(heartbeat.Key()).To(BeNumerically("==", 0x0017))
+
+	buff := make([]byte, 4)
+	expectOffset1(io.ReadFull(serverReader, buff)).
+		To(BeNumerically("==", 4))
+}
+
+func (rmq *fakeRabbitMQServer) fakeRabbitMQHeartbeat() {
+	defer GinkgoRecover()
+	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(rmq.deadlineDelta))).
+		To(Succeed())
+
+	// heartbeat frame size
+	frameSize := 4 // command + version
+
+	header := internal.NewHeader(frameSize, 0x0017, 1)
+	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
+		"expected to write 8 bytes")
+
+	//MarshalBinary
+	bodyRequest, err := internal.NewHeader(frameSize, 0x0017, 1).MarshalBinary()
+	expectOffset1(err).ToNot(HaveOccurred())
+	_, err = rmq.connection.Write(bodyRequest)
+	expectOffset1(err).ToNot(HaveOccurred())
+
+}
+
 type ctxKey struct {
 	string
 }
