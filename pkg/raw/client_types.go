@@ -139,6 +139,6 @@ type Clienter interface {
 	Partitions(ctx context.Context, superStream string) ([]string, error)
 	RouteQuery(ctx context.Context, routingKey, superStream string) ([]string, error)
 	NotifyMetadata() <-chan *MetadataUpdate
-	NotifyConsumerUpdate(chan *ConsumerUpdate) <-chan *ConsumerUpdate
+	NotifyConsumerUpdate() <-chan *ConsumerUpdate
 	ConsumerUpdateResponse(ctx context.Context, correlationId uint32, responseCode uint16, offsetType uint16, offset uint64) error
 }

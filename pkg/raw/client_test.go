@@ -552,8 +552,7 @@ var _ = Describe("Client", func() {
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second * 2))).To(Succeed())
 		streamClient := raw.NewClient(fakeClientConn, conf)
 
-		consumerUpdate := make(chan *raw.ConsumerUpdate, 1)
-		streamClient.NotifyConsumerUpdate(consumerUpdate)
+		consumerUpdate := streamClient.NotifyConsumerUpdate()
 
 		go streamClient.(*raw.Client).StartFrameListener(ctx)
 		go fakeRabbitMQ.fakeRabbitMQConsumerUpdateQuery(ctx, 42, 1, 16, 64)

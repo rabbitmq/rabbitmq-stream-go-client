@@ -1246,10 +1246,13 @@ func (tc *Client) NotifyCreditError(notification chan *CreditError) <-chan *Cred
 	return notification
 }
 
-// NotifyConsumerUpdate TODO: go docs
-func (tc *Client) NotifyConsumerUpdate(c chan *ConsumerUpdate) <-chan *ConsumerUpdate {
+// NotifyConsumerUpdate is used to receive activity updates for consumers connected to a stream
+// in a single-active consumer scenario.
+func (tc *Client) NotifyConsumerUpdate() <-chan *ConsumerUpdate {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	c := make(chan *ConsumerUpdate, 1)
 	tc.consumerUpdateCh = c
 	return c
 }
