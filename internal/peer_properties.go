@@ -20,7 +20,7 @@ func NewPeerPropertiesRequest(connectionName string) *PeerPropertiesRequest {
 	p.clientProperties["copyright"] = "Copyright (c) 2023 VMware, Inc. or its affiliates."
 	p.clientProperties["information"] = "Licensed under the MPL 2.0. See https://www.rabbitmq.com/"
 	//c.clientProperties.items["version"] = ClientVersion
-	p.clientProperties["platform"] = "Golang V2"
+	p.clientProperties["platform"] = "Golang"
 	return p
 }
 

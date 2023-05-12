@@ -217,6 +217,44 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		Expect(streamClient.Close(itCtx)).To(Succeed())
 	}, SpecTimeout(15*time.Second))
 
+	// Test the notification in case of force disconnection.
+	// The disconnection is based on the connection name.
+	// With the HTTP API, we can check the connection name and kill it.
+	// The client has to notify the disconnection.
+	It("connection name and notify disconnection", Label("behaviour"), func(ctx SpecContext) {
+		h := slog.HandlerOptions{Level: slog.LevelDebug}.NewTextHandler(GinkgoWriter)
+		debugLogger := slog.New(h)
+		itCtx := raw.NewContextWithLogger(ctx, *debugLogger)
+		streamClientConfiguration, err := raw.NewClientConfiguration(rabbitmqUri)
+		Expect(err).ToNot(HaveOccurred())
+		connectionName := "notify-disconnection-test-1"
+		streamClientConfiguration.SetConnectionName(connectionName)
+
+		By("preparing the environment")
+		streamClient, err := raw.DialConfig(itCtx, streamClientConfiguration)
+		Expect(err).ToNot(HaveOccurred())
+		// Force close the connection is done with the HTTP API and based on the connection name.
+		httpUtils := NewHTTPUtils()
+		Eventually(func() string {
+			name, _ := httpUtils.GetConnectionByConnectionName(connectionName)
+			return name
+		}, 10*time.Second).WithPolling(1*time.Second).Should(Equal(connectionName),
+			"expected connection to be present")
+
+		c := streamClient.NotifyConnectionClosed()
+		By("Forcing closing the connection")
+		errClose := httpUtils.ForceCloseConnectionByConnectionName(connectionName)
+		Eventually(errClose).WithTimeout(time.Second * 10).WithPolling(time.Second).ShouldNot(HaveOccurred())
+
+		// the channel should be open and the notification should be received
+		select {
+		case notify, ok := <-c:
+			Expect(ok).To(BeTrue(), "expected the channel to be open")
+			Expect(notify).To(Equal(raw.ErrConnectionClosed))
+		case <-itCtx.Done():
+			Fail("expected to receive a closed notification")
+		}
+	}, SpecTimeout(20*time.Second))
 })
 
 func wrap[T any](v T) []T {

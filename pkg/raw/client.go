@@ -45,7 +45,6 @@ type Client struct {
 	mu sync.Mutex
 	// this channel is used for correlation-less incoming frames from the server
 	frameBodyListener chan internal.SyncCommandRead
-	isOpen            bool
 	// this function is used during shutdown to stop the background loop that reads from the network
 	ioLoopCancelFn       context.CancelFunc
 	connection           *internal.Connection
@@ -57,8 +56,15 @@ type Client struct {
 	publishErrorCh       chan *PublishError
 	chunkCh              chan *Chunk
 	notifyCh             chan *CreditError
-	metadataUpdateCh     chan *MetadataUpdate
-	consumerUpdateCh     chan *ConsumerUpdate
+	// see constants states of the connection
+	// we need different states to handle the case where the connection is closed by the server
+	// Open/ConnectionClosing/Closed
+	// ConnectionClosing is used to set the connection status no longer open, but still waiting for the server to close the connection
+	connectionStatus uint8
+	// socketClosedCh is used to notify the client that the socket has been closed
+	socketClosedCh   chan error
+	metadataUpdateCh chan *MetadataUpdate
+	consumerUpdateCh chan *ConsumerUpdate
 }
 
 // IsOpen returns true if the connection is open, false otherwise
@@ -66,7 +72,7 @@ type Client struct {
 func (tc *Client) IsOpen() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.isOpen
+	return tc.connectionStatus == constants.ConnectionOpen
 }
 
 // NewClient returns a common.Clienter implementation to interact with RabbitMQ stream using low level primitives.
@@ -76,7 +82,7 @@ func NewClient(connection net.Conn, configuration *ClientConfiguration) Clienter
 	rawClient := &Client{
 		frameBodyListener: make(chan internal.SyncCommandRead),
 		connection:        internal.NewConnection(connection),
-		isOpen:            false,
+		connectionStatus:  constants.ConnectionClosed,
 		correlationsMap:   sync.Map{},
 		configuration:     configuration,
 	}
@@ -222,6 +228,24 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			if errors.Is(err, io.ErrClosedPipe) {
 				return nil
 			}
+
+			if errors.Is(err, io.EOF) {
+				// EOF is returned when the connection is closed
+				if tc.socketClosedCh != nil {
+					if tc.IsOpen() {
+						tc.socketClosedCh <- ErrConnectionClosed
+					}
+					// the TCP connection here is closed
+					// we close the channel since we don't need to send more than one message
+					close(tc.socketClosedCh)
+					tc.socketClosedCh = nil
+				}
+				// set the shutdown flag to false since we don't want to close the connection
+				// since it's already closed
+				_ = tc.shutdown(false)
+				return nil
+			}
+
 			if err != nil {
 				// TODO: some errors may be recoverable. We only need to return if reconnection
 				// 	is needed
@@ -278,7 +302,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					// we do not return here because we must execute the shutdown process and close the socket
 				}
 
-				err = tc.shutdown()
+				err = tc.shutdown(true)
 				if err != nil && !errors.Is(err, io.ErrClosedPipe) {
 					return err
 				}
@@ -594,21 +618,34 @@ func (tc *Client) open(ctx context.Context, brokerIndex int) error {
 	return streamErrorOrNil(openResp.ResponseCode())
 }
 
-func (tc *Client) shutdown() error {
+func (tc *Client) shutdown(closeConnection bool) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	tc.isOpen = false
+	// The method can be called by the Close() method or by the
+	// connection error handler, see: handleIncoming EOF error
+	// the shutdown method has to be idempotent since it can be called multiple times
+	// In case of unexpected connection error, the shutdown is called just once
+	tc.connectionStatus = constants.ConnectionClosed
 	tc.ioLoopCancelFn()
 
 	if tc.confirmsCh != nil {
 		close(tc.confirmsCh)
+		tc.confirmsCh = nil
 	}
 
 	if tc.chunkCh != nil {
 		close(tc.chunkCh)
+		tc.chunkCh = nil
 	}
 
-	return tc.connection.Close()
+	// if the caller is handleIncoming EOF error closeConnection is false,
+	// The connection is already closed
+	// So we don't need to close it again
+
+	if closeConnection {
+		return tc.connection.Close()
+	}
+	return nil
 }
 
 func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) error {
@@ -863,7 +900,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 	}
 
 	tc.mu.Lock()
-	tc.isOpen = true
+	tc.connectionStatus = constants.ConnectionOpen
 	defer tc.mu.Unlock()
 	log.Info("connection is open")
 
@@ -1113,6 +1150,8 @@ func (tc *Client) Close(ctx context.Context) error {
 		return errNilContext
 	}
 
+	tc.connectionStatus = constants.ConnectionClosing
+
 	log := loggerFromCtxOrDiscard(ctx).WithGroup("close")
 	log.Debug("starting connection close")
 
@@ -1127,7 +1166,7 @@ func (tc *Client) Close(ctx context.Context) error {
 		log.Error("close response code is not OK", "error", err)
 	}
 
-	err = tc.shutdown()
+	err = tc.shutdown(true)
 	if err != nil && !errors.Is(err, io.ErrClosedPipe) {
 		return err
 	}
@@ -1235,6 +1274,20 @@ func (tc *Client) NotifyChunk(c chan *Chunk) <-chan *Chunk {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	tc.chunkCh = c
+	return c
+}
+
+// NotifyConnectionClosed receives notifications about connection closed events.
+// It is raised only once when the connection is closed in unexpected way.
+// Connection gracefully closed by the client will not raise this event.
+func (tc *Client) NotifyConnectionClosed() <-chan error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	// The user can't decide the size of the channel, so we use a buffer of 1.
+	// NotifyConnectionClosed is one shot notification, so we don't need a buffer.
+	// buffer greater than 1 cloud cause a deadlock since the channel is closed after the first notification.
+	c := make(chan error, 1)
+	tc.socketClosedCh = c
 	return c
 }
 

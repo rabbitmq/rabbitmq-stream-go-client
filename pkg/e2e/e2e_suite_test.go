@@ -72,23 +72,26 @@ var _ = SynchronizedBeforeSuite(func(ctx SpecContext) {
 		containerName = defaultContainerName
 	}
 
-	pluginsCmd := exec.Command(
-		"docker",
-		"exec",
-		"--user=rabbitmq",
-		containerName,
-		"rabbitmq-plugins",
-		"enable",
-		"rabbitmq_stream",
-		"rabbitmq_stream_management",
-		"rabbitmq_management",
-	)
-	session, err := gexec.Start(pluginsCmd, GinkgoWriter, GinkgoWriter)
-	Expect(err).ToNot(HaveOccurred())
-	Eventually(session).
-		WithTimeout(time.Second*15).
-		WithPolling(time.Second).
-		Should(gexec.Exit(0), "expected to enable stream plugin")
+	if isCi := os.Getenv("CI"); isCi != "" {
+		pluginsCmd := exec.Command(
+			"docker",
+			"exec",
+			"--user=rabbitmq",
+			containerName,
+			"rabbitmq-plugins",
+			"enable",
+			"rabbitmq_stream",
+			"rabbitmq_stream_management",
+			"rabbitmq_management",
+		)
+
+		session, err := gexec.Start(pluginsCmd, GinkgoWriter, GinkgoWriter)
+		Expect(err).ToNot(HaveOccurred())
+		Eventually(session).
+			WithTimeout(time.Second*15).
+			WithPolling(time.Second).
+			Should(gexec.Exit(0), "expected to enable stream plugin")
+	}
 
 	if rabbitDebugLog {
 		debugCmd := exec.Command(

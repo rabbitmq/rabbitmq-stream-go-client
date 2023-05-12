@@ -19,6 +19,7 @@ var (
 	errUnknownSubscription = errors.New("unknown subscription ID")
 	errNoMoreBrokersToTry  = errors.New("failed to dial RabbitMQ: no more brokers to try")
 	errWriteShort          = errors.New("wrote less bytes than expected")
+	ErrConnectionClosed    = errors.New("connection closed by peer. EOF error")
 )
 
 var schemePorts = map[string]int{"rabbitmq-stream": 5552, "rabbitmq-stream+tls": 5551}
@@ -128,6 +129,7 @@ type Clienter interface {
 	Close(ctx context.Context) error
 	NotifyPublish(chan *PublishConfirm) <-chan *PublishConfirm
 	NotifyChunk(c chan *Chunk) <-chan *Chunk
+	NotifyConnectionClosed() <-chan error
 	ExchangeCommandVersions(ctx context.Context) error
 	Credit(ctx context.Context, subscriptionId uint8, credit uint16) error
 	NotifyCreditError(notification chan *CreditError) <-chan *CreditError

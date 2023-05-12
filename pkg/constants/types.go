@@ -67,3 +67,10 @@ const (
 	CompressionNone uint8 = 0x00
 	CompressionGzip uint8 = 0x01
 )
+
+// Connections states
+const (
+	ConnectionClosed  = 0x01
+	ConnectionOpen    = 0x02
+	ConnectionClosing = 0x03
+)

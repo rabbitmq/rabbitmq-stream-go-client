@@ -34,6 +34,13 @@ func main() {
 	}
 	log.Info("connection status", "open", streamClient.IsOpen())
 
+	var closeChan = streamClient.NotifyConnectionClosed()
+	go func() {
+		for c := range closeChan {
+			log.Info("connection closed", "reason", c, "isOpen", streamClient.IsOpen())
+		}
+	}()
+
 	err = streamClient.DeclareStream(ctx, stream, map[string]string{"name": "test-stream"})
 	if err != nil && err.Error() != "stream already exists" {
 		log.Error("error in declaring stream", "error", err)
@@ -50,8 +57,6 @@ func main() {
 	const batchSize = 100
 	const iterations = 2
 	const totalMessages = iterations * batchSize
-	// PublishingId 555 --> [] messages 551, 552, 553, 554, 555
-	// ONLY 555
 	publishChan := streamClient.NotifyPublish(make(chan *raw.PublishConfirm, 100))
 	go func() {
 		var confirmed int

@@ -5,6 +5,7 @@ package raw
 import (
 	"context"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 )
 
 // StartFrameListener starts reading the Connection socket. It receives frames
@@ -34,10 +35,14 @@ func (tc *Client) StartFrameListener(ctx context.Context) {
 	}
 }
 
-// SetIsOpen sets the field isOpen. Useful during tests to simulate that the
+// SetIsOpen sets the field connectionStatus. Useful during tests to simulate that the
 // connection is open.
 func (tc *Client) SetIsOpen(open bool) {
-	tc.isOpen = open
+	if open {
+		tc.connectionStatus = constants.ConnectionOpen
+	} else {
+		tc.connectionStatus = constants.ConnectionClosed
+	}
 }
 
 // Request to expose Client.request for testing purposes

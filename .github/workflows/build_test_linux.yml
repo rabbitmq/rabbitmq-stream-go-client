@@ -32,10 +32,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       rabbitmq:
-        image: "rabbitmq:3"
+        image: "rabbitmq:3-management"
         ports:
           - 5552
           - 5672
+          - 15672:15672
         options: >-
           --health-cmd "rabbitmq-diagnostics check_running"
           --health-interval 10s
@@ -54,4 +55,4 @@ jobs:
       - name: E2E Tests
         env:
           RABBITMQ_CONTAINER_NAME: ${{ job.services.rabbitmq.id }}
-        run: make e2e_tests RMQ_E2E_SKIP_CONTAINER_START="please" RABBITMQ_URI="rabbitmq-stream://guest:guest@localhost:${{ job.services.rabbitmq.ports[5552] }}/%2F"
+        run: make e2e_tests RMQ_E2E_SKIP_CONTAINER_START="please" RABBITMQ_URI="rabbitmq-stream://guest:guest@localhost:${{ job.services.rabbitmq.ports[5552] }}/%2F" CI="actions"
