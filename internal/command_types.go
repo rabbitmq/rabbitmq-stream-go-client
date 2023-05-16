@@ -70,7 +70,7 @@ func WriteCommand[T CommandWrite](request T, writer *bufio.Writer) error {
 	return writer.Flush()
 }
 
-// WriteCommandWithheader sends the Commands to the server with included header.
+// WriteCommandWithHeader sends the Commands to the server with included header.
 // The commands are sent in the following order:
 // 1. Header
 // 2. Command
