@@ -1033,16 +1033,20 @@ func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessage
 // the caller to choose the publishingId.
 
 func (tc *Client) SendSubEntryBatch(ctx context.Context, publisherId uint8,
-	publishingId uint64, compress common.CompresserCodec, publishingMessages []common.PublishingMessager) error {
+	publishingId uint64, compress common.CompresserCodec, messages []common.Message) error {
 	if ctx == nil {
 		return errNilContext
 	}
 	logger := loggerFromCtxOrDiscard(ctx).WithGroup("SendSubEntryBatch")
-	logger.Debug("starting send-sub-entry", "publisherId", publisherId, "message-count", len(publishingMessages))
+	logger.Debug("starting send-sub-entry-batch", "publisherId", publisherId, "messageCount", len(messages))
 
 	buff := new(bytes.Buffer)
-	for _, msg := range publishingMessages {
-		_, err := msg.WriteTo(buff)
+	for _, msg := range messages {
+		binary, err := msg.MarshalBinary()
+		if err != nil {
+			return err
+		}
+		_, err = internal.WriteMany(buff, len(binary), binary)
 		if err != nil {
 			return err
 		}
@@ -1060,7 +1064,7 @@ func (tc *Client) SendSubEntryBatch(ctx context.Context, publisherId uint8,
 		1,
 		publishingId,
 		compress.GetType(),
-		uint16(len(publishingMessages)),
+		uint16(len(messages)),
 		uncompressedDataSize,
 		compressedDataSize,
 		compressed))

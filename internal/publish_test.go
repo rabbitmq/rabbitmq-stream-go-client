@@ -3,6 +3,8 @@ package internal
 import (
 	"bufio"
 	"bytes"
+	"fmt"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/codecs/amqp"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -50,31 +52,77 @@ var _ = Describe("Create", func() {
 
 		It("encodes fake message", func() {
 			buffFakeMessages := new(bytes.Buffer)
-			writerFakeMessages := bufio.NewWriter(buffFakeMessages)
 
 			// we simulate a message aggregation
 			// that can be done by the client
 			// First loop to aggregate the messages
-			var fakeMessages []common.StreamerMessage
-			fakeMessages = append(fakeMessages, NewFakeMessage(17, []byte("foo")))
-			fakeMessages = append(fakeMessages, NewFakeMessage(21, []byte("wine")))
-			fakeMessages = append(fakeMessages, NewFakeMessage(23, []byte("beer")))
-			fakeMessages = append(fakeMessages, NewFakeMessage(29, []byte("water")))
+			var fakeMessages []common.Message
+			for i := 0; i < 5; i++ {
+				fakeMessages = append(fakeMessages, NewFakeMessage(uint64(i), []byte(
+					fmt.Sprintf("fake message %d", i))))
+			}
 
 			// It is time to prepare the buffer to send to the server
-			for _, fakeMessage := range fakeMessages {
-				Expect(fakeMessage.WriteTo(writerFakeMessages)).To(BeNumerically("==", 8+4+len(fakeMessage.Body())))
+			for i := 0; i < len(fakeMessages); i++ {
+				data, err := fakeMessages[i].MarshalBinary()
+				Expect(err).ToNot(HaveOccurred())
+				l, err := buffFakeMessages.Write(data)
+				Expect(l).To(BeNumerically("==", 26))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(data)).To(BeNumerically("==", 8+4+len(fmt.Sprintf("fake message %d", i))))
 			}
-			Expect(writerFakeMessages.Flush()).To(Succeed())
 
 			c := NewPublishRequest(200, uint32(len(fakeMessages)), buffFakeMessages.Bytes())
 			buff := new(bytes.Buffer)
 			wr := bufio.NewWriter(buff)
 			Expect(c.Write(wr)).To(BeNumerically("==", c.SizeNeeded()-streamProtocolHeaderSizeBytes))
+			Expect(c.publisherId).To(BeNumerically("==", 200))
+			Expect(c.messageCount).To(BeNumerically("==", 5))
+			Expect(c.messages).To(HaveLen(130)) // 5 messages * 26 bytes each))
 			Expect(wr.Flush()).To(Succeed())
-
 		})
+	})
 
+	It("encodes AMQP1.0 message", func() {
+		buffAMQP10 := new(bytes.Buffer)
+
+		// we simulate a message aggregation
+		// that can be done by the client
+		// First loop to aggregate the messages
+		// In this case we use AMQP1.0 message
+		var amqpMessages []common.Message
+		for i := 0; i < 5; i++ {
+			amqpMessages = append(amqpMessages, amqp.NewAMQP10Message([]byte(
+				fmt.Sprintf("AMQP message %d", i))))
+		}
+
+		// It is time to prepare the buffer to send to the server
+		for i := 0; i < len(amqpMessages); i++ {
+			data, err := amqpMessages[i].MarshalBinary()
+			Expect(err).ToNot(HaveOccurred())
+
+			l, err := buffAMQP10.Write(data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(l).To(BeNumerically("==", 19))
+
+			Expect(len(data)).To(BeNumerically("==", 3+ // Format code from AMQP 1.0 3 bytes
+				2+ // 2 bytes to define the application data types (AMQP 1.0)
+				// 		[]byte{  byte(typeCodeVbin8),
+				//			byte(15),
+				//		})
+				// So the total is 5 bytes + the length of the message
+				len(fmt.Sprintf("AMQP message %d", i))))
+		}
+
+		c := NewPublishRequest(200, uint32(len(amqpMessages)), buffAMQP10.Bytes())
+		buff := new(bytes.Buffer)
+		wr := bufio.NewWriter(buff)
+		Expect(c.Write(wr)).To(BeNumerically("==", c.SizeNeeded()-streamProtocolHeaderSizeBytes))
+		Expect(c.publisherId).To(BeNumerically("==", 200))
+		Expect(c.messageCount).To(BeNumerically("==", 5))
+		Expect(c.messageCount).To(BeNumerically("==", 5))
+		Expect(c.messages).To(HaveLen(95)) // 5 messages * 19 bytes each (14 + 2 +3 ))
+		Expect(wr.Flush()).To(Succeed())
 	})
 
 	Context("Response", func() {

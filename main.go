@@ -3,20 +3,18 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/binary"
 	"fmt"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/codecs/amqp"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"golang.org/x/exp/slog"
-	"io"
 	"os"
 	"time"
 )
 
 func main() {
 	log := slog.New(slog.NewTextHandler(os.Stdout))
-
 	stream := "test-stream"
 	config, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost:5552")
 	if err != nil {
@@ -55,7 +53,7 @@ func main() {
 	}
 
 	const batchSize = 100
-	const iterations = 2
+	const iterations = 1000
 	const totalMessages = iterations * batchSize
 	publishChan := streamClient.NotifyPublish(make(chan *raw.PublishConfirm, 100))
 	go func() {
@@ -85,14 +83,16 @@ func main() {
 	var id uint64
 	startTime := time.Now()
 	for j := 0; j < iterations; j++ {
-		var fakeMessages []common.PublishingMessager
+		var messages []common.PublishingMessager
 		for i := 0; i < batchSize; i++ {
-			fakeMessages = append(fakeMessages,
-				raw.NewPublishingMessage(id, NewFakeMessage([]byte(fmt.Sprintf("message %d", i)))))
+			msg := amqp.NewAMQP10Message([]byte(fmt.Sprintf("msg %d", i)))
+
+			messages = append(messages,
+				raw.NewPublishingMessage(id, msg))
 			id++ // increment the id
 		}
 
-		err = streamClient.Send(ctx, 1, fakeMessages)
+		err = streamClient.Send(ctx, 1, messages)
 		if err != nil {
 			log.Error("error in sending messages", "error", err)
 			panic(err)
@@ -100,6 +100,47 @@ func main() {
 	}
 	fmt.Println("End sending messages")
 	fmt.Printf("Sent %d  in : %s \n", id, time.Since(startTime))
+
+	/// BATCH SEND
+	fmt.Println("Start sending BATCH messages")
+
+	err = streamClient.DeclarePublisher(ctx, 2, "test-publisher-subEntry", stream)
+	if err != nil {
+		log.Error("error in declaring publisher", "error", err)
+		panic(err)
+	}
+	var idSub uint64 = 0
+
+	startTime = time.Now()
+	// sending sub-entry batch to the server
+	var messages []common.Message
+	for i := 0; i < batchSize; i++ {
+		messages = append(messages,
+			amqp.NewAMQP10Message([]byte(fmt.Sprintf("message %d", i))))
+	}
+
+	err = streamClient.SendSubEntryBatch(ctx, 2,
+		idSub,
+		&common.CompressNONE{},
+		messages)
+
+	if err != nil {
+		log.Error("error in SendSubEntryBatch", "error", err)
+		panic(err)
+	}
+
+	idSub = idSub + 1
+	err = streamClient.SendSubEntryBatch(ctx, 2,
+		idSub, &common.CompressGZIP{}, messages)
+
+	if err != nil {
+		log.Error("error in SendSubEntryBatch", "error", err)
+		panic(err)
+	}
+
+	fmt.Printf("Sent %d  in : %s \n", batchSize*2, time.Since(startTime))
+
+	/// END BATCH SEND
 
 	var received int
 	chunkChan := streamClient.NotifyChunk(make(chan *raw.Chunk, 100))
@@ -128,44 +169,6 @@ func main() {
 		log.Info("offset", "offset", offset)
 	}
 
-	// sending sub-entry batch to the server
-	var subEntryFakeMessages []common.PublishingMessager
-	for i := 0; i < batchSize; i++ {
-		subEntryFakeMessages = append(subEntryFakeMessages,
-			raw.NewPublishingMessage(id, NewFakeMessage([]byte(fmt.Sprintf("message %d", i)))))
-		id++ // increment the id
-	}
-
-	err = streamClient.DeclarePublisher(ctx, 2, "test-publisher-subEntry", stream)
-	if err != nil {
-		log.Error("error in declaring publisher", "error", err)
-		panic(err)
-	}
-	var idSub uint64 = 0
-
-	err = streamClient.SendSubEntryBatch(ctx,
-		2,
-		idSub,
-		&common.CompressNONE{},
-		subEntryFakeMessages)
-
-	if err != nil {
-		log.Error("error in SendSubEntryBatch", "error", err)
-		panic(err)
-	}
-
-	idSub = idSub + 1
-	err = streamClient.SendSubEntryBatch(ctx,
-		2,
-		idSub,
-		&common.CompressGZIP{},
-		subEntryFakeMessages)
-
-	if err != nil {
-		log.Error("error in SendSubEntryBatch", "error", err)
-		panic(err)
-	}
-
 	fmt.Println("Press any key to stop ")
 	reader := bufio.NewReader(os.Stdin)
 	_, _ = reader.ReadString('\n')
@@ -187,36 +190,4 @@ func main() {
 		panic(err)
 	}
 	log.Info("connection status", "open", streamClient.IsOpen())
-}
-
-type FakeMessage struct {
-	body []byte
-}
-
-func (f *FakeMessage) WriteTo(writer io.Writer) (int64, error) {
-	written := 0
-	err := binary.Write(writer, binary.BigEndian, uint32(len(f.body)))
-	if err != nil {
-		panic(err)
-	}
-	written += binary.Size(uint32(len(f.body)))
-
-	err = binary.Write(writer, binary.BigEndian, f.body)
-	if err != nil {
-		panic(err)
-	}
-	written += binary.Size(f.body)
-	return int64(written), nil
-}
-
-func (f *FakeMessage) SetBody(body []byte) {
-	f.body = body
-}
-
-func (f *FakeMessage) Body() []byte {
-	return f.body
-}
-
-func NewFakeMessage(body []byte) *FakeMessage {
-	return &FakeMessage{body: body}
 }

@@ -2,18 +2,35 @@
 
 package internal
 
-import (
-	"io"
-)
+import "bytes"
 
 type FakeMessage struct {
 	publishingId uint64
 	body         []byte
 }
 
-func (f *FakeMessage) WriteTo(writer io.Writer) (int64, error) {
-	n, err := writeMany(writer, f.publishingId, len(f.body), f.body)
-	return int64(n), err
+func (f *FakeMessage) UnmarshalBinary(data []byte) error {
+	reader := bytes.NewReader(data)
+	var length uint32
+	err := readMany(reader, &f.publishingId, &length)
+	if err != nil {
+		return err
+	}
+	f.body = make([]byte, length)
+	err = readMany(reader, &f.body)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (f *FakeMessage) MarshalBinary() (data []byte, err error) {
+	buff := new(bytes.Buffer)
+	_, err = writeMany(buff, f.publishingId, uint32(len(f.body)), f.body)
+	if err != nil {
+		return nil, err
+	}
+	return buff.Bytes(), nil
 }
 
 func (f *FakeMessage) SetPublishingId(publishingId uint64) {

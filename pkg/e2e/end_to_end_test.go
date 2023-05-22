@@ -3,6 +3,8 @@
 package e2e_test
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
@@ -11,6 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
 	"golang.org/x/exp/slog"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -165,7 +168,9 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		const numMessages = 100
 		for i := 0; i < numMessages; i++ {
 			Expect(
-				streamClient.Send(itCtx, publisherId, wrap[common.PublishingMessager](raw.NewPublishingMessage(uint64(i), &plainTextMessage{messageBody}))),
+				streamClient.Send(itCtx, publisherId, wrap[common.PublishingMessager](
+					raw.NewPublishingMessage(uint64(i),
+						&plainTextMessage{messageBody}))),
 			).To(Succeed())
 		}
 
@@ -193,10 +198,26 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 			numOfEntries += chunk.NumEntries
 			debugLogger.Info("chunk received", slog.Any("subscription", chunk.SubscriptionId), slog.Any("numEntries", chunk.NumEntries))
 
-			m := &plainTextMessage{}
+			reader := bytes.NewReader(chunk.Messages)
 			for i := uint16(0); i < chunk.NumEntries; i++ {
-				x, z := i*104, (i+1)*104
-				Expect(m.UnmarshalBinary(chunk.Messages[x:z])).To(Succeed())
+				var messageSize uint32
+				// The PublishingMessage.WriteTo method writes the message size
+				// that is required by the protocol. We read it here to get the
+				// size of the message body. After the 4 byte size, the next
+				// bytes are the message body.
+				Expect(binary.Read(reader, binary.BigEndian, &messageSize)).To(Succeed())
+				Expect(messageSize).To(BeNumerically(">", 0))
+				// this is the message body
+				buffer := make([]byte, messageSize)
+				full, err := io.ReadFull(reader, buffer)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(full).To(BeNumerically("==",
+					100+ // 100 bytes of message body
+						4)) // 4 bytes of message size
+				m := &plainTextMessage{}
+
+				// how the message body is unmarshalled is up to the struct
+				Expect(m.UnmarshalBinary(buffer)).To(Succeed())
 				Expect(m.body).To(Equal(messageBody))
 			}
 
@@ -209,7 +230,6 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 
 		By("unsubscribing")
 		Expect(streamClient.Unsubscribe(ctx, subscriptionId)).To(Succeed())
-		//Expect(chunks).To(BeClosed())
 
 		By("cleaning up")
 		Expect(streamClient.DeletePublisher(ctx, publisherId)).To(Succeed())

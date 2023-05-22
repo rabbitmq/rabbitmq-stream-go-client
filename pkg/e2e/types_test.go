@@ -5,7 +5,6 @@ package e2e_test
 import (
 	"bytes"
 	"encoding/binary"
-	"io"
 )
 
 type plainTextMessage struct {
@@ -24,23 +23,20 @@ func (p *plainTextMessage) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (p *plainTextMessage) WriteTo(w io.Writer) (n int64, err error) {
-	n = 0
-	err = binary.Write(w, binary.BigEndian, uint32(len(p.body)))
+func (p *plainTextMessage) MarshalBinary() ([]byte, error) {
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, binary.BigEndian, uint32(len(p.body)))
 	if err != nil {
-		return
+		return nil, err
 	}
-	n += 4
+	err = binary.Write(buff, binary.BigEndian, []byte(p.body))
+	if err != nil {
+		return nil, err
+	}
 
-	n32, err := w.Write([]byte(p.body))
-	n += int64(n32)
-	return
+	return buff.Bytes(), nil
 }
 
-func (p *plainTextMessage) SetBody(body []byte) {
-	p.body = string(body)
-}
-
-func (p *plainTextMessage) Body() []byte {
-	return []byte(p.body)
+func (p *plainTextMessage) Body() string {
+	return p.body
 }

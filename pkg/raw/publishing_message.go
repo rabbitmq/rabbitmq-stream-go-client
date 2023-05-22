@@ -8,7 +8,7 @@ import (
 
 type PublishingMessage struct {
 	publishingId uint64
-	message      common.StreamerMessage
+	message      common.Message
 }
 
 func (m *PublishingMessage) SetPublishingId(publishingId uint64) {
@@ -19,26 +19,28 @@ func (m *PublishingMessage) PublishingId() uint64 {
 	return m.publishingId
 }
 
-func (m *PublishingMessage) SetMessage(message common.StreamerMessage) {
+func (m *PublishingMessage) SetMessage(message common.Message) {
 	m.message = message
 }
 
-func (m *PublishingMessage) Message() common.StreamerMessage {
+func (m *PublishingMessage) Message() common.Message {
 	return m.message
 }
 
 func (m *PublishingMessage) WriteTo(writer io.Writer) (int64, error) {
-	written, err := internal.WriteMany(writer, m.publishingId)
+	binary, err := m.Message().MarshalBinary()
+	if err != nil {
+		return 0, err
+	}
+	written, err := internal.WriteMany(writer, m.publishingId,
+		len(binary), binary)
 	if err != nil {
 		return int64(written), err
 	}
-	writtenM, err := m.message.WriteTo(writer)
-	if err != nil {
-		return int64(writtenM), err
-	}
-	return int64(written) + writtenM, nil
+
+	return int64(written), nil
 }
 
-func NewPublishingMessage(publishingId uint64, message common.StreamerMessage) *PublishingMessage {
+func NewPublishingMessage(publishingId uint64, message common.Message) *PublishingMessage {
 	return &PublishingMessage{publishingId: publishingId, message: message}
 }

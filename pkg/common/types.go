@@ -3,22 +3,26 @@ package common
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"io"
 )
 
-type StreamerMessage interface {
-	io.WriterTo
-	SetBody(body []byte)
-	Body() []byte
+// Message is the interface for the message
+type Message interface {
+	encoding.BinaryMarshaler
+	encoding.BinaryUnmarshaler
 }
 
+// PublishingMessager is the interface for the publishing message
+// it creates a message with a publishingId and a Message
+// The message doesn't contain the publishingId this is why we need this interface
 type PublishingMessager interface {
 	io.WriterTo
 	SetPublishingId(publishingId uint64)
 	PublishingId() uint64
-	SetMessage(message StreamerMessage)
-	Message() StreamerMessage
+	SetMessage(message Message)
+	Message() Message
 }
 
 //******** Sub Batch Entry Message ******************************
