@@ -23,7 +23,7 @@ var logger *slog.Logger
 
 func TestStream(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Stream Suite")
+	RunSpecs(t, "Raw Suite")
 }
 
 var _ = BeforeSuite(func() {

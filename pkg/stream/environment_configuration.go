@@ -236,7 +236,7 @@ func WithId(id string) EnvironmentConfigurationOption {
 	}
 }
 
-func NewEnvironmentConfiguration(options ...EnvironmentConfigurationOption) *EnvironmentConfiguration {
+func NewEnvironmentConfiguration(options ...EnvironmentConfigurationOption) EnvironmentConfiguration {
 	e := &EnvironmentConfiguration{
 		Uris:                             []string{DefaultUri},
 		Uri:                              DefaultUri,
@@ -256,5 +256,5 @@ func NewEnvironmentConfiguration(options ...EnvironmentConfigurationOption) *Env
 		option(e)
 	}
 
-	return e
+	return *e
 }

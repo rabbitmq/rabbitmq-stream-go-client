@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("EnvironmentConfiguration", Focus, func() {
+var _ = Describe("EnvironmentConfiguration", func() {
 	It("creates a configuration with expected defaults", func() {
 		ec := stream.NewEnvironmentConfiguration()
 

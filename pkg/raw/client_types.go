@@ -92,6 +92,8 @@ func (r *ClientConfiguration) SetConnectionName(connectionName string) {
 }
 
 func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error) {
+	// TODO(Zerpet): we may not need to have a slice of brokers here
+	//   the smart layer will take care of contacting different brokers
 	builder := &ClientConfiguration{
 		rabbitmqBrokers:    make([]broker, 0, 9),
 		clientHeartbeat:    60,
@@ -114,6 +116,8 @@ func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error
 	return builder, nil
 }
 
+type StreamConfiguration = constants.StreamConfiguration
+
 type PublishConfirm = internal.PublishConfirmResponse
 type PublishError = internal.PublishErrorResponse
 type Chunk = internal.ChunkResponse
@@ -125,7 +129,7 @@ type Heartbeat = internal.Heartbeat
 
 type Clienter interface {
 	Connect(ctx context.Context) error
-	DeclareStream(ctx context.Context, stream string, configuration constants.StreamConfiguration) error
+	DeclareStream(ctx context.Context, stream string, configuration StreamConfiguration) error
 	DeleteStream(ctx context.Context, stream string) error
 	DeclarePublisher(ctx context.Context, publisherId uint8, publisherReference string, stream string) error
 	Send(ctx context.Context, publisherId uint8, messages []common.PublishingMessager) error
