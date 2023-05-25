@@ -393,17 +393,17 @@ func (mr *MockRawClientMockRecorder) SendHeartbeat() *gomock.Call {
 }
 
 // SendSubEntryBatch mocks base method.
-func (m *MockRawClient) SendSubEntryBatch(ctx context.Context, publisherId uint8, publishingId uint64, compress common.CompresserCodec, publishingMessages []common.PublishingMessager) error {
+func (m *MockRawClient) SendSubEntryBatch(ctx context.Context, publisherId uint8, publishingId uint64, compress common.CompresserCodec, messages []common.Message) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendSubEntryBatch", ctx, publisherId, publishingId, compress, publishingMessages)
+	ret := m.ctrl.Call(m, "SendSubEntryBatch", ctx, publisherId, publishingId, compress, messages)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendSubEntryBatch indicates an expected call of SendSubEntryBatch.
-func (mr *MockRawClientMockRecorder) SendSubEntryBatch(ctx, publisherId, publishingId, compress, publishingMessages interface{}) *gomock.Call {
+func (mr *MockRawClientMockRecorder) SendSubEntryBatch(ctx, publisherId, publishingId, compress, messages interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendSubEntryBatch", reflect.TypeOf((*MockRawClient)(nil).SendSubEntryBatch), ctx, publisherId, publishingId, compress, publishingMessages)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendSubEntryBatch", reflect.TypeOf((*MockRawClient)(nil).SendSubEntryBatch), ctx, publisherId, publishingId, compress, messages)
 }
 
 // StoreOffset mocks base method.
