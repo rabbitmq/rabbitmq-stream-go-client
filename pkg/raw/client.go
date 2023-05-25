@@ -941,8 +941,7 @@ func (tc *Client) DeclareStream(ctx context.Context, stream string, configuratio
 
 	createResponse, err := tc.syncRequest(ctx, internal.NewCreateRequest(stream, configuration))
 	if err != nil {
-		log.Error("error declaring stream", "stream", stream, "stream-args", configuration)
-		return err
+		return &DeclareStreamError{stream, configuration, err}
 	}
 	return streamErrorOrNil(createResponse.ResponseCode())
 }
@@ -959,9 +958,7 @@ func (tc *Client) DeleteStream(ctx context.Context, stream string) error {
 
 	deleteResponse, err := tc.syncRequest(ctx, internal.NewDeleteRequest(stream))
 	if err != nil {
-		// TODO: remove log line if the error contains the name of the stream
-		log.Error("error deleting stream", "stream", stream)
-		return err
+		return &DeleteStreamError{stream, err}
 	}
 	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
@@ -982,8 +979,7 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 
 	deleteResponse, err := tc.syncRequest(ctx, internal.NewDeclarePublisherRequest(publisherId, publisherReference, stream))
 	if err != nil {
-		log.Error("error declaring publisher", "publisherId", publisherId, "publisherReference", publisherReference, "stream", stream)
-		return err
+		return &DeclarePublisherError{publisherId, publisherReference, stream, err}
 	}
 	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
@@ -1084,8 +1080,7 @@ func (tc *Client) DeletePublisher(ctx context.Context, publisherId uint8) error 
 
 	deleteResponse, err := tc.syncRequest(ctx, internal.NewDeletePublisherRequest(publisherId))
 	if err != nil {
-		log.Error("error deleting publisher", "publisherId", publisherId)
-		return err
+		return &DeletePublisherError{publisherId, err}
 	}
 	return streamErrorOrNil(deleteResponse.ResponseCode())
 }
@@ -1135,14 +1130,7 @@ func (tc *Client) Subscribe(
 
 	subscribeResponse, err := tc.syncRequest(ctx, internal.NewSubscribeRequestRequest(subscriptionId, stream, offsetType, offset, credit, properties))
 	if err != nil {
-		log.Error("error subscribing consumer",
-			"subscriptionId", subscriptionId,
-			"stream", stream,
-			"offsetType", offsetType,
-			"offset", offset,
-			"credit", credit,
-			"properties", properties)
-		return err
+		return &SubscribeError{subscriptionId, stream, offsetType, offset, credit, properties, err}
 	}
 	return streamErrorOrNil(subscribeResponse.ResponseCode())
 }
@@ -1251,8 +1239,7 @@ func (tc *Client) MetadataQuery(ctx context.Context, stream string) (*MetadataRe
 	logger.Debug("starting metadata query")
 	response, err := tc.syncRequest(ctx, internal.NewMetadataQuery(stream))
 	if err != nil {
-		logger.Error("error getting metadata", "stream", stream)
-		return nil, err
+		return nil, &MetadataQueryError{stream, err}
 	}
 
 	return response.(*MetadataResponse), streamErrorOrNil(response.ResponseCode())
@@ -1373,8 +1360,7 @@ func (tc *Client) QueryOffset(ctx context.Context, reference string, stream stri
 	logger.Debug("starting query offset", "reference", reference, "stream", stream)
 	response, err := tc.syncRequest(ctx, internal.NewQueryOffsetRequest(reference, stream))
 	if err != nil {
-		logger.Error("error sending sync request to query offset", "reference", reference, "stream", stream)
-		return 0, err
+		return 0, &QueryOffsetError{reference, stream, err}
 	}
 	var offsetResponse *internal.QueryOffsetResponse
 	if reflect.TypeOf(response) != reflect.TypeOf(offsetResponse) {
@@ -1394,8 +1380,7 @@ func (tc *Client) StreamStats(ctx context.Context, stream string) (map[string]in
 	logger.Debug("starting stream stats", "stream", stream)
 	streamStatsResponse, err := tc.syncRequest(ctx, internal.NewStreamStatsRequest(stream))
 	if err != nil {
-		logger.Error("error sending sync request for stream stats", "stream", stream)
-		return nil, err
+		return nil, &StreamStatsError{stream, err}
 	}
 	return streamStatsResponse.(*internal.StreamStatsResponse).Stats, streamErrorOrNil(streamStatsResponse.ResponseCode())
 }

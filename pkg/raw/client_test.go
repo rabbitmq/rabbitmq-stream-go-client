@@ -464,6 +464,18 @@ var _ = Describe("Client", func() {
 			}, SpecTimeout(1500*time.Millisecond))
 		})
 
+		When("stream not available", func() {
+			It("returns 'stream no available' error", func(ctx SpecContext) {
+				itCtx := newContextWithResponseCode(raw.NewContextWithLogger(ctx, *logger), streamResponseCodeStreamNotAvailable)
+				streamClient := raw.NewClient(fakeClientConn, conf)
+				go streamClient.(*raw.Client).StartFrameListener(itCtx)
+
+				By("deleting a stream")
+				go fakeRabbitMQ.fakeRabbitMQDeleteStream(itCtx, "stream")
+				Expect(streamClient.DeleteStream(itCtx, "stream")).To(MatchError("stream not available"))
+			})
+		})
+
 		When("authentication fails", func() {
 			It("returns 'authentication failed' error", func(ctx SpecContext) {
 				itCtx := raw.NewContextWithLogger(newContextWithResponseCode(ctx, streamResponseCodeAuthFailure, "sasl-auth"), *logger)
@@ -493,14 +505,14 @@ var _ = Describe("Client", func() {
 			Expect(client.Connect(ctx2)).To(MatchError("context canceled"))
 
 			By("not blocking in stream declaration")
-			Expect(client.DeclareStream(ctx2, "not-created", constants.StreamConfiguration{})).
+			Expect(errors.Unwrap(client.DeclareStream(ctx2, "not-created", constants.StreamConfiguration{}))).
 				To(MatchError("context canceled"))
 
 			By("not blocking on stream deletion")
-			Expect(client.DeleteStream(ctx2, "who-dat")).To(MatchError("context canceled"))
+			Expect(errors.Unwrap(client.DeleteStream(ctx2, "who-dat"))).To(MatchError("context canceled"))
 
 			By("not blocking on declare publisher")
-			Expect(client.DeclarePublisher(ctx2, 123, "a-publisher", "some-stream")).
+			Expect(errors.Unwrap(client.DeclarePublisher(ctx2, 123, "a-publisher", "some-stream"))).
 				To(MatchError("context canceled"))
 		}, SpecTimeout(500*time.Millisecond))
 	})
