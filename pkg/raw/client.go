@@ -704,34 +704,25 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 
 // public API
 
-// DialConfig establishes a connection to RabbitMQ servers in common.Configuration. It returns an error if the
-// connection cannot be established. On a successful connection, in returns an implementation of common.Clienter,
-// capable of interacting to RabbitMQ streams binary protocol at a low level.
+// DialConfig establishes a connection to RabbitMQ servers in
+// common.Configuration. It returns an error if the connection cannot be
+// established. On a successful connection, in returns an implementation of
+// common.Clienter, capable of interacting to RabbitMQ streams binary protocol at
+// a low level.
 //
-// This is the recommended method to connect to RabbitMQ. After this function returns, a connection is established
-// and authenticated with RabbitMQ. Do NOT call Client.Connect() after this function.
+// This is the recommended method to connect to RabbitMQ. After this function
+// returns, a connection is established and authenticated with RabbitMQ. Do NOT
+// call Client.Connect() after this function.
 //
-// ClientConfiguration must not be nil. ClientConfiguration should be initialised using NewClientConfiguration().
-// A custom dial function can be set using ClientConfiguration.SetDial(). Check ClientConfiguration.SetDial()
-// for more information. If dial function is not provided, DefaultDial is used with a timeout of 30 seconds.
-// DefaultDial uses net.Dial
+// ClientConfiguration must not be nil. ClientConfiguration should be initialised
+// using NewClientConfiguration(). A custom dial function can be set using
+// ClientConfiguration.SetDial(). Check ClientConfiguration.SetDial() for more
+// information. If dial function is not provided, DefaultDial is used with a
+// timeout of 30 seconds. DefaultDial uses net.Dial
 //
-// The context passed to DialConfig will be used with in the background routine that listens for incoming frames
-// from the server. Cancelling this context will stop the background routine, causing the client to not read
-// any further communication from the server. Something like this would cause the client to not function correctly:
-//
-//	func connectToRabbit(ctx context.Context) (common.Clienter, error) {
-//		dialCtx, cancel := context.WithTimeout(ctx, time.Second)
-//		defer cancel()
-//		return raw.DialConfig(dialCtx, cfg)
-//	}
-//
-// This will be addressed in [issue#27]
-//
-// The client returned by the above code will not function correctly, because the background routine won't
-// read any information from the server (since the context is cancelled after return). If you want to implement
-// a custom timeout or dial-retry mechanism, provide your own dial function using [raw.ClientConfiguration] SetDial().
-// A simple dial function could be as follows:
+// If you want to implement a custom timeout or dial-retry mechanism, provide
+// your own dial function using [raw.ClientConfiguration] SetDial(). A simple
+// dial function could be as follows:
 //
 //	cfg.SetDial(func(network, addr string) (net.Conn, error) {
 //		return net.DialTimeout(network, addr, time.Second)
@@ -839,7 +830,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 	// to execute Connect(). The i/o loop in handleIncoming() must not be tight to the same deadline.
 	//
 	// https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
-	ioLoopCtx, cancel := context.WithCancel(ctx)
+	ioLoopCtx, cancel := context.WithCancel(context.Background())
 	tc.ioLoopCancelFn = cancel
 	go func(ctx context.Context) {
 		log := loggerFromCtxOrDiscard(ctx).WithGroup("frame-listener")
@@ -931,7 +922,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 // By default, the stream is created without any retention policy, so stream can grow indefinitely.
 // It is recommended to set a retention policy to avoid filling up the disk.
 // See also https://www.rabbitmq.com/streams.html#retention
-func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration constants.StreamConfiguration) error {
+func (tc *Client) DeclareStream(ctx context.Context, stream string, configuration StreamConfiguration) error {
 	if ctx == nil {
 		return errNilContext
 	}

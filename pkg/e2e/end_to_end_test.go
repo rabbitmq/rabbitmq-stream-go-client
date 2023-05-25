@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
@@ -256,7 +257,8 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		// Force close the connection is done with the HTTP API and based on the connection name.
 		httpUtils := NewHTTPUtils()
 		Eventually(func() string {
-			name, _ := httpUtils.GetConnectionByConnectionName(connectionName)
+			name, err := httpUtils.GetConnectionByConnectionName(connectionName)
+			debugLogger.Error("error in HTTP request", "error", err)
 			return name
 		}, 10*time.Second).WithPolling(1*time.Second).Should(Equal(connectionName),
 			"expected connection to be present")
@@ -275,6 +277,25 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 			Fail("expected to receive a closed notification")
 		}
 	}, SpecTimeout(20*time.Second))
+
+	When("the dial context is cancelled", Label("behaviour"), func() {
+		It("works normally", Focus, func(ctx SpecContext) {
+			dialCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+
+			streamClientConfiguration, err := raw.NewClientConfiguration(rabbitmqUri)
+			Expect(err).ToNot(HaveOccurred())
+
+			By("dialing the server")
+			streamClient, err := raw.DialConfig(dialCtx, streamClientConfiguration)
+			Expect(err).ToNot(HaveOccurred())
+			cancel()
+
+			By("exchanging commands and closing")
+			Expect(streamClient.ExchangeCommandVersions(ctx)).To(Succeed())
+			Expect(streamClient.Close(ctx)).To(Succeed())
+		}, SpecTimeout(10*time.Second))
+	})
 })
 
 func wrap[T any](v T) []T {
