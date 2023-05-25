@@ -279,7 +279,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 	}, SpecTimeout(20*time.Second))
 
 	When("the dial context is cancelled", Label("behaviour"), func() {
-		It("works normally", Focus, func(ctx SpecContext) {
+		It("works normally",  func(ctx SpecContext) {
 			dialCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
 

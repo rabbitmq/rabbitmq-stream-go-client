@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"reflect"
+	"sync"
 	"time"
 )
 
@@ -97,5 +98,33 @@ var _ = Describe("Environment", func() {
 			// assert
 			Expect(err).To(MatchError("something went wrong"))
 		})
+
+	})
+
+	When("multiple routines use the environment",  func() {
+		// FIXME(Zerpet): I'm not sure how reliable is this test
+		//   it does not trigger the race detector. It makes some
+		//   sense that it doesn't, since all access is read-only
+		It("access the locators safely", func(ctx SpecContext) {
+			// setup
+			mockRawClient.EXPECT().
+				DeclareStream(
+					gomock.AssignableToTypeOf(ctx),
+					gomock.AssignableToTypeOf("string"),
+					gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
+				).
+				Times(10)
+
+			wg := sync.WaitGroup{}
+			for i := 0; i < 10; i++ {
+				wg.Add(1)
+				go func() {
+					_ = environment.CreateStream(ctx, "go-routine-stream", stream.CreateStreamOptions{})
+					wg.Done()
+				}()
+			}
+
+			wg.Wait()
+		}, SpecTimeout(time.Second*2))
 	})
 })
