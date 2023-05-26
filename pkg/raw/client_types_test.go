@@ -15,9 +15,7 @@ var _ = Describe("ClientTypes", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			brokers := clientConf.RabbitmqBrokers()
-			Expect(brokers).NotTo(BeNil())
-			Expect(len(brokers)).To(BeNumerically("==", 1))
-			Expect(brokers[0]).To(MatchFields(IgnoreExtras,
+			Expect(brokers).To(MatchFields(IgnoreExtras,
 				Fields{
 					"Host":     Equal("localparty.com"),
 					"Port":     BeNumerically("==", 4321),
@@ -28,55 +26,13 @@ var _ = Describe("ClientTypes", func() {
 				}))
 		})
 
-		It("accepts multiple uris", func() {
-			conf, err := raw.NewClientConfiguration(
-				"rabbitmq-stream://localhost:5552",
-				"rabbitmq-stream://example.com",
-				"rabbitmq-stream+tls://user:pass@some.service.com:4242/a-vhost")
-			Expect(err).ToNot(HaveOccurred())
-
-			brokers := conf.RabbitmqBrokers()
-			Expect(brokers).NotTo(BeNil())
-			Expect(brokers).To(HaveLen(3))
-			Expect(brokers[0]).To(MatchFields(IgnoreExtras,
-				Fields{
-					"Host":     Equal("localhost"),
-					"Port":     BeNumerically("==", 5552),
-					"Username": Equal("guest"),
-					"Password": Equal("guest"),
-					"Vhost":    Equal("/"),
-					"Scheme":   Equal("rabbitmq-stream"),
-				}))
-
-			Expect(brokers[1]).To(MatchFields(IgnoreExtras,
-				Fields{
-					"Host":     Equal("example.com"),
-					"Port":     BeNumerically("==", 5552),
-					"Username": Equal("guest"),
-					"Password": Equal("guest"),
-					"Vhost":    Equal("/"),
-					"Scheme":   Equal("rabbitmq-stream"),
-				}))
-
-			Expect(brokers[2]).To(MatchFields(IgnoreExtras,
-				Fields{
-					"Host":     Equal("some.service.com"),
-					"Port":     BeNumerically("==", 4242),
-					"Username": Equal("user"),
-					"Password": Equal("pass"),
-					"Vhost":    Equal("a-vhost"),
-					"Scheme":   Equal("rabbitmq-stream+tls"),
-				}))
-		})
-
 		It("accepts zero URLs and returns default broker", func() {
-			conf, err := raw.NewClientConfiguration()
+			conf, err := raw.NewClientConfiguration("")
 			Expect(err).ToNot(HaveOccurred())
 
 			broker := conf.RabbitmqBrokers()
 			Expect(broker).NotTo(BeNil())
-			Expect(broker).To(HaveLen(1))
-			Expect(broker[0]).To(MatchFields(IgnoreExtras,
+			Expect(broker).To(MatchFields(IgnoreExtras,
 				Fields{
 					"Host":     Equal("localhost"),
 					"Port":     BeNumerically("==", 5552),

@@ -587,10 +587,9 @@ func (tc *Client) saslAuthenticate(ctx context.Context) error {
 	for _, mechanism := range tc.configuration.authMechanism {
 		if strings.EqualFold(mechanism, "PLAIN") {
 			log.Debug("found PLAIN mechanism as supported")
-			// FIXME: try different rabbitmq credentials
 			saslPlain := internal.NewSaslPlainMechanism(
-				tc.configuration.rabbitmqBrokers[0].Username,
-				tc.configuration.rabbitmqBrokers[0].Password,
+				tc.configuration.rabbitmqBroker.Username,
+				tc.configuration.rabbitmqBroker.Password,
 			)
 			saslAuthReq := internal.NewSaslAuthenticateRequest(mechanism)
 			err := saslAuthReq.SetChallengeResponse(saslPlain)
@@ -609,14 +608,14 @@ func (tc *Client) saslAuthenticate(ctx context.Context) error {
 	return errors.New("server does not support PLAIN SASL mechanism")
 }
 
-func (tc *Client) open(ctx context.Context, brokerIndex int) error {
+func (tc *Client) open(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
 	}
 	log := loggerFromCtxOrDiscard(ctx).WithGroup("open")
 	log.Debug("starting open")
 
-	rabbit := tc.configuration.rabbitmqBrokers[brokerIndex]
+	rabbit := tc.configuration.rabbitmqBroker
 	openReq := internal.NewOpenRequest(rabbit.Vhost)
 	openRespCommand, err := tc.syncRequest(ctx, openReq)
 	if err != nil {
@@ -727,8 +726,6 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 //	cfg.SetDial(func(network, addr string) (net.Conn, error) {
 //		return net.DialTimeout(network, addr, time.Second)
 //	})
-//
-// [issue#27]: https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
 func DialConfig(ctx context.Context, config *ClientConfiguration) (Clienter, error) {
 	// FIXME: try to test this with net.Pipe fake
 	//		dialer should return the fakeClientConn from net.Pipe
@@ -749,28 +746,17 @@ func DialConfig(ctx context.Context, config *ClientConfiguration) (Clienter, err
 		dialer = DefaultDial(defaultConnectionTimeout)
 	}
 
-	// TODO: TLS if scheme is rabbitmq-stream+tls
-	for _, rabbitmqBroker := range config.rabbitmqBrokers {
-		addr := net.JoinHostPort(rabbitmqBroker.Host, strconv.FormatInt(int64(rabbitmqBroker.Port), 10))
-		// TODO: check if context is Done()
-		conn, err = dialer("tcp", addr)
-		if err != nil {
-			log.Error(
-				"failed to dial RabbitMQ, will try to dial another broker",
-				"error",
-				err,
-				"hostname",
-				rabbitmqBroker.Host,
-				"port",
-				rabbitmqBroker.Port,
-			)
-			continue
-		}
-		break
+	select {
+	default:
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 
-	if conn == nil {
-		return nil, errNoMoreBrokersToTry
+	// TODO: TLS if scheme is rabbitmq-stream+tls
+	addr := net.JoinHostPort(config.rabbitmqBroker.Host, strconv.FormatInt(int64(config.rabbitmqBroker.Port), 10))
+	conn, err = dialer("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial RabbitMQ '%s': %w", addr, err)
 	}
 
 	client := NewClient(conn, config)
@@ -819,8 +805,6 @@ func (tc *Client) Connect(ctx context.Context) error {
 
 	log := loggerFromCtxOrDiscard(ctx).WithGroup("connect")
 	log.Info("starting connection")
-
-	var i = 0 // broker index for chosen broker to dial to
 
 	// We have to create a new context here and keep a reference to the cancelling function.
 	// This context controls the i/o loop that reads from the network socket, and it is
@@ -895,7 +879,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 	}
 	tuneCancel()
 
-	err = tc.open(ctx, i)
+	err = tc.open(ctx)
 	if err != nil {
 		return fmt.Errorf("error in open: %w", err)
 	}

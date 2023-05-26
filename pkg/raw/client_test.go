@@ -59,7 +59,7 @@ var _ = Describe("Client", func() {
 		// conf can be "global" as long as tests do not modify it
 		// if a test needs to modify the configuration, it shall
 		// make a local copy and then modify the configuration
-		conf, _ = raw.NewClientConfiguration()
+		conf, _ = raw.NewClientConfiguration("")
 	})
 
 	AfterEach(func() {

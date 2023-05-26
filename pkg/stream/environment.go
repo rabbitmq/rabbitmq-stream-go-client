@@ -20,7 +20,7 @@ type Environment struct {
 func NewEnvironment(configuration EnvironmentConfiguration) (*Environment, error) {
 	e := &Environment{
 		configuration: configuration,
-		locators:      make([]*locator, len(configuration.Uris)),
+		locators:      make([]*locator, 0, len(configuration.Uris)),
 	}
 
 	if !configuration.LazyInitialization {

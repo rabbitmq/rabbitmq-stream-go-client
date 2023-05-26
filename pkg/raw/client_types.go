@@ -54,7 +54,7 @@ var defaultBroker = broker{
 }
 
 type ClientConfiguration struct {
-	rabbitmqBrokers    []broker
+	rabbitmqBroker     broker
 	clientMaxFrameSize uint32
 	clientHeartbeat    uint32
 	authMechanism      []string
@@ -75,8 +75,8 @@ func (r *ClientConfiguration) SetDial(dial func(network, addr string) (net.Conn,
 	r.dial = dial
 }
 
-func (r *ClientConfiguration) RabbitmqBrokers() []broker {
-	return r.rabbitmqBrokers
+func (r *ClientConfiguration) RabbitmqBrokers() broker {
+	return r.rabbitmqBroker
 }
 
 func (r *ClientConfiguration) SetClientMaxFrameSize(clientMaxFrameSize uint32) {
@@ -91,28 +91,26 @@ func (r *ClientConfiguration) SetConnectionName(connectionName string) {
 	r.connectionName = connectionName
 }
 
-func NewClientConfiguration(rabbitmqUrls ...string) (*ClientConfiguration, error) {
+func NewClientConfiguration(rabbitmqUrl string) (*ClientConfiguration, error) {
 	// TODO(Zerpet): we may not need to have a slice of brokers here
 	//   the smart layer will take care of contacting different brokers
 	builder := &ClientConfiguration{
-		rabbitmqBrokers:    make([]broker, 0, 9),
+		rabbitmqBroker:     broker{},
 		clientHeartbeat:    60,
 		clientMaxFrameSize: 1_048_576,
-		connectionName:     "stream-go-connection",
 	}
 
-	if len(rabbitmqUrls) == 0 {
-		builder.rabbitmqBrokers = append(builder.rabbitmqBrokers, defaultBroker)
+	if len(rabbitmqUrl) == 0 {
+		builder.rabbitmqBroker = defaultBroker
 		return builder, nil
 	}
 
-	for _, uri := range rabbitmqUrls {
-		broker, err := parseURI(uri)
-		if err != nil {
-			return nil, err
-		}
-		builder.rabbitmqBrokers = append(builder.rabbitmqBrokers, broker)
+	broker, err := parseURI(rabbitmqUrl)
+	if err != nil {
+		return nil, err
 	}
+
+	builder.rabbitmqBroker = broker
 	return builder, nil
 }
 
