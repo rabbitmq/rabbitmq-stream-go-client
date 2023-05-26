@@ -14,13 +14,13 @@ const (
 
 type Environment struct {
 	configuration EnvironmentConfiguration
-	locators      map[string]*locator
+	locators      []*locator
 }
 
 func NewEnvironment(configuration EnvironmentConfiguration) (*Environment, error) {
 	e := &Environment{
 		configuration: configuration,
-		locators:      make(map[string]*locator, len(configuration.Uris)),
+		locators:      make([]*locator, len(configuration.Uris)),
 	}
 
 	if !configuration.LazyInitialization {
@@ -31,8 +31,6 @@ func NewEnvironment(configuration EnvironmentConfiguration) (*Environment, error
 }
 
 func (e *Environment) start() error {
-	ctx := context.Background()
-
 	for i, uri := range e.configuration.Uris {
 		c, err := raw.NewClientConfiguration(uri)
 		if err != nil {
@@ -41,23 +39,16 @@ func (e *Environment) start() error {
 
 		c.SetConnectionName(fmt.Sprintf("%s-locator-%d", e.configuration.Id, i))
 
-		dialCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
-		client, err := raw.DialConfig(dialCtx, c)
+		l := newLocator(*c)
+		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		err = l.connect(ctx)
 		cancel()
+
 		if err != nil {
-			return err
+			continue
 		}
 
-		locatorKey := fmt.Sprintf("%s:%d", e.configuration.Host, e.configuration.Port)
-		if _, found := e.locators[locatorKey]; found {
-			// TODO: handle duplicates
-			panic("duplicate uri")
-		}
-
-		e.locators[locatorKey] = &locator{
-			Client:          client,
-			addressResolver: nil,
-		}
+		e.locators = append(e.locators, l)
 	}
 
 	return nil
