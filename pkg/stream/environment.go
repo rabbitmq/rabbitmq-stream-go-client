@@ -336,6 +336,24 @@ func (envOptions *EnvironmentOptions) SetTLSConfig(config *tls.Config) *Environm
 	return envOptions
 }
 
+func (envOptions *EnvironmentOptions) SetIgnoreDefaultSettings(value bool) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{ignoreDefaultSettings: value})
+	} else {
+		envOptions.ConnectionParameters[0].ignoreDefaultSettings = value
+	}
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetScheme(value string) *EnvironmentOptions {
+	if len(envOptions.ConnectionParameters) == 0 {
+		envOptions.ConnectionParameters = append(envOptions.ConnectionParameters, &Broker{Scheme: value})
+	} else {
+		envOptions.ConnectionParameters[0].Scheme = value
+	}
+	return envOptions
+}
+
 func (envOptions *EnvironmentOptions) IsTLS(val bool) *EnvironmentOptions {
 	if val {
 		if len(envOptions.ConnectionParameters) == 0 {

@@ -34,16 +34,19 @@ type Broker struct {
 
 	advHost string
 	advPort string
+
+	ignoreDefaultSettings bool
 }
 
 func newBrokerDefault() *Broker {
 	return &Broker{
-		Scheme:   "rabbitmq-stream",
-		Host:     "localhost",
-		Port:     StreamTcpPort,
-		User:     "guest",
-		Password: "guest",
-		Vhost:    "/",
+		Scheme:                "rabbitmq-stream",
+		Host:                  "localhost",
+		Port:                  StreamTcpPort,
+		User:                  "guest",
+		Password:              "guest",
+		Vhost:                 "/",
+		ignoreDefaultSettings: false,
 	}
 }
 
@@ -63,28 +66,30 @@ func (br *Broker) isTLS() bool {
 }
 
 func (br *Broker) mergeWithDefault() {
-	broker := newBrokerDefault()
-	if br.Host == "" {
-		br.Host = broker.Host
-	}
-	if br.Vhost == "" {
-		br.Vhost = broker.Vhost
-	}
+	if !br.ignoreDefaultSettings {
+		broker := newBrokerDefault()
+		if br.Host == "" {
+			br.Host = broker.Host
+		}
+		if br.Vhost == "" {
+			br.Vhost = broker.Vhost
+		}
 
-	if br.User == "" {
-		br.User = broker.User
-	}
-	if br.User == "" {
-		br.User = broker.User
-	}
-	if br.Password == "" {
-		br.Password = broker.Password
-	}
-	if br.Port == "" || br.Port == "0" {
-		br.Port = broker.Port
-	}
-	if br.Scheme == "" {
-		br.Scheme = broker.Scheme
+		if br.User == "" {
+			br.User = broker.User
+		}
+		if br.User == "" {
+			br.User = broker.User
+		}
+		if br.Password == "" {
+			br.Password = broker.Password
+		}
+		if br.Port == "" || br.Port == "0" {
+			br.Port = broker.Port
+		}
+		if br.Scheme == "" {
+			br.Scheme = broker.Scheme
+		}
 	}
 
 }
