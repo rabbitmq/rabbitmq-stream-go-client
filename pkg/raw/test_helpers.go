@@ -17,7 +17,7 @@ func (tc *Client) StartFrameListener(ctx context.Context) {
 		panic(errNilContext)
 	}
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("frame-listener")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("frame-listener")
 	log.Debug("starting frame listener")
 
 	// it is ok to derive from ctx because this function

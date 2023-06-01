@@ -11,7 +11,7 @@ import (
 // https://pkg.go.dev/context#WithValue
 type contextKey struct{}
 
-func loggerFromCtxOrDiscard(ctx context.Context) *slog.Logger {
+func LoggerFromCtxOrDiscard(ctx context.Context) *slog.Logger {
 	v := ctx.Value(contextKey{})
 	if v == nil {
 		return slog.New(discardHandler{})

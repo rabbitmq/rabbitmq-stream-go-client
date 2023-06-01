@@ -106,7 +106,7 @@ func (tc *Client) storeCorrelation(request internal.SyncCommandWrite) {
 }
 
 func (tc *Client) removeCorrelation(ctx context.Context, id uint32) {
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("correlation-map")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("correlation-map")
 	corr := tc.getCorrelationById(id)
 	if corr == nil {
 		logger.Info("correlation not found, skipping removal", "correlation-id", id)
@@ -138,7 +138,7 @@ func (tc *Client) syncRequest(ctx context.Context, request internal.SyncCommandW
 		return nil, ctx.Err()
 	}
 
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("syncRequest")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("syncRequest")
 
 	tc.storeCorrelation(request)
 	defer tc.removeCorrelation(ctx, request.CorrelationId())
@@ -175,7 +175,7 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) er
 		return ctx.Err()
 	}
 
-	logger := loggerFromCtxOrDiscard(ctx)
+	logger := LoggerFromCtxOrDiscard(ctx)
 	// FIXME: Perhaps too verbose. May need to exclude the request, and log only the request command ID
 	logger.Debug("writing command to the wire", "request", request)
 	return internal.WriteCommandWithHeader(request, tc.connection.GetWriter())
@@ -187,7 +187,7 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) er
 func (tc *Client) handleResponse(ctx context.Context, read internal.SyncCommandRead) {
 	var logger *slog.Logger
 	if ctx != nil {
-		logger = loggerFromCtxOrDiscard(ctx)
+		logger = LoggerFromCtxOrDiscard(ctx)
 	} else {
 		logger = NewDiscardLogger()
 	}
@@ -214,7 +214,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 		return errNilContext
 	}
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("handleIncoming")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("handleIncoming")
 	buffer := tc.connection.GetReader()
 	for {
 		select {
@@ -534,7 +534,7 @@ func (tc *Client) peerProperties(ctx context.Context) error {
 		return errNilContext
 	}
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("peer properties")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("peer properties")
 	log.Debug("starting peer properties")
 	serverPropertiesResponse, err := tc.syncRequest(ctx,
 		internal.NewPeerPropertiesRequest(tc.configuration.connectionName))
@@ -557,7 +557,7 @@ func (tc *Client) saslHandshake(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
 	}
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("sasl handshake")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("sasl handshake")
 	log.Debug("starting SASL handshake")
 
 	saslMechanisms, err := tc.syncRequest(ctx, internal.NewSaslHandshakeRequest())
@@ -581,7 +581,7 @@ func (tc *Client) saslHandshake(ctx context.Context) error {
 func (tc *Client) saslAuthenticate(ctx context.Context) error {
 	// TODO: perhaps we could merge saslHandshake and saslAuthenticate in a single function?
 	// FIXME: make this pluggable to allow different authentication backends
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("sasl authenticate")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("sasl authenticate")
 	log.Debug("starting SASL authenticate")
 
 	for _, mechanism := range tc.configuration.authMechanism {
@@ -612,7 +612,7 @@ func (tc *Client) open(ctx context.Context) error {
 	if ctx == nil {
 		return errNilContext
 	}
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("open")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("open")
 	log.Debug("starting open")
 
 	rabbit := tc.configuration.rabbitmqBroker
@@ -729,14 +729,13 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 func DialConfig(ctx context.Context, config *ClientConfiguration) (Clienter, error) {
 	// FIXME: try to test this with net.Pipe fake
 	//		dialer should return the fakeClientConn from net.Pipe
-	// FIXME: comment about context cancellation
 	if config == nil {
 		return nil, errNilConfig
 	}
 	if ctx == nil {
 		return nil, errNilContext
 	}
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("dial")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("dial")
 	var err error
 	var conn net.Conn
 
@@ -803,7 +802,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 		return errNilContext
 	}
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("connect")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("connect")
 	log.Info("starting connection")
 
 	// We have to create a new context here and keep a reference to the cancelling function.
@@ -817,7 +816,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 	ioLoopCtx, cancel := context.WithCancel(context.Background())
 	tc.ioLoopCancelFn = cancel
 	go func(ctx context.Context) {
-		log := loggerFromCtxOrDiscard(ctx).WithGroup("frame-listener")
+		log := LoggerFromCtxOrDiscard(ctx).WithGroup("frame-listener")
 		log.Debug("starting frame listener")
 
 		select {
@@ -911,7 +910,7 @@ func (tc *Client) DeclareStream(ctx context.Context, stream string, configuratio
 		return errNilContext
 	}
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("declareStream")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("declareStream")
 	log.Debug("starting declare stream", "stream", stream)
 
 	createResponse, err := tc.syncRequest(ctx, internal.NewCreateRequest(stream, configuration))
@@ -928,7 +927,7 @@ func (tc *Client) DeleteStream(ctx context.Context, stream string) error {
 		return errNilContext
 	}
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("deleteStream")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("deleteStream")
 	log.Debug("starting delete stream", "stream", stream)
 
 	deleteResponse, err := tc.syncRequest(ctx, internal.NewDeleteRequest(stream))
@@ -949,7 +948,7 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 		return errNilContext
 	}
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("declarePublisher")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("declarePublisher")
 	log.Debug("starting declare publisher", "publisherId", publisherId, "publisherReference", publisherReference, "stream", stream)
 
 	deleteResponse, err := tc.syncRequest(ctx, internal.NewDeclarePublisherRequest(publisherId, publisherReference, stream))
@@ -978,7 +977,7 @@ func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessage
 		return errNilContext
 	}
 
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("send")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("send")
 	logger.Debug("starting send", "publisherId", publisherId, "message-count", len(publishingMessages))
 
 	buff := new(bytes.Buffer)
@@ -1008,7 +1007,7 @@ func (tc *Client) SendSubEntryBatch(ctx context.Context, publisherId uint8,
 	if ctx == nil {
 		return errNilContext
 	}
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("SendSubEntryBatch")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("SendSubEntryBatch")
 	logger.Debug("starting send-sub-entry-batch", "publisherId", publisherId, "messageCount", len(messages))
 
 	buff := new(bytes.Buffer)
@@ -1050,7 +1049,7 @@ func (tc *Client) DeletePublisher(ctx context.Context, publisherId uint8) error 
 		return errNilContext
 	}
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("deletePublisher")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("deletePublisher")
 	log.Debug("starting delete publisher", "publisherId", publisherId)
 
 	deleteResponse, err := tc.syncRequest(ctx, internal.NewDeletePublisherRequest(publisherId))
@@ -1094,7 +1093,7 @@ func (tc *Client) Subscribe(
 		return errNilContext
 	}
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("subscribe")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("subscribe")
 	log.Debug("starting subscribe consumer",
 		"subscriptionId", subscriptionId,
 		"stream", stream,
@@ -1138,7 +1137,7 @@ func (tc *Client) Close(ctx context.Context) error {
 
 	tc.connectionStatus = constants.ConnectionClosing
 
-	log := loggerFromCtxOrDiscard(ctx).WithGroup("close")
+	log := LoggerFromCtxOrDiscard(ctx).WithGroup("close")
 	log.Debug("starting connection close")
 
 	response, err := tc.syncRequest(ctx, internal.NewCloseRequest(constants.ResponseCodeOK, "kthxbye"))
@@ -1165,7 +1164,7 @@ func (tc *Client) ExchangeCommandVersions(ctx context.Context) error {
 		return errNilContext
 	}
 
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("exchangeCommandVersions")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("exchangeCommandVersions")
 	logger.Debug("starting exchange command versions")
 	response, err := tc.syncRequest(ctx, internal.NewExchangeCommandVersionsRequest())
 	if err != nil {
@@ -1180,7 +1179,7 @@ func (tc *Client) Credit(ctx context.Context, subscriptionID uint8, credits uint
 	if ctx == nil {
 		return errNilContext
 	}
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("credit")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("credit")
 	logger.Debug("starting credit")
 
 	return tc.request(ctx, internal.NewCreditRequest(subscriptionID, credits))
@@ -1210,7 +1209,7 @@ func (tc *Client) MetadataQuery(ctx context.Context, stream string) (*MetadataRe
 		return nil, errNilContext
 	}
 
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("metadataQuery")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("metadataQuery")
 	logger.Debug("starting metadata query")
 	response, err := tc.syncRequest(ctx, internal.NewMetadataQuery(stream))
 	if err != nil {
@@ -1313,7 +1312,7 @@ func (tc *Client) StoreOffset(ctx context.Context, reference, stream string, off
 	if ctx == nil {
 		return errNilContext
 	}
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("StoreOffset")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("StoreOffset")
 	logger.Debug("starting store offset", "reference", reference, "stream", stream)
 	err := tc.request(ctx, internal.NewStoreOffsetRequest(reference, stream, offset))
 	if err != nil {
@@ -1331,7 +1330,7 @@ func (tc *Client) QueryOffset(ctx context.Context, reference string, stream stri
 	if ctx == nil {
 		return 0, errNilContext
 	}
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("queryOffset")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("queryOffset")
 	logger.Debug("starting query offset", "reference", reference, "stream", stream)
 	response, err := tc.syncRequest(ctx, internal.NewQueryOffsetRequest(reference, stream))
 	if err != nil {
@@ -1351,7 +1350,7 @@ func (tc *Client) StreamStats(ctx context.Context, stream string) (map[string]in
 	if ctx == nil {
 		return nil, errNilContext
 	}
-	logger := loggerFromCtxOrDiscard(ctx).WithGroup("StreamStats")
+	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("StreamStats")
 	logger.Debug("starting stream stats", "stream", stream)
 	streamStatsResponse, err := tc.syncRequest(ctx, internal.NewStreamStatsRequest(stream))
 	if err != nil {
