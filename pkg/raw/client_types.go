@@ -17,7 +17,6 @@ var (
 	errNilContext          = errors.New("context cannot be nil")
 	errNilConfig           = errors.New("RabbitmqConfiguration cannot be nil")
 	errUnknownSubscription = errors.New("unknown subscription ID")
-	errNoMoreBrokersToTry  = errors.New("failed to dial RabbitMQ: no more brokers to try")
 	errWriteShort          = errors.New("wrote less bytes than expected")
 	ErrConnectionClosed    = errors.New("connection closed by peer. EOF error")
 )
