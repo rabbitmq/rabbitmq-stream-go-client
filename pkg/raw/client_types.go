@@ -92,8 +92,6 @@ func (r *ClientConfiguration) SetConnectionName(connectionName string) {
 }
 
 func NewClientConfiguration(rabbitmqUrl string) (*ClientConfiguration, error) {
-	// TODO(Zerpet): we may not need to have a slice of brokers here
-	//   the smart layer will take care of contacting different brokers
 	builder := &ClientConfiguration{
 		rabbitmqBroker:     broker{},
 		clientHeartbeat:    60,

@@ -3,11 +3,14 @@ package stream_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/golang/mock/gomock"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/stream"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
+	"golang.org/x/exp/slog"
 	"reflect"
 	"sync"
 	"time"
@@ -19,6 +22,7 @@ var _ = Describe("Environment", func() {
 		mockCtrl      *gomock.Controller
 		mockRawClient *MockRawClient
 		environment   *stream.Environment
+		rootCtx       = context.Background()
 	)
 
 	BeforeEach(func() {
@@ -33,7 +37,10 @@ var _ = Describe("Environment", func() {
 		environment, err = stream.NewEnvironment(c)
 		Expect(err).ToNot(HaveOccurred())
 
-		environment.SetLocatorRawClient("fakehost:1234", mockRawClient)
+		environment.AppendLocatorRawClient(mockRawClient)
+		environment.SetBackoffPolicy(func(_ int) time.Duration {
+			return time.Millisecond * 10
+		})
 	})
 
 	Context("create stream", func() {
@@ -90,18 +97,55 @@ var _ = Describe("Environment", func() {
 					gomock.AssignableToTypeOf("string"),
 					gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 				).
+				AnyTimes().
 				Return(errors.New("something went wrong"))
+			b := gbytes.NewBuffer()
+			logger := slog.New(slog.NewTextHandler(b))
+			ctx2 := raw.NewContextWithLogger(context.Background(), *logger)
 
 			// act
-			err := environment.CreateStream(context.Background(), "a-stream", stream.CreateStreamOptions{})
+			err := environment.CreateStream(ctx2, "a-stream", stream.CreateStreamOptions{})
 
 			// assert
-			Expect(err).To(MatchError("something went wrong"))
+			Expect(err).To(MatchError("locator operation failed: something went wrong"))
+			for i := 0; i < 3; i++ {
+				Eventually(b).Within(time.Second * 2).Should(gbytes.Say("error creating stream"))
+				Eventually(b).Within(time.Second * 2).Should(gbytes.Say(`error="something went wrong"`))
+				Eventually(b).Within(time.Second * 2).Should(gbytes.Say("name=a-stream"))
+				Eventually(b).Within(time.Second * 2).Should(gbytes.Say(fmt.Sprintf("attempt=%d", i)))
+			}
 		})
 
+		When("the create stream operation errors", func() {
+			It("retries", func() {
+				// setup
+				var ctx = reflect.TypeOf((*context.Context)(nil)).Elem()
+				mockRawClient.EXPECT().
+					DeclareStream(
+						gomock.AssignableToTypeOf(ctx),
+						gomock.AssignableToTypeOf("string"),
+						gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
+					).
+					Return(errors.New("something went wrong")).
+					Times(2)
+				// it returns nil on the 3rd attempt
+				mockRawClient.EXPECT().
+					DeclareStream(
+						gomock.AssignableToTypeOf(ctx),
+						gomock.AssignableToTypeOf("string"),
+						gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
+					)
+
+				// act
+				err := environment.CreateStream(rootCtx, "retries-test", stream.CreateStreamOptions{})
+
+				// assert
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
 	})
 
-	When("multiple routines use the environment",  func() {
+	When("multiple routines use the environment", func() {
 		// FIXME(Zerpet): I'm not sure how reliable is this test
 		//   it does not trigger the race detector. It makes some
 		//   sense that it doesn't, since all access is read-only
