@@ -251,6 +251,10 @@ func (c *Client) authenticate(user string, password string) error {
 			break
 		}
 	}
+	if saslMechanism == "" {
+		return fmt.Errorf("no matching mechanism found")
+	}
+
 	response := unicodeNull + user + unicodeNull + password
 	saslResponse := []byte(response)
 	return c.sendSaslAuthenticate(saslMechanism, saslResponse)
