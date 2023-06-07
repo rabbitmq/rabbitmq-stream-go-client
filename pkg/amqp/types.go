@@ -36,7 +36,7 @@ import (
 type amqpType uint8
 type ProtoID uint8
 
-// Mechanism codes
+// Type codes
 const (
 	typeCodeNull amqpType = 0x40
 

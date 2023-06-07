@@ -42,10 +42,10 @@ type unmarshaler interface {
 //
 // If i implements unmarshaler, i.unmarshal() will be called.
 //
-// Pointers to primitive types will be decoded via the appropriate read[Mechanism] function.
+// Pointers to primitive types will be decoded via the appropriate read[type] function.
 //
-// If i is a pointer to a pointer (**Mechanism), it will be dereferenced and a new instance
-// of (*Mechanism) is allocated via reflection.
+// If it is a pointer to a pointer (**Type), it will be dereferenced and a new instance
+// of (*Type) is allocated via reflection.
 //
 // Common map types (map[string]string, map[Symbol]interface{}, and
 // map[interface{}]interface{}), will be decoded via conversion to the mapStringAny,
