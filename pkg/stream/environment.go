@@ -337,7 +337,7 @@ func (envOptions *EnvironmentOptions) SetVHost(vhost string) *EnvironmentOptions
 	return envOptions
 }
 
-func (envOptions *EnvironmentOptions) SetSaslMechanisms(value string) *EnvironmentOptions {
+func (envOptions *EnvironmentOptions) SetSaslConfiguration(value string) *EnvironmentOptions {
 	if envOptions.SaslConfiguration == nil {
 		envOptions.SaslConfiguration = newSaslConfigurationDefault()
 	}

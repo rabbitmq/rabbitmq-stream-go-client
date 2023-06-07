@@ -178,7 +178,7 @@ env, err := stream.NewEnvironment(
 
 ### Sasl Mechanisms
 
-To configure SASL you need to set the `SaslMechanism` parameter `Environment.SetSaslMechanisms`:
+To configure SASL you need to set the `SaslMechanism` parameter `Environment.SetSaslConfiguration`:
 ```golang
 cfg := new(tls.Config)
 cfg.ServerName = "my_server_name"
@@ -195,7 +195,7 @@ cfg.Certificates = append(cfg.Certificates, cert)
 env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().
 	SetUri("rabbitmq-stream+tls://my_server_name:5551/").
 	IsTLS(true).
-	SetSaslMechanisms(stream..SaslConfigurationExternal). // SASL EXTERNAL
+	SetSaslConfiguration(stream.SaslConfigurationExternal). // SASL EXTERNAL
 	SetTLSConfig(cfg))
 ```
 

@@ -343,9 +343,9 @@ var _ = Describe("Environment test", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("Fail to set SetSaslMechanisms", func() {
+	It("Fail to set SetSaslConfiguration", func() {
 		_, err := NewEnvironment(NewEnvironmentOptions().
-			SetSaslMechanisms("IS_NOT_VALID").
+			SetSaslConfiguration("IS_NOT_VALID").
 			IsTLS(true))
 		Expect(err).To(HaveOccurred())
 	})
