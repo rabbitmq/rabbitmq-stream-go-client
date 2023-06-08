@@ -8,14 +8,57 @@ import (
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/stream"
 	"golang.org/x/exp/slog"
 	"os"
 	"time"
 )
 
 func main() {
+	runSmartClient()
+	runRawClient()
+}
+
+func runSmartClient() {
+	h := slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}
+	log := slog.New(h.NewTextHandler(os.Stdout))
+
+	ctx := raw.NewContextWithLogger(context.Background(), *log)
+
+	c := stream.NewEnvironmentConfiguration(
+		stream.WithLazyInitialization(false),
+		stream.WithUri("rabbitmq-stream://localhost:5552"),
+	)
+
+	env, err := stream.NewEnvironment(ctx, c)
+	if err != nil {
+		panic(err)
+	}
+	//defer env.Close()
+
+	err = env.CreateStream(ctx, "my-stream", stream.StreamOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	sc := bufio.NewScanner(os.Stdin)
+	fmt.Print("Close the connection and press enter")
+	sc.Scan()
+
+	err = env.CreateStream(ctx, "other-stream", stream.StreamOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Print("Life good! Press enter to exit")
+	sc.Scan()
+}
+
+func runRawClient() {
 	log := slog.New(slog.NewTextHandler(os.Stdout))
-	stream := "test-stream"
+	streamName := "test-streamName"
 	config, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost:5552")
 	if err != nil {
 		panic(err)
@@ -39,9 +82,9 @@ func main() {
 		}
 	}()
 
-	err = streamClient.DeclareStream(ctx, stream, map[string]string{"name": "test-stream"})
-	if err != nil && err.Error() != "stream already exists" {
-		log.Error("error in declaring stream", "error", err)
+	err = streamClient.DeclareStream(ctx, streamName, map[string]string{"name": "test-streamName"})
+	if err != nil && err.Error() != "streamName already exists" {
+		log.Error("error in declaring streamName", "error", err)
 		panic(err)
 	}
 
@@ -73,7 +116,7 @@ func main() {
 		}
 	}()
 
-	err = streamClient.DeclarePublisher(ctx, 1, "test-publisher", stream)
+	err = streamClient.DeclarePublisher(ctx, 1, "test-publisher", streamName)
 	if err != nil {
 		log.Error("error in declaring publisher", "error", err)
 		panic(err)
@@ -104,7 +147,7 @@ func main() {
 	/// BATCH SEND
 	fmt.Println("Start sending BATCH messages")
 
-	err = streamClient.DeclarePublisher(ctx, 2, "test-publisher-subEntry", stream)
+	err = streamClient.DeclarePublisher(ctx, 2, "test-publisher-subEntry", streamName)
 	if err != nil {
 		log.Error("error in declaring publisher", "error", err)
 		panic(err)
@@ -157,12 +200,12 @@ func main() {
 		}
 	}()
 
-	err = streamClient.Subscribe(ctx, stream, constants.OffsetTypeFirst, 1, 10, map[string]string{"name": "my_consumer"}, 10)
+	err = streamClient.Subscribe(ctx, streamName, constants.OffsetTypeFirst, 1, 10, map[string]string{"name": "my_consumer"}, 10)
 	if err != nil {
 		panic(err)
 	}
 
-	offset, err := streamClient.QueryOffset(ctx, "my_consumer", stream)
+	offset, err := streamClient.QueryOffset(ctx, "my_consumer", streamName)
 	if err != nil {
 		log.Error("error querying offset", "error", err)
 	} else {
@@ -178,7 +221,7 @@ func main() {
 		panic(err)
 	}
 
-	err = streamClient.DeleteStream(ctx, stream)
+	err = streamClient.DeleteStream(ctx, streamName)
 	if err != nil {
 		return
 	}

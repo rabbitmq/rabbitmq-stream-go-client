@@ -3,14 +3,11 @@ package stream_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/golang/mock/gomock"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/stream"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
-	"golang.org/x/exp/slog"
 	"reflect"
 	"sync"
 	"time"
@@ -20,21 +17,22 @@ var _ = Describe("Environment", func() {
 
 	var (
 		mockCtrl      *gomock.Controller
-		mockRawClient *MockRawClient
+		mockRawClient *stream.MockRawClient
 		environment   *stream.Environment
 		rootCtx       = context.Background()
+		ctxType       = reflect.TypeOf((*context.Context)(nil)).Elem()
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		mockRawClient = NewMockRawClient(mockCtrl)
+		mockRawClient = stream.NewMockRawClient(mockCtrl)
 
 		c := stream.NewEnvironmentConfiguration(
 			stream.WithLazyInitialization(true),
 			stream.WithUri("fakehost:1234"),
 		)
 		var err error
-		environment, err = stream.NewEnvironment(c)
+		environment, err = stream.NewEnvironment(rootCtx, c)
 		Expect(err).ToNot(HaveOccurred())
 
 		environment.AppendLocatorRawClient(mockRawClient)
@@ -46,9 +44,8 @@ var _ = Describe("Environment", func() {
 	Context("create stream", func() {
 		It("creates a stream", func() {
 			// setup
-			var ctx = reflect.TypeOf((*context.Context)(nil)).Elem()
 			mockRawClient.EXPECT().DeclareStream(
-				gomock.AssignableToTypeOf(ctx),
+				gomock.AssignableToTypeOf(ctxType),
 				gomock.Eq("my-stream"),
 				gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 			)
@@ -62,9 +59,8 @@ var _ = Describe("Environment", func() {
 
 		It("creates a stream with given parameters", func() {
 			// setup
-			var ctx = reflect.TypeOf((*context.Context)(nil)).Elem()
 			mockRawClient.EXPECT().DeclareStream(
-				gomock.AssignableToTypeOf(ctx),
+				gomock.AssignableToTypeOf(ctxType),
 				gomock.Eq("my-stream-with-options"),
 				gomock.Eq(raw.StreamConfiguration{
 					"x-max-age":                       "120s",
@@ -90,39 +86,29 @@ var _ = Describe("Environment", func() {
 
 		It("bubbles up any error", func() {
 			// setup
-			var ctx = reflect.TypeOf((*context.Context)(nil)).Elem()
 			mockRawClient.EXPECT().
 				DeclareStream(
-					gomock.AssignableToTypeOf(ctx),
+					gomock.AssignableToTypeOf(ctxType),
 					gomock.AssignableToTypeOf("string"),
 					gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 				).
 				AnyTimes().
 				Return(errors.New("something went wrong"))
-			b := gbytes.NewBuffer()
-			logger := slog.New(slog.NewTextHandler(b))
-			ctx2 := raw.NewContextWithLogger(context.Background(), *logger)
 
 			// act
-			err := environment.CreateStream(ctx2, "a-stream", stream.CreateStreamOptions{})
+			err := environment.CreateStream(rootCtx, "a-stream", stream.CreateStreamOptions{})
 
 			// assert
 			Expect(err).To(MatchError("locator operation failed: something went wrong"))
-			for i := 0; i < 3; i++ {
-				Eventually(b).Within(time.Second * 2).Should(gbytes.Say("error creating stream"))
-				Eventually(b).Within(time.Second * 2).Should(gbytes.Say(`error="something went wrong"`))
-				Eventually(b).Within(time.Second * 2).Should(gbytes.Say("name=a-stream"))
-				Eventually(b).Within(time.Second * 2).Should(gbytes.Say(fmt.Sprintf("attempt=%d", i)))
-			}
 		})
 
 		When("the create stream operation errors", func() {
+			// TODO: retries are tested at locator level. Do we need this test?
 			It("retries", func() {
 				// setup
-				var ctx = reflect.TypeOf((*context.Context)(nil)).Elem()
 				mockRawClient.EXPECT().
 					DeclareStream(
-						gomock.AssignableToTypeOf(ctx),
+						gomock.AssignableToTypeOf(ctxType),
 						gomock.AssignableToTypeOf("string"),
 						gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 					).
@@ -131,7 +117,7 @@ var _ = Describe("Environment", func() {
 				// it returns nil on the 3rd attempt
 				mockRawClient.EXPECT().
 					DeclareStream(
-						gomock.AssignableToTypeOf(ctx),
+						gomock.AssignableToTypeOf(ctxType),
 						gomock.AssignableToTypeOf("string"),
 						gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 					)
@@ -153,7 +139,7 @@ var _ = Describe("Environment", func() {
 			// setup
 			mockRawClient.EXPECT().
 				DeclareStream(
-					gomock.AssignableToTypeOf(ctx),
+					gomock.AssignableToTypeOf(ctxType),
 					gomock.AssignableToTypeOf("string"),
 					gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 				).

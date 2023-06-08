@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
-	"golang.org/x/exp/slog"
 	"math/rand"
 	"time"
 )
@@ -20,7 +19,7 @@ type Environment struct {
 	backOffPolicy func(int) time.Duration
 }
 
-func NewEnvironment(configuration EnvironmentConfiguration) (*Environment, error) {
+func NewEnvironment(ctx context.Context, configuration EnvironmentConfiguration) (*Environment, error) {
 	e := &Environment{
 		configuration: configuration,
 		locators:      make([]*locator, 0, len(configuration.Uris)),
@@ -31,13 +30,15 @@ func NewEnvironment(configuration EnvironmentConfiguration) (*Environment, error
 	}
 
 	if !configuration.LazyInitialization {
-		return e, e.start()
+		return e, e.start(ctx)
 	}
 
 	return e, nil
 }
 
-func (e *Environment) start() error {
+func (e *Environment) start(ctx context.Context) error {
+	logger := raw.LoggerFromCtxOrDiscard(ctx)
+
 	for i, uri := range e.configuration.Uris {
 		c, err := raw.NewClientConfiguration(uri)
 		if err != nil {
@@ -46,18 +47,21 @@ func (e *Environment) start() error {
 
 		c.SetConnectionName(fmt.Sprintf("%s-locator-%d", e.configuration.Id, i))
 
-		l := newLocator(*c)
-		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		l := newLocator(*c, logger)
+		// if ctx has a lower timeout, it will be used instead of DefaultTimeout
+		// https://pkg.go.dev/context#WithDeadline
+		ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 		err = l.connect(ctx)
 		cancel()
 
+		// TODO: add retry logic
 		if err != nil {
 			continue
 		}
 
 		e.locators = append(e.locators, l)
 	}
-
+	// FIXME: return last error
 	return nil
 }
 
@@ -70,9 +74,6 @@ func (e *Environment) pickLocator(n int) *locator {
 
 // CreateStream with name and given options.
 func (e *Environment) CreateStream(ctx context.Context, name string, opts StreamOptions) error {
-	logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("stream.environment")
-
-	var executed bool
 	var lastError error
 
 	// TODO:💡try to make the attempts generic, so that we pass a function and it is executed
@@ -80,30 +81,17 @@ func (e *Environment) CreateStream(ctx context.Context, name string, opts Stream
 	rn := rand.Intn(100)
 	n := len(e.locators)
 	for i := 0; i < n; i++ {
-		for attempt, maxAttempt := 0, 3; attempt < maxAttempt; {
-			// context cancellation is checked in the raw layer
-			lastError = e.pickLocator((i+rn)%n).
-				Client.DeclareStream(ctx, name, streamOptionsToRawStreamConfiguration(opts))
-			if lastError == nil {
-				executed = true
-				break
-			}
+		ctxCreate, cancel := context.WithTimeout(ctx, DefaultTimeout)
+		// context cancellation is checked in the raw layer
+		l := e.pickLocator((i + rn) % n)
+		lastError = l.createStream(ctxCreate, name, streamOptionsToRawStreamConfiguration(opts))
+		cancel()
 
-			logger.Error("error creating stream", slog.Any("error", lastError), slog.String("name", name), slog.Int("attempt", attempt))
-
-			attempt++
-
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(e.backOffPolicy(attempt)):
-			}
-		}
-
-		if executed {
-			return nil
+		// FIXME: check whether error is recoverable e.g. Stream already exists is not recoverable
+		if lastError == nil {
+			return lastError
 		}
 	}
-	// This should never happen
+
 	return fmt.Errorf("locator operation failed: %w", lastError)
 }
