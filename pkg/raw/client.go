@@ -222,6 +222,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			log.Info("context cancelled", "reason", ctx.Err())
 			return ctx.Err()
 		default:
+			// TODO: use a pool of headers to avoid allocation on each iteration
 			var header = new(internal.Header)
 			// TODO: set an I/O deadline to avoid deadlock on I/O
 			// 		renew the deadline at the beginning of each iteration
@@ -654,6 +655,11 @@ func (tc *Client) shutdown(closeConnection bool) error {
 	if tc.chunkCh != nil {
 		close(tc.chunkCh)
 		tc.chunkCh = nil
+	}
+
+	if tc.socketClosedCh != nil {
+		close(tc.socketClosedCh)
+		tc.socketClosedCh = nil
 	}
 
 	// if the caller is handleIncoming EOF error closeConnection is false,

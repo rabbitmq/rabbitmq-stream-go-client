@@ -111,6 +111,7 @@ func NewClientConfiguration(rabbitmqUrl string) (*ClientConfiguration, error) {
 	return builder, nil
 }
 
+// TODO: Go docs
 type StreamConfiguration = constants.StreamConfiguration
 
 type PublishConfirm = internal.PublishConfirmResponse
