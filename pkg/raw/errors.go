@@ -32,7 +32,7 @@ type DeclareStreamError struct {
 }
 
 func (d *DeclareStreamError) Error() string {
-	return fmt.Sprintf("error delaring stream: %s, configuration: %v, error: %s",
+	return fmt.Sprintf("error declaring stream: %s, configuration: %v, error: %s",
 		d.stream,
 		d.configuration,
 		d.err,
