@@ -19,7 +19,7 @@ type locator struct {
 	log                  *slog.Logger
 	shutdownNotification chan struct{}
 	rawClientConf        raw.ClientConfiguration
-	Client               raw.Clienter
+	client               raw.Clienter
 	isSet                bool
 	clientClose          <-chan error
 	backOffPolicy        func(int) time.Duration
@@ -39,7 +39,7 @@ func newLocator(c raw.ClientConfiguration, logger *slog.Logger) *locator {
 		backOffPolicy: func(attempt int) time.Duration {
 			return time.Second * time.Duration(attempt<<1)
 		},
-		Client:               nil,
+		client:               nil,
 		isSet:                false,
 		addressResolver:      nil,
 		shutdownNotification: make(chan struct{}),
@@ -54,7 +54,7 @@ func (l *locator) connect(ctx context.Context) error {
 		return err
 	}
 
-	l.Client = client
+	l.client = client
 	l.isSet = true
 
 	l.clientClose = client.NotifyConnectionClosed()
@@ -98,7 +98,7 @@ func (l *locator) shutdownHandler() {
 				if e != nil && i == 99 {
 					log.Debug("maximum number of attempts trying to reconnect locator, giving up", slog.Any("error", e), slog.Int("attempt", i))
 					l.isSet = false
-					l.Client = nil
+					l.client = nil
 					l.Unlock()
 					return
 				}
@@ -109,7 +109,7 @@ func (l *locator) shutdownHandler() {
 					continue
 				}
 
-				l.Client = c
+				l.client = c
 				l.clientClose = c.NotifyConnectionClosed()
 
 				log.Debug("locator reconnected")
@@ -122,36 +122,44 @@ func (l *locator) shutdownHandler() {
 	}
 }
 
-func (l *locator) createStream(ctx context.Context, name string, configuration raw.StreamConfiguration) error {
-	l.log.Debug("starting locator operation 'create stream'", slog.String("streamName", name))
+// locatorOperationFn type represents a "generic" operation on a locator. The
+// implementing function must always return an error, or nil, as last element of
+// the result slice. Most implementations are likely to return a slice with a
+// single nil-error element. Implementations that return a result and an error, like
+// e.g. query metadata, must return a result-element first, and an error (or nil) as
+// last element.
+type locatorOperationFn func(*locator, ...any) (result []any)
 
-	if err := l.maybeInitializeLocator(); err != nil {
-		return err
-	}
+func (l *locator) operationCreateStream(args ...any) []any {
+	ctx := args[0].(context.Context)
+	name := args[1].(string)
+	configuration := args[2].(raw.StreamConfiguration)
+	resultErr := l.client.DeclareStream(ctx, name, configuration)
+	return []any{resultErr}
+}
+
+func (l *locator) locatorOperation(op locatorOperationFn, args ...any) (result []any) {
+	l.log.Debug("starting locator operation", slog.Any("op", op), slog.Any("args", args))
 
 	var lastErr error
 	for attempt := 0; attempt < maxAttempt; {
-		lastErr = l.Client.DeclareStream(ctx, name, configuration)
-		if lastErr == nil {
-			l.log.Debug("locator operation 'create stream' succeed", slog.String("streamName", name))
+		result = op(l, args...)
+
+		// last element of result is error type
+		if result[len(result)-1] == nil {
+			lastErr = nil
+			l.log.Debug("locator operation succeed", slog.Any("operation", op), slog.Any("args", args))
 			break
 		}
 
-		if errors.Is(lastErr, raw.ErrStreamAlreadyExists) {
-			l.log.Debug("locator operation 'create stream' failed with non-retryable error", slog.String("streamName", name))
-			return lastErr
+		lastErr = result[len(result)-1].(error)
+		if isNonRetryableError(lastErr) || errors.Is(lastErr, context.DeadlineExceeded) {
+			l.log.Debug("locator operation failed with non-retryable error", slog.Any("error", lastErr))
+			return result
 		}
 
-		l.log.Debug("error in locator operation 'create stream'", slog.Any("error", lastErr), slog.Int("attempt", attempt))
-
+		l.log.Debug("error in locator operation", slog.Any("error", lastErr), slog.Int("attempt", attempt))
 		attempt++
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(l.backOffPolicy(attempt)):
-		}
 	}
-
-	return lastErr
+	return result
 }

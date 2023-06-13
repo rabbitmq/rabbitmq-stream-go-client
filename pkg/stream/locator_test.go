@@ -40,7 +40,7 @@ var _ = Describe("Locator", func() {
 			l = &locator{
 				log:                  logger,
 				shutdownNotification: make(chan struct{}),
-				Client:               mockClient,
+				client:               mockClient,
 				isSet:                true,
 				backOffPolicy: func(_ int) time.Duration {
 					return time.Millisecond * 10
@@ -58,7 +58,8 @@ var _ = Describe("Locator", func() {
 				)
 
 			// act
-			err := l.createStream(rootCtx, "my-stream", raw.StreamConfiguration{})
+			r := l.locatorOperation((*locator).operationCreateStream, rootCtx, "my-stream", raw.StreamConfiguration{})
+			err := r[0]
 
 			// assert
 			Expect(err).ToNot(HaveOccurred())
@@ -76,7 +77,8 @@ var _ = Describe("Locator", func() {
 				AnyTimes()
 
 			// act
-			err := l.createStream(rootCtx, "oopsie", raw.StreamConfiguration{})
+			r := l.locatorOperation((*locator).operationCreateStream, rootCtx, "oopsie", raw.StreamConfiguration{})
+			err := r[0]
 
 			// assert
 			Expect(err).To(MatchError("something went wrong"))
@@ -101,7 +103,8 @@ var _ = Describe("Locator", func() {
 					)
 
 				// act
-				err := l.createStream(rootCtx, "retryable-create", raw.StreamConfiguration{})
+				r := l.locatorOperation((*locator).operationCreateStream, rootCtx, "retryable-create", raw.StreamConfiguration{})
+				err := r[0]
 
 				// assert
 				Expect(err).ToNot(HaveOccurred())

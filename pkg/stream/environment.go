@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
+	"golang.org/x/exp/slog"
 	"math/rand"
 	"time"
 )
@@ -75,25 +76,35 @@ func (e *Environment) pickLocator(n int) *locator {
 
 // CreateStream with name and given options.
 func (e *Environment) CreateStream(ctx context.Context, name string, opts StreamOptions) error {
-	var lastError error
+	logger := raw.LoggerFromCtxOrDiscard(ctx)
 
-	// TODO:💡try to make the attempts generic, so that we pass a function and it is executed
-	// 	with N attempts. The challenge might be passing the parameters
 	rn := rand.Intn(100)
 	n := len(e.locators)
-	for i := 0; i < n; i++ {
-		ctxCreate, cancel := context.WithTimeout(ctx, DefaultTimeout)
-		// context cancellation is checked in the raw layer
-		l := e.pickLocator((i + rn) % n)
-		lastError = l.createStream(ctxCreate, name, streamOptionsToRawStreamConfiguration(opts))
-		cancel()
 
-		if lastError == nil {
-			return lastError
+	var lastError error
+	for i := 0; i < n; i++ {
+		l := e.pickLocator((i + rn) % n)
+
+		// FIXME(Zerpet): sometimes, the reconnection logic does not work. I suspect we don't always receive a closed notification
+		if err := l.maybeInitializeLocator(); err != nil {
+			logger.Error("locator not available", slog.Any("error", err))
+			lastError = err
+			continue
 		}
 
+		ctxCreate, cancel := context.WithTimeout(ctx, DefaultTimeout)
+		// context cancellation is checked in the raw layer
+		res := l.locatorOperation((*locator).operationCreateStream, ctxCreate, name, streamOptionsToRawStreamConfiguration(opts))
+		cancel()
+
+		// check for nil first, otherwise type assertion will panic
+		if res[0] == nil {
+			return nil
+		}
+		lastError = res[0].(error)
+
 		// give up on non-retryable errors
-		if errors.Is(lastError, raw.ErrStreamAlreadyExists) {
+		if isNonRetryableError(lastError) || errors.Is(lastError, context.DeadlineExceeded) {
 			return lastError
 		}
 	}

@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 )
@@ -26,4 +27,25 @@ func streamOptionsToRawStreamConfiguration(options StreamOptions) raw.StreamConf
 	}
 
 	return c
+}
+
+func isNonRetryableError(err error) bool {
+	return errors.Is(err, raw.ErrStreamAlreadyExists) ||
+		errors.Is(err, raw.ErrSubscriptionIdAlreadyExists) ||
+		errors.Is(err, raw.ErrSubscriptionIdDoesNotExist) ||
+		errors.Is(err, raw.ErrStreamAlreadyExists) ||
+		errors.Is(err, raw.ErrStreamNotAvailable) ||
+		errors.Is(err, raw.ErrSASLMechanismNotSupported) ||
+		errors.Is(err, raw.ErrAuthFailure) ||
+		errors.Is(err, raw.ErrSASLError) ||
+		errors.Is(err, raw.ErrSASLChallenge) ||
+		errors.Is(err, raw.ErrSASLAuthFailureLoopback) ||
+		errors.Is(err, raw.ErrVirtualHostAccessFailure) ||
+		errors.Is(err, raw.ErrUnknownFrame) ||
+		errors.Is(err, raw.ErrFrameTooLarge) ||
+		errors.Is(err, raw.ErrInternalError) ||
+		errors.Is(err, raw.ErrAccessRefused) ||
+		errors.Is(err, raw.ErrPreconditionFailed) ||
+		errors.Is(err, raw.ErrPublisherDoesNotExist) ||
+		errors.Is(err, raw.ErrNoOffset)
 }

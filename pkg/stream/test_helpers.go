@@ -30,7 +30,7 @@ func (d discardHandler) WithGroup(string) slog.Handler {
 
 func (e *Environment) AppendLocatorRawClient(c raw.Clienter) {
 	e.locators = append(e.locators, &locator{
-		Client: c,
+		client: c,
 		isSet:  true,
 		log:    slog.New(&discardHandler{}),
 		backOffPolicy: func(int) time.Duration {
