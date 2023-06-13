@@ -128,6 +128,23 @@ var _ = Describe("Environment", func() {
 				// assert
 				Expect(err).ToNot(HaveOccurred())
 			})
+
+			It("gives up on non-retryable errors", func() {
+				// setup
+				mockRawClient.EXPECT().
+					DeclareStream(
+						gomock.AssignableToTypeOf(ctxType),
+						gomock.AssignableToTypeOf("string"),
+						gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
+					).
+					Return(raw.ErrStreamAlreadyExists)
+
+				// act
+				err := environment.CreateStream(rootCtx, "non-retryable-test", stream.CreateStreamOptions{})
+
+				// assert
+				Expect(err).To(MatchError("stream already exists"))
+			})
 		})
 	})
 

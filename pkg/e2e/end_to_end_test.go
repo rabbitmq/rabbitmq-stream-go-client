@@ -65,7 +65,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		stopWatch := throughputExp.NewStopwatch()
 
 		By("creating a stream")
-		Expect(streamClient.DeclareStream(itCtx, stream, constants.StreamConfiguration{})).To(Succeed())
+		Expect(streamClient.DeclareStream(itCtx, stream, raw.StreamConfiguration{})).To(Succeed())
 		stopWatch.Record("DeclareStream").Reset()
 
 		By("declaring a publisher")
@@ -157,7 +157,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		Expect(streamClient.IsOpen()).To(BeTrue(), "expected stream client to be open")
 		Expect(streamClient.ExchangeCommandVersions(ctx)).To(Succeed())
 
-		Expect(streamClient.DeclareStream(itCtx, stream, constants.StreamConfiguration{})).To(Succeed())
+		Expect(streamClient.DeclareStream(itCtx, stream, raw.StreamConfiguration{})).To(Succeed())
 
 		const publisherId = 2
 		Expect(
@@ -279,7 +279,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 	}, SpecTimeout(20*time.Second))
 
 	When("the dial context is cancelled", Label("behaviour"), func() {
-		It("works normally",  func(ctx SpecContext) {
+		It("works normally", func(ctx SpecContext) {
 			dialCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
 

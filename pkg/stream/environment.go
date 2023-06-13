@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"math/rand"
@@ -87,8 +88,12 @@ func (e *Environment) CreateStream(ctx context.Context, name string, opts Stream
 		lastError = l.createStream(ctxCreate, name, streamOptionsToRawStreamConfiguration(opts))
 		cancel()
 
-		// FIXME: check whether error is recoverable e.g. Stream already exists is not recoverable
 		if lastError == nil {
+			return lastError
+		}
+
+		// give up on non-retryable errors
+		if errors.Is(lastError, raw.ErrStreamAlreadyExists) {
 			return lastError
 		}
 	}

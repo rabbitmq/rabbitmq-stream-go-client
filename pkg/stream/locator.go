@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"golang.org/x/exp/slog"
 	"net"
@@ -134,6 +135,11 @@ func (l *locator) createStream(ctx context.Context, name string, configuration r
 		if lastErr == nil {
 			l.log.Debug("locator operation 'create stream' succeed", slog.String("streamName", name))
 			break
+		}
+
+		if errors.Is(lastErr, raw.ErrStreamAlreadyExists) {
+			l.log.Debug("locator operation 'create stream' failed with non-retryable error", slog.String("streamName", name))
+			return lastErr
 		}
 
 		l.log.Debug("error in locator operation 'create stream'", slog.Any("error", lastErr), slog.Int("attempt", attempt))

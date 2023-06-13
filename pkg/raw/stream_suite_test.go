@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"golang.org/x/exp/slog"
 	"io"
 	"net"
@@ -13,8 +14,6 @@ import (
 	"time"
 
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -261,7 +260,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQConnectionClose(ctx context.Context) 
 	expectOffset1(rw.Flush()).To(Succeed())
 }
 
-func (rmq *fakeRabbitMQServer) fakeRabbitMQDeclareStream(ctx context.Context, name string, args constants.StreamConfiguration) {
+func (rmq *fakeRabbitMQServer) fakeRabbitMQDeclareStream(ctx context.Context, name string, args raw.StreamConfiguration) {
 	defer GinkgoRecover()
 	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
 		To(Succeed())
@@ -514,7 +513,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQNewConsumer(
 	offsetType uint16,
 	offset uint64,
 	credit uint16,
-	properties constants.SubscribeProperties,
+	properties raw.SubscribeProperties,
 ) {
 	defer GinkgoRecover()
 

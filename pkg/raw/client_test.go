@@ -146,9 +146,9 @@ var _ = Describe("Client", func() {
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		go streamClient.(*raw.Client).StartFrameListener(itCtx)
 
-		go fakeRabbitMQ.fakeRabbitMQDeclareStream(newContextWithResponseCode(itCtx, 0x0001), "test-stream", constants.StreamConfiguration{"some-key": "some-value"})
+		go fakeRabbitMQ.fakeRabbitMQDeclareStream(newContextWithResponseCode(itCtx, 0x0001), "test-stream", raw.StreamConfiguration{"some-key": "some-value"})
 
-		Expect(streamClient.DeclareStream(itCtx, "test-stream", constants.StreamConfiguration{"some-key": "some-value"})).To(Succeed())
+		Expect(streamClient.DeclareStream(itCtx, "test-stream", raw.StreamConfiguration{"some-key": "some-value"})).To(Succeed())
 	})
 
 	Context("credits", func() {
@@ -259,7 +259,7 @@ var _ = Describe("Client", func() {
 
 		go fakeRabbitMQ.fakeRabbitMQNewConsumer(newContextWithResponseCode(itCtx, 0x0001), 12, "mystream",
 			constants.OffsetTypeOffset, 60_001, 5,
-			constants.SubscribeProperties{"some-config": "it-works"})
+			raw.SubscribeProperties{"some-config": "it-works"})
 
 		By("subscribing to a stream")
 		// must register channel before subscribing
@@ -270,7 +270,7 @@ var _ = Describe("Client", func() {
 			constants.OffsetTypeOffset,
 			12,
 			5,
-			constants.SubscribeProperties{"some-config": "it-works"},
+			raw.SubscribeProperties{"some-config": "it-works"},
 			60_001,
 		)).To(Succeed())
 
@@ -441,8 +441,8 @@ var _ = Describe("Client", func() {
 				streamClient := raw.NewClient(fakeClientConn, conf)
 				go streamClient.(*raw.Client).StartFrameListener(ctx2)
 
-				go fakeRabbitMQ.fakeRabbitMQDeclareStream(ctx2, "already-exists", constants.StreamConfiguration{})
-				Expect(streamClient.DeclareStream(ctx, "already-exists", constants.StreamConfiguration{})).To(MatchError("stream already exists"))
+				go fakeRabbitMQ.fakeRabbitMQDeclareStream(ctx2, "already-exists", raw.StreamConfiguration{})
+				Expect(streamClient.DeclareStream(ctx, "already-exists", raw.StreamConfiguration{})).To(MatchError("stream already exists"))
 			}, SpecTimeout(1500*time.Millisecond))
 		})
 
@@ -505,7 +505,7 @@ var _ = Describe("Client", func() {
 			Expect(client.Connect(ctx2)).To(MatchError("context canceled"))
 
 			By("not blocking in stream declaration")
-			Expect(errors.Unwrap(client.DeclareStream(ctx2, "not-created", constants.StreamConfiguration{}))).
+			Expect(errors.Unwrap(client.DeclareStream(ctx2, "not-created", raw.StreamConfiguration{}))).
 				To(MatchError("context canceled"))
 
 			By("not blocking on stream deletion")

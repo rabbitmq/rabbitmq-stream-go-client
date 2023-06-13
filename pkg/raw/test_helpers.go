@@ -5,7 +5,6 @@ package raw
 import (
 	"context"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 )
 
 // StartFrameListener starts reading the Connection socket. It receives frames
@@ -39,9 +38,9 @@ func (tc *Client) StartFrameListener(ctx context.Context) {
 // connection is open.
 func (tc *Client) SetIsOpen(open bool) {
 	if open {
-		tc.connectionStatus = constants.ConnectionOpen
+		tc.connectionStatus = ConnectionOpen
 	} else {
-		tc.connectionStatus = constants.ConnectionClosed
+		tc.connectionStatus = ConnectionClosed
 	}
 }
 

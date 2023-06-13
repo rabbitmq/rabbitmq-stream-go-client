@@ -2,7 +2,6 @@ package raw
 
 import (
 	"fmt"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"net/url"
 	"strconv"
 	"strings"
@@ -78,7 +77,7 @@ func parseURI(uri string) (broker, error) {
 }
 
 func streamErrorOrNil(responseCode uint16) error {
-	err, found := constants.ResponseCodeToError[responseCode]
+	err, found := ResponseCodeToError[responseCode]
 	if !found {
 		return fmt.Errorf("unknown response code %d", responseCode)
 	}

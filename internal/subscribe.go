@@ -17,7 +17,7 @@ type SubscribeRequest struct {
 	stream string // the stream to subscribe
 	credit uint16 // initial credit to be given to the client
 	// (usually) that should be between 1 and 10
-	properties constants.SubscribeProperties // map of properties (optional)
+	properties map[string]string // map of properties (optional)
 	// for example: "name": "my-subscription-name"
 }
 
@@ -29,7 +29,7 @@ func (s *SubscribeRequest) Credit() uint16 {
 	return s.credit
 }
 
-func (s *SubscribeRequest) Properties() constants.SubscribeProperties {
+func (s *SubscribeRequest) Properties() map[string]string {
 	return s.properties
 }
 
@@ -66,7 +66,7 @@ func (s *SubscribeRequest) UnmarshalBinary(data []byte) error {
 
 func NewSubscribeRequestRequest(subscriptionId uint8, stream string, offsetType uint16,
 	offset uint64, credit uint16,
-	properties constants.SubscribeProperties) *SubscribeRequest {
+	properties map[string]string) *SubscribeRequest {
 	return &SubscribeRequest{subscriptionId: subscriptionId, stream: stream, offsetType: offsetType,
 		offset: offset, credit: credit,
 		properties: properties}

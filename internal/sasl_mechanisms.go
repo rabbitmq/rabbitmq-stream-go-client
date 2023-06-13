@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding"
 	"fmt"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 )
 
 type SaslHandshakeRequest struct {
@@ -258,7 +257,8 @@ func (s *SaslAuthenticateResponse) Read(reader *bufio.Reader) error {
 		return err
 	}
 
-	if s.responseCode == constants.ResponseCodeSASLChallenge {
+	const saslChallenge = 0x0a
+	if s.responseCode == saslChallenge {
 		challengeResponse, err := readByteSlice(reader)
 		if err != nil {
 			return err

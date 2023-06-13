@@ -10,7 +10,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	common "github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
-	constants "github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	raw "github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 )
 
@@ -436,7 +435,7 @@ func (mr *MockRawClientMockRecorder) StreamStats(ctx, stream interface{}) *gomoc
 }
 
 // Subscribe mocks base method.
-func (m *MockRawClient) Subscribe(ctx context.Context, stream string, offsetType uint16, subscriptionId uint8, credit uint16, properties constants.SubscribeProperties, offset uint64) error {
+func (m *MockRawClient) Subscribe(ctx context.Context, stream string, offsetType uint16, subscriptionId uint8, credit uint16, properties raw.SubscribeProperties, offset uint64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Subscribe", ctx, stream, offsetType, subscriptionId, credit, properties, offset)
 	ret0, _ := ret[0].(error)

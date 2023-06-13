@@ -2,7 +2,6 @@ package raw
 
 import (
 	"fmt"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 )
 
 type DeclarePublisherError struct {
@@ -27,7 +26,7 @@ func (d *DeclarePublisherError) Unwrap() error {
 
 type DeclareStreamError struct {
 	stream        string
-	configuration constants.StreamConfiguration
+	configuration StreamConfiguration
 	err           error
 }
 
@@ -128,7 +127,7 @@ type SubscribeError struct {
 	offsetType     uint16
 	offset         uint64
 	credit         uint16
-	properties     constants.SubscribeProperties
+	properties     SubscribeProperties
 	err            error
 }
 

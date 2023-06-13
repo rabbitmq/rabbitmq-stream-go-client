@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	"golang.org/x/exp/slog"
 	"io"
 	"math"
@@ -74,7 +73,7 @@ type Client struct {
 func (tc *Client) IsOpen() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.connectionStatus == constants.ConnectionOpen
+	return tc.connectionStatus == ConnectionOpen
 }
 
 // NewClient returns a common.Clienter implementation to interact with RabbitMQ stream using low level primitives.
@@ -84,7 +83,7 @@ func NewClient(connection net.Conn, configuration *ClientConfiguration) Clienter
 	rawClient := &Client{
 		frameBodyListener: make(chan internal.SyncCommandRead),
 		connection:        internal.NewConnection(connection),
-		connectionStatus:  constants.ConnectionClosed,
+		connectionStatus:  ConnectionClosed,
 		correlationsMap:   sync.Map{},
 		configuration:     configuration,
 	}
@@ -644,7 +643,7 @@ func (tc *Client) shutdown(closeConnection bool) error {
 	// connection error handler, see: handleIncoming EOF error
 	// the shutdown method has to be idempotent since it can be called multiple times
 	// In case of unexpected connection error, the shutdown is called just once
-	tc.connectionStatus = constants.ConnectionClosed
+	tc.connectionStatus = ConnectionClosed
 	tc.ioLoopCancelFn()
 
 	if tc.confirmsCh != nil {
@@ -691,7 +690,7 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 		return err
 	}
 
-	bdy := internal.NewSimpleResponseWith(req.CorrelationId(), constants.ResponseCodeOK)
+	bdy := internal.NewSimpleResponseWith(req.CorrelationId(), ResponseCodeOK)
 	b, err := bdy.MarshalBinary()
 	if err != nil {
 		return err
@@ -899,7 +898,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 	}
 
 	tc.mu.Lock()
-	tc.connectionStatus = constants.ConnectionOpen
+	tc.connectionStatus = ConnectionOpen
 	defer tc.mu.Unlock()
 	log.Info("connection is open")
 
@@ -1092,7 +1091,7 @@ func (tc *Client) Subscribe(
 	offsetType uint16,
 	subscriptionId uint8,
 	credit uint16,
-	properties constants.SubscribeProperties,
+	properties SubscribeProperties,
 	offset uint64,
 ) error {
 	if ctx == nil {
@@ -1141,12 +1140,12 @@ func (tc *Client) Close(ctx context.Context) error {
 		return errNilContext
 	}
 
-	tc.connectionStatus = constants.ConnectionClosing
+	tc.connectionStatus = ConnectionClosing
 
 	log := LoggerFromCtxOrDiscard(ctx).WithGroup("close")
 	log.Debug("starting connection close")
 
-	response, err := tc.syncRequest(ctx, internal.NewCloseRequest(constants.ResponseCodeOK, "kthxbye"))
+	response, err := tc.syncRequest(ctx, internal.NewCloseRequest(ResponseCodeOK, "kthxbye"))
 	if err != nil {
 		return err
 	}
