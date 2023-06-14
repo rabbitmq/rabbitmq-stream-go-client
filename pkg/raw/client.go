@@ -76,6 +76,12 @@ func (tc *Client) IsOpen() bool {
 	return tc.connectionStatus == ConnectionOpen
 }
 
+func (tc *Client) isOpenOrClosing() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.connectionStatus == ConnectionOpen || tc.connectionStatus == ConnectionClosing
+}
+
 // NewClient returns a common.Clienter implementation to interact with RabbitMQ stream using low level primitives.
 // NewClient requires an established net.Conn and a ClientConfiguration. Using DialConfig() is the preferred method
 // to establish a connection to RabbitMQ servers.
@@ -228,13 +234,15 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 			// 		clear the deadline after reading the header
 			err := header.Read(buffer)
 			if errors.Is(err, io.ErrClosedPipe) {
+				log.Debug("pipe closed by peer", slog.Any("error", err))
 				return nil
 			}
 
 			if errors.Is(err, io.EOF) {
+				log.Debug("connection closed by peer", slog.Any("error", err))
 				// EOF is returned when the connection is closed
 				if tc.socketClosedCh != nil {
-					if tc.IsOpen() {
+					if tc.isOpenOrClosing() {
 						tc.socketClosedCh <- ErrConnectionClosed
 					}
 					// the TCP connection here is closed
@@ -244,7 +252,10 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				}
 				// set the shutdown flag to false since we don't want to close the connection
 				// since it's already closed
-				_ = tc.shutdown(false)
+				err = tc.shutdown(false)
+				if err != nil {
+					log.Error("error in shutdown process", slog.Any("error", err))
+				}
 				return nil
 			}
 
@@ -818,7 +829,7 @@ func (tc *Client) Connect(ctx context.Context) error {
 	// to execute Connect(). The i/o loop in handleIncoming() must not be tight to the same deadline.
 	//
 	// https://github.com/Gsantomaggio/rabbitmq-stream-go-client/issues/27
-	ioLoopCtx, cancel := context.WithCancel(context.Background())
+	ioLoopCtx, cancel := context.WithCancel(NewContextWithLogger(context.Background(), *log))
 	tc.ioLoopCancelFn = cancel
 	go func(ctx context.Context) {
 		log := LoggerFromCtxOrDiscard(ctx).WithGroup("frame-listener")

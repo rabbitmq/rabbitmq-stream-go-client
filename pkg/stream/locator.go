@@ -70,10 +70,13 @@ func (l *locator) maybeInitializeLocator() error {
 	defer l.Unlock()
 
 	if l.isSet {
+		l.log.Debug("locator is already initialized")
 		return nil
 	}
 
-	return l.connect(context.Background())
+	ctx := raw.NewContextWithLogger(context.Background(), *l.log)
+
+	return l.connect(ctx)
 }
 
 // this function is meant to run in a routine. Do not call it directly.
@@ -91,7 +94,7 @@ func (l *locator) shutdownHandler() {
 			log.Debug("unexpected locator disconnection, trying to reconnect", slog.Any("error", err))
 			l.Lock()
 			for i := 0; i < 100; i++ {
-				dialCtx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+				dialCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(context.Background(), *log), DefaultTimeout)
 				c, e := raw.DialConfig(dialCtx, &l.rawClientConf)
 				cancel()
 
@@ -139,7 +142,7 @@ func (l *locator) operationCreateStream(args ...any) []any {
 }
 
 func (l *locator) locatorOperation(op locatorOperationFn, args ...any) (result []any) {
-	l.log.Debug("starting locator operation", slog.Any("op", op), slog.Any("args", args))
+	l.log.Debug("starting locator operation")
 
 	var lastErr error
 	for attempt := 0; attempt < maxAttempt; {
@@ -148,7 +151,7 @@ func (l *locator) locatorOperation(op locatorOperationFn, args ...any) (result [
 		// last element of result is error type
 		if result[len(result)-1] == nil {
 			lastErr = nil
-			l.log.Debug("locator operation succeed", slog.Any("operation", op), slog.Any("args", args))
+			l.log.Debug("locator operation succeed")
 			break
 		}
 
