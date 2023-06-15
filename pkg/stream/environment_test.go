@@ -49,6 +49,9 @@ var _ = Describe("Environment", func() {
 				gomock.Eq("my-stream"),
 				gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 			)
+			mockRawClient.EXPECT().
+				IsOpen().
+				Return(true) // from maybeInitializeLocator
 
 			// act
 			err := environment.CreateStream(context.Background(), "my-stream", stream.StreamOptions{})
@@ -68,6 +71,9 @@ var _ = Describe("Environment", func() {
 					"x-stream-max-segment-size-bytes": "100000",
 				}),
 			)
+			mockRawClient.EXPECT().
+				IsOpen().
+				Return(true) // from maybeInitializeLocator
 
 			// act
 			err := environment.CreateStream(
@@ -94,6 +100,9 @@ var _ = Describe("Environment", func() {
 				).
 				AnyTimes().
 				Return(errors.New("something went wrong"))
+			mockRawClient.EXPECT().
+				IsOpen().
+				Return(true) // from maybeInitializeLocator
 
 			// act
 			err := environment.CreateStream(rootCtx, "a-stream", stream.CreateStreamOptions{})
@@ -121,6 +130,9 @@ var _ = Describe("Environment", func() {
 						gomock.AssignableToTypeOf("string"),
 						gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 					)
+				mockRawClient.EXPECT().
+					IsOpen().
+					Return(true) // from maybeInitializeLocator
 
 				// act
 				err := environment.CreateStream(rootCtx, "retries-test", stream.CreateStreamOptions{})
@@ -138,6 +150,9 @@ var _ = Describe("Environment", func() {
 						gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 					).
 					Return(raw.ErrStreamAlreadyExists)
+				mockRawClient.EXPECT().
+					IsOpen().
+					Return(true) // from maybeInitializeLocator
 
 				// act
 				err := environment.CreateStream(rootCtx, "non-retryable-test", stream.CreateStreamOptions{})
@@ -161,6 +176,10 @@ var _ = Describe("Environment", func() {
 					gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
 				).
 				Times(10)
+			mockRawClient.EXPECT().
+				IsOpen().
+				Return(true).
+				Times(10) // from maybeInitializeLocator
 
 			wg := sync.WaitGroup{}
 			for i := 0; i < 10; i++ {
