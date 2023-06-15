@@ -76,12 +76,6 @@ func (tc *Client) IsOpen() bool {
 	return tc.connectionStatus == ConnectionOpen
 }
 
-func (tc *Client) isOpenOrClosing() bool {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return tc.connectionStatus == ConnectionOpen || tc.connectionStatus == ConnectionClosing
-}
-
 // NewClient returns a common.Clienter implementation to interact with RabbitMQ stream using low level primitives.
 // NewClient requires an established net.Conn and a ClientConfiguration. Using DialConfig() is the preferred method
 // to establish a connection to RabbitMQ servers.
@@ -229,20 +223,12 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 		default:
 			// TODO: use a pool of headers to avoid allocation on each iteration
 			var header = new(internal.Header)
-			// TODO: set an I/O deadline to avoid deadlock on I/O
-			// 		renew the deadline at the beginning of each iteration
-			// 		clear the deadline after reading the header
 			err := header.Read(buffer)
-			if errors.Is(err, io.ErrClosedPipe) {
-				log.Debug("pipe closed by peer", slog.Any("error", err))
-				return nil
-			}
+			if err != nil {
+				log.Debug("error reading from the connection", slog.Any("error", err))
 
-			if errors.Is(err, io.EOF) {
-				log.Debug("connection closed by peer", slog.Any("error", err))
-				// EOF is returned when the connection is closed
 				if tc.socketClosedCh != nil {
-					if tc.isOpenOrClosing() {
+					if tc.IsOpen() {
 						tc.socketClosedCh <- ErrConnectionClosed
 					}
 					// the TCP connection here is closed
@@ -259,11 +245,6 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				return nil
 			}
 
-			if err != nil {
-				// TODO: some errors may be recoverable. We only need to return if reconnection
-				// 	is needed
-				return err
-			}
 			switch header.Command() {
 			case internal.CommandPeerPropertiesResponse:
 				peerPropResponse := internal.NewPeerPropertiesResponse()

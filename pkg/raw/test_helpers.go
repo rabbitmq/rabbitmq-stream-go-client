@@ -48,3 +48,7 @@ func (tc *Client) SetIsOpen(open bool) {
 func (tc *Client) Request(ctx context.Context, write internal.CommandWrite) error {
 	return tc.request(ctx, write)
 }
+
+func (tc *Client) ForceCloseConnectionSocket() {
+	_ = tc.connection.Close()
+}

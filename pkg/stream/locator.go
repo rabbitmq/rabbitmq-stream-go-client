@@ -69,8 +69,8 @@ func (l *locator) maybeInitializeLocator() error {
 	l.Lock()
 	defer l.Unlock()
 
-	if l.isSet {
-		l.log.Debug("locator is already initialized")
+	if l.isSet && l.client.IsOpen() {
+		l.log.Debug("locator is already initialized and connected")
 		return nil
 	}
 
