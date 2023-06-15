@@ -28,12 +28,6 @@ func newCorrelation(id uint32) *correlation {
 		id: id}
 }
 
-func (c *correlation) Close() {
-	// TODO: maybe we don't need to close the channel. When there are 0 references to
-	// 		correlation struct, it will be garbage collected by Go's GC
-	close(c.chResponse)
-}
-
 // Client is the base struct to interact with RabbitMQ streams at a low level. Client implements the common.Clienter
 // interface. Functions of this interface accept a context.Context. It is highly advised to provide a context with a
 // deadline/timeout to all function calls. When a context is cancelled, the function will cancel its work and return
@@ -111,7 +105,6 @@ func (tc *Client) removeCorrelation(ctx context.Context, id uint32) {
 		logger.Info("correlation not found, skipping removal", "correlation-id", id)
 		return
 	}
-	corr.Close()
 	tc.correlationsMap.Delete(id)
 }
 
