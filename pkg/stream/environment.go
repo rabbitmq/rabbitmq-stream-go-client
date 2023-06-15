@@ -41,6 +41,7 @@ func NewEnvironment(ctx context.Context, configuration EnvironmentConfiguration)
 func (e *Environment) start(ctx context.Context) error {
 	logger := raw.LoggerFromCtxOrDiscard(ctx)
 
+	var lastConnectError error
 	for i, uri := range e.configuration.Uris {
 		c, err := raw.NewClientConfiguration(uri)
 		if err != nil {
@@ -56,15 +57,14 @@ func (e *Environment) start(ctx context.Context) error {
 		err = l.connect(ctx)
 		cancel()
 
-		// TODO: add retry logic
 		if err != nil {
+			lastConnectError = err
 			continue
 		}
 
 		e.locators = append(e.locators, l)
 	}
-	// FIXME: return last error
-	return nil
+	return lastConnectError
 }
 
 func (e *Environment) pickLocator(n int) *locator {
@@ -73,6 +73,8 @@ func (e *Environment) pickLocator(n int) *locator {
 	}
 	return e.locators[n]
 }
+
+// # Public API
 
 // CreateStream with name and given options.
 func (e *Environment) CreateStream(ctx context.Context, name string, opts StreamOptions) error {
@@ -85,7 +87,6 @@ func (e *Environment) CreateStream(ctx context.Context, name string, opts Stream
 	for i := 0; i < n; i++ {
 		l := e.pickLocator((i + rn) % n)
 
-		// FIXME(Zerpet): sometimes, the reconnection logic does not work. I suspect we don't always receive a closed notification
 		if err := l.maybeInitializeLocator(); err != nil {
 			logger.Error("locator not available", slog.Any("error", err))
 			lastError = err
