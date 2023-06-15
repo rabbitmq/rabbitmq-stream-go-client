@@ -21,6 +21,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
         * [Multi hosts](#multi-hosts)
         * [Load Balancer](#load-balancer)
         * [TLS](#tls)
+		* [Sasl Mechanisms](#sasl-mechanisms)
       * [Streams](#streams)
 		* [Statistics](#streams-statistics)
     * [Publish messages](#publish-messages)
@@ -173,6 +174,29 @@ env, err := stream.NewEnvironment(
 				SetUri("rabbitmq-stream+tls://guest:guest@localhost:5551/").
 				SetTLSConfig(&tls.Config{}),
 )
+```
+
+### Sasl Mechanisms
+
+To configure SASL you need to set the `SaslMechanism` parameter `Environment.SetSaslConfiguration`:
+```golang
+cfg := new(tls.Config)
+cfg.ServerName = "my_server_name"
+cfg.RootCAs = x509.NewCertPool()
+
+if ca, err := os.ReadFile("certs/ca_certificate.pem"); err == nil {
+	cfg.RootCAs.AppendCertsFromPEM(ca)
+}
+
+if cert, err := tls.LoadX509KeyPair("certs/client/cert.pem", "certs/client/key.pem"); err == nil {
+cfg.Certificates = append(cfg.Certificates, cert)
+}
+
+env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().
+	SetUri("rabbitmq-stream+tls://my_server_name:5551/").
+	IsTLS(true).
+	SetSaslConfiguration(stream.SaslConfigurationExternal). // SASL EXTERNAL
+	SetTLSConfig(cfg))
 ```
 
 ### Streams

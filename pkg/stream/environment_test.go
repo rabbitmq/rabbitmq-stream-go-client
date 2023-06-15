@@ -343,6 +343,13 @@ var _ = Describe("Environment test", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("Fail to set SetSaslConfiguration", func() {
+		_, err := NewEnvironment(NewEnvironmentOptions().
+			SetSaslConfiguration("IS_NOT_VALID").
+			IsTLS(true))
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("Set TCP parameters", func() {
 		// weak test, atm I don't have other ways to test these values
 		// just validate that the connection still works

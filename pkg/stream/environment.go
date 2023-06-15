@@ -25,7 +25,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if options == nil {
 		options = NewEnvironmentOptions()
 	}
-	client := newClient("go-stream-locator", nil, options.TCPParameters)
+	client := newClient("go-stream-locator", nil, options.TCPParameters, options.SaslConfiguration)
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
@@ -36,6 +36,12 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if options.MaxConsumersPerClient <= 0 || options.MaxProducersPerClient <= 0 ||
 		options.MaxConsumersPerClient > 254 || options.MaxProducersPerClient > 254 {
 		return nil, fmt.Errorf(" MaxConsumersPerClient and MaxProducersPerClient must be between 1 and 254")
+	}
+
+	if options.SaslConfiguration != nil {
+		if options.SaslConfiguration.Mechanism != SaslConfigurationPlain && options.SaslConfiguration.Mechanism != SaslConfigurationExternal {
+			return nil, fmt.Errorf("SaslConfiguration mechanism must be PLAIN or EXTERNAL")
+		}
 	}
 
 	if len(options.ConnectionParameters) == 0 {
@@ -76,7 +82,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 }
 func (env *Environment) newReconnectClient() (*Client, error) {
 	broker := env.options.ConnectionParameters[0]
-	client := newClient("go-stream-locator", broker, env.options.TCPParameters)
+	client := newClient("go-stream-locator", broker, env.options.TCPParameters, env.options.SaslConfiguration)
 
 	err := client.connect()
 	tentatives := 1
@@ -86,7 +92,8 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 		time.Sleep(time.Duration(tentatives) * time.Second)
 		rand.Seed(time.Now().UnixNano())
 		n := rand.Intn(len(env.options.ConnectionParameters))
-		client = newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters)
+		client = newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
+			env.options.SaslConfiguration)
 		tentatives = tentatives + 1
 		err = client.connect()
 
@@ -261,6 +268,7 @@ func (env *Environment) IsClosed() bool {
 type EnvironmentOptions struct {
 	ConnectionParameters  []*Broker
 	TCPParameters         *TCPParameters
+	SaslConfiguration     *SaslConfiguration
 	MaxProducersPerClient int
 	MaxConsumersPerClient int
 	AddressResolver       *AddressResolver
@@ -272,6 +280,7 @@ func NewEnvironmentOptions() *EnvironmentOptions {
 		MaxConsumersPerClient: 1,
 		ConnectionParameters:  []*Broker{},
 		TCPParameters:         newTCPParameterDefault(),
+		SaslConfiguration:     newSaslConfigurationDefault(),
 	}
 }
 
@@ -325,6 +334,14 @@ func (envOptions *EnvironmentOptions) SetVHost(vhost string) *EnvironmentOptions
 	} else {
 		envOptions.ConnectionParameters[0].Vhost = vhost
 	}
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetSaslConfiguration(value string) *EnvironmentOptions {
+	if envOptions.SaslConfiguration == nil {
+		envOptions.SaslConfiguration = newSaslConfigurationDefault()
+	}
+	envOptions.SaslConfiguration.Mechanism = value
 	return envOptions
 }
 
@@ -506,7 +523,7 @@ func (c *Client) maybeCleanConsumers(streamName string) {
 	}
 }
 
-func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, streamName string,
+func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string,
 	options *ProducerOptions) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
@@ -521,7 +538,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 	}
 
 	if clientResult == nil {
-		clientResult = cc.newClientForProducer(leader, tcpParameters)
+		clientResult = cc.newClientForProducer(leader, tcpParameters, saslConfiguration)
 	}
 
 	err := clientResult.connect()
@@ -538,7 +555,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 		if err != nil {
 			return nil, err
 		}
-		clientResult = cc.newClientForProducer(leader, tcpParameters)
+		clientResult = cc.newClientForProducer(leader, tcpParameters, saslConfiguration)
 		err = clientResult.connect()
 		if err != nil {
 			return nil, err
@@ -555,8 +572,8 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 	return producer, nil
 }
 
-func (cc *environmentCoordinator) newClientForProducer(leader *Broker, tcpParameters *TCPParameters) *Client {
-	clientResult := newClient("go-stream-producer", leader, tcpParameters)
+func (cc *environmentCoordinator) newClientForProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
+	clientResult := newClient("go-stream-producer", leader, tcpParameters, saslConfiguration)
 	chMeta := make(chan metaDataUpdateEvent, 1)
 	clientResult.metadataListener = chMeta
 	go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -575,7 +592,7 @@ func (cc *environmentCoordinator) newClientForProducer(leader *Broker, tcpParame
 	return clientResult
 }
 
-func (cc *environmentCoordinator) newConsumer(leader *Broker, tcpParameters *TCPParameters,
+func (cc *environmentCoordinator) newConsumer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration,
 	streamName string, messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	cc.mutex.Lock()
@@ -591,7 +608,7 @@ func (cc *environmentCoordinator) newConsumer(leader *Broker, tcpParameters *TCP
 	}
 
 	if clientResult == nil {
-		clientResult = newClient("go-stream-consumer", leader, tcpParameters)
+		clientResult = newClient("go-stream-consumer", leader, tcpParameters, saslConfiguration)
 		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -675,8 +692,8 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 	}
 	leader.cloneFrom(clientLocator.broker, resolver)
 
-	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.tcpParameters, streamName,
-		options)
+	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.tcpParameters,
+		clientLocator.saslConfiguration, streamName, options)
 	if err != nil {
 		return nil, err
 	}
@@ -740,7 +757,7 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 	}
 	consumerBroker.cloneFrom(clientLocator.broker, resolver)
 	consumer, err := ps.consumersCoordinator[coordinatorKey].
-		newConsumer(consumerBroker, clientLocator.tcpParameters, streamName, messagesHandler, consumerOptions)
+		newConsumer(consumerBroker, clientLocator.tcpParameters, clientLocator.saslConfiguration, streamName, messagesHandler, consumerOptions)
 	if err != nil {
 		return nil, err
 	}

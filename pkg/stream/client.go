@@ -14,6 +14,22 @@ import (
 	"time"
 )
 
+// SaslConfiguration see
+//
+//	SaslConfigurationPlain    = "PLAIN"
+//	SaslConfigurationExternal = "EXTERNAL"
+//
+
+type SaslConfiguration struct {
+	Mechanism string
+}
+
+func newSaslConfigurationDefault() *SaslConfiguration {
+	return &SaslConfiguration{
+		Mechanism: SaslConfigurationPlain,
+	}
+}
+
 type TuneState struct {
 	requestedMaxFrameSize int
 	requestedHeartbeat    int
@@ -42,13 +58,14 @@ type Client struct {
 	coordinator          *Coordinator
 	broker               *Broker
 	tcpParameters        *TCPParameters
+	saslConfiguration    *SaslConfiguration
 
 	mutex            *sync.Mutex
 	metadataListener metadataListener
 	lastHeartBeat    HeartBeat
 }
 
-func newClient(connectionName string, broker *Broker, tcpParameters *TCPParameters) *Client {
+func newClient(connectionName string, broker *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
 	var clientBroker = broker
 	if broker == nil {
 		clientBroker = newBrokerDefault()
@@ -57,10 +74,15 @@ func newClient(connectionName string, broker *Broker, tcpParameters *TCPParamete
 		tcpParameters = newTCPParameterDefault()
 	}
 
+	if saslConfiguration == nil {
+		saslConfiguration = newSaslConfigurationDefault()
+	}
+
 	c := &Client{
 		coordinator:          NewCoordinator(),
 		broker:               clientBroker,
 		tcpParameters:        tcpParameters,
+		saslConfiguration:    saslConfiguration,
 		destructor:           &sync.Once{},
 		mutex:                &sync.Mutex{},
 		clientProperties:     ClientProperties{items: make(map[string]string)},
@@ -224,10 +246,15 @@ func (c *Client) authenticate(user string, password string) error {
 	}
 	saslMechanism := ""
 	for i := 0; i < len(saslMechanisms); i++ {
-		if saslMechanisms[i] == "PLAIN" {
-			saslMechanism = "PLAIN"
+		if saslMechanisms[i] == c.saslConfiguration.Mechanism {
+			saslMechanism = c.saslConfiguration.Mechanism
+			break
 		}
 	}
+	if saslMechanism == "" {
+		return fmt.Errorf("no matching mechanism found")
+	}
+
 	response := unicodeNull + user + unicodeNull + password
 	saslResponse := []byte(response)
 	return c.sendSaslAuthenticate(saslMechanism, saslResponse)

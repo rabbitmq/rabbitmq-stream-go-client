@@ -194,3 +194,8 @@ func lookUpCommand(command uint16) string {
 
 	return constLookup[command]
 }
+
+const (
+	SaslConfigurationPlain    = "PLAIN"
+	SaslConfigurationExternal = "EXTERNAL"
+)
