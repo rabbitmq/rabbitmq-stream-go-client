@@ -390,6 +390,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 					log.Debug("heartbeat received")
 				}
 			case internal.CommandDeliver:
+				// TODO: check if we can use a Pool of chunks?
 				chunkResponse := new(internal.ChunkResponse)
 				err = chunkResponse.Read(buffer)
 				log.WithGroup("deliver").
@@ -402,10 +403,13 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
+				tc.mu.Lock()
 				if tc.chunkCh == nil {
-					log.Info("chunk channel is not registered. Use Client.NotifyChunk() to receive chunks")
+					tc.mu.Unlock()
+					log.Debug("chunk channel is not registered. Is the client unsubscribing?")
 					continue
 				}
+				tc.mu.Unlock()
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -1116,7 +1120,14 @@ func (tc *Client) Unsubscribe(ctx context.Context, subscriptionId uint8) error {
 	if err != nil {
 		return err
 	}
-	// FIXME: close subscription channel
+
+	tc.mu.Lock()
+	if tc.chunkCh != nil {
+		close(tc.chunkCh)
+		tc.chunkCh = nil
+	}
+	tc.mu.Unlock()
+
 	return streamErrorOrNil(unSubscribeResponse.ResponseCode())
 }
 

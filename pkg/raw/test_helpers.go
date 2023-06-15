@@ -29,7 +29,6 @@ func (tc *Client) StartFrameListener(ctx context.Context) {
 
 	err := tc.handleIncoming(ioLoopCtx)
 	if err != nil {
-		// FIXME: handle error, possibly shutdown or reconnect
 		log.Error("error handling incoming frames", "error", err)
 	}
 }
