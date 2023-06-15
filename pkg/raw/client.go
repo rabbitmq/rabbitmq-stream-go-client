@@ -159,7 +159,6 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) er
 	if ctx == nil {
 		return errNilContext
 	}
-	// TODO: check if context is canceled before proceeding to WriteCommand
 
 	select {
 	default:
@@ -167,9 +166,7 @@ func (tc *Client) request(ctx context.Context, request internal.CommandWrite) er
 		return ctx.Err()
 	}
 
-	logger := LoggerFromCtxOrDiscard(ctx)
-	// FIXME: Perhaps too verbose. May need to exclude the request, and log only the request command ID
-	logger.Debug("writing command to the wire", "request", request)
+	LoggerFromCtxOrDiscard(ctx).Debug("writing command to the wire", "requestId", request.Key())
 	return internal.WriteCommandWithHeader(request, tc.connection.GetWriter())
 }
 
@@ -197,7 +194,6 @@ func (tc *Client) handleResponse(ctx context.Context, read internal.SyncCommandR
 	correlation.chResponse <- read
 }
 
-// TODO: Maybe Add a timeout
 // handleIncoming is responsible for handling incoming frames from the server.
 // each frame is handled by a specific handler function.
 // the frame must read the internal.Header to decode the frame body.
