@@ -1256,16 +1256,16 @@ func (tc *Client) Credit(ctx context.Context, subscriptionID uint8, credits uint
 //	}
 //
 // stream is the name of the stream.
-func (tc *Client) MetadataQuery(ctx context.Context, stream string) (*MetadataResponse, error) {
+func (tc *Client) MetadataQuery(ctx context.Context, streams []string) (*MetadataResponse, error) {
 	if ctx == nil {
 		return nil, errNilContext
 	}
 
 	logger := LoggerFromCtxOrDiscard(ctx).WithGroup("metadataQuery")
 	logger.Debug("starting metadata query")
-	response, err := tc.syncRequest(ctx, internal.NewMetadataQuery(stream))
+	response, err := tc.syncRequest(ctx, internal.NewMetadataQuery(streams))
 	if err != nil {
-		return nil, &MetadataQueryError{stream, err}
+		return nil, &MetadataQueryError{streams, err}
 	}
 
 	return response.(*MetadataResponse), streamErrorOrNil(response.ResponseCode())

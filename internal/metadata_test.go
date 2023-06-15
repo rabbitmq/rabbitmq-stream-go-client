@@ -11,19 +11,25 @@ import (
 var _ = Describe("Internal/Metadata", func() {
 	Context("Query", func() {
 		It("knows the size needed to encode itself", func() {
-			m := NewMetadataQuery("test-stream")
+			stream1 := "stream1"
+			stream2 := "stream2"
+			m := NewMetadataQuery([]string{stream1, stream2})
 			m.SetCorrelationId(123)
 
 			expectedSize := streamProtocolKeySizeBytes +
 				streamProtocolVersionSizeBytes +
 				streamProtocolCorrelationIdSizeBytes +
-				streamProtocolStringLenSizeBytes + len(m.stream)
+				streamProtocolSliceLenBytes +
+				streamProtocolStringLenSizeBytes + len(stream1) +
+				streamProtocolStringLenSizeBytes + len(stream2)
 
 			Expect(m.SizeNeeded()).To(BeNumerically("==", expectedSize))
 		})
 
 		It("encodes itself into a binary sequence", func() {
-			m := NewMetadataQuery("test-stream")
+			stream1 := "stream1"
+			stream2 := "stream2"
+			m := NewMetadataQuery([]string{stream1, stream2})
 			m.SetCorrelationId(123)
 
 			buff := &bytes.Buffer{}
@@ -33,13 +39,14 @@ var _ = Describe("Internal/Metadata", func() {
 
 			expectedByteSequence := []byte{
 				0x00, 0x00, 0x00, 0x7B, // correlationId
-				0x00, 0x0B, // string length
+				0x00, 0x00, 0x00, 0x02, // slice len bytes
+				0x00, 0x07, // string length
+				byte('s'), byte('t'), byte('r'), byte('e'), byte('a'), byte('m'), byte('1'),
+				0x00, 0x07, // string length
+				byte('s'), byte('t'), byte('r'), byte('e'), byte('a'), byte('m'), byte('2'),
 			}
 
-			expectedByteSequence = append(expectedByteSequence, []byte("test-stream")...)
-
 			Expect(buff.Bytes()).To(Equal(expectedByteSequence))
-
 		})
 	})
 

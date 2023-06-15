@@ -187,9 +187,9 @@ var _ = Describe("Client", func() {
 			streamClient := raw.NewClient(fakeClientConn, conf)
 			go streamClient.(*raw.Client).StartFrameListener(ctx)
 
-			go fakeRabbitMQ.fakeRabbitMQMetadataQuery(ctx, "stream-exists")
+			go fakeRabbitMQ.fakeRabbitMQMetadataQuery(ctx, []string{"stream-exists"})
 
-			metadataResponse, err := streamClient.MetadataQuery(ctx, "stream-exists")
+			metadataResponse, err := streamClient.MetadataQuery(ctx, []string{"stream-exists"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", 1))
 			Expect(metadataResponse.CorrelationId()).To(BeNumerically("==", 1))
@@ -203,10 +203,10 @@ var _ = Describe("Client", func() {
 
 				go fakeRabbitMQ.fakeRabbitMQMetadataQuery(
 					newContextWithResponseCode(ctx, streamResponseCodeStreamDoesNotExist, "metadata"),
-					"stream-does-not-exist",
+					[]string{"stream-does-not-exist"},
 				)
 
-				metadataResponse, err := streamClient.MetadataQuery(ctx, "stream")
+				metadataResponse, err := streamClient.MetadataQuery(ctx, []string{"stream"})
 				Expect(err).To(MatchError("stream does not exist"))
 				Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", streamResponseCodeStreamDoesNotExist))
 			}, SpecTimeout(time.Second*3))

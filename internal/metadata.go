@@ -8,17 +8,17 @@ import (
 
 type MetadataQuery struct {
 	correlationId uint32
-	stream        string
+	streams       []string
 }
 
 const LenNilMetaDataResponse = 22
 
-func NewMetadataQuery(stream string) *MetadataQuery {
-	return &MetadataQuery{stream: stream}
+func NewMetadataQuery(streams []string) *MetadataQuery {
+	return &MetadataQuery{streams: streams}
 }
 
 func (m *MetadataQuery) UnmarshalBinary(data []byte) error {
-	return readMany(bytes.NewReader(data), &m.correlationId, &m.stream)
+	return readMany(bytes.NewReader(data), &m.correlationId, &m.streams)
 }
 
 func (m *MetadataQuery) CorrelationId() uint32 {
@@ -29,8 +29,8 @@ func (m *MetadataQuery) SetCorrelationId(id uint32) {
 	m.correlationId = id
 }
 
-func (m *MetadataQuery) Stream() string {
-	return m.stream
+func (m *MetadataQuery) Streams() []string {
+	return m.streams
 }
 
 func (m *MetadataQuery) Key() uint16 {
@@ -38,22 +38,34 @@ func (m *MetadataQuery) Key() uint16 {
 }
 
 func (m *MetadataQuery) SizeNeeded() int {
-	return streamProtocolKeySizeBytes +
+	size := streamProtocolKeySizeBytes +
 		streamProtocolVersionSizeBytes +
 		streamProtocolCorrelationIdSizeBytes +
-		streamProtocolStringLenSizeBytes +
-		len(m.stream)
+		streamProtocolSliceLenBytes
+
+	for _, stream := range m.streams {
+		size += streamProtocolStringLenSizeBytes +
+			len(stream)
+	}
+
+	fmt.Println(size)
+
+	return size
 }
 
 func (m *MetadataQuery) Write(w *bufio.Writer) (int, error) {
-	n, err := writeMany(w, m.correlationId, m.stream)
+	n, err := writeMany(w, m.correlationId, m.streams)
 	if err != nil {
 		return n, err
 	}
 
 	expectedBytesWritten := streamProtocolCorrelationIdSizeBytes +
-		streamProtocolStringLenSizeBytes +
-		len(m.stream)
+		streamProtocolSliceLenBytes
+	for _, stream := range m.streams {
+		expectedBytesWritten += streamProtocolStringLenSizeBytes +
+			len(stream)
+	}
+
 	if n != expectedBytesWritten {
 		return n, fmt.Errorf("did not write expected amount of bytes: wrote %d expected %d", n, expectedBytesWritten)
 	}

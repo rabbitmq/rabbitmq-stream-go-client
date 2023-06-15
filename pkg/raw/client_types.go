@@ -133,7 +133,7 @@ type Clienter interface {
 	ExchangeCommandVersions(ctx context.Context) error
 	Credit(ctx context.Context, subscriptionId uint8, credit uint16) error
 	NotifyCreditError(notification chan *CreditError) <-chan *CreditError
-	MetadataQuery(ctx context.Context, stream string) (*MetadataResponse, error)
+	MetadataQuery(ctx context.Context, streams []string) (*MetadataResponse, error)
 	StoreOffset(ctx context.Context, reference, stream string, offset uint64) error
 	QueryOffset(ctx context.Context, reference string, stream string) (uint64, error)
 	StreamStats(ctx context.Context, stream string) (map[string]int64, error)

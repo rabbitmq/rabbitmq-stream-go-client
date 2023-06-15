@@ -655,7 +655,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQPublisherConfirms(pubId uint8, numOfC
 	expectOffset1(err).ToNot(HaveOccurred())
 }
 
-func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(ctx context.Context, stream string) {
+func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(ctx context.Context, streams []string) {
 	defer GinkgoRecover()
 	expectOffset1(rmq.connection.SetDeadline(time.Now().Add(time.Second))).
 		To(Succeed())
@@ -690,7 +690,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(ctx context.Context, st
 	responseCode := responseCodeFromContext(ctx, "metadata")
 	var responseBody []byte
 	var err error
-	if stream == body.Stream() {
+	if streams[0] == body.Streams()[0] {
 		responseBody, err = internal.NewMetadataResponse(rmq.correlationIdSeq.next(),
 			5678,
 			1,
@@ -707,7 +707,7 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(ctx context.Context, st
 			responseCode,
 			0,
 			"",
-			stream,
+			"stream-does-not-exist",
 			[]uint16{},
 		).MarshalBinary()
 	}

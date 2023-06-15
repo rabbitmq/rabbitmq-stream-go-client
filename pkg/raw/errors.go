@@ -72,13 +72,13 @@ func (d *DeleteStreamError) Unwrap() error {
 }
 
 type MetadataQueryError struct {
-	stream string
-	err    error
+	streams []string
+	err     error
 }
 
 func (m *MetadataQueryError) Error() string {
 	return fmt.Sprintf("error getting metadata, stream: %s, error: %s",
-		m.stream,
+		m.streams,
 		m.err,
 	)
 }
