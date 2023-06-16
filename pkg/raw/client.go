@@ -239,6 +239,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				peerPropResponse := internal.NewPeerPropertiesResponse()
 				err = peerPropResponse.Read(buffer)
 				if err != nil {
+					// commands related to connection open/dial operations should return
+					// reconnection won't be tried at this point, therefore, this I/O
+					// loop should exit
 					return err
 				}
 				tc.handleResponse(ctx, peerPropResponse)
@@ -246,6 +249,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				saslMechanismsResponse := internal.NewSaslHandshakeResponse()
 				err = saslMechanismsResponse.Read(buffer)
 				if err != nil {
+					// commands related to connection open/dial operations should return
+					// reconnection won't be tried at this point, therefore, this I/O
+					// loop should exit
 					return err
 				}
 				tc.handleResponse(ctx, saslMechanismsResponse)
@@ -253,6 +259,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				saslAuthResp := new(internal.SaslAuthenticateResponse)
 				err = saslAuthResp.Read(buffer)
 				if err != nil {
+					// commands related to connection open/dial operations should return
+					// reconnection won't be tried at this point, therefore, this I/O
+					// loop should exit
 					return err
 				}
 				tc.handleResponse(ctx, saslAuthResp)
@@ -260,6 +269,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				tuneReq := new(internal.TuneRequest)
 				err = tuneReq.Read(buffer)
 				if err != nil {
+					// commands related to connection open/dial operations should return
+					// reconnection won't be tried at this point, therefore, this I/O
+					// loop should exit
 					return err
 				}
 				tc.frameBodyListener <- tuneReq
@@ -267,6 +279,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				openResp := new(internal.OpenResponse)
 				err = openResp.Read(buffer)
 				if err != nil {
+					// commands related to connection open/dial operations should return
+					// reconnection won't be tried at this point, therefore, this I/O
+					// loop should exit
 					return err
 				}
 				tc.handleResponse(ctx, openResp)
@@ -275,7 +290,8 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				closeReq := new(internal.CloseRequest)
 				err = closeReq.Read(buffer)
 				if err != nil {
-					return err
+					log.Error("error decoding close request body. Proceeding to shutdown connection", slog.Any("error", err))
+					return tc.shutdown(true)
 				}
 
 				log.Info("server requested connection close", "close-reason", closeReq.ClosingReason())
@@ -297,17 +313,23 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				internal.CommandCloseResponse,
 				internal.CommandSubscribeResponse,
 				internal.CommandUnsubscribeResponse:
-				createResp := new(internal.SimpleResponse)
-				err = createResp.Read(buffer)
+				simpleResponse := new(internal.SimpleResponse)
+				err = simpleResponse.Read(buffer)
 				if err != nil {
-					return err
+					log.Error("error decoding simple response body", slog.Any("error", err))
+					// we can't respond back to the RPC request at this point
+					// we continue and RPC caller should time out
+					continue
 				}
-				tc.handleResponse(ctx, createResp)
+				tc.handleResponse(ctx, simpleResponse)
 			case internal.CommandPublishConfirm:
 				publishConfirm := new(internal.PublishConfirmResponse)
 				err = publishConfirm.Read(buffer)
 				if err != nil {
-					return err
+					log.Error("error decoding publish confirm response body", slog.Any("error", err))
+					// we can't respond back to the RPC request at this point
+					// we continue and RPC caller should time out
+					continue
 				}
 
 				if tc.confirmsCh == nil {
@@ -325,7 +347,10 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				publishError := new(internal.PublishErrorResponse)
 				err = publishError.Read(buffer)
 				if err != nil {
-					return err
+					log.Error("error decoding publish error response body", slog.Any("error", err))
+					// we can't send a notification at this point
+					// TODO: revisit this. We should probably close the connection
+					continue
 				}
 				if tc.publishErrorCh == nil {
 					log.Info("error channel is not registered. Use Client.NotifyPublishError() to receive publish errors")
@@ -345,7 +370,10 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				metadataUpdate := new(internal.MetadataUpdateResponse)
 				err = metadataUpdate.Read(buffer)
 				if err != nil {
-					return err
+					log.Error("error decoding metadata update response body", slog.Any("error", err))
+					// we can't send a notification at this point
+					// TODO: revisit this. We should probably close the connection
+					continue
 				}
 
 				if tc.metadataUpdateCh == nil {
@@ -365,7 +393,10 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				hb := new(internal.Heartbeat)
 				err = hb.Read(buffer)
 				if err != nil {
-					return err
+					log.Error("error decoding heartbeat body", slog.Any("error", err))
+					// we can't send a notification at this point
+					// TODO: revisit this. What to do here?
+					continue
 				}
 				if tc.heartbeatCh == nil {
 					log.Info("heartbeat channel is not registered. Use Client.NotifyHeartbeat() to receive heartbeats")
@@ -382,6 +413,12 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				// TODO: check if we can use a Pool of chunks?
 				chunkResponse := new(internal.ChunkResponse)
 				err = chunkResponse.Read(buffer)
+				if err != nil {
+					log.Error("error decoding chunk response body", slog.Any("error", err))
+					// we can't send a the chunk at this point
+					// TODO: revisit this. What to do here?
+					continue
+				}
 				log.WithGroup("deliver").
 					Debug(
 						"received a chunk",
@@ -389,9 +426,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 						slog.Int64("chunkTimestamp", chunkResponse.Timestamp),
 						slog.Any("subscriptionId", chunkResponse.SubscriptionId),
 					)
-				if err != nil {
-					return err
-				}
+
 				tc.mu.Lock()
 				if tc.chunkCh == nil {
 					tc.mu.Unlock()
@@ -409,7 +444,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				err = consumerUpdate.Read(buffer)
 				log.Debug("received consumer update query")
 				if err != nil {
-					return err
+					log.Error("error decoding consumer update query body", slog.Any("error", err))
+					// TODO: we probably should panic here, or at least close the connection
+					continue
 				}
 				if tc.consumerUpdateCh == nil {
 					log.Info("consumer update channel is not registered. Use Client.NotifyConsumerUpdate() to receive updates")
@@ -427,6 +464,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				log.Debug("received exchange command versions response")
 				if err != nil {
 					log.Error("error exchanging command versions", "error", err)
+					// we can't send a response to the RPC request at this point
+					// we continue and RPC caller should time out
+					continue
 				}
 				tc.handleResponse(ctx, exchangeResponse)
 			case internal.CommandQueryOffsetResponse:
@@ -435,22 +475,27 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				log.Debug("received query offset response")
 				if err != nil {
 					log.Error("error receiving query offset response", "error", err)
+					// we can't send a response to the RPC request at this point
+					// we continue and RPC caller should time out
+					continue
 				}
-				// TODO: check for nil queryOffsetResponse?
 				tc.handleResponse(ctx, queryOffsetResponse)
 			case internal.CommandCreditResponse:
 				// We only receive a response in there's an error
 				creditResp := new(CreditError)
 				err = creditResp.Read(buffer)
-				log.Error(
+				if err != nil {
+					log.Error("error decoding credit response body", slog.Any("error", err))
+					// we can't send a notification to the channel
+					// we continue and eventually a consumer will starve for credits
+					continue
+				}
+				log.Debug(
 					"received credit response for unknown subscription",
-					"error", errUnknownSubscription,
+					"error", ResponseCodeToError[creditResp.ResponseCode()],
 					"responseCode", creditResp.ResponseCode(),
 					"subscriptionId", creditResp.SubscriptionId(),
 				)
-				if err != nil {
-					return err
-				}
 
 				tc.mu.Lock()
 				if tc.notifyCh != nil {
@@ -467,16 +512,21 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				err := metadataResp.Read(buffer)
 				log.Debug("received metadata response")
 				if err != nil {
-					log.Error("error in metadata response", "error", err)
+					log.Error("error decoding metadata response", "error", err)
+					// we can't send a response to the RPC request
+					// we continue and RPC caller should time out
+					continue
 				}
-				// TODO: should we check for nil in metadataResp? Or return in the above if?
 				tc.handleResponse(ctx, metadataResp)
 			case internal.CommandStreamStatsResponse:
 				streamStatsResp := new(internal.StreamStatsResponse)
 				err := streamStatsResp.Read(buffer)
 				log.Debug("received stream stats response")
 				if err != nil {
-					log.Error("error in stream stats response", "error", err)
+					log.Error("error decoding stream stats response", "error", err)
+					// we can't send a response to the RPC request
+					// we continue and RPC caller should time out
+					continue
 				}
 				tc.handleResponse(ctx, streamStatsResp)
 			case internal.CommandQueryPublisherSequenceResponse:
@@ -484,7 +534,10 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				err := queryPublisherSequenceResp.Read(buffer)
 				log.Debug("received publisher sequence response")
 				if err != nil {
-					log.Error("error in publisher sequence response", "error", err)
+					log.Error("error decoding publisher sequence response", "error", err)
+					// we can't send a response to the RPC request
+					// we continue and RPC caller should time out
+					continue
 				}
 				tc.handleResponse(ctx, queryPublisherSequenceResp)
 			case internal.CommandRouteResponse:
@@ -492,7 +545,10 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				err := routeResp.Read(buffer)
 				log.Debug("received route response")
 				if err != nil {
-					log.Error("error in route response", "error", err)
+					log.Error("error decoding route response", "error", err)
+					// we can't send a response to the RPC request
+					// we continue and RPC caller should time out
+					continue
 				}
 				tc.handleResponse(ctx, routeResp)
 			case internal.CommandPartitionsResponse:
@@ -500,15 +556,14 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				err := partitionsResp.Read(buffer)
 				log.Debug("received stream stats response")
 				if err != nil {
-					log.Error("error in stream stats response", "error", err)
+					log.Error("error decoding stream stats response", "error", err)
+					// we can't send a response to the RPC request
+					// we continue and RPC caller should time out
+					continue
 				}
 				tc.handleResponse(ctx, partitionsResp)
 			default:
-				log.Info("frame not implemented", "command ID", fmt.Sprintf("%X", header.Command()))
-				_, err := buffer.Discard(header.Length() - 4)
-				if err != nil {
-					log.Debug("error discarding bytes from unknown frame", "error", err, "discard", header.Length()-4)
-				}
+				panic(fmt.Errorf("unknown command: %v", header))
 			}
 		}
 	}

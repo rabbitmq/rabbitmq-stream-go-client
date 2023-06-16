@@ -11,13 +11,12 @@ import (
 )
 
 var (
-	errURIScheme           = errors.New("RabbitMQ Stream scheme must be either 'rabbitmq-stream://' or 'rabbitmq-stream+tls://'")
-	errURIWhitespace       = errors.New("URI must not contain whitespace")
-	errNilContext          = errors.New("context cannot be nil")
-	errNilConfig           = errors.New("RabbitmqConfiguration cannot be nil")
-	errUnknownSubscription = errors.New("unknown subscription ID")
-	errWriteShort          = errors.New("wrote less bytes than expected")
-	ErrConnectionClosed    = errors.New("connection closed by peer. EOF error")
+	errURIScheme        = errors.New("RabbitMQ Stream scheme must be either 'rabbitmq-stream://' or 'rabbitmq-stream+tls://'")
+	errURIWhitespace    = errors.New("URI must not contain whitespace")
+	errNilContext       = errors.New("context cannot be nil")
+	errNilConfig        = errors.New("RabbitmqConfiguration cannot be nil")
+	errWriteShort       = errors.New("wrote less bytes than expected")
+	ErrConnectionClosed = errors.New("connection closed by peer. EOF error")
 )
 
 var schemePorts = map[string]int{"rabbitmq-stream": 5552, "rabbitmq-stream+tls": 5551}
