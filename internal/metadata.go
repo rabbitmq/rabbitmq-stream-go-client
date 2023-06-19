@@ -4,14 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 )
 
 type MetadataQuery struct {
 	correlationId uint32
 	streams       []string
 }
-
-const LenNilMetaDataResponse = 22
 
 func NewMetadataQuery(streams []string) *MetadataQuery {
 	return &MetadataQuery{streams: streams}
@@ -48,8 +47,6 @@ func (m *MetadataQuery) SizeNeeded() int {
 			len(stream)
 	}
 
-	fmt.Println(size)
-
 	return size
 }
 
@@ -78,9 +75,9 @@ func (m *MetadataQuery) Version() int16 {
 }
 
 type MetadataResponse struct {
-	correlationId  uint32
-	broker         Broker
-	streamMetadata StreamMetadata
+	correlationId   uint32
+	brokers         []Broker
+	streamsMetadata []StreamMetadata
 }
 
 type Broker struct {
@@ -107,40 +104,95 @@ func NewMetadataResponse(correlationId,
 ) *MetadataResponse {
 	return &MetadataResponse{
 		correlationId: correlationId,
-		broker: Broker{
-			reference: brokerReference,
-			host:      host,
-			port:      port,
+		brokers: []Broker{
+			{
+				reference: brokerReference,
+				host:      host,
+				port:      port,
+			},
 		},
-		streamMetadata: StreamMetadata{
-			streamName:         streamName,
-			responseCode:       responseCode,
-			leaderReference:    leaderReference,
-			replicasReferences: replicasReferences,
+		streamsMetadata: []StreamMetadata{
+			{
+				streamName:         streamName,
+				responseCode:       responseCode,
+				leaderReference:    leaderReference,
+				replicasReferences: replicasReferences,
+			},
 		},
 	}
 }
 
 func (m *MetadataResponse) MarshalBinary() (data []byte, err error) {
-	buff := &bytes.Buffer{}
-	n, err := writeMany(buff,
-		m.correlationId,
-		m.broker.reference,
-		m.broker.host,
-		m.broker.port,
-		m.streamMetadata.streamName,
-		m.streamMetadata.responseCode,
-		m.streamMetadata.leaderReference,
-		uint32(len(m.streamMetadata.replicasReferences)),
-		m.streamMetadata.replicasReferences)
+	buff := new(bytes.Buffer)
+	wr := bufio.NewWriter(buff)
+	bytesWritten := 0
 
+	n, err := writeMany(wr, m.correlationId)
 	if err != nil {
 		return nil, err
 	}
+	bytesWritten += n
 
-	lenReplicasReferences := len(m.streamMetadata.replicasReferences) * 2
-	if n != LenNilMetaDataResponse+len(m.broker.host)+len(m.streamMetadata.streamName)+lenReplicasReferences {
-		return nil, errWriteShort
+	n, err = writeMany(wr, len(m.brokers))
+	if err != nil {
+		return nil, err
+	}
+	bytesWritten += n
+
+	for _, broker := range m.brokers {
+		n, err = writeMany(wr, broker.reference, broker.host, broker.port)
+		if err != nil {
+			return nil, err
+		}
+		bytesWritten += n
+	}
+
+	n, err = writeMany(wr, len(m.streamsMetadata))
+	if err != nil {
+		return nil, err
+	}
+	bytesWritten += n
+
+	for _, streamMetadata := range m.streamsMetadata {
+		n, err = writeMany(
+			wr,
+			streamMetadata.streamName,
+			streamMetadata.responseCode,
+			streamMetadata.leaderReference,
+			uint32(len(streamMetadata.replicasReferences)),
+			streamMetadata.replicasReferences,
+		)
+		if err != nil {
+			return nil, err
+		}
+		bytesWritten += n
+	}
+
+	// calculate Bytes that were written and what we expect to write
+	expectedBytesWritten := streamProtocolCorrelationIdSizeBytes + streamProtocolSliceLenBytes
+	for _, broker := range m.brokers {
+		expectedBytesWritten += streamProtocolKeySizeUint16 +
+			streamProtocolStringLenSizeBytes +
+			len(broker.host) +
+			streamProtocolKeySizeUint32
+	}
+
+	expectedBytesWritten += streamProtocolSliceLenBytes
+	for _, streamMetadata := range m.streamsMetadata {
+		expectedBytesWritten += streamProtocolStringLenSizeBytes +
+			len(streamMetadata.streamName) +
+			streamProtocolKeySizeUint16 +
+			streamProtocolKeySizeUint16 +
+			streamProtocolSliceLenBytes +
+			(len(streamMetadata.replicasReferences) * 2) // 2 bytes for each replicasReference
+	}
+
+	if bytesWritten != expectedBytesWritten {
+		return nil, fmt.Errorf("did not write expected number of bytes: wanted %d, wrote %d", expectedBytesWritten, bytesWritten)
+	}
+
+	if err = wr.Flush(); err != nil {
+		return nil, err
 	}
 
 	data = buff.Bytes()
@@ -148,38 +200,61 @@ func (m *MetadataResponse) MarshalBinary() (data []byte, err error) {
 }
 
 func (m *MetadataResponse) Read(reader *bufio.Reader) error {
-	err := readMany(reader, &m.correlationId)
+	var lenBrokers uint32
+	err := readMany(reader, &m.correlationId, &lenBrokers)
 	if err != nil {
 		return err
 	}
 
-	err = readMany(reader, &m.broker.reference, &m.broker.host, &m.broker.port)
-	if err != nil {
-		return err
-	}
-
-	err = readMany(reader,
-		&m.streamMetadata.streamName, &m.streamMetadata.responseCode, &m.streamMetadata.leaderReference)
-	if err != nil {
-		return err
-	}
-
-	var refLen uint32
-	err = readAny(reader, &refLen)
-	if err != nil {
-		return err
-	}
-
-	m.streamMetadata.replicasReferences = make([]uint16, refLen)
-
-	for i := uint32(0); i < refLen; i++ {
-		var value uint16
-		err = readAny(reader, &value)
+	m.brokers = make([]Broker, lenBrokers)
+	// iterate over the brokers and read
+	for i := uint32(0); i < lenBrokers; i++ {
+		var ref uint16
+		var host string
+		var port uint32
+		err := readMany(reader, &ref, &host, &port)
 		if err != nil {
 			return err
 		}
-		m.streamMetadata.replicasReferences[i] = value
+		m.brokers[i].reference = ref
+		m.brokers[i].host = host
+		m.brokers[i].port = port
 	}
+
+	// read len streamsMetadata
+	lenMetadata, err := readUInt(reader)
+	if err != nil {
+		return err
+	}
+
+	m.streamsMetadata = make([]StreamMetadata, lenMetadata)
+	// iterate over streamsMetadata and read
+	for i := uint32(0); i < lenMetadata; i++ {
+		var streamName string
+		var responseCode uint16
+		var leaderReference uint16
+		var replicasLen uint32
+		var replicasRefs []uint16
+
+		err := readMany(reader, &streamName, &responseCode, &leaderReference, &replicasLen)
+		if err != nil {
+			return err
+		}
+
+		for j := uint32(0); j < replicasLen; j++ {
+			var ref uint16
+			ref, err = readUShort(reader)
+			if err != nil {
+				return err
+			}
+			replicasRefs = append(replicasRefs, ref)
+		}
+		m.streamsMetadata[i].streamName = streamName
+		m.streamsMetadata[i].responseCode = responseCode
+		m.streamsMetadata[i].leaderReference = leaderReference
+		m.streamsMetadata[i].replicasReferences = replicasRefs
+	}
+
 	return nil
 }
 
@@ -188,5 +263,7 @@ func (m *MetadataResponse) CorrelationId() uint32 {
 }
 
 func (m *MetadataResponse) ResponseCode() uint16 {
-	return m.streamMetadata.responseCode
+	// ResponseCodeOK, means the request to fetch metadata was successful.
+	// Determining if each individual stream is responding OK is the responsibility of the caller.
+	return constants.ResponseCodeOK
 }

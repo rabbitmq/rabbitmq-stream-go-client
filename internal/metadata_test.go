@@ -3,7 +3,6 @@ package internal
 import (
 	"bufio"
 	"bytes"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -54,15 +53,17 @@ var _ = Describe("Internal/Metadata", func() {
 		It("successfully decode a binary sequence into itself", func() {
 			byteSequence := []byte{
 				0x00, 0x00, 0x00, 0xff, // correlation id
-				0x00, 0x01, // broker reference
+				0x00, 0x00, 0x00, 0x01, // broker slice len bytes
+				0x00, 0x05, // broker reference
 				0x00, 0x07, // broker host length
 				byte('1'), byte('.'), byte('1'), byte('.'), byte('1'), byte('.'), byte('1'), // broker host
 				0x00, 0x00, 0x00, 0x02, // broker port
+				0x00, 0x00, 0x00, 0x01, // slice len bytes
 				0x00, 0x04, // stream name length
 				byte('t'), byte('e'), byte('s'), byte('t'), // stream name
 				0x00, 0x03, // response code
 				0x00, 0x04, // leaderReference
-				0x00, 0x00, 0x00, 0x03, // replica reference length
+				0x00, 0x00, 0x00, 0x03, // replica reference slice length
 				0x00, 0x0a, 0x00, 0x0b, 0x00, 0x0c, // replica references
 			}
 
@@ -70,14 +71,14 @@ var _ = Describe("Internal/Metadata", func() {
 			Expect(resp.Read(bufio.NewReader(bytes.NewReader(byteSequence)))).To(Succeed())
 
 			Expect(resp.correlationId).To(BeNumerically("==", 255))
-			Expect(resp.broker.reference).To(BeNumerically("==", 1))
-			Expect(resp.broker.host).To(Equal("1.1.1.1"))
-			Expect(resp.broker.port).To(BeNumerically("==", 2))
-			Expect(resp.streamMetadata.streamName).To(Equal("test"))
-			Expect(resp.streamMetadata.responseCode).To(BeNumerically("==", 3))
-			Expect(resp.streamMetadata.leaderReference).To(BeNumerically("==", 4))
-			Expect(resp.streamMetadata.replicasReferences).To(HaveLen(3))
-			Expect(resp.streamMetadata.replicasReferences).To(ConsistOf(uint16(10), uint16(11), uint16(12)))
+			Expect(resp.brokers[0].reference).To(BeNumerically("==", 5))
+			Expect(resp.brokers[0].host).To(Equal("1.1.1.1"))
+			Expect(resp.brokers[0].port).To(BeNumerically("==", 2))
+			Expect(resp.streamsMetadata[0].streamName).To(Equal("test"))
+			Expect(resp.streamsMetadata[0].responseCode).To(BeNumerically("==", 3))
+			Expect(resp.streamsMetadata[0].leaderReference).To(BeNumerically("==", 4))
+			Expect(resp.streamsMetadata[0].replicasReferences).To(HaveLen(3))
+			Expect(resp.streamsMetadata[0].replicasReferences).To(ConsistOf(uint16(10), uint16(11), uint16(12)))
 		})
 	})
 })

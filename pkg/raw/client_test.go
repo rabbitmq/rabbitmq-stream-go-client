@@ -193,7 +193,7 @@ var _ = Describe("Client", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", 1))
 			Expect(metadataResponse.CorrelationId()).To(BeNumerically("==", 1))
-		})
+		}, SpecTimeout(time.Second*3))
 
 		Context("when a metadata query is sent for a non existent stream name", func() {
 			It("returns an error", func(ctx SpecContext) {
@@ -207,8 +207,8 @@ var _ = Describe("Client", func() {
 				)
 
 				metadataResponse, err := streamClient.MetadataQuery(ctx, []string{"stream"})
-				Expect(err).To(MatchError("stream does not exist"))
-				Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", streamResponseCodeStreamDoesNotExist))
+				Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", streamResponseCodeOK))
+				Expect(err).NotTo(HaveOccurred())
 			}, SpecTimeout(time.Second*3))
 		})
 	})

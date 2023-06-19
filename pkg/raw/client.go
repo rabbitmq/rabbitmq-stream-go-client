@@ -1237,17 +1237,17 @@ func (tc *Client) Credit(ctx context.Context, subscriptionID uint8, credits uint
 	return tc.request(ctx, internal.NewCreditRequest(subscriptionID, credits))
 }
 
-// MetadataQuery sends a syncRequest to get metadata for a given stream. If the error is nil,
+// MetadataQuery sends a syncRequest to get metadata for a given list of streams. If the error is nil,
 // the MetadataResponse is returned which has the following structure:-
 //
 //	MetadataResponse{
 //		correlationID uint32
-//		broker Broker{
+//		brokers []Broker{
 //			reference uint16
 //			host string
 //			port uint32
 //		}
-//		streamMetadata StreamMetadata{
+//		streamsMetadata []StreamMetadata{
 //			streamName string
 //			responseCode uint16
 //			leaderReference uint16
@@ -1255,7 +1255,7 @@ func (tc *Client) Credit(ctx context.Context, subscriptionID uint8, credits uint
 //		}
 //	}
 //
-// stream is the name of the stream.
+// streams is a list of stream names.
 func (tc *Client) MetadataQuery(ctx context.Context, streams []string) (*MetadataResponse, error) {
 	if ctx == nil {
 		return nil, errNilContext

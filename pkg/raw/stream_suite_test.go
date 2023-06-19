@@ -675,13 +675,16 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(ctx context.Context, st
 	// metadataResponse
 	frameSize := 4 + // header
 		4 + // correlationID
-		2 + // broker refernce
+		4 + // brokers length
+		2 + // broker reference
 		9 + // broker host
 		4 + // broker port
+		4 + // streamMetadata length
 		8 + // streamMetadata streamName
 		2 + // streamMetadata responseCode
 		2 + // streamMetadata leaderReference
-		8 // streamMetadata replicasreferences
+		4 + // streamMetadata replicas length
+		4 // streamMetadata replicasreferences
 
 	header = internal.NewHeader(frameSize, 0x800f, 1)
 	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
@@ -702,13 +705,13 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(ctx context.Context, st
 		).MarshalBinary()
 	} else {
 		responseBody, err = internal.NewMetadataResponse(rmq.correlationIdSeq.next(),
-			0,
-			0,
+			29,
+			2,
 			responseCode,
-			0,
-			"",
+			3,
+			"0.0.0.0",
 			"stream-does-not-exist",
-			[]uint16{},
+			[]uint16{3, 4},
 		).MarshalBinary()
 	}
 
