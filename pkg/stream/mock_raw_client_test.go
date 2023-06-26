@@ -177,18 +177,18 @@ func (mr *MockRawClientMockRecorder) IsOpen() *gomock.Call {
 }
 
 // MetadataQuery mocks base method.
-func (m *MockRawClient) MetadataQuery(ctx context.Context, stream string) (*raw.MetadataResponse, error) {
+func (m *MockRawClient) MetadataQuery(ctx context.Context, streams []string) (*raw.MetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MetadataQuery", ctx, stream)
+	ret := m.ctrl.Call(m, "MetadataQuery", ctx, streams)
 	ret0, _ := ret[0].(*raw.MetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // MetadataQuery indicates an expected call of MetadataQuery.
-func (mr *MockRawClientMockRecorder) MetadataQuery(ctx, stream interface{}) *gomock.Call {
+func (mr *MockRawClientMockRecorder) MetadataQuery(ctx, streams interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MetadataQuery", reflect.TypeOf((*MockRawClient)(nil).MetadataQuery), ctx, stream)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MetadataQuery", reflect.TypeOf((*MockRawClient)(nil).MetadataQuery), ctx, streams)
 }
 
 // NotifyChunk mocks base method.

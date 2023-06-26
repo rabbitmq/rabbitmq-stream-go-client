@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 )
 
 type MetadataQuery struct {
@@ -265,5 +264,5 @@ func (m *MetadataResponse) CorrelationId() uint32 {
 func (m *MetadataResponse) ResponseCode() uint16 {
 	// ResponseCodeOK, means the request to fetch metadata was successful.
 	// Determining if each individual stream is responding OK is the responsibility of the caller.
-	return constants.ResponseCodeOK
+	return 1
 }

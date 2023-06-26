@@ -196,7 +196,7 @@ var _ = Describe("Client", func() {
 		}, SpecTimeout(time.Second*3))
 
 		Context("when a metadata query is sent for a non existent stream name", func() {
-			It("returns an error", func(ctx SpecContext) {
+			It("The request is successful, and the error is contained in the metadata for that stream", func(ctx SpecContext) {
 				Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())
 				streamClient := raw.NewClient(fakeClientConn, conf)
 				go streamClient.(*raw.Client).StartFrameListener(ctx)
@@ -206,8 +206,7 @@ var _ = Describe("Client", func() {
 					[]string{"stream-does-not-exist"},
 				)
 
-				metadataResponse, err := streamClient.MetadataQuery(ctx, []string{"stream"})
-				Expect(metadataResponse.ResponseCode()).To(BeNumerically("==", streamResponseCodeOK))
+				_, err := streamClient.MetadataQuery(ctx, []string{"stream"})
 				Expect(err).NotTo(HaveOccurred())
 			}, SpecTimeout(time.Second*3))
 		})

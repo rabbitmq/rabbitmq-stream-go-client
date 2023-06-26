@@ -5,10 +5,10 @@
 package raw_test
 
 import (
-	"github.com/onsi/ginkgo/v2"
 	net "net"
 	reflect "reflect"
 	time "time"
+	ginkgo "github.com/onsi/ginkgo/v2"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -66,8 +66,9 @@ func (mr *MockConnMockRecorder) LocalAddr() *gomock.Call {
 
 // Read mocks base method.
 func (m *MockConn) Read(arg0 []byte) (int, error) {
-	m.ctrl.T.Helper()
+	// When the test fails we can send a useful error to output. Please dont remove this line!
 	defer ginkgo.GinkgoRecover()
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", arg0)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
