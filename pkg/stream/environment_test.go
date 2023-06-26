@@ -209,16 +209,30 @@ var _ = Describe("Environment", func() {
 			})
 		})
 
-		When("there are multiple locators", func() {
-			// marked as flaky because the environment picks a locator randomly
-			// the test flakes if locator2 is picked first
-			It("uses different locators when one fails", FlakeAttempts(3), func() {
-				// setup
-				locator2rawClient := stream.NewMockRawClient(mockCtrl)
+		// marked as flaky because the environment picks a locator randomly
+		// the test flakes if locator2 is picked first
+		When("there are multiple locators", FlakeAttempts(3), func() {
+			var (
+				locator2rawClient *stream.MockRawClient
+			)
+
+			BeforeEach(func() {
+				locator2rawClient = stream.NewMockRawClient(mockCtrl)
 				environment.AppendLocatorRawClient(locator2rawClient)
 				environment.SetBackoffPolicy(func(_ int) time.Duration {
 					return time.Millisecond * 10
 				})
+
+				mockRawClient.EXPECT().
+					IsOpen().
+					Return(true) // from maybeInitializeLocator
+			})
+
+			It("uses different locators when one fails", func() {
+				// setup
+				locator2rawClient.EXPECT().
+					IsOpen().
+					Return(true)
 				locator2rawClient.EXPECT().
 					DeleteStream(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"))
 
@@ -227,16 +241,20 @@ var _ = Describe("Environment", func() {
 					Return(errors.New("something went wrong")).
 					Times(3)
 
-				mockRawClient.EXPECT().
-					IsOpen().
-					Return(true) // from maybeInitializeLocator
-				locator2rawClient.EXPECT().
-					IsOpen().
-					Return(true)
-
 				// act
 				err := environment.DeleteStream(rootCtx, "retried-delete-stream")
 				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("gives up on non-retryable errors", func() {
+				// setup
+				mockRawClient.EXPECT().
+					DeleteStream(gomock.AssignableToTypeOf(ctxType), gomock.Eq("non-retryable")).
+					Return(raw.ErrStreamDoesNotExist)
+
+				// act
+				err := environment.DeleteStream(rootCtx, "non-retryable")
+				Expect(err).To(HaveOccurred())
 			})
 		})
 	})

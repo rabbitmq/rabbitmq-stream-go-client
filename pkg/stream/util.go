@@ -34,7 +34,7 @@ func isNonRetryableError(err error) bool {
 	return errors.Is(err, raw.ErrStreamAlreadyExists) ||
 		errors.Is(err, raw.ErrSubscriptionIdAlreadyExists) ||
 		errors.Is(err, raw.ErrSubscriptionIdDoesNotExist) ||
-		errors.Is(err, raw.ErrStreamAlreadyExists) ||
+		errors.Is(err, raw.ErrStreamDoesNotExist) ||
 		errors.Is(err, raw.ErrStreamNotAvailable) ||
 		errors.Is(err, raw.ErrSASLMechanismNotSupported) ||
 		errors.Is(err, raw.ErrAuthFailure) ||

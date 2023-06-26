@@ -92,6 +92,7 @@ func (e *Environment) CreateStream(ctx context.Context, name string, opts Stream
 			continue
 		}
 
+		// TODO: refactor to use maybeApplyDefaultTimeout()
 		ctxCreate, cancel := context.WithTimeout(ctx, DefaultTimeout)
 		// context cancellation is checked in the raw layer
 		res := l.locatorOperation((*locator).operationCreateStream, ctxCreate, name, streamOptionsToRawStreamConfiguration(opts))
