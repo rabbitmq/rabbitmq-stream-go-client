@@ -2,7 +2,6 @@ package stream
 
 import (
 	"context"
-	"errors"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"golang.org/x/exp/slog"
 	"net"
@@ -133,14 +132,6 @@ func (l *locator) shutdownHandler() {
 // last element.
 type locatorOperationFn func(*locator, ...any) (result []any)
 
-func (l *locator) operationCreateStream(args ...any) []any {
-	ctx := args[0].(context.Context)
-	name := args[1].(string)
-	configuration := args[2].(raw.StreamConfiguration)
-	resultErr := l.client.DeclareStream(ctx, name, configuration)
-	return []any{resultErr}
-}
-
 func (l *locator) locatorOperation(op locatorOperationFn, args ...any) (result []any) {
 	l.log.Debug("starting locator operation")
 
@@ -156,7 +147,7 @@ func (l *locator) locatorOperation(op locatorOperationFn, args ...any) (result [
 		}
 
 		lastErr = result[len(result)-1].(error)
-		if isNonRetryableError(lastErr) || errors.Is(lastErr, context.DeadlineExceeded) {
+		if isNonRetryableError(lastErr) {
 			l.log.Debug("locator operation failed with non-retryable error", slog.Any("error", lastErr))
 			return result
 		}
@@ -165,4 +156,17 @@ func (l *locator) locatorOperation(op locatorOperationFn, args ...any) (result [
 		attempt++
 	}
 	return result
+}
+
+func (l *locator) operationCreateStream(args ...any) []any {
+	ctx := args[0].(context.Context)
+	name := args[1].(string)
+	configuration := args[2].(raw.StreamConfiguration)
+	return []any{l.client.DeclareStream(ctx, name, configuration)}
+}
+
+func (l *locator) operationDeleteStream(args ...any) []any {
+	ctx := args[0].(context.Context)
+	name := args[1].(string)
+	return []any{l.client.DeleteStream(ctx, name)}
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/stream"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
+	"golang.org/x/exp/slog"
 	"reflect"
 	"sync"
 	"time"
@@ -159,6 +161,82 @@ var _ = Describe("Environment", func() {
 
 				// assert
 				Expect(err).To(MatchError("stream already exists"))
+			})
+		})
+	})
+
+	Context("delete stream", func() {
+		It("deletes a stream", func() {
+			// setup
+			mockRawClient.EXPECT().
+				DeleteStream(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("my-stream"))
+			mockRawClient.EXPECT().
+				IsOpen().
+				Return(true) // from maybeInitializeLocator
+
+			err := environment.DeleteStream(rootCtx, "my-stream")
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		When("there's an error", func() {
+			BeforeEach(func() {
+				// setup
+				mockRawClient.EXPECT().
+					DeleteStream(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("my-stream")).
+					Return(errors.New("something went wrong")).
+					AnyTimes()
+				mockRawClient.EXPECT().
+					IsOpen().
+					Return(true) // from maybeInitializeLocator
+			})
+
+			It("bubbles up the error", func() {
+				err := environment.DeleteStream(rootCtx, "error-in-delete")
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("logs locator operation errors", func() {
+				// setup
+				logBuffer := gbytes.NewBuffer()
+				logger := slog.New(slog.NewTextHandler(logBuffer))
+				ctx := raw.NewContextWithLogger(context.Background(), *logger)
+
+				// act
+				err := environment.DeleteStream(ctx, "log-errors")
+				Expect(err).To(HaveOccurred())
+
+				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say(`"locator operation failed" error="something went wrong"`))
+			})
+		})
+
+		When("there are multiple locators", func() {
+			// marked as flaky because the environment picks a locator randomly
+			// the test flakes if locator2 is picked first
+			It("uses different locators when one fails", FlakeAttempts(3), func() {
+				// setup
+				locator2rawClient := stream.NewMockRawClient(mockCtrl)
+				environment.AppendLocatorRawClient(locator2rawClient)
+				environment.SetBackoffPolicy(func(_ int) time.Duration {
+					return time.Millisecond * 10
+				})
+				locator2rawClient.EXPECT().
+					DeleteStream(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"))
+
+				mockRawClient.EXPECT().
+					DeleteStream(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+					Return(errors.New("something went wrong")).
+					Times(3)
+
+				mockRawClient.EXPECT().
+					IsOpen().
+					Return(true) // from maybeInitializeLocator
+				locator2rawClient.EXPECT().
+					IsOpen().
+					Return(true)
+
+				// act
+				err := environment.DeleteStream(rootCtx, "retried-delete-stream")
+				Expect(err).ToNot(HaveOccurred())
 			})
 		})
 	})

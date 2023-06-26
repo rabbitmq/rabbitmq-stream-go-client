@@ -2,7 +2,6 @@ package stream
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"golang.org/x/exp/slog"
@@ -105,10 +104,48 @@ func (e *Environment) CreateStream(ctx context.Context, name string, opts Stream
 		lastError = res[0].(error)
 
 		// give up on non-retryable errors
-		if isNonRetryableError(lastError) || errors.Is(lastError, context.DeadlineExceeded) {
+		if isNonRetryableError(lastError) {
 			return lastError
 		}
 	}
 
 	return fmt.Errorf("locator operation failed: %w", lastError)
+}
+
+// DeleteStream with given name.
+func (e *Environment) DeleteStream(ctx context.Context, name string) error {
+	logger := raw.LoggerFromCtxOrDiscard(ctx)
+
+	rn := rand.Intn(100)
+	n := len(e.locators)
+
+	var lastError error
+	for i := 0; i < n; i++ {
+		l := e.pickLocator((i + rn) % n)
+
+		if err := l.maybeInitializeLocator(); err != nil {
+			logger.Error("locator not available", slog.Any("error", err))
+			lastError = err
+			continue
+		}
+
+		opCtx, cancel := maybeApplyDefaultTimeout(ctx)
+		result := l.locatorOperation((*locator).operationDeleteStream, opCtx, name)
+		if cancel != nil {
+			cancel()
+		}
+
+		if result[0] == nil {
+			return nil
+		}
+
+		if err := result[0].(error); err != nil {
+			lastError = err
+			if isNonRetryableError(lastError) {
+				return lastError
+			}
+			logger.Error("locator operation failed", slog.Any("error", lastError))
+		}
+	}
+	return lastError
 }

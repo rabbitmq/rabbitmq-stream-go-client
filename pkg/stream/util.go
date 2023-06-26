@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
@@ -47,5 +48,14 @@ func isNonRetryableError(err error) bool {
 		errors.Is(err, raw.ErrAccessRefused) ||
 		errors.Is(err, raw.ErrPreconditionFailed) ||
 		errors.Is(err, raw.ErrPublisherDoesNotExist) ||
-		errors.Is(err, raw.ErrNoOffset)
+		errors.Is(err, raw.ErrNoOffset) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, context.Canceled)
+}
+
+func maybeApplyDefaultTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); !ok {
+		return context.WithTimeout(ctx, DefaultTimeout)
+	}
+	return ctx, nil
 }
