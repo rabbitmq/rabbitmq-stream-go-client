@@ -76,6 +76,18 @@ tests: | $(GINKGO) ## Run unit tests. Make sure you install-tools before running
 	@printf "$(GREEN)Running all tests in parallel$(NORMAL)\n"
 	$(GINKGO) $(GINKGO_RUN_SHARED_FLAGS) $(GINKGO_RUN_FLAGS) --skip-package "e2e" $(GINKGO_EXTRA) .
 
+# Run tests target for CI. Using go run instead of Ginkgo CLI to save some bandwidth by not downloading Ginkgo CLI
+tests-ci:
+	$(GO) run github.com/onsi/ginkgo/v2/ginkgo \
+		$(GINKGO_RUN_SHARED_FLAGS) \
+		$(GINKGO_RUN_FLAGS) \
+		--randomize-suites \
+		--label-filter="!flaky" \
+		--skip-package "e2e" \
+		--fail-on-pending \
+		--keep-going
+
+
 #### e2e test suite accepts the flags -keep-rabbit-container=true and -rabbit-debug-log=true
 #### -keep-rabbit-container=true does not delete the rabbit container after the suite run. It is useful to examine rabbit logs after a test failure
 #### -rabbit-debug-log=true enables debug log level in rabbitmq before the tests start
