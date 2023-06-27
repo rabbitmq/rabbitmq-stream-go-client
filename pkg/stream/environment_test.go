@@ -259,6 +259,37 @@ var _ = Describe("Environment", func() {
 		})
 	})
 
+	Context("close", func() {
+		// close the environment connection.
+		// TODO when there are active producers/consumers we will need to stop them first
+		It("closes the environment connection", func() {
+			// setup
+			mockRawClient.EXPECT().
+				Close(gomock.AssignableToTypeOf(ctxType))
+
+			environment.Close(rootCtx)
+		})
+
+		When("there is an error", func() {
+			BeforeEach(func() {
+				// setup
+				mockRawClient.EXPECT().
+					Close(gomock.AssignableToTypeOf(ctxType)).
+					Return(errors.New("something went wrong"))
+			})
+
+			It("logs the error and moves on", func() {
+				logBuffer := gbytes.NewBuffer()
+				logger := slog.New(slog.NewTextHandler(logBuffer))
+				ctx := raw.NewContextWithLogger(context.Background(), *logger)
+
+				environment.Close(ctx)
+
+				Eventually(logBuffer).WithTimeout(time.Second).Should(gbytes.Say(`"error closing locator client" close.error="something went wrong"`))
+			})
+		})
+	})
+
 	When("multiple routines use the environment", func() {
 		// FIXME(Zerpet): I'm not sure how reliable is this test
 		//   it does not trigger the race detector. It makes some

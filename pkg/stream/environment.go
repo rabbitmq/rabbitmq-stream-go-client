@@ -150,3 +150,16 @@ func (e *Environment) DeleteStream(ctx context.Context, name string) error {
 	}
 	return lastError
 }
+
+func (e *Environment) Close(ctx context.Context) {
+	logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("close")
+	// TODO: shutdown producers/consumers
+	for _, l := range e.locators {
+		if l.isSet {
+			err := l.client.Close(ctx)
+			if err != nil {
+				logger.Warn("error closing locator client", slog.Any("error", err))
+			}
+		}
+	}
+}
