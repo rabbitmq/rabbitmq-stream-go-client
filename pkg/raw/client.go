@@ -590,6 +590,7 @@ func (tc *Client) peerProperties(ctx context.Context) error {
 		"properties",
 		response.ServerProperties,
 	)
+	tc.configuration.rabbitmqBroker.ServerProperties = response.ServerProperties
 	return streamErrorOrNil(response.ResponseCode())
 }
 

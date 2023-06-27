@@ -320,4 +320,23 @@ var _ = Describe("Environment", func() {
 			wg.Wait()
 		}, SpecTimeout(time.Second*2))
 	})
+
+	Context("query stream stats", Focus, func() {
+		It("queries stats for a given stream", func() {
+			// setup
+			mockRawClient.EXPECT().
+				StreamStats(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+				Return(map[string]int64{"first_chunk_id": 40, "committed_chunk_id": 42}, nil)
+
+			// act
+			stats, err := environment.QueryStreamStats(rootCtx, "stream-with-stats")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(stats.FirstOffset()).To(BeNumerically("==", 40))
+			Expect(stats.CommittedChunkId()).To(BeNumerically("==", 42))
+		})
+
+		When("there is an error", func() {
+
+		})
+	})
 })

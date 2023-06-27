@@ -51,3 +51,24 @@ func (tc *Client) Request(ctx context.Context, write internal.CommandWrite) erro
 func (tc *Client) ForceCloseConnectionSocket() {
 	_ = tc.connection.Close()
 }
+
+// SetServerProperties sets the server properties given as key-value pairs.
+// It is a mistake to provide an odd number of arguments, except 0 or 1.
+// If given only 1 argument, it sets the argument as key with empty string value.
+// Passing an odd number of arguments panics.
+func (r *ClientConfiguration) SetServerProperties(keyValues ...string) {
+	if r.rabbitmqBroker.ServerProperties == nil {
+		r.rabbitmqBroker.ServerProperties = make(map[string]string)
+	}
+
+	if len(keyValues) == 0 {
+		return
+	}
+	if len(keyValues) == 1 {
+		r.rabbitmqBroker.ServerProperties[keyValues[0]] = ""
+		return
+	}
+	for i := 0; i < len(keyValues); i += 2 {
+		r.rabbitmqBroker.ServerProperties[keyValues[i]] = keyValues[i+1]
+	}
+}

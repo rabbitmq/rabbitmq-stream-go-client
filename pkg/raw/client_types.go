@@ -26,14 +26,15 @@ const (
 )
 
 type broker struct {
-	Host     string
-	Port     int
-	Username string
-	Vhost    string
-	Password string
-	Scheme   string
-	AdvHost  string
-	AdvPort  string
+	Host             string
+	Port             int
+	Username         string
+	Vhost            string
+	Password         string
+	Scheme           string
+	AdvHost          string
+	AdvPort          string
+	ServerProperties map[string]string
 }
 
 var defaultBroker = broker{

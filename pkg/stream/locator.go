@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	"golang.org/x/exp/slog"
+	"golang.org/x/mod/semver"
 	"net"
 	"sync"
 	"time"
@@ -124,6 +125,19 @@ func (l *locator) shutdownHandler() {
 	}
 }
 
+const rabbitmqVersion311 = "v3.11"
+
+func (l *locator) isServer311orMore() bool {
+	v, ok := l.rawClientConf.RabbitmqBrokers().ServerProperties["version"]
+	if !ok {
+		// version not found in server properties
+		// returning false as we can't determine
+		return false
+	}
+	// "v" + v because semver module expects all string versions to start with v
+	return semver.Compare("v"+v, rabbitmqVersion311) >= 0
+}
+
 // locatorOperationFn type represents a "generic" operation on a locator. The
 // implementing function must always return an error, or nil, as last element of
 // the result slice. Most implementations are likely to return a slice with a
@@ -169,4 +183,11 @@ func (l *locator) operationDeleteStream(args ...any) []any {
 	ctx := args[0].(context.Context)
 	name := args[1].(string)
 	return []any{l.client.DeleteStream(ctx, name)}
+}
+
+func (l *locator) operationQueryStreamStats(args ...any) []any {
+	ctx := args[0].(context.Context)
+	name := args[1].(string)
+	stats, err := l.client.StreamStats(ctx, name)
+	return []any{stats, err}
 }

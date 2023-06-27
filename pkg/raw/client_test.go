@@ -116,6 +116,7 @@ var _ = Describe("Client", func() {
 		itCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(ctx, *logger), time.Second*4)
 		defer cancel()
 
+		By("connecting to the server")
 		streamClient := raw.NewClient(fakeClientConn, conf)
 		Eventually(streamClient.Connect).
 			WithContext(itCtx).
@@ -125,6 +126,10 @@ var _ = Describe("Client", func() {
 			WithTimeout(time.Second).
 			Should(BeTrue(), "expected connection to be open")
 
+		By("recording the server properties")
+		Expect(conf.RabbitmqBrokers().ServerProperties).To(HaveKeyWithValue("product", "mock-rabbitmq"))
+
+		By("closing the client connection gracefully")
 		go fakeRabbitMQ.fakeRabbitMQConnectionClose(itCtx)
 		// We need to renew the deadline
 		Expect(fakeClientConn.SetDeadline(time.Now().Add(time.Second))).To(Succeed())

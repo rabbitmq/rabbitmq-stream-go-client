@@ -151,6 +151,7 @@ func (e *Environment) DeleteStream(ctx context.Context, name string) error {
 	return lastError
 }
 
+// TODO: go docs
 func (e *Environment) Close(ctx context.Context) {
 	logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("close")
 	// TODO: shutdown producers/consumers
@@ -162,4 +163,13 @@ func (e *Environment) Close(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (e *Environment) QueryStreamStats(ctx context.Context, name string) (Stats, error) {
+	l := e.pickLocator(0)
+	result := l.locatorOperation((*locator).operationQueryStreamStats, ctx, name)
+
+	stats := result[0].(map[string]int64)
+
+	return Stats{stats["first_chunk_id"], stats["committed_chunk_id"]}, nil
 }
