@@ -47,6 +47,11 @@ func runSmartClient() {
 	fmt.Print("Close the connection and press enter")
 	sc.Scan()
 
+	err = env.DeleteStream(ctx, "my-stream")
+	if err != nil {
+		panic(err)
+	}
+
 	err = env.CreateStream(ctx, "other-stream", stream.StreamOptions{})
 	if err != nil {
 		panic(err)
@@ -54,6 +59,10 @@ func runSmartClient() {
 
 	fmt.Print("Life good! Press enter to exit")
 	sc.Scan()
+	err = env.DeleteStream(ctx, "other-stream")
+	if err != nil {
+		panic(err)
+	}
 }
 
 func runRawClient() {
