@@ -24,6 +24,8 @@ func (b ByteCapacity) String() string {
 }
 
 // StreamOptions is an alias for backwards compatibility with v1 of this client.
+//
+// Deprecated: use CreateStreamOptions. This alias is kept for backwards compatibility
 type StreamOptions = CreateStreamOptions
 
 type CreateStreamOptions struct {

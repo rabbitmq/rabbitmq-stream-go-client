@@ -76,7 +76,7 @@ func (e *Environment) pickLocator(n int) *locator {
 // # Public API
 
 // CreateStream with name and given options.
-func (e *Environment) CreateStream(ctx context.Context, name string, opts StreamOptions) error {
+func (e *Environment) CreateStream(ctx context.Context, name string, opts CreateStreamOptions) error {
 	logger := raw.LoggerFromCtxOrDiscard(ctx)
 
 	rn := rand.Intn(100)

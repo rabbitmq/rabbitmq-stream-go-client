@@ -13,7 +13,7 @@ const (
 	maxSegmentSizeKey = "x-stream-max-segment-size-bytes"
 )
 
-func streamOptionsToRawStreamConfiguration(options StreamOptions) raw.StreamConfiguration {
+func streamOptionsToRawStreamConfiguration(options CreateStreamOptions) raw.StreamConfiguration {
 	c := make(raw.StreamConfiguration, 3)
 	if options.MaxLength != 0 {
 		c[maxLengthKey] = options.MaxLength.String()

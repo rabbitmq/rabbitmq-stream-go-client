@@ -57,7 +57,7 @@ var _ = Describe("Environment", func() {
 				Return(true) // from maybeInitializeLocator
 
 			// act
-			err := environment.CreateStream(context.Background(), "my-stream", stream.StreamOptions{})
+			err := environment.CreateStream(context.Background(), "my-stream", stream.CreateStreamOptions{})
 
 			// assert
 			Expect(err).ToNot(HaveOccurred())

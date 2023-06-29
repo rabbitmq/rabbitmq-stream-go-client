@@ -38,7 +38,7 @@ func runSmartClient() {
 	}
 	//defer env.Close()
 
-	err = env.CreateStream(ctx, "my-stream", stream.StreamOptions{})
+	err = env.CreateStream(ctx, "my-stream", stream.CreateStreamOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -52,7 +52,7 @@ func runSmartClient() {
 		panic(err)
 	}
 
-	err = env.CreateStream(ctx, "other-stream", stream.StreamOptions{})
+	err = env.CreateStream(ctx, "other-stream", stream.CreateStreamOptions{})
 	if err != nil {
 		panic(err)
 	}
