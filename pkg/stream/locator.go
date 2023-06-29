@@ -186,6 +186,9 @@ func (l *locator) operationDeleteStream(args ...any) []any {
 }
 
 func (l *locator) operationQueryStreamStats(args ...any) []any {
+	if !l.isServer311orMore() {
+		return []any{nil, ErrUnsupportedOperation}
+	}
 	ctx := args[0].(context.Context)
 	name := args[1].(string)
 	stats, err := l.client.StreamStats(ctx, name)

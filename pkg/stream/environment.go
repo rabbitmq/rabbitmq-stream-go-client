@@ -168,6 +168,9 @@ func (e *Environment) Close(ctx context.Context) {
 func (e *Environment) QueryStreamStats(ctx context.Context, name string) (Stats, error) {
 	l := e.pickLocator(0)
 	result := l.locatorOperation((*locator).operationQueryStreamStats, ctx, name)
+	if result[1] != nil {
+		return Stats{-1, -1}, result[1].(error)
+	}
 
 	stats := result[0].(map[string]int64)
 

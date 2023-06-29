@@ -39,6 +39,15 @@ func (e *Environment) AppendLocatorRawClient(c raw.Clienter) {
 	})
 }
 
+// SetServerVersion sets the version in the server properties in the locator's
+// raw client configuration. Important to use it in tests for functions that
+// require 3.11+
+func (e *Environment) SetServerVersion(v string) {
+	for _, l := range e.locators {
+		l.rawClientConf.SetServerProperties("version", v)
+	}
+}
+
 func (e *Environment) SetBackoffPolicy(f func(int) time.Duration) {
 	e.backOffPolicy = f
 }

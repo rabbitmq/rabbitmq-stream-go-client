@@ -50,7 +50,8 @@ func isNonRetryableError(err error) bool {
 		errors.Is(err, raw.ErrPublisherDoesNotExist) ||
 		errors.Is(err, raw.ErrNoOffset) ||
 		errors.Is(err, context.DeadlineExceeded) ||
-		errors.Is(err, context.Canceled)
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, ErrUnsupportedOperation)
 }
 
 func maybeApplyDefaultTimeout(ctx context.Context) (context.Context, context.CancelFunc) {

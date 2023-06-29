@@ -13,7 +13,8 @@ const (
 )
 
 var (
-	ErrNoLocators = fmt.Errorf("no locators configured")
+	ErrNoLocators           = fmt.Errorf("no locators configured")
+	ErrUnsupportedOperation = fmt.Errorf("unsupported operation")
 )
 
 type ByteCapacity uint64

@@ -3,119 +3,75 @@ package stream
 import (
 	"context"
 	"errors"
-	"github.com/golang/mock/gomock"
 	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"golang.org/x/exp/slog"
-	"reflect"
 	"time"
 )
 
 var _ = Describe("Locator", func() {
 	Describe("Operations", func() {
 		var (
-			logger     *slog.Logger
-			mockCtrl   *gomock.Controller
-			mockClient *MockRawClient
-			ctxType    = reflect.TypeOf((*context.Context)(nil)).Elem()
-			rootCtx    = context.Background()
+			logger        *slog.Logger
+			backOffPolicy = func(_ int) time.Duration {
+				return time.Millisecond * 10
+			}
 		)
 
 		BeforeEach(func() {
 			logger = slog.New(slog.NewTextHandler(GinkgoWriter))
-			mockCtrl = gomock.NewController(GinkgoT())
-			mockClient = NewMockRawClient(mockCtrl)
 		})
 
 		It("reconnects", func() {
 			Skip("this needs a real rabbit to test, or close enough to real rabbit")
 		})
 
-		Context("stream declaration", func() {
+		When("there is an error", func() {
 			var (
-				l *locator
+				loc *locator
 			)
 
 			BeforeEach(func() {
-				l = &locator{
+				loc = &locator{
 					log:                  logger,
 					shutdownNotification: make(chan struct{}),
-					client:               mockClient,
+					rawClientConf:        raw.ClientConfiguration{},
+					client:               nil,
 					isSet:                true,
-					backOffPolicy: func(_ int) time.Duration {
-						return time.Millisecond * 10
-					},
+					clientClose:          nil,
+					backOffPolicy:        backOffPolicy,
 				}
 			})
 
-			It("creates a stream", func() {
-				// setup
-				mockClient.EXPECT().
-					DeclareStream(
-						gomock.AssignableToTypeOf(ctxType),
-						gomock.AssignableToTypeOf("string"),
-						gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
-					)
-
-				// act
-				r := l.locatorOperation((*locator).operationCreateStream, rootCtx, "my-stream", raw.StreamConfiguration{})
-				err := r[0]
-
-				// assert
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("bubbles up create errors", func() {
-				// setup
-				mockClient.EXPECT().
-					DeclareStream(
-						gomock.AssignableToTypeOf(ctxType),
-						gomock.AssignableToTypeOf("string"),
-						gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
-					).
-					Return(errors.New("something went wrong")).
-					AnyTimes()
-
-				// act
-				r := l.locatorOperation((*locator).operationCreateStream, rootCtx, "oopsie", raw.StreamConfiguration{})
-				err := r[0]
-
-				// assert
-				Expect(err).To(MatchError("something went wrong"))
-			})
-
-			When("the create stream operation errors", func() {
-				It("retries", func() {
-					// setup
-					mockClient.EXPECT().
-						DeclareStream(
-							gomock.AssignableToTypeOf(ctxType),
-							gomock.AssignableToTypeOf("string"),
-							gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
-						).
-						Return(errors.New("something went wrong")).
-						Times(2)
-					mockClient.EXPECT().
-						DeclareStream(
-							gomock.AssignableToTypeOf(ctxType),
-							gomock.AssignableToTypeOf("string"),
-							gomock.AssignableToTypeOf(raw.StreamConfiguration{}),
-						)
-
-					// act
-					r := l.locatorOperation((*locator).operationCreateStream, rootCtx, "retryable-create", raw.StreamConfiguration{})
-					err := r[0]
-
-					// assert
-					Expect(err).ToNot(HaveOccurred())
-					// TODO: assert that it logs errors
+			It("retries the operation on retryable errors", func() {
+				var runs int
+				_ = loc.locatorOperation(func(_ *locator, _ ...any) []any {
+					runs += 1
+					return []any{errors.New("oopsie")}
 				})
+				Expect(runs).To(BeNumerically("==", 3))
 			})
 
-			It("sets the locator", func() {
-				Skip("this test needs a real rabbit, or close enough")
+			It("gives up on non-retryable errors", func() {
+				var runs int
+				_ = loc.locatorOperation(func(_ *locator, _ ...any) []any {
+					runs += 1
+					return []any{context.DeadlineExceeded}
+				})
+				Expect(runs).To(BeNumerically("==", 1))
 			})
+
+			It("bubbles up the error", func() {
+				r := loc.locatorOperation(func(_ *locator, _ ...any) []any {
+					return []any{errors.New("oopsie")}
+				})
+				Expect(r).To(HaveLen(1)) // not all result slices with error have only 1 element tho
+				Expect(r[0]).To(BeAssignableToTypeOf(errors.New("an error")))
+				Expect(r[0]).To(MatchError("oopsie"))
+			})
+
+			// TODO: add a test for logs
 		})
 	})
 

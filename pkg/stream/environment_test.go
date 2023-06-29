@@ -321,7 +321,11 @@ var _ = Describe("Environment", func() {
 		}, SpecTimeout(time.Second*2))
 	})
 
-	Context("query stream stats", Focus, func() {
+	Context("query stream stats", func() {
+		BeforeEach(func() {
+			environment.SetServerVersion("3.11.1")
+		})
+
 		It("queries stats for a given stream", func() {
 			// setup
 			mockRawClient.EXPECT().
@@ -337,6 +341,16 @@ var _ = Describe("Environment", func() {
 
 		When("there is an error", func() {
 
+		})
+
+		When("server is less than 3.11", func() {
+			It("returns an unsupported error", func() {
+				environment.SetServerVersion("3.10.0")
+				// we do not expect any call from the Mock because it should error w/o trying
+
+				_, err := environment.QueryStreamStats(rootCtx, "stream-with-stats")
+				Expect(err).To(MatchError("unsupported operation"))
+			})
 		})
 	})
 })
