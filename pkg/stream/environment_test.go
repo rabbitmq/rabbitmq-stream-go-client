@@ -18,11 +18,14 @@ import (
 var _ = Describe("Environment", func() {
 
 	var (
-		mockCtrl      *gomock.Controller
-		mockRawClient *stream.MockRawClient
-		environment   *stream.Environment
-		rootCtx       = context.Background()
-		ctxType       = reflect.TypeOf((*context.Context)(nil)).Elem()
+		mockCtrl        *gomock.Controller
+		mockRawClient   *stream.MockRawClient
+		environment     *stream.Environment
+		rootCtx         = context.Background()
+		ctxType         = reflect.TypeOf((*context.Context)(nil)).Elem()
+		backOffPolicyFn = func(_ int) time.Duration {
+			return time.Millisecond * 10
+		}
 	)
 
 	BeforeEach(func() {
@@ -38,9 +41,7 @@ var _ = Describe("Environment", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		environment.AppendLocatorRawClient(mockRawClient)
-		environment.SetBackoffPolicy(func(_ int) time.Duration {
-			return time.Millisecond * 10
-		})
+		environment.SetBackoffPolicy(backOffPolicyFn)
 	})
 
 	Context("create stream", func() {
@@ -219,9 +220,7 @@ var _ = Describe("Environment", func() {
 			BeforeEach(func() {
 				locator2rawClient = stream.NewMockRawClient(mockCtrl)
 				environment.AppendLocatorRawClient(locator2rawClient)
-				environment.SetBackoffPolicy(func(_ int) time.Duration {
-					return time.Millisecond * 10
-				})
+				environment.SetBackoffPolicy(backOffPolicyFn)
 
 				mockRawClient.EXPECT().
 					IsOpen().
@@ -324,6 +323,9 @@ var _ = Describe("Environment", func() {
 	Context("query stream stats", func() {
 		BeforeEach(func() {
 			environment.SetServerVersion("3.11.1")
+			mockRawClient.EXPECT().
+				IsOpen().
+				Return(true) // from maybeInitializeLocator
 		})
 
 		It("queries stats for a given stream", func() {
@@ -340,7 +342,16 @@ var _ = Describe("Environment", func() {
 		})
 
 		When("there is an error", func() {
+			It("bubbles up the error", func() {
+				// setup
+				mockRawClient.EXPECT().
+					StreamStats(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+					Return(nil, errors.New("err not today")).
+					Times(3)
 
+				_, err := environment.QueryStreamStats(rootCtx, "retryable-error")
+				Expect(err).To(MatchError("err not today"))
+			})
 		})
 
 		When("server is less than 3.11", func() {
@@ -350,6 +361,53 @@ var _ = Describe("Environment", func() {
 
 				_, err := environment.QueryStreamStats(rootCtx, "stream-with-stats")
 				Expect(err).To(MatchError("unsupported operation"))
+			})
+		})
+
+		When("there are multiple locators", FlakeAttempts(3), Label("flaky"), func() {
+			var (
+				locator2rawClient *stream.MockRawClient
+			)
+
+			BeforeEach(func() {
+				locator2rawClient = stream.NewMockRawClient(mockCtrl)
+				environment.AppendLocatorRawClient(locator2rawClient)
+				environment.SetBackoffPolicy(backOffPolicyFn)
+
+				// have to set server version again because there's a new locator
+				environment.SetServerVersion("3.11.1")
+			})
+
+			It("uses different locators when one fails", func() {
+				// setup
+				locator2rawClient.EXPECT().
+					IsOpen().
+					Return(true)
+				locator2rawClient.EXPECT().
+					StreamStats(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+					Return(map[string]int64{"first_chunk_id": 40, "committed_chunk_id": 42}, nil)
+
+				mockRawClient.EXPECT().
+					StreamStats(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+					Return(nil, errors.New("something went wrong")).
+					Times(3)
+
+				// act
+				stats, err := environment.QueryStreamStats(rootCtx, "retried-stream-stats")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(stats.FirstOffset()).To(BeNumerically("==", 40))
+				Expect(stats.CommittedChunkId()).To(BeNumerically("==", 42))
+			})
+
+			It("gives up on non-retryable errors", func() {
+				// setup
+				mockRawClient.EXPECT().
+					StreamStats(gomock.AssignableToTypeOf(ctxType), gomock.Eq("non-retryable")).
+					Return(nil, raw.ErrStreamDoesNotExist)
+
+				// act
+				_, err := environment.QueryStreamStats(rootCtx, "non-retryable")
+				Expect(err).To(HaveOccurred())
 			})
 		})
 	})

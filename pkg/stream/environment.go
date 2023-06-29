@@ -113,7 +113,11 @@ func (e *Environment) CreateStream(ctx context.Context, name string, opts Stream
 	return fmt.Errorf("locator operation failed: %w", lastError)
 }
 
-// DeleteStream with given name.
+// DeleteStream with given name. Returns an error if the stream does not exist, or if any
+// unknown error occurs. The context may carry a [slog.Logger] to log operations and
+// intermediate errors, if any.
+//
+// See also: [raw.NewContextWithLogger]
 func (e *Environment) DeleteStream(ctx context.Context, name string) error {
 	logger := raw.LoggerFromCtxOrDiscard(ctx)
 
@@ -151,7 +155,10 @@ func (e *Environment) DeleteStream(ctx context.Context, name string) error {
 	return lastError
 }
 
-// TODO: go docs
+// Close the connection to RabbitMQ server. This function closes all connections
+// to RabbitMQ gracefully. A graceful disconnection sends a close request to RabbitMQ
+// and awaits a confirmation response. If there's any error closing a connection,
+// the error is logged to a logger extracted from the context.
 func (e *Environment) Close(ctx context.Context) {
 	logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("close")
 	// TODO: shutdown producers/consumers
@@ -165,14 +172,36 @@ func (e *Environment) Close(ctx context.Context) {
 	}
 }
 
+// QueryStreamStats queries the server for Stats from a given stream name.
+// Stats available are 'first offset id' and 'committed chunk id'
+//
+// This command is available in RabbitMQ 3.11+
 func (e *Environment) QueryStreamStats(ctx context.Context, name string) (Stats, error) {
-	l := e.pickLocator(0)
-	result := l.locatorOperation((*locator).operationQueryStreamStats, ctx, name)
-	if result[1] != nil {
-		return Stats{-1, -1}, result[1].(error)
+	rn := rand.Intn(100)
+	n := len(e.locators)
+
+	var lastError error
+	for i := 0; i < n; i++ {
+		l := e.pickLocator((i + rn) % n)
+		if err := l.maybeInitializeLocator(); err != nil {
+			lastError = err
+			// TODO: log error
+			continue
+		}
+
+		result := l.locatorOperation((*locator).operationQueryStreamStats, ctx, name)
+		if result[1] != nil {
+			lastError = result[1].(error)
+			if isNonRetryableError(lastError) {
+				return Stats{-1, -1}, lastError
+			}
+			// TODO: log error
+			continue
+		}
+
+		// TODO: log success at debug level
+		stats := result[0].(map[string]int64)
+		return Stats{stats["first_chunk_id"], stats["committed_chunk_id"]}, nil
 	}
-
-	stats := result[0].(map[string]int64)
-
-	return Stats{stats["first_chunk_id"], stats["committed_chunk_id"]}, nil
+	return Stats{-1, -1}, lastError
 }
