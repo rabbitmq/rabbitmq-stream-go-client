@@ -410,5 +410,23 @@ var _ = Describe("Environment", func() {
 				Expect(err).To(HaveOccurred())
 			})
 		})
+
+		It("logs intermediate error messages", func() {
+			// setup
+			logBuffer := gbytes.NewBuffer()
+			logger := slog.New(slog.NewTextHandler(logBuffer))
+			ctx := raw.NewContextWithLogger(context.Background(), *logger)
+
+			mockRawClient.EXPECT().
+				StreamStats(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+				Return(nil, errors.New("err maybe later")).
+				Times(3)
+
+			// act
+			_, err := environment.QueryStreamStats(ctx, "log-things")
+			Expect(err).To(HaveOccurred())
+
+			Eventually(logBuffer).Within(time.Millisecond * 500).Should(gbytes.Say(`"locator operation failed" error="err maybe later"`))
+		})
 	})
 })

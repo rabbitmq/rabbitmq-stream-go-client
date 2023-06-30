@@ -177,6 +177,7 @@ func (e *Environment) Close(ctx context.Context) {
 //
 // This command is available in RabbitMQ 3.11+
 func (e *Environment) QueryStreamStats(ctx context.Context, name string) (Stats, error) {
+	logger := raw.LoggerFromCtxOrDiscard(ctx)
 	rn := rand.Intn(100)
 	n := len(e.locators)
 
@@ -185,7 +186,7 @@ func (e *Environment) QueryStreamStats(ctx context.Context, name string) (Stats,
 		l := e.pickLocator((i + rn) % n)
 		if err := l.maybeInitializeLocator(); err != nil {
 			lastError = err
-			// TODO: log error
+			logger.Error("error initializing locator", slog.Any("error", err))
 			continue
 		}
 
@@ -195,11 +196,10 @@ func (e *Environment) QueryStreamStats(ctx context.Context, name string) (Stats,
 			if isNonRetryableError(lastError) {
 				return Stats{-1, -1}, lastError
 			}
-			// TODO: log error
+			logger.Error("locator operation failed", slog.Any("error", lastError))
 			continue
 		}
 
-		// TODO: log success at debug level
 		stats := result[0].(map[string]int64)
 		return Stats{stats["first_chunk_id"], stats["committed_chunk_id"]}, nil
 	}
