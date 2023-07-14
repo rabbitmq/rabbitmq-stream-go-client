@@ -60,7 +60,9 @@ func (l *locator) connect(ctx context.Context) error {
 	l.clientClose = client.NotifyConnectionClosed()
 	go l.shutdownHandler()
 
-	// TODO: exchange command versions
+	if l.isServer311orMore() {
+		return l.client.ExchangeCommandVersions(ctx)
+	}
 
 	return nil
 }
