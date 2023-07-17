@@ -3,7 +3,7 @@ package internal
 import (
 	"bufio"
 	"bytes"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
 )
 
 // SubscribeRequest is the command to subscribe to a stream

@@ -1,8 +1,8 @@
 package raw
 
 import (
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/internal"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
 	"io"
 )
 

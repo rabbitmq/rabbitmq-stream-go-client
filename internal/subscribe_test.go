@@ -3,9 +3,9 @@ package internal
 import (
 	"bufio"
 	"bytes"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
 )
 
 var _ = Describe("Subscribe", func() {

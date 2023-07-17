@@ -5,10 +5,10 @@
 package raw_test
 
 import (
+	ginkgo "github.com/onsi/ginkgo/v2"
 	net "net"
 	reflect "reflect"
 	time "time"
-	ginkgo "github.com/onsi/ginkgo/v2"
 
 	gomock "github.com/golang/mock/gomock"
 )

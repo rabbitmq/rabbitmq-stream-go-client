@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"golang.org/x/exp/slog"
 	"io"
 	"net"
@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/internal"
 )
 
 var logger *slog.Logger

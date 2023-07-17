@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/codecs/amqp"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
 )
 
 var _ = Describe("Create", func() {

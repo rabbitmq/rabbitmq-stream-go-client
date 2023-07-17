@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 )
 
 const (

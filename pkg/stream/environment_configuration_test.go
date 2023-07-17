@@ -1,9 +1,9 @@
 package stream_test
 
 import (
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/stream"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/stream"
 )
 
 var _ = Describe("EnvironmentConfiguration", func() {

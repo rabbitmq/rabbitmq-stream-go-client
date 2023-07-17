@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/constants"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
 	"io"
 )
 

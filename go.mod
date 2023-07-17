@@ -1,4 +1,4 @@
-module github.com/gsantomaggio/rabbitmq-stream-go-client
+module github.com/rabbitmq/rabbitmq-stream-go-client/v2
 
 go 1.19
 

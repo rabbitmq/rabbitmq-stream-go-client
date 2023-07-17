@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 )
 
 const (
