@@ -4,7 +4,7 @@ package raw
 
 import (
 	"context"
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/internal"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/internal"
 )
 
 // StartFrameListener starts reading the Connection socket. It receives frames

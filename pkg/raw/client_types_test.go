@@ -1,10 +1,10 @@
 package raw_test
 
 import (
-	"github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 )
 
 var _ = Describe("ClientTypes", func() {

@@ -9,8 +9,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	common "github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/common"
-	raw "github.com/gsantomaggio/rabbitmq-stream-go-client/pkg/raw"
+	common "github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
+	raw "github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 )
 
 // MockRawClient is a mock of Clienter interface.
