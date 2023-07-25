@@ -364,7 +364,7 @@ func (mr *MockRawClientMockRecorder) RouteQuery(ctx, routingKey, superStream int
 }
 
 // Send mocks base method.
-func (m *MockRawClient) Send(ctx context.Context, publisherId uint8, messages []common.PublishingMessager) error {
+func (m *MockRawClient) Send(ctx context.Context, publisherId uint8, messages []raw.Message) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Send", ctx, publisherId, messages)
 	ret0, _ := ret[0].(error)
@@ -392,7 +392,7 @@ func (mr *MockRawClientMockRecorder) SendHeartbeat() *gomock.Call {
 }
 
 // SendSubEntryBatch mocks base method.
-func (m *MockRawClient) SendSubEntryBatch(ctx context.Context, publisherId uint8, publishingId uint64, compress common.CompresserCodec, messages []common.Message) error {
+func (m *MockRawClient) SendSubEntryBatch(ctx context.Context, publisherId uint8, publishingId uint64, compress common.CompresserCodec, messages []common.Serializer) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendSubEntryBatch", ctx, publisherId, publishingId, compress, messages)
 	ret0, _ := ret[0].(error)

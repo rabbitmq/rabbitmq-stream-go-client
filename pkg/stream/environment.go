@@ -2,10 +2,12 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"golang.org/x/exp/slog"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -15,15 +17,17 @@ const (
 )
 
 type Environment struct {
-	configuration EnvironmentConfiguration
-	locators      []*locator
-	backOffPolicy func(int) time.Duration
+	configuration        EnvironmentConfiguration
+	locators             []*locator
+	backOffPolicy        func(int) time.Duration
+	producerCoordinators []*producerCoordinator
 }
 
 func NewEnvironment(ctx context.Context, configuration EnvironmentConfiguration) (*Environment, error) {
 	e := &Environment{
-		configuration: configuration,
-		locators:      make([]*locator, 0, len(configuration.Uris)),
+		configuration:        configuration,
+		locators:             make([]*locator, 0, len(configuration.Uris)),
+		producerCoordinators: make([]*producerCoordinator, 0),
 	}
 
 	e.backOffPolicy = func(attempt int) time.Duration {
@@ -35,6 +39,15 @@ func NewEnvironment(ctx context.Context, configuration EnvironmentConfiguration)
 	}
 
 	return e, nil
+}
+
+func (e *Environment) pickProducerCoordinator(host string, port int) *producerCoordinator {
+	for i := 0; i < len(e.producerCoordinators); i++ {
+		if e.producerCoordinators[i].host == host && e.producerCoordinators[i].port == port {
+			return e.producerCoordinators[i]
+		}
+	}
+	panic("implement me!")
 }
 
 func (e *Environment) start(ctx context.Context) error {
@@ -71,6 +84,11 @@ func (e *Environment) pickLocator(n int) *locator {
 		return e.locators[0]
 	}
 	return e.locators[n]
+}
+
+func (e *Environment) pickRandomLocator() *locator {
+	rn := rand.Intn(100) % len(e.locators)
+	return e.pickLocator(rn)
 }
 
 // # Public API
@@ -157,11 +175,18 @@ func (e *Environment) DeleteStream(ctx context.Context, name string) error {
 
 // Close the connection to RabbitMQ server. This function closes all connections
 // to RabbitMQ gracefully. A graceful disconnection sends a close request to RabbitMQ
-// and awaits a confirmation response. If there's any error closing a connection,
+// and awaits a confirmation response. If there's any error closing\ a connection,
 // the error is logged to a logger extracted from the context.
 func (e *Environment) Close(ctx context.Context) {
 	logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("close")
 	// TODO: shutdown producers/consumers
+	for _, coordinator := range e.producerCoordinators {
+		err := coordinator.Close(ctx)
+		if err != nil {
+			logger.Warn("error closing coordinator", slog.Any("error", err))
+		}
+	}
+
 	for _, l := range e.locators {
 		if l.isSet {
 			err := l.client.Close(ctx)
@@ -204,4 +229,77 @@ func (e *Environment) QueryStreamStats(ctx context.Context, name string) (Stats,
 		return Stats{stats["first_chunk_id"], stats["committed_chunk_id"]}, nil
 	}
 	return Stats{-1, -1}, lastError
+}
+
+func (e *Environment) CreateProducer(ctx context.Context, streamName string, opts *ProducerOpts) (Producer, error) {
+	err := opts.validate()
+	if err != nil {
+		return nil, err
+	}
+
+	//p, err := e.producerCoordinators[0].createAndRegister(0)
+	//if err != nil {
+	//	panic(err)
+	//}
+	// TODO find coordinator by host + port
+	//pickedCoordinator := &e.producerCoordinators[0]
+	var pickedCoordinator *producerCoordinator = nil
+	for i := 0; i < len(e.producerCoordinators); i++ {
+		if e.producerCoordinators[i].hasCapacity() {
+			pickedCoordinator = e.producerCoordinators[i]
+		}
+	}
+
+	if pickedCoordinator == nil {
+		l := e.pickRandomLocator()
+		pConf := l.rawClientConf.Clone()
+
+		pConf.SetConnectionName(opts.ClientProvidedName)
+		producerClient, err := raw.DialConfig(ctx, pConf)
+		if err != nil {
+			return nil, err
+		}
+
+		if l.isServer311orMore() {
+			err = producerClient.ExchangeCommandVersions(ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// register new coordinator
+		pickedCoordinator = &producerCoordinator{
+			mu:                  sync.Mutex{},
+			maxCapacity:         e.configuration.MaxProducersByConnection,
+			publisherIdSequence: autoIncrementNumber[uint8]{},
+			producers:           make(map[int]Producer),
+			producerMu:          &sync.Mutex{},
+			producerClient:      producerClient,
+			host:                l.rawClientConf.RabbitmqBrokers().Host,
+			port:                l.rawClientConf.RabbitmqBrokers().Port,
+		}
+		e.producerCoordinators = append(e.producerCoordinators, pickedCoordinator)
+	}
+
+	p := newSmartProducer(streamName, opts, raw.LoggerFromCtxOrDiscard(ctx))
+	// TODO generate internal producer ID in a predictable way
+	pubId, err := pickedCoordinator.register(123, p)
+	if err != nil && errors.Is(err, errCoordinatorFull) {
+		// TODO create new coordinator
+	} else if err != nil {
+		panic(err)
+	}
+
+	p.publisherId = pubId
+
+	// publisher reference is always empty string in the standard producer
+	err = pickedCoordinator.producerClient.DeclarePublisher(ctx, pubId, "", streamName)
+	if err != nil {
+		// TODO what to do here?
+		//_ = pickedCoordinator.producerClient.Close(ctx)
+		return nil, err
+	}
+
+	p.start()
+	return p, nil
 }

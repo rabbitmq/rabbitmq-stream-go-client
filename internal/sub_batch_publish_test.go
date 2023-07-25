@@ -84,7 +84,7 @@ var _ = Describe("Create", func() {
 			// we simulate a message aggregation
 			// that can be done by the client
 			// First loop to aggregate the messages
-			var fakeMessages []common.Message
+			var fakeMessages []common.Serializer
 			for i := 0; i < 5; i++ {
 				fakeMessages = append(fakeMessages, NewFakeMessage(uint64(i), []byte(
 					fmt.Sprintf("fake message %d", i))))
@@ -137,7 +137,7 @@ var _ = Describe("Create", func() {
 			// we simulate a message aggregation
 			// that can be done by the client
 			// First loop to aggregate the messages
-			var fakeMessages []common.Message
+			var fakeMessages []common.Serializer
 			for i := 0; i < 5; i++ {
 				fakeMessages = append(fakeMessages, NewFakeMessage(uint64(i), []byte(
 					fmt.Sprintf("fake message %d", i))))
@@ -187,7 +187,7 @@ var _ = Describe("Create", func() {
 			// we simulate a message aggregation
 			// that can be done by the client
 			// First loop to aggregate the messages
-			var amqpMessages []common.Message
+			var amqpMessages []common.Serializer
 			for i := 0; i < 5; i++ {
 				amqpMessages = append(amqpMessages, amqp.NewAMQP10Message([]byte(
 					fmt.Sprintf("AMQP_ message %d", i))))
@@ -244,7 +244,7 @@ var _ = Describe("Create", func() {
 			// we simulate a message aggregation
 			// that can be done by the client
 			// First loop to aggregate the messages
-			var amqpMessages []common.Message
+			var amqpMessages []common.Serializer
 			// I don't know chinese, so I just copied the first paragraph of the wikipedia page for Alan Turing
 			// https://zh.wikipedia.org/wiki/%E8%89%BE%E4%BC%A6%C2%B7%E5%9B%BE%E7%81%B5
 			chString := "艾伦·麦席森·图灵，OBE，FRS（英語：Alan Mathison Turing，又译阿兰·图灵，Turing也常翻譯成涂林或者杜林，1912年6月23日—1954年6月7日）是英国電腦科學家、数学家、邏輯學家、密码分析学家和理论生物学家，他被誉为计算机科学與人工智能之父。\n\n二次世界大战期间，「Hut 8」小组，负责德国海军密码分析。 期间他设计了一些加速破译德国密码的技术，包括改进波兰战前研制的机器Bombe，一种可以找到恩尼格玛密码机设置的机电机器。 图灵在破译截获的编码信息方面发挥了关键作用，使盟军能够在包括大西洋战役在内的许多重要交战中击败軸心國海軍，并因此帮助赢得了战争[3][4]。"

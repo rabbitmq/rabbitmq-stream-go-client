@@ -8,7 +8,7 @@ import (
 
 type PublishingMessage struct {
 	publishingId uint64
-	message      common.Message
+	message      common.Serializer
 }
 
 func (m *PublishingMessage) SetPublishingId(publishingId uint64) {
@@ -19,11 +19,11 @@ func (m *PublishingMessage) PublishingId() uint64 {
 	return m.publishingId
 }
 
-func (m *PublishingMessage) SetMessage(message common.Message) {
+func (m *PublishingMessage) SetMessage(message common.Serializer) {
 	m.message = message
 }
 
-func (m *PublishingMessage) Message() common.Message {
+func (m *PublishingMessage) Message() common.Serializer {
 	return m.message
 }
 
@@ -41,6 +41,6 @@ func (m *PublishingMessage) WriteTo(writer io.Writer) (int64, error) {
 	return int64(written), nil
 }
 
-func NewPublishingMessage(publishingId uint64, message common.Message) *PublishingMessage {
+func NewPublishingMessage(publishingId uint64, message common.Serializer) *PublishingMessage {
 	return &PublishingMessage{publishingId: publishingId, message: message}
 }

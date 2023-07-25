@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
+	"golang.org/x/exp/constraints"
+	"sync"
 )
 
 const (
@@ -12,6 +14,25 @@ const (
 	maxLengthKey      = "x-max-length-bytes"
 	maxSegmentSizeKey = "x-stream-max-segment-size-bytes"
 )
+
+type autoIncrementNumber[T constraints.Integer] struct {
+	value T
+	mu    sync.Mutex
+}
+
+func (ai *autoIncrementNumber[T]) next() T {
+	ai.mu.Lock()
+	defer ai.mu.Unlock()
+
+	ai.value++
+	return ai.value
+}
+
+func (ai *autoIncrementNumber[T]) current() T {
+	ai.mu.Lock()
+	defer ai.mu.Unlock()
+	return ai.value
+}
 
 func streamOptionsToRawStreamConfiguration(options CreateStreamOptions) raw.StreamConfiguration {
 	c := make(raw.StreamConfiguration, 3)

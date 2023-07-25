@@ -16,7 +16,7 @@ import (
 
 func main() {
 	runSmartClient()
-	runRawClient()
+	//runRawClient()
 }
 
 func runSmartClient() {
@@ -30,39 +30,53 @@ func runSmartClient() {
 	c := stream.NewEnvironmentConfiguration(
 		stream.WithLazyInitialization(false),
 		stream.WithUri("rabbitmq-stream://localhost:5552"),
+		stream.WithMaxProducersByConnection(1),
 	)
 
 	env, err := stream.NewEnvironment(ctx, c)
 	if err != nil {
 		panic(err)
 	}
-	//defer env.Close()
+	defer env.Close(ctx)
 
-	err = env.CreateStream(ctx, "my-stream", stream.CreateStreamOptions{})
+	streamName := "my-stream"
+	_ = env.DeleteStream(ctx, streamName)
+
+	err = env.CreateStream(ctx, streamName, stream.CreateStreamOptions{})
 	if err != nil {
 		panic(err)
 	}
 
+	pOpts := &stream.ProducerOpts{
+		ClientProvidedName: "book-store-producer",
+		MaxInFlight:        1_000,
+		MaxMessagesPerSend: 500,
+		ConfirmTimeout:     time.Second * 30,
+	}
+
+	for i := 0; i < 2; i++ {
+		producer, err := env.CreateProducer(ctx, streamName, pOpts)
+		if err != nil {
+			panic(err)
+		}
+		for i := uint64(0); i < 100_000; i++ {
+			msg := amqp.NewAMQP10Message([]byte(fmt.Sprintf("Message #%d", i)))
+			err := producer.Send(*msg)
+			if err != nil {
+				log.Error("error sending message", slog.Any("error", err), slog.Uint64("id", i))
+			}
+		}
+	}
 	sc := bufio.NewScanner(os.Stdin)
-	fmt.Print("Close the connection and press enter")
-	sc.Scan()
+	fmt.Println("Press enter to exit")
+	_ = sc.Scan()
 
-	err = env.DeleteStream(ctx, "my-stream")
+	err = env.DeleteStream(ctx, streamName)
 	if err != nil {
 		panic(err)
 	}
 
-	err = env.CreateStream(ctx, "other-stream", stream.CreateStreamOptions{})
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Print("Life good! Press enter to exit")
-	sc.Scan()
-	err = env.DeleteStream(ctx, "other-stream")
-	if err != nil {
-		panic(err)
-	}
+	env.Close(ctx)
 }
 
 func runRawClient() {
@@ -135,7 +149,7 @@ func runRawClient() {
 	var id uint64
 	startTime := time.Now()
 	for j := 0; j < iterations; j++ {
-		var messages []common.PublishingMessager
+		var messages []raw.Message
 		for i := 0; i < batchSize; i++ {
 			msg := amqp.NewAMQP10Message([]byte(fmt.Sprintf("msg %d", i)))
 
@@ -165,7 +179,7 @@ func runRawClient() {
 
 	startTime = time.Now()
 	// sending sub-entry batch to the server
-	var messages []common.Message
+	var messages []common.Serializer
 	for i := 0; i < batchSize; i++ {
 		messages = append(messages,
 			amqp.NewAMQP10Message([]byte(fmt.Sprintf("message %d", i))))

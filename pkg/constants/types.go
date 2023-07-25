@@ -12,6 +12,9 @@ const (
 // See common/types.go Compresser interface
 // See client::SendSubEntryBatch
 const (
-	CompressionNone uint8 = 0x00
-	CompressionGzip uint8 = 0x01
+	CompressionNone uint8 = iota
+	CompressionGzip
+	CompressionSnappy
+	CompressionLz4
+	CompressionZstd
 )

@@ -5,27 +5,16 @@ import (
 	"compress/gzip"
 	"encoding"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
-	"io"
 )
 
-// Message is the interface for the message
-type Message interface {
+// Serializer is something that can encode and decode itself
+// into a binary sequence
+type Serializer interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
 }
 
-// PublishingMessager is the interface for the publishing message
-// it creates a message with a publishingId and a Message
-// The message doesn't contain the publishingId this is why we need this interface
-type PublishingMessager interface {
-	io.WriterTo
-	SetPublishingId(publishingId uint64)
-	PublishingId() uint64
-	SetMessage(message Message)
-	Message() Message
-}
-
-//******** Sub Batch Entry Message ******************************
+//******** Sub Batch Entry Serializer ******************************
 
 // Define an interface for compressing the messages
 // Default implementations are

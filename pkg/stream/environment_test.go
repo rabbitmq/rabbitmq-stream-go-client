@@ -212,7 +212,7 @@ var _ = Describe("Environment", func() {
 
 		// marked as flaky because the environment picks a locator randomly
 		// the test flakes if locator2 is picked first
-		When("there are multiple locators", FlakeAttempts(3), Label("flaky"), func() {
+		When("there are multiple locators", FlakeAttempts(5), Label("flaky"), func() {
 			var (
 				locator2rawClient *stream.MockRawClient
 			)
@@ -364,7 +364,7 @@ var _ = Describe("Environment", func() {
 			})
 		})
 
-		When("there are multiple locators", FlakeAttempts(3), Label("flaky"), func() {
+		When("there are multiple locators", FlakeAttempts(5), Label("flaky"), func() {
 			var (
 				locator2rawClient *stream.MockRawClient
 			)

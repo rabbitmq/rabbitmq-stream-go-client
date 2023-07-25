@@ -10,7 +10,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"golang.org/x/exp/slog"
@@ -112,7 +111,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		for i := uint64(0); i < numMessages; i++ {
 			messageContainer := raw.NewPublishingMessage(i, &plainTextMessage{messageBody})
 			Expect(
-				streamClient.Send(itCtx, publisherId, wrap[common.PublishingMessager](messageContainer)),
+				streamClient.Send(itCtx, publisherId, wrap[raw.Message](messageContainer)),
 			).To(Succeed())
 		}
 		stopWatch.Record("Send").Reset()
@@ -169,7 +168,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		const numMessages = 100
 		for i := 0; i < numMessages; i++ {
 			Expect(
-				streamClient.Send(itCtx, publisherId, wrap[common.PublishingMessager](
+				streamClient.Send(itCtx, publisherId, wrap[raw.Message](
 					raw.NewPublishingMessage(uint64(i),
 						&plainTextMessage{messageBody}))),
 			).To(Succeed())

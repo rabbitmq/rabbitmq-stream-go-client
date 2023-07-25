@@ -58,6 +58,38 @@ type ClientConfiguration struct {
 	dial               func(network, addr string) (net.Conn, error)
 }
 
+func (r *ClientConfiguration) Clone() *ClientConfiguration {
+	c := new(ClientConfiguration)
+	c.rabbitmqBroker = broker{
+		Host:             r.rabbitmqBroker.Host,
+		Port:             r.rabbitmqBroker.Port,
+		Username:         r.rabbitmqBroker.Username,
+		Vhost:            r.rabbitmqBroker.Vhost,
+		Password:         r.rabbitmqBroker.Password,
+		Scheme:           r.rabbitmqBroker.Scheme,
+		AdvHost:          r.rabbitmqBroker.AdvHost,
+		AdvPort:          r.rabbitmqBroker.AdvPort,
+		ServerProperties: make(map[string]string, len(r.rabbitmqBroker.ServerProperties)),
+	}
+	for k, v := range r.rabbitmqBroker.ServerProperties {
+		c.rabbitmqBroker.ServerProperties[k] = v
+	}
+
+	c.clientMaxFrameSize = r.clientMaxFrameSize
+	c.clientHeartbeat = r.clientHeartbeat
+
+	n := len(r.authMechanism)
+	c.authMechanism = make([]string, n)
+	if copy(c.authMechanism, r.authMechanism) != n {
+		panic("short copy")
+	}
+
+	c.tlsConfig = r.tlsConfig.Clone()
+	c.connectionName = r.connectionName
+	c.dial = r.dial
+	return c
+}
+
 func (r *ClientConfiguration) TlsConfig() *tls.Config {
 	return r.tlsConfig
 }
@@ -122,8 +154,8 @@ type Clienter interface {
 	DeclareStream(ctx context.Context, stream string, configuration StreamConfiguration) error
 	DeleteStream(ctx context.Context, stream string) error
 	DeclarePublisher(ctx context.Context, publisherId uint8, publisherReference string, stream string) error
-	Send(ctx context.Context, publisherId uint8, messages []common.PublishingMessager) error
-	SendSubEntryBatch(ctx context.Context, publisherId uint8, publishingId uint64, compress common.CompresserCodec, messages []common.Message) error
+	Send(ctx context.Context, publisherId uint8, messages []Message) error
+	SendSubEntryBatch(ctx context.Context, publisherId uint8, publishingId uint64, compress common.CompresserCodec, messages []common.Serializer) error
 	DeletePublisher(ctx context.Context, publisherId uint8) error
 	Subscribe(ctx context.Context, stream string, offsetType uint16, subscriptionId uint8, credit uint16, properties SubscribeProperties, offset uint64) error
 	Unsubscribe(ctx context.Context, subscriptionId uint8) error

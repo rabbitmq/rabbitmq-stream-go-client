@@ -555,7 +555,7 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				}
 				tc.handleResponse(ctx, partitionsResp)
 			default:
-				panic(fmt.Errorf("unknown command: %v", header))
+				panic(fmt.Errorf("unknown command: %+v", header))
 			}
 		}
 	}
@@ -1006,11 +1006,11 @@ func (tc *Client) DeclarePublisher(ctx context.Context, publisherId uint8, publi
 // The publisher ID is the same ID used in a DeclarePublisher function call. The
 // application must keep track of this ID for sending messages.
 //
-// The slice of common.PublishingMessager is a batch of messages to be sent. Note
+// The slice of common.Message is a batch of messages to be sent. Note
 // that RabbitMQ Stream protocol does not specify a format for the messages. This
 // flexibility allows to send, in a single "Publish" frame, a batch of
 // application messages; for example, a batch of AMQP 1.0 messages.
-func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessages []common.PublishingMessager) error {
+func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessages []Message) error {
 	if ctx == nil {
 		return errNilContext
 	}
@@ -1037,11 +1037,11 @@ func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessage
 // SendSubEntryBatch is fire and forget, like the send function the client will receive the confirmation from the server.
 // The server sends only the confirmation for the `publishingId`.
 
-// The publishingId should be the last id of []common.PublishingMessager but we leave the api open to allow
+// The publishingId should be the last id of []common.Message but we leave the api open to allow
 // the caller to choose the publishingId.
 
 func (tc *Client) SendSubEntryBatch(ctx context.Context, publisherId uint8,
-	publishingId uint64, compress common.CompresserCodec, messages []common.Message) error {
+	publishingId uint64, compress common.CompresserCodec, messages []common.Serializer) error {
 	if ctx == nil {
 		return errNilContext
 	}

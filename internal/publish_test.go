@@ -56,7 +56,7 @@ var _ = Describe("Create", func() {
 			// we simulate a message aggregation
 			// that can be done by the client
 			// First loop to aggregate the messages
-			var fakeMessages []common.Message
+			var fakeMessages []common.Serializer
 			for i := 0; i < 5; i++ {
 				fakeMessages = append(fakeMessages, NewFakeMessage(uint64(i), []byte(
 					fmt.Sprintf("fake message %d", i))))
@@ -90,7 +90,7 @@ var _ = Describe("Create", func() {
 		// that can be done by the client
 		// First loop to aggregate the messages
 		// In this case we use AMQP1.0 message
-		var amqpMessages []common.Message
+		var amqpMessages []common.Serializer
 		for i := 0; i < 5; i++ {
 			amqpMessages = append(amqpMessages, amqp.NewAMQP10Message([]byte(
 				fmt.Sprintf("AMQP message %d", i))))
