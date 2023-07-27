@@ -2,12 +2,13 @@ package stream
 
 import (
 	"context"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
-	"golang.org/x/exp/slog"
-	"golang.org/x/mod/semver"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
+	"golang.org/x/exp/slog"
+	"golang.org/x/mod/semver"
 )
 
 const (
@@ -24,11 +25,11 @@ type locator struct {
 	clientClose          <-chan error
 	backOffPolicy        func(int) time.Duration
 	addressResolver      net.Addr // TODO: placeholder for address resolver
-
+	heartbeater          *heartBeater
 }
 
 func newLocator(c raw.ClientConfiguration, logger *slog.Logger) *locator {
-	return &locator{
+	locator := &locator{
 		log: logger.
 			WithGroup("locator").
 			With(
@@ -43,7 +44,10 @@ func newLocator(c raw.ClientConfiguration, logger *slog.Logger) *locator {
 		isSet:                false,
 		addressResolver:      nil,
 		shutdownNotification: make(chan struct{}),
+		heartbeater:          NewHeartBeater(time.Second*time.Duration(c.ClientHeartbeat()), nil, logger),
 	}
+
+	return locator
 }
 
 func (l *locator) connect(ctx context.Context) error {
@@ -63,6 +67,10 @@ func (l *locator) connect(ctx context.Context) error {
 	if l.isServer311orMore() {
 		return l.client.ExchangeCommandVersions(ctx)
 	}
+
+	// TODO Start heartbeat here
+	l.heartbeater.client = client
+	l.heartbeater.start()
 
 	return nil
 }
@@ -95,6 +103,7 @@ func (l *locator) shutdownHandler() {
 			// TODO: maybe add a 'ok' safeguard here?
 			log.Debug("unexpected locator disconnection, trying to reconnect", slog.Any("error", err))
 			l.Lock()
+			l.heartbeater.stop()
 			for i := 0; i < 100; i++ {
 				dialCtx, cancel := context.WithTimeout(raw.NewContextWithLogger(context.Background(), *log), DefaultTimeout)
 				c, e := raw.DialConfig(dialCtx, &l.rawClientConf)
@@ -116,6 +125,8 @@ func (l *locator) shutdownHandler() {
 
 				l.client = c
 				l.clientClose = c.NotifyConnectionClosed()
+				l.heartbeater.client = c
+				l.heartbeater.start()
 
 				log.Debug("locator reconnected")
 
@@ -171,6 +182,8 @@ func (l *locator) locatorOperation(op locatorOperationFn, args ...any) (result [
 		l.log.Debug("error in locator operation", slog.Any("error", lastErr), slog.Int("attempt", attempt))
 		attempt++
 	}
+	// TODO reset heartbeat timer
+	l.heartbeater.reset()
 	return result
 }
 
@@ -204,6 +217,7 @@ func (l *locator) operationQueryOffset(args ...any) []any {
 	offset, err := l.client.QueryOffset(ctx, reference, stream)
 	return []any{offset, err}
 }
+
 func (l *locator) operationPartitions(args ...any) []any {
 	ctx := args[0].(context.Context)
 	superstream := args[1].(string)
@@ -217,4 +231,8 @@ func (l *locator) operationQuerySequence(args ...any) []any {
 	stream := args[2].(string)
 	pubId, err := l.client.QueryPublisherSequence(ctx, reference, stream)
 	return []any{pubId, err}
+}
+
+func (l *locator) operationSendHeartbeat(args ...any) []any {
+	return []any{l.client.SendHeartbeat()}
 }

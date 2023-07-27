@@ -6,6 +6,7 @@ package stream
 
 import (
 	context "context"
+	"github.com/onsi/ginkgo/v2"
 	reflect "reflect"
 
 	common "github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
@@ -379,6 +380,7 @@ func (mr *MockRawClientMockRecorder) Send(ctx, publisherId, messages interface{}
 
 // SendHeartbeat mocks base method.
 func (m *MockRawClient) SendHeartbeat() error {
+	defer ginkgo.GinkgoRecover()
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendHeartbeat")
 	ret0, _ := ret[0].(error)

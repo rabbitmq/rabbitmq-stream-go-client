@@ -74,6 +74,10 @@ func (r *ClientConfiguration) RabbitmqBrokers() broker {
 	return r.rabbitmqBroker
 }
 
+func (r *ClientConfiguration) ClientHeartbeat() uint32 {
+	return r.clientHeartbeat
+}
+
 func (r *ClientConfiguration) SetClientMaxFrameSize(clientMaxFrameSize uint32) {
 	r.clientMaxFrameSize = clientMaxFrameSize
 }

@@ -3,13 +3,13 @@ package stream
 import (
 	"context"
 	"errors"
-	"time"
-
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"golang.org/x/exp/slog"
+	"time"
 )
 
 var _ = Describe("Locator", func() {
@@ -118,6 +118,61 @@ var _ = Describe("Locator", func() {
 				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("error"))
 				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("context deadline exceeded"))
 			})
+		})
+
+	})
+
+	Describe("heartbeats", func() {
+		var (
+			mockCtrl      *gomock.Controller
+			mockRawClient *MockRawClient
+			discardLogger = slog.New(discardHandler{})
+			backOffPolicy = func(_ int) time.Duration {
+				return time.Millisecond * 10
+			}
+		)
+
+		BeforeEach(func() {
+			mockCtrl = gomock.NewController(GinkgoT())
+			mockRawClient = NewMockRawClient(mockCtrl)
+		})
+
+		It("resets heartbeat ticker on locator operation", func() {
+			mockRawClient.EXPECT().NotifyHeartbeat()
+
+			hb := NewHeartBeater(time.Second, mockRawClient, discardLogger)
+			loc := &locator{
+				log:                  discardLogger,
+				shutdownNotification: make(chan struct{}),
+				rawClientConf:        raw.ClientConfiguration{},
+				client:               nil,
+				isSet:                true,
+				clientClose:          nil,
+				backOffPolicy:        backOffPolicy,
+				heartbeater:          hb,
+			}
+
+			done := make(chan struct{})
+			hb.start()
+
+			go func() {
+				defer GinkgoRecover()
+				Consistently(loc.heartbeater.ticker.C, "1010ms").ShouldNot(Receive())
+				close(done)
+			}()
+
+			// do a locator op
+			loc.locatorOperation(func(_ *locator, _ ...any) (result []any) {
+				<-time.After(time.Millisecond * 50)
+				return []any{nil}
+			})
+			<-done
+		})
+
+		It("resets heartbeat ticker", func() {
+			// do a locator operation
+			// see that hb.reset is called
+
 		})
 	})
 
