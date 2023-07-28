@@ -959,16 +959,19 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQPublishError(publisherId uint8, publi
 	// publish error frame size
 	frameSize := 4 + // header
 		1 + // uint8 publisherId
+		4 + // list size
 		8 + // publishingId
 		2 // publishing Error code
 	header := internal.NewHeader(frameSize, 0x0004, 1)
 	expectOffset1(header.Write(rmq.connection)).To(BeNumerically("==", 8),
 		"expected to write 8 bytes")
 
-	bodyRequest, err := internal.NewPublishErrorResponse(publisherId, publishingId, code).MarshalBinary()
+	publishingError := internal.NewPublishingError(publishingId, code)
+	bodyRequest, err := internal.NewPublishErrorResponse(publisherId, *publishingError).MarshalBinary()
 	expectOffset1(err).ToNot(HaveOccurred())
-	_, err = rmq.connection.Write(bodyRequest)
+	nn, err := rmq.connection.Write(bodyRequest)
 	expectOffset1(err).ToNot(HaveOccurred())
+	Expect(nn).To(BeNumerically("==", 15))
 }
 
 func (rmq *fakeRabbitMQServer) fakeRabbitMQSendHeartbeat() {

@@ -399,11 +399,12 @@ var _ = Describe("Client", func() {
 		defer cancel()
 		select {
 		case <-eventuallyCtx.Done():
-			Fail("did not receive from confirmation channel")
+			Fail("did not receive from publish-error channel")
 		case p := <-pubErrsCh:
 			Expect(p.PublisherId()).To(BeNumerically("==", 1))
-			Expect(p.PublishingId()).To(BeNumerically("==", 5))
-			Expect(p.Code()).To(BeNumerically("==", 42))
+			Expect(p.PublishErrors()).To(HaveLen(1))
+			Expect(p.PublishErrors()[0].PublishingId()).To(BeNumerically("==", 5))
+			Expect(p.PublishErrors()[0].Code()).To(BeNumerically("==", 42))
 		}
 	}, SpecTimeout(3*time.Second))
 

@@ -52,7 +52,7 @@ func ExtractCommandCode(code uint16) uint16 {
 	return code & 0b0111_1111_1111_1111
 }
 
-func readMany(readerStream io.Reader, args ...interface{}) error {
+func readMany(readerStream io.Reader, args ...any) error {
 	for _, arg := range args {
 		err := readAny(readerStream, arg)
 		if err != nil {
@@ -62,7 +62,7 @@ func readMany(readerStream io.Reader, args ...interface{}) error {
 	return nil
 }
 
-func readAny(readerStream io.Reader, arg interface{}) error {
+func readAny(readerStream io.Reader, arg any) error {
 
 	switch arg := arg.(type) {
 	case *int:
