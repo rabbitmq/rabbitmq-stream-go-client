@@ -387,14 +387,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 						"stream", metadataUpdate.Stream())
 				}
 			case internal.CommandHeartbeat:
-				hb := new(internal.Heartbeat)
-				err = hb.Read(buffer)
-				if err != nil {
-					log.Error("error decoding heartbeat body", slog.Any("error", err))
-					// we can't send a notification at this point
-					// TODO: revisit this. What to do here?
-					continue
-				}
+				// We do not need to read from the buffer here because heartbeat is only a header,
+				// and we read the header already
+				hb := internal.NewHeartbeat()
 				if tc.heartbeatCh == nil {
 					log.Info("heartbeat channel is not registered. Use Client.NotifyHeartbeat() to receive heartbeats")
 					continue
