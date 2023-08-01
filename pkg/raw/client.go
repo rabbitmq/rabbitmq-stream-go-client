@@ -360,12 +360,9 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				case <-ctx.Done():
 					return ctx.Err()
 				case tc.publishErrorCh <- publishError:
-					log.Debug("sent a publish error",
-						"publisherId", publishError.PublisherId(),
-						"publishingId", publishError.PublishingId(),
-						"code", publishError.Code(),
-					)
+					log.Debug("sent a publish error", "publisherId", publishError.PublisherId())
 				}
+
 			case internal.CommandMetadataUpdate:
 				metadataUpdate := new(internal.MetadataUpdateResponse)
 				err = metadataUpdate.Read(buffer)

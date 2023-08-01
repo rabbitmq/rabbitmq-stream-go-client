@@ -7,11 +7,12 @@ import (
 	"net"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/mock"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
+	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -41,14 +42,14 @@ var _ = Describe("Client", func() {
 		fakeServerConn net.Conn
 		fakeClientConn net.Conn
 		mockCtrl       *gomock.Controller
-		fakeConn       *MockConn
+		fakeConn       *mock.MockConn
 		fakeRabbitMQ   *fakeRabbitMQServer
 		conf           *raw.ClientConfiguration
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		fakeConn = NewMockConn(mockCtrl)
+		fakeConn = mock.NewMockConn(mockCtrl)
 		fakeServerConn, fakeClientConn = net.Pipe()
 		fakeRabbitMQ = &fakeRabbitMQServer{
 			correlationIdSeq: autoIncrementingSequence{0},
@@ -86,10 +87,10 @@ var _ = Describe("Client", func() {
 	Context("request", func() {
 		When("the context is cancelled", func() {
 			var ctx context.Context
-			var fakeCommandWrite *MockCommandWrite
+			var fakeCommandWrite *mock.MockCommandWrite
 
 			BeforeEach(func() {
-				fakeCommandWrite = NewMockCommandWrite(mockCtrl)
+				fakeCommandWrite = mock.NewMockCommandWrite(mockCtrl)
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithCancel(context.Background())
 				cancel()
@@ -398,11 +399,12 @@ var _ = Describe("Client", func() {
 		defer cancel()
 		select {
 		case <-eventuallyCtx.Done():
-			Fail("did not receive from confirmation channel")
+			Fail("did not receive from publish-error channel")
 		case p := <-pubErrsCh:
 			Expect(p.PublisherId()).To(BeNumerically("==", 1))
-			Expect(p.PublishingId()).To(BeNumerically("==", 5))
-			Expect(p.Code()).To(BeNumerically("==", 42))
+			Expect(p.PublishErrors()).To(HaveLen(1))
+			Expect(p.PublishErrors()[0].PublishingId()).To(BeNumerically("==", 5))
+			Expect(p.PublishErrors()[0].Code()).To(BeNumerically("==", 42))
 		}
 	}, SpecTimeout(3*time.Second))
 

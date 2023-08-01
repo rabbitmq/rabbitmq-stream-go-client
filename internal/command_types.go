@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-//go:generate mockgen -source command_types.go -destination ../pkg/raw/mock_internal_interfaces_test.go -package raw_test
+//go:generate mockgen -source command_types.go -destination ../pkg/mock/mock_internal_interfaces.go -package mock
 
 // CommandRead is the interface that wraps the Read method.
 // Read reads the command from the reader.

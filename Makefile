@@ -37,7 +37,7 @@ ginkgo: | $(GINKGO)
 MOCKGEN ?= $(GOPATH)/bin/mockgen
 $(MOCKGEN):
 	@printf "$(GREEN)Installing mockgen CLI$(NORMAL)\n"
-	$(GO) install -mod=mod github.com/golang/mock/mockgen
+	$(GO) install -mod=mod go.uber.org/mock/mockgen
 
 .PHONY: mockgen
 mockgen: | $(MOCKGEN)
@@ -50,16 +50,17 @@ install-tools: ## Install tool dependencies for development
 ### Golang targets
 
 .PHONY: go-mod-tidy
-go-mod-tidy: ## Run 'go mod tidy' with compatibility to Go 1.18
-	$(GO) mod tidy -go=1.18
+go-mod-tidy: ## Run 'go mod tidy' with compatibility to Go 1.19
+	$(GO) mod tidy -go=1.19
 
 .PHONY: go-generate-mocks
 go-generate-mocks: | $(MOCKGEN) ## Generate Mocks for testing
-	$(MOCKGEN) -destination=./pkg/raw/mock_conn_test.go -package=raw_test net Conn
+	$(MOCKGEN) -destination=./pkg/mock/mock_conn.go -package=mock net Conn
 	$(MOCKGEN) -source=pkg/raw/client_types.go -package stream \
 		-destination=pkg/stream/mock_raw_client_test.go \
 		-mock_names Clienter=MockRawClient \
 		pkg/raw Clienter
+	$(GO) generate internal/command_types.go
 
 ### build
 

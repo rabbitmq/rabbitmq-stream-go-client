@@ -109,6 +109,7 @@ func NewClientConfiguration(rabbitmqUrl string) (*ClientConfiguration, error) {
 
 type PublishConfirm = internal.PublishConfirmResponse
 type PublishError = internal.PublishErrorResponse
+type PublishingError = internal.PublishingError
 type Chunk = internal.ChunkResponse
 type CreditError = internal.CreditResponse
 type MetadataResponse = internal.MetadataResponse
