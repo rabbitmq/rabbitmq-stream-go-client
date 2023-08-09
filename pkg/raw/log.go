@@ -2,7 +2,7 @@ package raw
 
 import (
 	"context"
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 // The provided key must be comparable and should not be of type string or any

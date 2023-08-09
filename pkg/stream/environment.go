@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
-	"golang.org/x/exp/slog"
+	"log/slog"
 	"math/rand"
 	"time"
 )

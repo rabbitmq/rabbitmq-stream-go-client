@@ -9,7 +9,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/stream"
 	"go.uber.org/mock/gomock"
-	"golang.org/x/exp/slog"
+	"log/slog"
 	"reflect"
 	"sync"
 	"time"
@@ -199,7 +199,7 @@ var _ = Describe("Environment", func() {
 			It("logs locator operation errors", func() {
 				// setup
 				logBuffer := gbytes.NewBuffer()
-				logger := slog.New(slog.NewTextHandler(logBuffer))
+				logger := slog.New(slog.NewTextHandler(logBuffer, nil))
 				ctx := raw.NewContextWithLogger(context.Background(), *logger)
 
 				// act
@@ -281,7 +281,7 @@ var _ = Describe("Environment", func() {
 
 			It("logs the error and moves on", func() {
 				logBuffer := gbytes.NewBuffer()
-				logger := slog.New(slog.NewTextHandler(logBuffer))
+				logger := slog.New(slog.NewTextHandler(logBuffer, nil))
 				ctx := raw.NewContextWithLogger(context.Background(), *logger)
 
 				environment.Close(ctx)
@@ -417,7 +417,7 @@ var _ = Describe("Environment", func() {
 		It("logs intermediate error messages", func() {
 			// setup
 			logBuffer := gbytes.NewBuffer()
-			logger := slog.New(slog.NewTextHandler(logBuffer))
+			logger := slog.New(slog.NewTextHandler(logBuffer, nil))
 			ctx := raw.NewContextWithLogger(context.Background(), *logger)
 
 			mockRawClient.EXPECT().

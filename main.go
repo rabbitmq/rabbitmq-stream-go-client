@@ -9,7 +9,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/stream"
-	"golang.org/x/exp/slog"
+	"log/slog"
 	"os"
 	"time"
 )
@@ -20,10 +20,10 @@ func main() {
 }
 
 func runSmartClient() {
-	h := slog.HandlerOptions{
+	slogOpts := &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}
-	log := slog.New(h.NewTextHandler(os.Stdout))
+	log := slog.New(slog.NewTextHandler(os.Stdout, slogOpts))
 
 	ctx := raw.NewContextWithLogger(context.Background(), *log)
 
@@ -66,7 +66,7 @@ func runSmartClient() {
 }
 
 func runRawClient() {
-	log := slog.New(slog.NewTextHandler(os.Stdout))
+	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	streamName := "test-streamName"
 	config, err := raw.NewClientConfiguration("rabbitmq-stream://guest:guest@localhost:5552")
 	if err != nil {

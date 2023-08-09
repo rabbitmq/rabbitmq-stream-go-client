@@ -3,13 +3,12 @@ package stream
 import (
 	"context"
 	"errors"
-	"time"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
-	"golang.org/x/exp/slog"
+	"log/slog"
+	"time"
 )
 
 var _ = Describe("Locator", func() {
@@ -23,10 +22,7 @@ var _ = Describe("Locator", func() {
 		)
 
 		BeforeEach(func() {
-			h := slog.HandlerOptions{
-				Level: slog.LevelDebug,
-			}.NewTextHandler(GinkgoWriter)
-			logger = slog.New(h)
+			logger = slog.New(slog.NewTextHandler(GinkgoWriter, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 			loc = &locator{
 				log:                  logger,

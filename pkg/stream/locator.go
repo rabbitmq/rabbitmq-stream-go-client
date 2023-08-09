@@ -3,8 +3,8 @@ package stream
 import (
 	"context"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
-	"golang.org/x/exp/slog"
 	"golang.org/x/mod/semver"
+	"log/slog"
 	"net"
 	"sync"
 	"time"

@@ -13,14 +13,14 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
-	"golang.org/x/exp/slog"
 	"io"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
 )
 
-var e2eLogger = slog.New(slog.NewTextHandler(GinkgoWriter))
+var e2eLogger = slog.New(slog.NewTextHandler(GinkgoWriter, nil))
 
 var _ = Describe("E2E", Serial, Label("e2e"), func() {
 	const (
@@ -134,8 +134,8 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 
 	// Send and Recveive Messages, assert messages received are valid.
 	It("sends, and receives messages", Label("behaviour"), func(ctx SpecContext) {
-		h := slog.HandlerOptions{Level: slog.LevelDebug}.NewTextHandler(GinkgoWriter)
-		debugLogger := slog.New(h)
+		opts := &slog.HandlerOptions{Level: slog.LevelDebug}
+		debugLogger := slog.New(slog.NewTextHandler(GinkgoWriter, opts))
 		itCtx := raw.NewContextWithLogger(ctx, *debugLogger)
 		streamClientConfiguration, err := raw.NewClientConfiguration(rabbitmqUri)
 		Expect(err).ToNot(HaveOccurred())
@@ -243,8 +243,8 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 	// With the HTTP API, we can check the connection name and kill it.
 	// The client has to notify the disconnection.
 	It("connection name and notify disconnection", Label("behaviour"), func(ctx SpecContext) {
-		h := slog.HandlerOptions{Level: slog.LevelDebug}.NewTextHandler(GinkgoWriter)
-		debugLogger := slog.New(h)
+		options := &slog.HandlerOptions{Level: slog.LevelDebug}
+		debugLogger := slog.New(slog.NewTextHandler(GinkgoWriter, options))
 		itCtx := raw.NewContextWithLogger(ctx, *debugLogger)
 		streamClientConfiguration, err := raw.NewClientConfiguration(rabbitmqUri)
 		Expect(err).ToNot(HaveOccurred())
