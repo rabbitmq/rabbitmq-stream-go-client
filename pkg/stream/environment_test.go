@@ -643,6 +643,22 @@ var _ = Describe("Environment", func() {
 			pubId, err := environment.QuerySequence(rootCtx, "producer-id", "stream-id")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(pubId).To(BeNumerically("==", 42))
+
+		})
+
+		When("there is an error", func() {
+			It("bubbles up the error", func() {
+				// setup
+      var publishingId uint64
+      publishingId = 0
+				mockRawClient.EXPECT().
+				QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+					Return(publishingId, errors.New("err not today")).
+					Times(3)
+
+        _, err := environment.QuerySequence(rootCtx, "producer-id", "stream-id")
+				Expect(err).To(MatchError("err not today"))
+			})
 		})
 	})
 })

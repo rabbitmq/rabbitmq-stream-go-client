@@ -239,6 +239,20 @@ func (e *Environment) QueryOffset(ctx context.Context, consumer, stream string) 
 			// pick at random
 			l = e.pickLocator((i + rn) % n)
 		}
+		result := l.locatorOperation((*locator).operationQuerySequence, ctx, reference, stream)
+		if result[1] != nil {
+			lastError = result[1].(error)
+			if isNonRetryableError(lastError) {
+				return 0, lastError
+			}
+		}
+		result := l.locatorOperation((*locator).operationQuerySequence, ctx, reference, stream)
+		if result[1] != nil {
+			lastError = result[1].(error)
+			if isNonRetryableError(lastError) {
+				return uint64(0), lastError
+			}
+		}
 
 		if err := l.maybeInitializeLocator(); err != nil {
 			lastError = err
