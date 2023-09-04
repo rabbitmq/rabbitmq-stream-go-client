@@ -431,6 +431,7 @@ var _ = Describe("Environment", func() {
 
 			Eventually(logBuffer).Within(time.Millisecond * 500).Should(gbytes.Say(`"locator operation failed" error="err maybe later"`))
 		})
+
 	})
 
 	Context("query offset", func() {
@@ -620,6 +621,28 @@ var _ = Describe("Environment", func() {
 			Expect(err).To(HaveOccurred())
 
 			Eventually(logBuffer).Within(time.Millisecond * 500).Should(gbytes.Say(`"locator operation failed" error="err maybe later"`))
+		})
+	})
+
+	Context("query sequence", func() {
+		BeforeEach(func() {
+			mockRawClient.EXPECT().
+				IsOpen().
+				Return(true) // from maybeInitializeLocator
+		})
+
+		It("queries last publishingid for a given producer and stream", func() {
+			// setup
+			var publishingId uint64
+			publishingId = 42
+			mockRawClient.EXPECT().
+				QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+				Return(publishingId, nil)
+
+			// act
+			pubId, err := environment.QuerySequence(rootCtx, "producer-id", "stream-id")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pubId).To(BeNumerically("==", 42))
 		})
 	})
 })

@@ -204,10 +204,17 @@ func (l *locator) operationQueryOffset(args ...any) []any {
 	offset, err := l.client.QueryOffset(ctx, reference, stream)
 	return []any{offset, err}
 }
-
 func (l *locator) operationPartitions(args ...any) []any {
 	ctx := args[0].(context.Context)
 	superstream := args[1].(string)
 	partitions, err := l.client.Partitions(ctx, superstream)
 	return []any{partitions, err}
+}
+
+func (l *locator) operationQuerySequence(args ...any) []any {
+	ctx := args[0].(context.Context)
+	reference := args[1].(string)
+	stream := args[2].(string)
+	pubId, err := l.client.QueryPublisherSequence(ctx, reference, stream)
+	return []any{pubId, err}
 }

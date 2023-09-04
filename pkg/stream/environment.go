@@ -300,3 +300,23 @@ func (e *Environment) QueryPartitions(ctx context.Context, superstream string) (
 	}
 	return nil, lastError
 }
+
+func (e *Environment) QuerySequence(ctx context.Context, reference, stream string) (uint64, error) {
+	var lastError error
+	l := e.pickLocator(0)
+	if err := l.maybeInitializeLocator(); err != nil {
+		lastError = err
+	}
+
+	result := l.locatorOperation((*locator).operationQuerySequence, ctx, reference, stream)
+	if result[1] != nil {
+		lastError = result[1].(error)
+		if isNonRetryableError(lastError) {
+			return 0, lastError
+		}
+	}
+
+	pubId := result[0].(uint64)
+
+	return pubId, nil
+}
