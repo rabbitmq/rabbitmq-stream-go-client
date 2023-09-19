@@ -431,7 +431,6 @@ var _ = Describe("Environment", func() {
 
 			Eventually(logBuffer).Within(time.Millisecond * 500).Should(gbytes.Say(`"locator operation failed" error="err maybe later"`))
 		})
-
 	})
 
 	Context("query offset", func() {
@@ -649,16 +648,86 @@ var _ = Describe("Environment", func() {
 		When("there is an error", func() {
 			It("bubbles up the error", func() {
 				// setup
-      var publishingId uint64
-      publishingId = 0
+				var publishingId uint64
+				publishingId = 0
+
 				mockRawClient.EXPECT().
-				QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+					QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
 					Return(publishingId, errors.New("err not today")).
 					Times(3)
 
-        _, err := environment.QuerySequence(rootCtx, "producer-id", "stream-id")
+				_, err := environment.QuerySequence(rootCtx, "producer-id", "stream-id")
 				Expect(err).To(MatchError("err not today"))
 			})
+		})
+
+		When("there are multiple locators", FlakeAttempts(3), Label("flaky"), func() {
+			var (
+				locator2rawClient *stream.MockRawClient
+			)
+
+			BeforeEach(func() {
+				locator2rawClient = stream.NewMockRawClient(mockCtrl)
+				environment.AppendLocatorRawClient(locator2rawClient)
+				environment.SetBackoffPolicy(backOffPolicyFn)
+
+				// have to set server version again because there's a new locator
+				environment.SetServerVersion("3.11.1")
+			})
+
+			It("uses different locators when one fails", func() {
+				// setup
+				var publishingId uint64
+				var nilPublishingId uint64
+				publishingId = 42
+				nilPublishingId = 0
+
+				locator2rawClient.EXPECT().
+					IsOpen().
+					Return(true)
+				locator2rawClient.EXPECT().
+					QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+					Return(publishingId, nil)
+
+				mockRawClient.EXPECT().
+					QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+					Return(nilPublishingId, errors.New("something went wrong")).
+					Times(3)
+
+				// act
+				pubId, err := environment.QuerySequence(rootCtx, "retried-stream-stats", "stream-id")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(pubId).To(BeNumerically("==", 42))
+			})
+
+			It("gives up on non-retryable errors", func() {
+				// setup
+				mockRawClient.EXPECT().
+					QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.Eq("non-retryable"), gomock.AssignableToTypeOf("string")).
+					Return(uint64(0), raw.ErrStreamDoesNotExist)
+
+				// act
+				_, err := environment.QuerySequence(rootCtx, "non-retryable", "stream")
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		It("logs intermediate error messages", func() {
+			// setup
+			logBuffer := gbytes.NewBuffer()
+			logger := slog.New(slog.NewTextHandler(logBuffer))
+			ctx := raw.NewContextWithLogger(context.Background(), *logger)
+
+			mockRawClient.EXPECT().
+				QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+				Return(uint64(0), errors.New("err maybe later")).
+				Times(3)
+
+			// act
+			_, err := environment.QuerySequence(ctx, "log-things", "stream")
+			Expect(err).To(HaveOccurred())
+
+			Eventually(logBuffer).Within(time.Millisecond * 500).Should(gbytes.Say(`"locator operation failed" error="err maybe later"`))
 		})
 	})
 })
