@@ -239,20 +239,6 @@ func (e *Environment) QueryOffset(ctx context.Context, consumer, stream string) 
 			// pick at random
 			l = e.pickLocator((i + rn) % n)
 		}
-		result := l.locatorOperation((*locator).operationQuerySequence, ctx, reference, stream)
-		if result[1] != nil {
-			lastError = result[1].(error)
-			if isNonRetryableError(lastError) {
-				return 0, lastError
-			}
-		}
-		result := l.locatorOperation((*locator).operationQuerySequence, ctx, reference, stream)
-		if result[1] != nil {
-			lastError = result[1].(error)
-			if isNonRetryableError(lastError) {
-				return uint64(0), lastError
-			}
-		}
 
 		if err := l.maybeInitializeLocator(); err != nil {
 			lastError = err
@@ -315,22 +301,35 @@ func (e *Environment) QueryPartitions(ctx context.Context, superstream string) (
 	return nil, lastError
 }
 
+// QuerySequence retrieves the last publishingID for a given producer
+// (reference) and stream name.
 func (e *Environment) QuerySequence(ctx context.Context, reference, stream string) (uint64, error) {
+	logger := raw.LoggerFromCtxOrDiscard(ctx)
+	rn := rand.Intn(100)
+	n := len(e.locators)
+
 	var lastError error
-	l := e.pickLocator(0)
-	if err := l.maybeInitializeLocator(); err != nil {
-		lastError = err
-	}
-
-	result := l.locatorOperation((*locator).operationQuerySequence, ctx, reference, stream)
-	if result[1] != nil {
-		lastError = result[1].(error)
-		if isNonRetryableError(lastError) {
-			return 0, lastError
+	for i := 0; i < n; i++ {
+		l := e.pickLocator((i + rn) % n)
+		if err := l.maybeInitializeLocator(); err != nil {
+			lastError = err
+			logger.Error("error initializing locator", slog.Any("error", err))
+			continue
 		}
+
+		result := l.locatorOperation((*locator).operationQuerySequence, ctx, reference, stream)
+		if result[1] != nil {
+			lastError = result[1].(error)
+			if isNonRetryableError(lastError) {
+				return uint64(0), lastError
+			}
+			logger.Error("locator operation failed", slog.Any("error", lastError))
+			continue
+		}
+
+		pubId := result[0].(uint64)
+		return pubId, nil
 	}
 
-	pubId := result[0].(uint64)
-
-	return pubId, nil
+	return uint64(0), lastError
 }

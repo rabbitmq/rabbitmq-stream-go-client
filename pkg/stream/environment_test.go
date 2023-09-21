@@ -632,8 +632,7 @@ var _ = Describe("Environment", func() {
 
 		It("queries last publishingid for a given producer and stream", func() {
 			// setup
-			var publishingId uint64
-			publishingId = 42
+			publishingId := uint64(42)
 			mockRawClient.EXPECT().
 				QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
 				Return(publishingId, nil)
@@ -648,8 +647,7 @@ var _ = Describe("Environment", func() {
 		When("there is an error", func() {
 			It("bubbles up the error", func() {
 				// setup
-				var publishingId uint64
-				publishingId = 0
+				publishingId := uint64(0)
 
 				mockRawClient.EXPECT().
 					QueryPublisherSequence(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
