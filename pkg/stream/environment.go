@@ -205,3 +205,35 @@ func (e *Environment) QueryStreamStats(ctx context.Context, name string) (Stats,
 	}
 	return Stats{-1, -1}, lastError
 }
+
+// QueryOffset retrieves the last consumer offset stored for a given consumer
+// name and stream name.
+func (e *Environment) QueryOffset(ctx context.Context, consumer, stream string) (uint64, error) {
+	logger := raw.LoggerFromCtxOrDiscard(ctx)
+	rn := rand.Intn(100)
+	n := len(e.locators)
+
+	var lastError error
+	for i := 0; i < n; i++ {
+		l := e.pickLocator((i + rn) % n)
+		if err := l.maybeInitializeLocator(); err != nil {
+			lastError = err
+			logger.Error("error initializing locator", slog.Any("error", err))
+			continue
+		}
+
+		result := l.locatorOperation((*locator).operationQueryOffset, ctx, consumer, stream)
+		if result[1] != nil {
+			lastError = result[1].(error)
+			if isNonRetryableError(lastError) {
+				return uint64(0), lastError
+			}
+			logger.Error("locator operation failed", slog.Any("error", lastError))
+			continue
+		}
+
+		offset := result[0].(uint64)
+		return offset, nil
+	}
+	return uint64(0), lastError
+}
