@@ -15,9 +15,10 @@ const (
 )
 
 type Environment struct {
-	configuration EnvironmentConfiguration
-	locators      []*locator
-	backOffPolicy func(int) time.Duration
+	configuration           EnvironmentConfiguration
+	locators                []*locator
+	backOffPolicy           func(int) time.Duration
+	locatorSelectSequential bool
 }
 
 func NewEnvironment(ctx context.Context, configuration EnvironmentConfiguration) (*Environment, error) {
@@ -125,8 +126,15 @@ func (e *Environment) DeleteStream(ctx context.Context, name string) error {
 	n := len(e.locators)
 
 	var lastError error
+	var l *locator
 	for i := 0; i < n; i++ {
-		l := e.pickLocator((i + rn) % n)
+		if e.locatorSelectSequential {
+			// round robin / sequential
+			l = e.locators[i]
+		} else {
+			// pick at random
+			l = e.pickLocator((i + rn) % n)
+		}
 
 		if err := l.maybeInitializeLocator(); err != nil {
 			logger.Error("locator not available", slog.Any("error", err))
@@ -182,8 +190,16 @@ func (e *Environment) QueryStreamStats(ctx context.Context, name string) (Stats,
 	n := len(e.locators)
 
 	var lastError error
+	var l *locator
 	for i := 0; i < n; i++ {
-		l := e.pickLocator((i + rn) % n)
+		if e.locatorSelectSequential {
+			// round robin / sequential
+			l = e.locators[i]
+		} else {
+			// pick at random
+			l = e.pickLocator((i + rn) % n)
+		}
+
 		if err := l.maybeInitializeLocator(); err != nil {
 			lastError = err
 			logger.Error("error initializing locator", slog.Any("error", err))
@@ -214,8 +230,16 @@ func (e *Environment) QueryOffset(ctx context.Context, consumer, stream string) 
 	n := len(e.locators)
 
 	var lastError error
+	var l *locator
 	for i := 0; i < n; i++ {
-		l := e.pickLocator((i + rn) % n)
+		if e.locatorSelectSequential {
+			// round robin / sequential
+			l = e.locators[i]
+		} else {
+			// pick at random
+			l = e.pickLocator((i + rn) % n)
+		}
+
 		if err := l.maybeInitializeLocator(); err != nil {
 			lastError = err
 			logger.Error("error initializing locator", slog.Any("error", err))

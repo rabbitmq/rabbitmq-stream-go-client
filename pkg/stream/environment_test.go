@@ -212,7 +212,7 @@ var _ = Describe("Environment", func() {
 
 		// marked as flaky because the environment picks a locator randomly
 		// the test flakes if locator2 is picked first
-		When("there are multiple locators", FlakeAttempts(3), Label("flaky"), func() {
+		When("there are multiple locators", func() {
 			var (
 				locator2rawClient *stream.MockRawClient
 			)
@@ -221,6 +221,7 @@ var _ = Describe("Environment", func() {
 				locator2rawClient = stream.NewMockRawClient(mockCtrl)
 				environment.AppendLocatorRawClient(locator2rawClient)
 				environment.SetBackoffPolicy(backOffPolicyFn)
+				environment.SetLocatorSelectSequential(true)
 
 				mockRawClient.EXPECT().
 					IsOpen().
@@ -229,6 +230,7 @@ var _ = Describe("Environment", func() {
 
 			It("uses different locators when one fails", func() {
 				// setup
+
 				locator2rawClient.EXPECT().
 					IsOpen().
 					Return(true)
@@ -364,7 +366,7 @@ var _ = Describe("Environment", func() {
 			})
 		})
 
-		When("there are multiple locators", FlakeAttempts(3), Label("flaky"), func() {
+		When("there are multiple locators", func() {
 			var (
 				locator2rawClient *stream.MockRawClient
 			)
@@ -373,6 +375,7 @@ var _ = Describe("Environment", func() {
 				locator2rawClient = stream.NewMockRawClient(mockCtrl)
 				environment.AppendLocatorRawClient(locator2rawClient)
 				environment.SetBackoffPolicy(backOffPolicyFn)
+				environment.SetLocatorSelectSequential(true)
 
 				// have to set server version again because there's a new locator
 				environment.SetServerVersion("3.11.1")
@@ -453,7 +456,7 @@ var _ = Describe("Environment", func() {
 			It("bubbles up the error", func() {
 				// setup
 				mockRawClient.EXPECT().
-          QueryOffset(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+					QueryOffset(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
 					Return(uint64(0), errors.New("err not today")).
 					Times(3)
 
@@ -462,7 +465,7 @@ var _ = Describe("Environment", func() {
 			})
 		})
 
-		When("there are multiple locators", FlakeAttempts(3), Label("flaky"), func() {
+		When("there are multiple locators", func() {
 			var (
 				locator2rawClient *stream.MockRawClient
 			)
@@ -471,6 +474,7 @@ var _ = Describe("Environment", func() {
 				locator2rawClient = stream.NewMockRawClient(mockCtrl)
 				environment.AppendLocatorRawClient(locator2rawClient)
 				environment.SetBackoffPolicy(backOffPolicyFn)
+				environment.SetLocatorSelectSequential(true)
 			})
 
 			It("uses different locators when one fails", func() {
