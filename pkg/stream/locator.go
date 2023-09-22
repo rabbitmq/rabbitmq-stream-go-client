@@ -196,3 +196,11 @@ func (l *locator) operationQueryStreamStats(args ...any) []any {
 	stats, err := l.client.StreamStats(ctx, name)
 	return []any{stats, err}
 }
+
+func (l *locator) operationQueryOffset(args ...any) []any {
+	ctx := args[0].(context.Context)
+	reference := args[1].(string)
+	stream := args[2].(string)
+	offset, err := l.client.QueryOffset(ctx, reference, stream)
+	return []any{offset, err}
+}

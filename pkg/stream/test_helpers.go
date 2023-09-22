@@ -51,3 +51,7 @@ func (e *Environment) SetServerVersion(v string) {
 func (e *Environment) SetBackoffPolicy(f func(int) time.Duration) {
 	e.backOffPolicy = f
 }
+
+func (e *Environment) SetLocatorSelectSequential(v bool) {
+	e.locatorSelectSequential = v
+}

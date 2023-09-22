@@ -212,7 +212,7 @@ var _ = Describe("Environment", func() {
 
 		// marked as flaky because the environment picks a locator randomly
 		// the test flakes if locator2 is picked first
-		When("there are multiple locators", FlakeAttempts(3), Label("flaky"), func() {
+		When("there are multiple locators", func() {
 			var (
 				locator2rawClient *stream.MockRawClient
 			)
@@ -221,6 +221,7 @@ var _ = Describe("Environment", func() {
 				locator2rawClient = stream.NewMockRawClient(mockCtrl)
 				environment.AppendLocatorRawClient(locator2rawClient)
 				environment.SetBackoffPolicy(backOffPolicyFn)
+				environment.SetLocatorSelectSequential(true)
 
 				mockRawClient.EXPECT().
 					IsOpen().
@@ -229,6 +230,7 @@ var _ = Describe("Environment", func() {
 
 			It("uses different locators when one fails", func() {
 				// setup
+
 				locator2rawClient.EXPECT().
 					IsOpen().
 					Return(true)
@@ -364,7 +366,7 @@ var _ = Describe("Environment", func() {
 			})
 		})
 
-		When("there are multiple locators", FlakeAttempts(3), Label("flaky"), func() {
+		When("there are multiple locators", func() {
 			var (
 				locator2rawClient *stream.MockRawClient
 			)
@@ -373,6 +375,7 @@ var _ = Describe("Environment", func() {
 				locator2rawClient = stream.NewMockRawClient(mockCtrl)
 				environment.AppendLocatorRawClient(locator2rawClient)
 				environment.SetBackoffPolicy(backOffPolicyFn)
+				environment.SetLocatorSelectSequential(true)
 
 				// have to set server version again because there's a new locator
 				environment.SetServerVersion("3.11.1")
@@ -424,6 +427,101 @@ var _ = Describe("Environment", func() {
 
 			// act
 			_, err := environment.QueryStreamStats(ctx, "log-things")
+			Expect(err).To(HaveOccurred())
+
+			Eventually(logBuffer).Within(time.Millisecond * 500).Should(gbytes.Say(`"locator operation failed" error="err maybe later"`))
+		})
+	})
+
+	Context("query offset", func() {
+		BeforeEach(func() {
+			mockRawClient.EXPECT().
+				IsOpen().
+				Return(true) // from maybeInitializeLocator
+		})
+
+		It("queries offset for a given consumer and stream", func() {
+			// setup
+			mockRawClient.EXPECT().
+				QueryOffset(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+				Return(uint64(42), nil)
+
+			// act
+			offset, err := environment.QueryOffset(rootCtx, "consumer-with-offset", "stream")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(offset).To(BeNumerically("==", 42))
+		})
+
+		When("there is an error", func() {
+			It("bubbles up the error", func() {
+				// setup
+				mockRawClient.EXPECT().
+					QueryOffset(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+					Return(uint64(0), errors.New("err not today")).
+					Times(3)
+
+				_, err := environment.QueryOffset(rootCtx, "retryable-error", "stream")
+				Expect(err).To(MatchError("err not today"))
+			})
+		})
+
+		When("there are multiple locators", func() {
+			var (
+				locator2rawClient *stream.MockRawClient
+			)
+
+			BeforeEach(func() {
+				locator2rawClient = stream.NewMockRawClient(mockCtrl)
+				environment.AppendLocatorRawClient(locator2rawClient)
+				environment.SetBackoffPolicy(backOffPolicyFn)
+				environment.SetLocatorSelectSequential(true)
+			})
+
+			It("uses different locators when one fails", func() {
+				// setup
+				locator2rawClient.EXPECT().
+					IsOpen().
+					Return(true)
+				locator2rawClient.EXPECT().
+					QueryOffset(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+					Return(uint64(42), nil)
+
+				mockRawClient.EXPECT().
+					QueryOffset(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+					Return(uint64(0), errors.New("something went wrong")).
+					Times(3)
+
+				// act
+				offset, err := environment.QueryOffset(rootCtx, "retried-offset", "stream")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(offset).To(BeNumerically("==", 42))
+			})
+
+			It("gives up on non-retryable errors", func() {
+				// setup
+				mockRawClient.EXPECT().
+					QueryOffset(gomock.AssignableToTypeOf(ctxType), gomock.Eq("non-retryable"), gomock.AssignableToTypeOf("string")).
+					Return(uint64(0), raw.ErrStreamDoesNotExist)
+
+				// act
+				_, err := environment.QueryOffset(rootCtx, "non-retryable", "stream")
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		It("logs intermediate error messages", func() {
+			// setup
+			logBuffer := gbytes.NewBuffer()
+			logger := slog.New(slog.NewTextHandler(logBuffer))
+			ctx := raw.NewContextWithLogger(context.Background(), *logger)
+
+			mockRawClient.EXPECT().
+				QueryOffset(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string"), gomock.AssignableToTypeOf("string")).
+				Return(uint64(0), errors.New("err maybe later")).
+				Times(3)
+
+			// act
+			_, err := environment.QueryOffset(ctx, "log-things", "stream")
 			Expect(err).To(HaveOccurred())
 
 			Eventually(logBuffer).Within(time.Millisecond * 500).Should(gbytes.Say(`"locator operation failed" error="err maybe later"`))
