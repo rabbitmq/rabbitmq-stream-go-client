@@ -307,10 +307,23 @@ func (e *Environment) QuerySequence(ctx context.Context, reference, stream strin
 	logger := raw.LoggerFromCtxOrDiscard(ctx)
 	rn := rand.Intn(100)
 	n := len(e.locators)
-
 	var lastError error
+
+	if !validateStringParameter(reference) {
+		lastError = fmt.Errorf("producer reference invalid: %s", reference)
+		logger.Error("invalid producer reference", slog.Any("error", lastError))
+		return uint64(0), lastError
+	}
+
+	var l *locator
 	for i := 0; i < n; i++ {
-		l := e.pickLocator((i + rn) % n)
+		if e.locatorSelectSequential {
+			// round robin / sequential
+			l = e.locators[i]
+		} else {
+			// pick at random
+			l = e.pickLocator((i + rn) % n)
+		}
 		if err := l.maybeInitializeLocator(); err != nil {
 			lastError = err
 			logger.Error("error initializing locator", slog.Any("error", err))
