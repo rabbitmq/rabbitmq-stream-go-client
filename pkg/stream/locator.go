@@ -22,7 +22,7 @@ type locator struct {
 	client               raw.Clienter
 	isSet                bool
 	clientClose          <-chan error
-	backOffPolicy        func(int) time.Duration
+	retryPolicy          backoffDurationFunc
 	addressResolver      net.Addr // TODO: placeholder for address resolver
 
 }
@@ -35,10 +35,8 @@ func newLocator(c raw.ClientConfiguration, logger *slog.Logger) *locator {
 				slog.String("host", c.RabbitmqBrokers().Host),
 				slog.Int("port", c.RabbitmqBrokers().Port),
 			),
-		rawClientConf: c,
-		backOffPolicy: func(attempt int) time.Duration {
-			return time.Second * time.Duration(attempt<<1)
-		},
+		rawClientConf:        c,
+		retryPolicy:          defaultBackOffPolicy,
 		client:               nil,
 		isSet:                false,
 		addressResolver:      nil,

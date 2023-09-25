@@ -31,7 +31,7 @@ var _ = Describe("Locator", func() {
 				client:               nil,
 				isSet:                true,
 				clientClose:          nil,
-				backOffPolicy:        backOffPolicy,
+				retryPolicy:        backOffPolicy,
 			}
 		})
 

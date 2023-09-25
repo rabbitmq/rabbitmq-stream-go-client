@@ -15,9 +15,9 @@ const (
 )
 
 type Environment struct {
-	configuration           EnvironmentConfiguration
-	locators                []*locator
-	backOffPolicy           func(int) time.Duration
+	configuration EnvironmentConfiguration
+	locators      []*locator
+	retryPolicy   backoffDurationFunc
 	locatorSelectSequential bool
 }
 
@@ -25,10 +25,7 @@ func NewEnvironment(ctx context.Context, configuration EnvironmentConfiguration)
 	e := &Environment{
 		configuration: configuration,
 		locators:      make([]*locator, 0, len(configuration.Uris)),
-	}
-
-	e.backOffPolicy = func(attempt int) time.Duration {
-		return time.Second * time.Duration(attempt<<1)
+		retryPolicy:   defaultBackOffPolicy,
 	}
 
 	if !configuration.LazyInitialization {

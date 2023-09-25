@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
+	"sync"
+	"time"
 )
 
 const (
@@ -59,6 +61,37 @@ func maybeApplyDefaultTimeout(ctx context.Context) (context.Context, context.Can
 		return context.WithTimeout(ctx, DefaultTimeout)
 	}
 	return ctx, nil
+}
+
+// Borrowed from experimental Go library
+// https://pkg.go.dev/golang.org/x/exp/constraints#Integer
+// Making a copy & paste to avoid depending on golang.org/x/exp
+// FIXME probably need to include copyright/license from golang.org/x/exp
+type integer interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
+}
+
+type autoIncrementingSequence[T integer] struct {
+	sync.Mutex
+	value T
+}
+
+func newAutoIncrementingSequence[T integer](startingValue T) *autoIncrementingSequence[T] {
+	return &autoIncrementingSequence[T]{value: startingValue}
+}
+
+func (a *autoIncrementingSequence[T]) next() (next T) {
+	a.Lock()
+	defer a.Unlock()
+	next = a.value
+	a.value += 1
+	return
+}
+
+type backoffDurationFunc func(int) time.Duration
+
+var defaultBackOffPolicy backoffDurationFunc = func(i int) time.Duration {
+	return time.Second * time.Duration(i<<1)
 }
 
 func validateStringParameter(p string) bool {

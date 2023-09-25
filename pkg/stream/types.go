@@ -1,7 +1,11 @@
 package stream
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
 	"time"
 )
 
@@ -13,8 +17,10 @@ const (
 )
 
 var (
-	ErrNoLocators           = fmt.Errorf("no locators configured")
-	ErrUnsupportedOperation = fmt.Errorf("unsupported operation")
+	ErrNoLocators           = errors.New("no locators configured")
+	ErrUnsupportedOperation = errors.New("unsupported operation")
+	ErrBatchTooLarge        = errors.New("too many messages in batch")
+	ErrEmptyBatch           = errors.New("batch list is empty")
 )
 
 type ByteCapacity uint64
@@ -33,3 +39,12 @@ type CreateStreamOptions struct {
 	MaxLength      ByteCapacity
 	MaxSegmentSize ByteCapacity
 }
+
+type Producer interface {
+	Send(ctx context.Context, msg amqp.Message) error
+	SendBatch(ctx context.Context, messages []amqp.Message) error
+	SendWithId(ctx context.Context, publishingId uint64, msg amqp.Message) error
+	GetLastPublishedId() uint64
+}
+
+type Message = common.Message
