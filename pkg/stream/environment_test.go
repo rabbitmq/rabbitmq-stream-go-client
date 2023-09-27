@@ -526,5 +526,100 @@ var _ = Describe("Environment", func() {
 
 			Eventually(logBuffer).Within(time.Millisecond * 500).Should(gbytes.Say(`"locator operation failed" error="err maybe later"`))
 		})
+
+	})
+	Context("query partitions", func() {
+		BeforeEach(func() {
+			mockRawClient.EXPECT().
+				IsOpen().
+				Return(true) // from maybeInitializeLocator
+		})
+
+		It("queries partition streams for a given superstream", func() {
+			// setup
+			mockRawClient.EXPECT().
+				Partitions(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+				Return([]string{"stream1, stream2"}, nil)
+
+			// act
+			partitions, err := environment.QueryPartitions(rootCtx, "superstream")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(partitions).To(Equal([]string{"stream1, stream2"}))
+		})
+
+		When("there is an error", func() {
+			It("bubbles up the error", func() {
+				// setup
+				mockRawClient.EXPECT().
+					Partitions(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+					Return(nil, errors.New("err not today")).
+					Times(3)
+
+				_, err := environment.QueryPartitions(rootCtx, "superstream-does-not-exist")
+				Expect(err).To(MatchError("err not today"))
+			})
+		})
+
+		When("there are multiple locators", func() {
+			var (
+				locator2rawClient *stream.MockRawClient
+			)
+
+			BeforeEach(func() {
+				locator2rawClient = stream.NewMockRawClient(mockCtrl)
+				environment.AppendLocatorRawClient(locator2rawClient)
+				environment.SetBackoffPolicy(backOffPolicyFn)
+				environment.SetLocatorSelectSequential(true)
+			})
+
+			It("uses different locators when one fails", func() {
+				// setup
+				locator2rawClient.EXPECT().
+					IsOpen().
+					Return(true)
+				locator2rawClient.EXPECT().
+					Partitions(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+					Return([]string{"stream1", "stream2"}, nil)
+
+				mockRawClient.EXPECT().
+					Partitions(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+					Return(nil, errors.New("something went wrong")).
+					Times(3)
+
+				// act
+				partitions, err := environment.QueryPartitions(rootCtx, "superstream")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(partitions).To(Equal([]string{"stream1", "stream2"}))
+			})
+
+			It("gives up on non-retryable errors", func() {
+				// setup
+				mockRawClient.EXPECT().
+					Partitions(gomock.AssignableToTypeOf(ctxType), gomock.Eq("non-retryable")).
+					Return(nil, raw.ErrStreamDoesNotExist)
+
+				// act
+				_, err := environment.QueryPartitions(rootCtx, "non-retryable")
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		It("logs intermediate error messages", func() {
+			// setup
+			logBuffer := gbytes.NewBuffer()
+			logger := slog.New(slog.NewTextHandler(logBuffer))
+			ctx := raw.NewContextWithLogger(context.Background(), *logger)
+
+			mockRawClient.EXPECT().
+				Partitions(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("string")).
+				Return(nil, errors.New("err maybe later")).
+				Times(3)
+
+			// act
+			_, err := environment.QueryPartitions(ctx, "log-things")
+			Expect(err).To(HaveOccurred())
+
+			Eventually(logBuffer).Within(time.Millisecond * 500).Should(gbytes.Say(`"locator operation failed" error="err maybe later"`))
+		})
 	})
 })

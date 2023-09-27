@@ -261,3 +261,42 @@ func (e *Environment) QueryOffset(ctx context.Context, consumer, stream string) 
 	}
 	return uint64(0), lastError
 }
+
+// QueryPartitions returns a list of partition streams for a given superstream name
+func (e *Environment) QueryPartitions(ctx context.Context, superstream string) ([]string, error) {
+	logger := raw.LoggerFromCtxOrDiscard(ctx)
+	rn := rand.Intn(100)
+	n := len(e.locators)
+
+	var lastError error
+	var l *locator
+	for i := 0; i < n; i++ {
+		if e.locatorSelectSequential {
+			// round robin / sequential
+			l = e.locators[i]
+		} else {
+			// pick at random
+			l = e.pickLocator((i + rn) % n)
+		}
+
+		if err := l.maybeInitializeLocator(); err != nil {
+			lastError = err
+			logger.Error("error initializing locator", slog.Any("error", err))
+			continue
+		}
+
+		result := l.locatorOperation((*locator).operationPartitions, ctx, superstream)
+		if result[1] != nil {
+			lastError = result[1].(error)
+			if isNonRetryableError(lastError) {
+				return nil, lastError
+			}
+			logger.Error("locator operation failed", slog.Any("error", lastError))
+			continue
+		}
+
+		partitions := result[0].([]string)
+		return partitions, nil
+	}
+	return nil, lastError
+}
