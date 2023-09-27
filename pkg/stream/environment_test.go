@@ -589,7 +589,7 @@ var _ = Describe("Environment", func() {
 				// act
 				partitions, err := environment.QueryPartitions(rootCtx, "superstream")
 				Expect(err).ToNot(HaveOccurred())
-        Expect(partitions).To(Equal([]string{"stream1", "stream2"}))
+				Expect(partitions).To(Equal([]string{"stream1", "stream2"}))
 			})
 
 			It("gives up on non-retryable errors", func() {
