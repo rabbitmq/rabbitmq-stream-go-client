@@ -22,3 +22,26 @@ jobs:
           version: "2023.1.3"
           install-go: false
           build-tags: "rabbitmq.stream.test,rabbitmq.stream.e2e"
+
+  format-check:
+    name: Check Go Formatting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: stable
+
+      - name: Run gofmt check
+        run: |
+          go fmt ./...
+          changes=$(git status --porcelain)
+          if [ -n "$changes" ]; then
+            echo "The following Go files are not formatted correctly:"
+            echo "$changes"
+            exit 1
+          fi
