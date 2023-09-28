@@ -3,16 +3,19 @@ package stream
 import (
 	"context"
 	"errors"
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"golang.org/x/exp/slog"
-	"time"
 )
 
 var _ = Describe("Locator", func() {
 	Describe("Operations", func() {
 		var (
+			loc           *locator
 			logger        *slog.Logger
 			backOffPolicy = func(_ int) time.Duration {
 				return time.Millisecond * 10
@@ -20,7 +23,20 @@ var _ = Describe("Locator", func() {
 		)
 
 		BeforeEach(func() {
-			logger = slog.New(slog.NewTextHandler(GinkgoWriter))
+			h := slog.HandlerOptions{
+				Level: slog.LevelDebug,
+			}.NewTextHandler(GinkgoWriter)
+			logger = slog.New(h)
+
+			loc = &locator{
+				log:                  logger,
+				shutdownNotification: make(chan struct{}),
+				rawClientConf:        raw.ClientConfiguration{},
+				client:               nil,
+				isSet:                true,
+				clientClose:          nil,
+				backOffPolicy:        backOffPolicy,
+			}
 		})
 
 		It("reconnects", func() {
@@ -28,21 +44,6 @@ var _ = Describe("Locator", func() {
 		})
 
 		When("there is an error", func() {
-			var (
-				loc *locator
-			)
-
-			BeforeEach(func() {
-				loc = &locator{
-					log:                  logger,
-					shutdownNotification: make(chan struct{}),
-					rawClientConf:        raw.ClientConfiguration{},
-					client:               nil,
-					isSet:                true,
-					clientClose:          nil,
-					backOffPolicy:        backOffPolicy,
-				}
-			})
 
 			It("retries the operation on retryable errors", func() {
 				var runs int
@@ -71,7 +72,52 @@ var _ = Describe("Locator", func() {
 				Expect(r[0]).To(MatchError("oopsie"))
 			})
 
-			// TODO: add a test for logs
+		})
+
+		Context("logging", func() {
+			var logBuffer *gbytes.Buffer
+
+			BeforeEach(func() {
+				logBuffer = gbytes.NewBuffer()
+				GinkgoWriter.TeeTo(logBuffer)
+			})
+
+			It("emits a log when locator operation starts", func() {
+				_ = loc.locatorOperation(func(_ *locator, _ ...any) []any {
+					return []any{errors.New("oopsie")}
+				})
+
+				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("starting locator operation"))
+			})
+
+			It("emits a log when locator operation succeeds", func() {
+				_ = loc.locatorOperation(func(_ *locator, _ ...any) []any {
+					return []any{nil}
+				})
+
+				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("locator operation succeed"))
+			})
+
+			It("emits a log on error", func() {
+				_ = loc.locatorOperation(func(_ *locator, _ ...any) []any {
+					return []any{errors.New("oopsie")}
+				})
+				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("error in locator operation"))
+				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("error"))
+				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("oopsie"))
+			})
+
+			It("emits a log on non-retryable error", func() {
+				var runs int
+				_ = loc.locatorOperation(func(_ *locator, _ ...any) []any {
+					runs += 1
+					return []any{context.DeadlineExceeded}
+				})
+				Expect(runs).To(BeNumerically("==", 1))
+				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("locator operation failed with non-retryable error"))
+				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("error"))
+				Eventually(logBuffer).Within(time.Second).Should(gbytes.Say("context deadline exceeded"))
+			})
 		})
 	})
 
