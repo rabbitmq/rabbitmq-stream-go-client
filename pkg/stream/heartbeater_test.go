@@ -1,10 +1,10 @@
 package stream
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
+	"go.uber.org/mock/gomock"
 	"time"
 )
 
@@ -71,15 +71,14 @@ var _ = Describe("Heartbeater", func() {
 
 		hb.tickDuration = time.Minute // we do not want to receive a tick
 		hb.start()
-		Expect(hb.done).ToNot(BeClosed())
+		Expect(hb.done.C).ToNot(BeClosed())
 		Expect(hb.ticker.C).ToNot(BeClosed())
 
 		hb.stop()
-		Expect(hb.done).To(BeClosed())
+		Expect(hb.done.C).To(BeClosed())
 		Consistently(hb.ticker.C, "100ms").ShouldNot(Receive())
 
 		By("not panicking on subsequent close")
-		// FIXME close on a closed channel panics
 		hb.stop()
 		// TODO investigate using gleak and asserts that heartbeater go routine have not leaked
 		// 		tried this before, but could not make the test go red, even after leaking the heartbeater routine

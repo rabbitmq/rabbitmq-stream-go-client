@@ -3,6 +3,7 @@ package stream
 import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"golang.org/x/exp/slog"
+	"sync"
 	"time"
 )
 
@@ -11,8 +12,29 @@ type heartBeater struct {
 	client       raw.Clienter
 	tickDuration time.Duration
 	ticker       *time.Ticker
-	done         chan struct{}
+	done         *DoneChan
 	receiveCh    <-chan *raw.Heartbeat
+}
+
+type DoneChan struct {
+	C      chan struct{}
+	closed bool
+	mutex  sync.Mutex
+}
+
+func NewDoneChan() *DoneChan {
+	return &DoneChan{C: make(chan struct{})}
+}
+
+// GracefulClose closes the DoneChan only if the Done chan is not already closed.
+func (dc *DoneChan) GracefulClose() {
+	dc.mutex.Lock()
+	defer dc.mutex.Unlock()
+
+	if !dc.closed {
+		close(dc.C)
+		dc.closed = true
+	}
 }
 
 func NewHeartBeater(duration time.Duration, client raw.Clienter, logger *slog.Logger) *heartBeater {
@@ -20,7 +42,7 @@ func NewHeartBeater(duration time.Duration, client raw.Clienter, logger *slog.Lo
 		logger:       logger,
 		client:       client,
 		tickDuration: duration,
-		done:         make(chan struct{}),
+		done:         NewDoneChan(),
 	}
 }
 
@@ -31,7 +53,7 @@ func (hb *heartBeater) start() {
 	go func() {
 		for {
 			select {
-			case <-hb.done:
+			case <-hb.done.C:
 				return
 			case <-hb.ticker.C:
 				hb.send()
@@ -52,7 +74,7 @@ func (hb *heartBeater) reset() {
 
 func (hb *heartBeater) stop() {
 	hb.ticker.Stop()
-	close(hb.done)
+	hb.done.GracefulClose()
 }
 
 func (hb *heartBeater) send() {
