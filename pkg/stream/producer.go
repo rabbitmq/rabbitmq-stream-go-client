@@ -17,6 +17,8 @@ var (
 
 const (
 	defaultBatchPublishingDelay = time.Millisecond * 100
+	defaultMaxInFlight          = 10_000
+	maxBufferedMessages         = 100
 )
 
 type ProducerOptions struct {
@@ -30,12 +32,24 @@ type ProducerOptions struct {
 	BatchPublishingDelay time.Duration
 }
 
+func (p *ProducerOptions) validate() {
+	if p.MaxInFlight <= 0 {
+		p.MaxInFlight = defaultMaxInFlight
+	}
+	if p.MaxBufferedMessages <= 0 {
+		p.MaxBufferedMessages = maxBufferedMessages
+	}
+	if p.BatchPublishingDelay == 0 {
+		p.BatchPublishingDelay = defaultBatchPublishingDelay
+	}
+}
+
 type standardProducer struct {
 	publisherId     uint8
 	rawClient       raw.Clienter
 	rawClientMu     *sync.Mutex
 	publishingIdSeq autoIncrementingSequence[uint64]
-	opts            ProducerOptions
+	opts            *ProducerOptions
 	// buffer mutex
 	bufferMu      *sync.Mutex
 	messageBuffer []common.PublishingMessager
@@ -45,13 +59,8 @@ type standardProducer struct {
 	destructor    sync.Once
 }
 
-func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts ProducerOptions) *standardProducer {
-	if opts.MaxInFlight <= 0 {
-		opts.MaxInFlight = 10_000
-	}
-	if opts.MaxBufferedMessages <= 0 {
-		opts.MaxBufferedMessages = 100
-	}
+func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *ProducerOptions) *standardProducer {
+	opts.validate()
 	p := &standardProducer{
 		publisherId:     publisherId,
 		rawClient:       rawClient,
@@ -90,12 +99,12 @@ func (s *standardProducer) push(publishingId uint64, message Message) error {
 }
 
 // synchronously sends the messages accumulated in the message buffer. If sending
-// is successful, it clears the message buffer.
+// is successful, it clears the message buffer. The caller MUST hold a lock
+// on the buffer mutex. Calling this function without a lock on buffer mutex is
+// undefined behaviour
 func (s *standardProducer) doSend(ctx context.Context) error {
-	s.bufferMu.Lock()
 	s.rawClientMu.Lock()
 	defer s.rawClientMu.Unlock()
-	defer s.bufferMu.Unlock()
 
 	if len(s.messageBuffer) == 0 {
 		return nil
@@ -141,7 +150,9 @@ func (s *standardProducer) sendLoopAsync(ctx context.Context) {
 		select {
 		case <-t.C:
 			// send
+			s.bufferMu.Lock()
 			err := s.doSend(ctx)
+			s.bufferMu.Unlock()
 			if err != nil {
 				// log error
 				panic(err)
@@ -160,15 +171,18 @@ func (s *standardProducer) sendLoopAsync(ctx context.Context) {
 func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 	//TODO implement me
 	s.bufferMu.Lock()
-	if len(s.messageBuffer) == s.opts.MaxBufferedMessages {
-		s.bufferMu.Unlock()
-		if err := s.doSend(ctx); err != nil {
-			return err
-		}
+	defer s.bufferMu.Unlock()
+	err := s.push(s.publishingIdSeq.next(), &msg)
+	if err != nil && errors.Is(err, errMessageBufferFull) {
+		return s.doSend(ctx)
+	} else if err != nil {
+		// this should never happen
+		panic(err)
 	}
 
-	_ = s.push(s.publishingIdSeq.next(), &msg)
-	s.bufferMu.Unlock()
+	if len(s.messageBuffer) == s.opts.MaxBufferedMessages {
+		return s.doSend(ctx)
+	}
 
 	return nil
 }

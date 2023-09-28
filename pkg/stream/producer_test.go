@@ -77,7 +77,7 @@ var _ = Describe("Smart Producer", func() {
 				publisherId: 1,
 				rawClient:   fakeRawClient,
 				rawClientMu: &sync.Mutex{},
-				opts:        ProducerOptions{MaxInFlight: 100, MaxBufferedMessages: 100},
+				opts:        &ProducerOptions{MaxInFlight: 100, MaxBufferedMessages: 100},
 			}
 
 			// test
@@ -97,7 +97,7 @@ var _ = Describe("Smart Producer", func() {
 					rawClient:       fakeRawClient,
 					rawClientMu:     &sync.Mutex{},
 					publishingIdSeq: autoIncrementingSequence[uint64]{},
-					opts:            ProducerOptions{MaxInFlight: 1, MaxBufferedMessages: 1},
+					opts:            &ProducerOptions{MaxInFlight: 1, MaxBufferedMessages: 1},
 				}
 				msgs := make([]amqp.Message, 10)
 				Expect(p.SendBatch(context.Background(), msgs)).To(MatchError(ErrBatchTooLarge))
@@ -134,7 +134,11 @@ var _ = Describe("Smart Producer", func() {
 					return nil
 				})
 
-			p := newStandardProducer(42, fakeRawClient, ProducerOptions{MaxInFlight: 5, MaxBufferedMessages: 5})
+			p := newStandardProducer(42, fakeRawClient, &ProducerOptions{
+				MaxInFlight:          5,
+				MaxBufferedMessages:  5,
+				BatchPublishingDelay: time.Millisecond * 200, // batching delay must be lower than Eventually's timeout
+			})
 
 			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 1")})).To(Succeed())
 			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 2")})).To(Succeed())
@@ -147,5 +151,51 @@ var _ = Describe("Smart Producer", func() {
 			}).Within(time.Second * 1).WithPolling(time.Millisecond * 200).Should(ConsistOf(uint64(0), uint64(1), uint64(2)))
 		})
 
+		It("publishes messages when buffer is full", func() {
+			m := &sync.Mutex{}
+			var capturedIds = make([]uint64, 0)
+			fakeRawClient.EXPECT().
+				Send(gomock.AssignableToTypeOf(ctxType), gomock.Eq(uint8(42)),
+					gomock.All(
+						gomock.Len(3),
+						gomock.AssignableToTypeOf([]common.PublishingMessager{}),
+					),
+				).
+				Do(func(_ context.Context, _ uint8, pMessages []common.PublishingMessager) error {
+					m.Lock()
+					for i := 0; i < len(pMessages); i++ {
+						capturedIds = append(capturedIds, pMessages[i].PublishingId())
+					}
+					m.Unlock()
+					return nil
+				}).
+				Times(2)
+
+			p := newStandardProducer(42, fakeRawClient, &ProducerOptions{
+				MaxInFlight:          3,
+				MaxBufferedMessages:  3,
+				BatchPublishingDelay: time.Minute, // long batch delay so that publishing happens because buffer is full
+			})
+
+			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 1")})).To(Succeed())
+			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 2")})).To(Succeed())
+			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 3")})).To(Succeed())
+			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 4")})).To(Succeed())
+			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 5")})).To(Succeed())
+			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 6")})).To(Succeed())
+			Eventually(func() []uint64 {
+				m.Lock()
+				defer m.Unlock()
+				return capturedIds
+			}).Within(time.Millisecond * 200).WithPolling(time.Millisecond * 20).Should(ConsistOf(
+				uint64(0),
+				uint64(1),
+				uint64(2),
+				uint64(3),
+				uint64(4),
+				uint64(5),
+			))
+
+		})
 	})
 })
