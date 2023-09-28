@@ -672,9 +672,6 @@ var _ = Describe("Environment", func() {
 					environment.AppendLocatorRawClient(locator2rawClient)
 					environment.SetBackoffPolicy(backOffPolicyFn)
 					environment.SetLocatorSelectSequential(true)
-
-					// have to set server version again because there's a new locator
-					// environment.SetServerVersion("3.11.1")
 				})
 
 				It("uses different locators when one fails", func() {

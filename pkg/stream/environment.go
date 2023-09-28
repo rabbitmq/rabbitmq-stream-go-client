@@ -311,7 +311,6 @@ func (e *Environment) QuerySequence(ctx context.Context, reference, stream strin
 
 	if !validateStringParameter(reference) {
 		lastError = fmt.Errorf("producer reference invalid: %s", reference)
-		logger.Error("invalid producer reference", slog.Any("error", lastError))
 		return uint64(0), lastError
 	}
 
