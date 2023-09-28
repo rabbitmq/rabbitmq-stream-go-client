@@ -15,9 +15,19 @@ var (
 	errMessageBufferFull = errors.New("message buffer is full")
 )
 
+const (
+	defaultBatchPublishingDelay = time.Millisecond * 100
+)
+
 type ProducerOptions struct {
-	MaxInFlight         int
+	// The maximum number of unconfirmed outbound messages. Producer.Send will start
+	// blocking when the limit is reached.
+	MaxInFlight int
+	// The maximum number of messages to accumulate before sending them to the
+	// broker.
 	MaxBufferedMessages int
+	// Period to send a batch of messages.
+	BatchPublishingDelay time.Duration
 }
 
 type standardProducer struct {
@@ -118,9 +128,15 @@ func (s *standardProducer) doSend(ctx context.Context) error {
 }
 
 func (s *standardProducer) sendLoopAsync(ctx context.Context) {
-	// FIXME: configurable ticker
-	t := time.NewTicker(time.Millisecond * 300)
+	var publishingDelay time.Duration
+	if s.opts.BatchPublishingDelay == 0 {
+		// important to make this check because NewTicker(0) panics
+		publishingDelay = defaultBatchPublishingDelay
+	} else {
+		publishingDelay = s.opts.BatchPublishingDelay
+	}
 
+	t := time.NewTicker(publishingDelay)
 	for {
 		select {
 		case <-t.C:

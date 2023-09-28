@@ -512,7 +512,7 @@ var _ = Describe("Environment", func() {
 		It("logs intermediate error messages", func() {
 			// setup
 			logBuffer := gbytes.NewBuffer()
-			logger := slog.New(slog.NewTextHandler(logBuffer))
+			logger := slog.New(slog.NewTextHandler(logBuffer, nil))
 			ctx := raw.NewContextWithLogger(context.Background(), *logger)
 
 			mockRawClient.EXPECT().
@@ -607,7 +607,7 @@ var _ = Describe("Environment", func() {
 		It("logs intermediate error messages", func() {
 			// setup
 			logBuffer := gbytes.NewBuffer()
-			logger := slog.New(slog.NewTextHandler(logBuffer))
+			logger := slog.New(slog.NewTextHandler(logBuffer, nil))
 			ctx := raw.NewContextWithLogger(context.Background(), *logger)
 
 			mockRawClient.EXPECT().
@@ -709,7 +709,7 @@ var _ = Describe("Environment", func() {
 			It("logs intermediate error messages", func() {
 				// setup
 				logBuffer := gbytes.NewBuffer()
-				logger := slog.New(slog.NewTextHandler(logBuffer))
+				logger := slog.New(slog.NewTextHandler(logBuffer, nil))
 				ctx := raw.NewContextWithLogger(context.Background(), *logger)
 
 				mockRawClient.EXPECT().

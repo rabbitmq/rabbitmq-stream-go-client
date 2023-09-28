@@ -77,7 +77,7 @@ var _ = Describe("Smart Producer", func() {
 				publisherId: 1,
 				rawClient:   fakeRawClient,
 				rawClientMu: &sync.Mutex{},
-				opts:        ProducerOptions{100, 100},
+				opts:        ProducerOptions{MaxInFlight: 100, MaxBufferedMessages: 100},
 			}
 
 			// test
@@ -97,7 +97,7 @@ var _ = Describe("Smart Producer", func() {
 					rawClient:       fakeRawClient,
 					rawClientMu:     &sync.Mutex{},
 					publishingIdSeq: autoIncrementingSequence[uint64]{},
-					opts:            ProducerOptions{1, 1},
+					opts:            ProducerOptions{MaxInFlight: 1, MaxBufferedMessages: 1},
 				}
 				msgs := make([]amqp.Message, 10)
 				Expect(p.SendBatch(context.Background(), msgs)).To(MatchError(ErrBatchTooLarge))
@@ -134,7 +134,7 @@ var _ = Describe("Smart Producer", func() {
 					return nil
 				})
 
-			p := newStandardProducer(42, fakeRawClient, ProducerOptions{5, 5})
+			p := newStandardProducer(42, fakeRawClient, ProducerOptions{MaxInFlight: 5, MaxBufferedMessages: 5})
 
 			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 1")})).To(Succeed())
 			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 2")})).To(Succeed())
