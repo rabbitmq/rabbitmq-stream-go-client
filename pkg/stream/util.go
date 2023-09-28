@@ -60,3 +60,11 @@ func maybeApplyDefaultTimeout(ctx context.Context) (context.Context, context.Can
 	}
 	return ctx, nil
 }
+
+func validateStringParameter(p string) bool {
+	if len(p) == 0 || p == " " {
+		return false
+	}
+
+	return true
+}
