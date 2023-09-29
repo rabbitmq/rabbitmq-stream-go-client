@@ -146,7 +146,6 @@ func WithUris(uris ...string) EnvironmentConfigurationOption {
 		}
 
 		for i, uri := range uris {
-			uri := uri // TODO(Zerpet): I'm not sure if this is necessary
 			if i == 0 {
 				WithUri(uri)(c)
 				continue
