@@ -51,12 +51,14 @@ type standardProducer struct {
 	publishingIdSeq autoIncrementingSequence[uint64]
 	opts            *ProducerOptions
 	// buffer mutex
-	bufferMu      *sync.Mutex
-	messageBuffer []common.PublishingMessager
-	retryDuration backoffDurationFunc
-	done          chan struct{}
-	cancel        context.CancelFunc
-	destructor    sync.Once
+	bufferMu           *sync.Mutex
+	messageBuffer      []PublishingMessage
+	retryDuration      backoffDurationFunc
+	done               chan struct{}
+	cancel             context.CancelFunc
+	destructor         sync.Once
+	unconfirmedMessage confirmationTracker
+	confirmedPublish   chan uint64
 }
 
 func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *ProducerOptions) *standardProducer {
@@ -72,7 +74,12 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *Produc
 		retryDuration: func(i int) time.Duration {
 			return time.Second * (1 << i)
 		},
-		done: make(chan struct{}),
+		done:             make(chan struct{}),
+		confirmedPublish: make(chan uint64),
+		unconfirmedMessage: confirmationTracker{
+			Mutex:    &sync.Mutex{},
+			messages: make(map[uint64]PublishingMessage, opts.MaxInFlight),
+		},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -168,6 +175,9 @@ func (s *standardProducer) sendLoopAsync(ctx context.Context) {
 
 // Public API
 
+// Send an AMQP 1.0 message asynchronously. Messages are accumulated in a buffer,
+// and sent after a delay, or when the buffer becomes full, whichever happens
+// first.
 func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 	//TODO implement me
 	s.bufferMu.Lock()

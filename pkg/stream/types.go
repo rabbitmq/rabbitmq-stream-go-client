@@ -17,10 +17,11 @@ const (
 )
 
 var (
-	ErrNoLocators           = errors.New("no locators configured")
-	ErrUnsupportedOperation = errors.New("unsupported operation")
-	ErrBatchTooLarge        = errors.New("too many messages in batch")
-	ErrEmptyBatch           = errors.New("batch list is empty")
+	ErrNoLocators            = errors.New("no locators configured")
+	ErrUnsupportedOperation  = errors.New("unsupported operation")
+	ErrBatchTooLarge         = errors.New("too many messages in batch")
+	ErrEmptyBatch            = errors.New("batch list is empty")
+	ErrUntrackedConfirmation = errors.New("message confirmation not tracked")
 )
 
 type ByteCapacity uint64
@@ -48,3 +49,4 @@ type Producer interface {
 }
 
 type Message = common.Message
+type PublishingMessage = common.PublishingMessager
