@@ -11,14 +11,11 @@ import (
 var _ = Describe("confirmation", func() {
 
 	var (
-		ctracker confirmationTracker
+		ctracker *confirmationTracker
 	)
 
 	BeforeEach(func() {
-		ctracker = confirmationTracker{
-			Mutex:    &sync.Mutex{},
-			messages: make(map[uint64]PublishingMessage, 10),
-		}
+		ctracker = newConfirmationTracker(10)
 	})
 
 	It("adds messages and maps them by publishing ID", func() {
@@ -34,6 +31,7 @@ var _ = Describe("confirmation", func() {
 			HaveKey(BeNumerically("==", 1)),
 			HaveKey(BeNumerically("==", 2)),
 		))
+		Expect(ctracker.unconfirmedMessagesSemaphore).To(HaveLen(3))
 	})
 
 	When("multiple routines add confirmations", func() {
@@ -41,6 +39,7 @@ var _ = Describe("confirmation", func() {
 			// this test is effective when the race detector is active
 			// use ginkgo --race [...ginkgo args...]
 			By("adding them one by one")
+			ctracker = newConfirmationTracker(20)
 			var wg sync.WaitGroup
 			for i := 0; i < 20; i++ {
 				wg.Add(1)
@@ -54,7 +53,7 @@ var _ = Describe("confirmation", func() {
 			Expect(ctracker.messages).To(HaveLen(20))
 
 			By("adding them in batches")
-			ctracker.messages = make(map[uint64]PublishingMessage, 20)
+			ctracker = newConfirmationTracker(21)
 			for i := 0; i < 20; i += 3 {
 				wg.Add(1)
 				go func(i int) {
@@ -78,6 +77,7 @@ var _ = Describe("confirmation", func() {
 
 		ctracker.addMany(raw.NewPublishingMessage(0, m))
 		Expect(ctracker.messages).To(HaveLen(1))
+		Expect(ctracker.unconfirmedMessagesSemaphore).To(HaveLen(1))
 
 		ctracker.addMany(
 			raw.NewPublishingMessage(5, m),
@@ -90,6 +90,7 @@ var _ = Describe("confirmation", func() {
 			HaveKey(BeNumerically("==", 6)),
 			HaveKey(BeNumerically("==", 7)),
 		))
+		Expect(ctracker.unconfirmedMessagesSemaphore).To(HaveLen(4))
 	})
 
 	Context("confirm", func() {
@@ -105,6 +106,7 @@ var _ = Describe("confirmation", func() {
 			Expect(pubMsg.PublishingId()).To(BeNumerically("==", 6))
 			Expect(pubMsg.Message()).To(Equal(m))
 			Expect(ctracker.messages).To(HaveLen(0))
+			Expect(ctracker.unconfirmedMessagesSemaphore).To(HaveLen(0))
 		})
 
 		When("a message is not tracked", func() {
@@ -114,6 +116,7 @@ var _ = Describe("confirmation", func() {
 				pubMsg, err := ctracker.confirm(123)
 				Expect(pubMsg).To(BeNil())
 				Expect(err).To(MatchError(ContainSubstring("message confirmation not tracked")))
+				Expect(ctracker.unconfirmedMessagesSemaphore).To(HaveLen(1))
 			})
 		})
 	})
