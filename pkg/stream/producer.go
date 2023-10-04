@@ -30,6 +30,9 @@ type ProducerOptions struct {
 	MaxBufferedMessages int
 	// Period to send a batch of messages.
 	BatchPublishingDelay time.Duration
+	// Time before enqueueing of a message fail when the maximum number of
+	// unconfirmed is reached.
+	EnqueueTimeout time.Duration
 }
 
 func (p *ProducerOptions) validate() {
@@ -41,6 +44,9 @@ func (p *ProducerOptions) validate() {
 	}
 	if p.BatchPublishingDelay == 0 {
 		p.BatchPublishingDelay = defaultBatchPublishingDelay
+	}
+	if p.EnqueueTimeout < 0 {
+		p.EnqueueTimeout = time.Second * 10
 	}
 }
 
@@ -66,7 +72,7 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *Produc
 	p := &standardProducer{
 		publisherId:     publisherId,
 		rawClient:       rawClient,
-		rawClientMu:     &sync.Mutex{},
+		rawClientMu:     &sync.Mutex{}, // FIXME: this has to come as argument. this mutex must be shared among all users of the client
 		publishingIdSeq: autoIncrementingSequence[uint64]{},
 		opts:            opts,
 		bufferMu:        &sync.Mutex{},
@@ -77,7 +83,7 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *Produc
 		done:             make(chan struct{}),
 		confirmedPublish: make(chan uint64),
 		unconfirmedMessage: confirmationTracker{
-			Mutex:    &sync.Mutex{},
+			mapMu:    &sync.Mutex{},
 			messages: make(map[uint64]PublishingMessage, opts.MaxInFlight),
 		},
 	}
@@ -86,6 +92,7 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *Produc
 	p.cancel = cancel
 
 	go p.sendLoopAsync(ctx)
+	go p.confirmationListenerAsync()
 	return p
 }
 
@@ -165,10 +172,25 @@ func (s *standardProducer) sendLoopAsync(ctx context.Context) {
 				panic(err)
 			}
 		case <-s.done:
+			// exit
+			t.Stop()
+			return
 		case <-ctx.Done():
 			// exit
 			t.Stop()
 			return
+		}
+	}
+}
+
+func (s *standardProducer) confirmationListenerAsync() {
+	for {
+		select {
+		case <-s.done:
+			return
+		case id := <-s.confirmedPublish:
+			_, _ = s.unconfirmedMessage.confirm(id)
+			// TODO: invoke a callback, or send a notification to a channel, or log the error, or all of the above (or change confirm() to no-op instead of error) or make this comment shorter :)
 		}
 	}
 }
@@ -182,7 +204,15 @@ func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 	//TODO implement me
 	s.bufferMu.Lock()
 	defer s.bufferMu.Unlock()
+
+	// if not max in flight
+	// then push
+	// else return error fail publish
+	//var err error
 	err := s.push(s.publishingIdSeq.next(), &msg)
+	if s.opts.EnqueueTimeout != 0 {
+
+	}
 	if err != nil && errors.Is(err, errMessageBufferFull) {
 		return s.doSend(ctx)
 	} else if err != nil {

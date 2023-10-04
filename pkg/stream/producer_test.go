@@ -26,15 +26,17 @@ var _ = Describe("Smart Producer", func() {
 	})
 
 	Describe("send batch", func() {
+		var (
+			p *standardProducer
+		)
+
+		AfterEach(func() {
+			p.close()
+		})
+
 		When("the batch list is empty", func() {
 			It("returns an error", func() {
-				p := standardProducer{
-					publisherId:     0,
-					rawClient:       fakeRawClient,
-					rawClientMu:     &sync.Mutex{},
-					publishingIdSeq: autoIncrementingSequence[uint64]{},
-				}
-
+				p = newStandardProducer(0, fakeRawClient, &ProducerOptions{})
 				Expect(p.SendBatch(context.Background(), []amqp.Message{})).To(MatchError("batch list is empty"))
 			})
 		})
@@ -73,12 +75,10 @@ var _ = Describe("Smart Producer", func() {
 					}),
 			)
 
-			p := standardProducer{
-				publisherId: 1,
-				rawClient:   fakeRawClient,
-				rawClientMu: &sync.Mutex{},
-				opts:        &ProducerOptions{MaxInFlight: 100, MaxBufferedMessages: 100},
-			}
+			p = newStandardProducer(1, fakeRawClient, &ProducerOptions{
+				MaxInFlight:         100,
+				MaxBufferedMessages: 100,
+			})
 
 			// test
 			batch := []amqp.Message{{Data: []byte("message 1")}}
@@ -92,13 +92,10 @@ var _ = Describe("Smart Producer", func() {
 
 		When("the batch list is larger than max in flight", func() {
 			It("returns an error", func() {
-				p := standardProducer{
-					publisherId:     0,
-					rawClient:       fakeRawClient,
-					rawClientMu:     &sync.Mutex{},
-					publishingIdSeq: autoIncrementingSequence[uint64]{},
-					opts:            &ProducerOptions{MaxInFlight: 1, MaxBufferedMessages: 1},
-				}
+				p = newStandardProducer(0, fakeRawClient, &ProducerOptions{
+					MaxInFlight:         1,
+					MaxBufferedMessages: 1,
+				})
 				msgs := make([]amqp.Message, 10)
 				Expect(p.SendBatch(context.Background(), msgs)).To(MatchError(ErrBatchTooLarge))
 			})
@@ -115,6 +112,14 @@ var _ = Describe("Smart Producer", func() {
 	})
 
 	Describe("send", func() {
+		var (
+			p *standardProducer
+		)
+
+		AfterEach(func() {
+			p.close()
+		})
+
 		It("accumulates and sends messages", func() {
 			m := &sync.Mutex{}
 			var capturedIds = make([]uint64, 0)
@@ -134,7 +139,7 @@ var _ = Describe("Smart Producer", func() {
 					return nil
 				})
 
-			p := newStandardProducer(42, fakeRawClient, &ProducerOptions{
+			p = newStandardProducer(42, fakeRawClient, &ProducerOptions{
 				MaxInFlight:          5,
 				MaxBufferedMessages:  5,
 				BatchPublishingDelay: time.Millisecond * 200, // batching delay must be lower than Eventually's timeout
@@ -152,6 +157,7 @@ var _ = Describe("Smart Producer", func() {
 		})
 
 		It("publishes messages when buffer is full", func() {
+			// setup
 			m := &sync.Mutex{}
 			var capturedIds = make([]uint64, 0)
 			fakeRawClient.EXPECT().
@@ -171,12 +177,17 @@ var _ = Describe("Smart Producer", func() {
 				}).
 				Times(2)
 
-			p := newStandardProducer(42, fakeRawClient, &ProducerOptions{
-				MaxInFlight:          3,
+			p = newStandardProducer(42, fakeRawClient, &ProducerOptions{
+				MaxInFlight:          10,
 				MaxBufferedMessages:  3,
 				BatchPublishingDelay: time.Minute, // long batch delay so that publishing happens because buffer is full
 			})
 
+			DeferCleanup(func() {
+				p.close()
+			})
+
+			// act
 			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 1")})).To(Succeed())
 			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 2")})).To(Succeed())
 			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 3")})).To(Succeed())
