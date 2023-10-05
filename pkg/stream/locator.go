@@ -68,7 +68,6 @@ func (l *locator) connect(ctx context.Context) error {
 		return l.client.ExchangeCommandVersions(ctx)
 	}
 
-	// TODO Start heartbeat here
 	l.heartbeater.client = client
 	l.heartbeater.start()
 
@@ -231,8 +230,4 @@ func (l *locator) operationQuerySequence(args ...any) []any {
 	stream := args[2].(string)
 	pubId, err := l.client.QueryPublisherSequence(ctx, reference, stream)
 	return []any{pubId, err}
-}
-
-func (l *locator) operationSendHeartbeat(args ...any) []any {
-	return []any{l.client.SendHeartbeat()}
 }

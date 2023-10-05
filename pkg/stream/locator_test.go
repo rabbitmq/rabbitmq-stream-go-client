@@ -168,12 +168,6 @@ var _ = Describe("Locator", func() {
 			})
 			<-done
 		})
-
-		It("resets heartbeat ticker", func() {
-			// do a locator operation
-			// see that hb.reset is called
-
-		})
 	})
 
 	Describe("Utils", func() {
