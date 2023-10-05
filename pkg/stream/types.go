@@ -22,6 +22,7 @@ var (
 	ErrBatchTooLarge         = errors.New("too many messages in batch")
 	ErrEmptyBatch            = errors.New("batch list is empty")
 	ErrUntrackedConfirmation = errors.New("message confirmation not tracked")
+	ErrEnqueueTimeout        = errors.New("timed out queueing message")
 )
 
 type ByteCapacity uint64

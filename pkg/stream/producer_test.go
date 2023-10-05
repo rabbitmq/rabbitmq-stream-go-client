@@ -183,10 +183,6 @@ var _ = Describe("Smart Producer", func() {
 				BatchPublishingDelay: time.Minute, // long batch delay so that publishing happens because buffer is full
 			})
 
-			DeferCleanup(func() {
-				p.close()
-			})
-
 			// act
 			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 1")})).To(Succeed())
 			Expect(p.Send(context.Background(), amqp.Message{Data: []byte("message 2")})).To(Succeed())

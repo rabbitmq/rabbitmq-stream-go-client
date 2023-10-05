@@ -51,19 +51,17 @@ func (p *ProducerOptions) validate() {
 }
 
 type standardProducer struct {
-	publisherId     uint8
-	rawClient       raw.Clienter
-	rawClientMu     *sync.Mutex
-	publishingIdSeq autoIncrementingSequence[uint64]
-	opts            *ProducerOptions
-	// buffer mutex
-	bufferMu           *sync.Mutex
-	messageBuffer      []PublishingMessage
+	publisherId        uint8
+	rawClient          raw.Clienter
+	rawClientMu        *sync.Mutex
+	publishingIdSeq    autoIncrementingSequence[uint64]
+	opts               *ProducerOptions
+	accumulator        *messageAccumulator
 	retryDuration      backoffDurationFunc
 	done               chan struct{}
 	cancel             context.CancelFunc
 	destructor         sync.Once
-	unconfirmedMessage confirmationTracker
+	unconfirmedMessage *confirmationTracker
 	confirmedPublish   chan uint64
 }
 
@@ -75,17 +73,13 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *Produc
 		rawClientMu:     &sync.Mutex{}, // FIXME: this has to come as argument. this mutex must be shared among all users of the client
 		publishingIdSeq: autoIncrementingSequence[uint64]{},
 		opts:            opts,
-		bufferMu:        &sync.Mutex{},
-		messageBuffer:   make([]common.PublishingMessager, 0, opts.MaxBufferedMessages),
+		accumulator:     newMessageAccumulator(opts.MaxBufferedMessages),
 		retryDuration: func(i int) time.Duration {
 			return time.Second * (1 << i)
 		},
-		done:             make(chan struct{}),
-		confirmedPublish: make(chan uint64),
-		unconfirmedMessage: confirmationTracker{
-			mapMu:    &sync.Mutex{},
-			messages: make(map[uint64]PublishingMessage, opts.MaxInFlight),
-		},
+		done:               make(chan struct{}),
+		confirmedPublish:   make(chan uint64),
+		unconfirmedMessage: newConfirmationTracker(opts.MaxInFlight),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -103,15 +97,6 @@ func (s *standardProducer) close() {
 	})
 }
 
-// push is not thread-safe. A bufferMu lock must be acquired before calling this function.
-func (s *standardProducer) push(publishingId uint64, message Message) error {
-	if len(s.messageBuffer) >= s.opts.MaxBufferedMessages {
-		return errMessageBufferFull
-	}
-	s.messageBuffer = append(s.messageBuffer, raw.NewPublishingMessage(publishingId, message))
-	return nil
-}
-
 // synchronously sends the messages accumulated in the message buffer. If sending
 // is successful, it clears the message buffer. The caller MUST hold a lock
 // on the buffer mutex. Calling this function without a lock on buffer mutex is
@@ -120,32 +105,24 @@ func (s *standardProducer) doSend(ctx context.Context) error {
 	s.rawClientMu.Lock()
 	defer s.rawClientMu.Unlock()
 
-	if len(s.messageBuffer) == 0 {
+	if s.accumulator.isEmpty() {
 		return nil
 	}
 
-	var err error
-	for i := 0; i < maxAttempt; i++ {
-		err = s.rawClient.Send(ctx, s.publisherId, s.messageBuffer)
-		if isNonRetryableError(err) {
-			return err
-		}
-		if err == nil {
+	// TODO: explore if we can have this buffer in a sync.Pool
+	messages := make([]PublishingMessage, 0, s.opts.MaxBufferedMessages)
+	for batchSize := 0; batchSize < s.opts.MaxBufferedMessages; batchSize++ {
+		pm := s.accumulator.get()
+		if pm == nil {
 			break
 		}
-
-		<-time.After(s.retryDuration(i))
+		messages = append(messages, pm)
 	}
 
+	err := s.rawClient.Send(ctx, s.publisherId, messages)
 	if err != nil {
 		return err
 	}
-
-	for i := 0; i < len(s.messageBuffer); i++ {
-		// FIXME: keep track of pending messages in a different list
-		s.messageBuffer[i] = nil
-	}
-	s.messageBuffer = s.messageBuffer[:0]
 
 	return nil
 }
@@ -164,9 +141,7 @@ func (s *standardProducer) sendLoopAsync(ctx context.Context) {
 		select {
 		case <-t.C:
 			// send
-			s.bufferMu.Lock()
 			err := s.doSend(ctx)
-			s.bufferMu.Unlock()
 			if err != nil {
 				// log error
 				panic(err)
@@ -202,26 +177,35 @@ func (s *standardProducer) confirmationListenerAsync() {
 // first.
 func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 	//TODO implement me
-	s.bufferMu.Lock()
-	defer s.bufferMu.Unlock()
-
-	// if not max in flight
-	// then push
-	// else return error fail publish
-	//var err error
-	err := s.push(s.publishingIdSeq.next(), &msg)
+	var send bool
 	if s.opts.EnqueueTimeout != 0 {
+		var err error
+		pm := raw.NewPublishingMessage(s.publishingIdSeq.next(), &msg)
+		err = s.unconfirmedMessage.addWithTimeout(pm, s.opts.EnqueueTimeout)
+		if err != nil {
+			return err
+		}
 
-	}
-	if err != nil && errors.Is(err, errMessageBufferFull) {
-		return s.doSend(ctx)
-	} else if err != nil {
-		// this should never happen
-		panic(err)
+		send, err = s.accumulator.addWithTimeout(pm, s.opts.EnqueueTimeout)
+		if err != nil {
+			return fmt.Errorf("error sending message: %w", err)
+		}
+	} else {
+		pm := raw.NewPublishingMessage(s.publishingIdSeq.next(), &msg)
+		s.unconfirmedMessage.add(pm)
+
+		var err error
+		send, err = s.accumulator.add(pm)
+		if err != nil {
+			return fmt.Errorf("error sending message: %w", err)
+		}
 	}
 
-	if len(s.messageBuffer) == s.opts.MaxBufferedMessages {
-		return s.doSend(ctx)
+	if send {
+		err := s.doSend(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

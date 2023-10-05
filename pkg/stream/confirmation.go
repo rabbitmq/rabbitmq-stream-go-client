@@ -3,6 +3,7 @@ package stream
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
 type confirmationTracker struct {
@@ -28,6 +29,20 @@ func (p *confirmationTracker) add(m PublishingMessage) {
 
 	id := m.PublishingId()
 	p.messages[id] = m
+}
+
+func (p *confirmationTracker) addWithTimeout(m PublishingMessage, timeout time.Duration) error {
+	p.mapMu.Lock()
+	defer p.mapMu.Unlock()
+
+	select {
+	case p.unconfirmedMessagesSemaphore <- struct{}{}:
+		id := m.PublishingId()
+		p.messages[id] = m
+		return nil
+	case <-time.After(timeout):
+		return ErrEnqueueTimeout
+	}
 }
 
 // adds a batch of messages to track confirmation. This function
