@@ -33,6 +33,10 @@ type ProducerOptions struct {
 	// Time before enqueueing of a message fail when the maximum number of
 	// unconfirmed is reached.
 	EnqueueTimeout time.Duration
+	// TODO: docs
+	ConfirmationHandler func(confirmation *MessageConfirmation)
+	// Used internally. Must be set by the producer manager
+	stream string
 }
 
 func (p *ProducerOptions) validate() {
@@ -51,8 +55,12 @@ func (p *ProducerOptions) validate() {
 }
 
 type standardProducer struct {
-	publisherId        uint8
-	rawClient          raw.Clienter
+	publisherId uint8
+	// shared Raw Client connection among all clients in the same manager
+	rawClient raw.Clienter
+	// this mutex must be shared among all components that have access to this
+	// rawClient. The Raw Client is not thread-safe and its access must be
+	// synchronised
 	rawClientMu        *sync.Mutex
 	publishingIdSeq    autoIncrementingSequence[uint64]
 	opts               *ProducerOptions
@@ -62,7 +70,9 @@ type standardProducer struct {
 	cancel             context.CancelFunc
 	destructor         sync.Once
 	unconfirmedMessage *confirmationTracker
-	confirmedPublish   chan uint64
+	// this channel is used by the producer manager to send confirmation notifications
+	// the end-user does not have access to this channel
+	confirmedPublish chan uint64
 }
 
 func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *ProducerOptions) *standardProducer {
@@ -86,7 +96,7 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *Produc
 	p.cancel = cancel
 
 	go p.sendLoopAsync(ctx)
-	go p.confirmationListenerAsync()
+	go p.confirmationListenerLoop()
 	return p
 }
 
@@ -158,13 +168,14 @@ func (s *standardProducer) sendLoopAsync(ctx context.Context) {
 	}
 }
 
-func (s *standardProducer) confirmationListenerAsync() {
+func (s *standardProducer) confirmationListenerLoop() {
 	for {
 		select {
 		case <-s.done:
 			return
 		case id := <-s.confirmedPublish:
 			_, _ = s.unconfirmedMessage.confirm(id)
+			// Probably a callback
 			// TODO: invoke a callback, or send a notification to a channel, or log the error, or all of the above (or change confirm() to no-op instead of error) or make this comment shorter :)
 		}
 	}
@@ -181,7 +192,12 @@ func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 	if s.opts.EnqueueTimeout != 0 {
 		var err error
 		pm := raw.NewPublishingMessage(s.publishingIdSeq.next(), &msg)
-		err = s.unconfirmedMessage.addWithTimeout(pm, s.opts.EnqueueTimeout)
+		err = s.unconfirmedMessage.addWithTimeout(&MessageConfirmation{
+			publishingId: pm.PublishingId(),
+			messages:     []amqp.Message{msg},
+			insert:       time.Now(),
+			stream:       s.opts.stream,
+		}, s.opts.EnqueueTimeout)
 		if err != nil {
 			return err
 		}
@@ -192,7 +208,12 @@ func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 		}
 	} else {
 		pm := raw.NewPublishingMessage(s.publishingIdSeq.next(), &msg)
-		s.unconfirmedMessage.add(pm)
+		s.unconfirmedMessage.add(&MessageConfirmation{
+			publishingId: pm.PublishingId(),
+			messages:     []amqp.Message{msg},
+			insert:       time.Now(),
+			stream:       s.opts.stream,
+		})
 
 		var err error
 		send, err = s.accumulator.add(pm)

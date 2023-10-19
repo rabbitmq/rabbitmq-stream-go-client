@@ -4,8 +4,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"sync"
+	"time"
 )
 
 var _ = Describe("confirmation", func() {
@@ -19,11 +19,29 @@ var _ = Describe("confirmation", func() {
 	})
 
 	It("adds messages and maps them by publishing ID", func() {
-		m := &amqp.Message{Data: []byte("message")}
+		m := amqp.Message{Data: []byte("message")}
 
-		ctracker.add(raw.NewPublishingMessage(0, m))
-		ctracker.add(raw.NewPublishingMessage(1, m))
-		ctracker.add(raw.NewPublishingMessage(2, m))
+		ctracker.add(
+			&MessageConfirmation{
+				publishingId: 0,
+				messages:     []amqp.Message{m},
+				insert:       time.Time{},
+				stream:       "foo",
+			})
+		ctracker.add(
+			&MessageConfirmation{
+				publishingId: 1,
+				messages:     []amqp.Message{m},
+				insert:       time.Time{},
+				stream:       "foo",
+			})
+		ctracker.add(
+			&MessageConfirmation{
+				publishingId: 2,
+				messages:     []amqp.Message{m},
+				insert:       time.Time{},
+				stream:       "foo",
+			})
 
 		Expect(ctracker.messages).To(HaveLen(3))
 		Expect(ctracker.messages).To(SatisfyAll(
@@ -44,8 +62,13 @@ var _ = Describe("confirmation", func() {
 			for i := 0; i < 20; i++ {
 				wg.Add(1)
 				go func(i int) {
-					m := &amqp.Message{Data: []byte("message")}
-					ctracker.add(raw.NewPublishingMessage(uint64(i), m))
+					m := amqp.Message{Data: []byte("message")}
+					ctracker.add(&MessageConfirmation{
+						publishingId: uint64(i),
+						messages:     []amqp.Message{m},
+						insert:       time.Time{},
+						stream:       "my-stream",
+					})
 					wg.Done()
 				}(i)
 			}
@@ -57,11 +80,26 @@ var _ = Describe("confirmation", func() {
 			for i := 0; i < 20; i += 3 {
 				wg.Add(1)
 				go func(i int) {
-					m := &amqp.Message{Data: []byte("message")}
+					m := amqp.Message{Data: []byte("message")}
 					ctracker.addMany(
-						raw.NewPublishingMessage(uint64(i), m),
-						raw.NewPublishingMessage(uint64(i+1), m),
-						raw.NewPublishingMessage(uint64(i+2), m),
+						&MessageConfirmation{
+							publishingId: uint64(i),
+							messages:     []amqp.Message{m},
+							insert:       time.Time{},
+							stream:       "my-stream",
+						},
+						&MessageConfirmation{
+							publishingId: uint64(i + 1),
+							messages:     []amqp.Message{m},
+							insert:       time.Time{},
+							stream:       "my-stream",
+						},
+						&MessageConfirmation{
+							publishingId: uint64(i + 2),
+							messages:     []amqp.Message{m},
+							insert:       time.Time{},
+							stream:       "my-stream",
+						},
 					)
 					wg.Done()
 				}(i)
@@ -72,17 +110,37 @@ var _ = Describe("confirmation", func() {
 	})
 
 	It("adds many messages", func() {
-		m := &amqp.Message{Data: []byte("amazing data")}
+		m := amqp.Message{Data: []byte("amazing data")}
 		ctracker.addMany()
 
-		ctracker.addMany(raw.NewPublishingMessage(0, m))
+		ctracker.addMany(&MessageConfirmation{
+			publishingId: 0,
+			messages:     []amqp.Message{m},
+			insert:       time.Time{},
+			stream:       "my-stream",
+		})
 		Expect(ctracker.messages).To(HaveLen(1))
 		Expect(ctracker.unconfirmedMessagesSemaphore).To(HaveLen(1))
 
 		ctracker.addMany(
-			raw.NewPublishingMessage(5, m),
-			raw.NewPublishingMessage(6, m),
-			raw.NewPublishingMessage(7, m),
+			&MessageConfirmation{
+				publishingId: 5,
+				messages:     []amqp.Message{m},
+				insert:       time.Time{},
+				stream:       "my-stream",
+			},
+			&MessageConfirmation{
+				publishingId: 6,
+				messages:     []amqp.Message{m},
+				insert:       time.Time{},
+				stream:       "my-stream",
+			},
+			&MessageConfirmation{
+				publishingId: 7,
+				messages:     []amqp.Message{m},
+				insert:       time.Time{},
+				stream:       "my-stream",
+			},
 		)
 		Expect(ctracker.messages).To(HaveLen(4))
 		Expect(ctracker.messages).To(SatisfyAll(
@@ -95,23 +153,38 @@ var _ = Describe("confirmation", func() {
 
 	Context("confirm", func() {
 		var (
-			m = &amqp.Message{Data: []byte("superb message")}
+			m = amqp.Message{Data: []byte("superb message")}
 		)
 
 		It("confirms one", func() {
-			ctracker.add(raw.NewPublishingMessage(6, m))
+			ctracker.add(&MessageConfirmation{
+				publishingId: 6,
+				messages:     []amqp.Message{m},
+				insert:       time.Time{},
+				stream:       "my-stream",
+			})
 
 			pubMsg, err := ctracker.confirm(6)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(pubMsg.PublishingId()).To(BeNumerically("==", 6))
-			Expect(pubMsg.Message()).To(Equal(m))
+			Expect(pubMsg.Messages()).To(
+				SatisfyAll(
+					HaveLen(1),
+					ContainElement(m),
+				),
+			)
 			Expect(ctracker.messages).To(HaveLen(0))
 			Expect(ctracker.unconfirmedMessagesSemaphore).To(HaveLen(0))
 		})
 
 		When("a message is not tracked", func() {
 			It("returns an error", func() {
-				ctracker.add(raw.NewPublishingMessage(1, m))
+				ctracker.add(&MessageConfirmation{
+					publishingId: 1,
+					messages:     []amqp.Message{m},
+					insert:       time.Time{},
+					stream:       "my-stream",
+				})
 
 				pubMsg, err := ctracker.confirm(123)
 				Expect(pubMsg).To(BeNil())
