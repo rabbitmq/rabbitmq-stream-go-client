@@ -88,8 +88,8 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *Produc
 			return time.Second * (1 << i)
 		},
 		done:               make(chan struct{}),
-		confirmedPublish:   make(chan uint64),
 		unconfirmedMessage: newConfirmationTracker(opts.MaxInFlight),
+		confirmedPublish:   make(chan uint64),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -174,9 +174,16 @@ func (s *standardProducer) confirmationListenerLoop() {
 		case <-s.done:
 			return
 		case id := <-s.confirmedPublish:
-			_, _ = s.unconfirmedMessage.confirm(id)
-			// Probably a callback
-			// TODO: invoke a callback, or send a notification to a channel, or log the error, or all of the above (or change confirm() to no-op instead of error) or make this comment shorter :)
+			msgConfirm, err := s.unconfirmedMessage.confirm(id)
+			if err != nil {
+				// TODO: log the error instead
+				panic(err)
+			}
+			if s.opts.ConfirmationHandler != nil {
+				msgConfirm.status = Confirmed
+				s.opts.ConfirmationHandler(msgConfirm)
+			}
+			// TODO: do we need an else { msgConfirm = nil } to ease the job of the GC?
 		}
 	}
 }
@@ -225,6 +232,10 @@ func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 	if send {
 		err := s.doSend(ctx)
 		if err != nil {
+			// at this point, we are tracking messages as unconfirmed,
+			// however, it is very likely they have never reached the broker
+			// a background worker will have to time out the confirmation
+			// This situation makes the infinite enqueue timeout dangerous
 			return err
 		}
 	}
