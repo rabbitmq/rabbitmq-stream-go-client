@@ -21,23 +21,27 @@ help:
 
 GO ?= $(shell which go)
 GOPATH ?= $(shell $(GO) env GOPATH)
+GOBIN ?= $(CURDIR)/bin
+$(GOBIN):
+	mkdir -pv $(GOBIN)
+
 define GO_TOOLS
-"github.com/golang/mock/mockgen" \
+"go.uber.org/mock/mockgen" \
 "github.com/onsi/ginkgo/v2/ginkgo"
 endef
 
-GINKGO ?= $(GOPATH)/bin/ginkgo
-$(GINKGO):
+GINKGO ?= $(GOBIN)/ginkgo
+$(GINKGO): | $(GOBIN)
 	@printf "$(GREEN)Installing ginkgo CLI$(NORMAL)\n"
-	$(GO) install -mod=mod github.com/onsi/ginkgo/v2/ginkgo
+	GOBIN="$(GOBIN)" $(GO) install -mod=mod github.com/onsi/ginkgo/v2/ginkgo
 
 .PHONY: ginkgo
 ginkgo: | $(GINKGO)
 
-MOCKGEN ?= $(GOPATH)/bin/mockgen
+MOCKGEN ?= $(GOBIN)/mockgen
 $(MOCKGEN):
 	@printf "$(GREEN)Installing mockgen CLI$(NORMAL)\n"
-	$(GO) install -mod=mod go.uber.org/mock/mockgen
+	GOBIN="$(GOBIN)" $(GO) install -mod=mod go.uber.org/mock/mockgen
 
 .PHONY: mockgen
 mockgen: | $(MOCKGEN)
