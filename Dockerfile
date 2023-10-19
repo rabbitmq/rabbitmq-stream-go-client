@@ -1,4 +1,4 @@
-FROM golang:1.8 as builder
+FROM golang:1.19 as builder
 ENV GOPATH=/go GOOS=linux CGO_ENABLED=0
 WORKDIR /go/src/github.com/rabbitmq/rabbitmq-stream-go-client
 COPY go.mod go.sum VERSION ./
@@ -7,6 +7,7 @@ COPY Makefile Makefile
 COPY perfTest perfTest
 
 RUN mkdir /stream_perf_test
+RUN go get -d -v ./...
 RUN VERSION=$(cat VERSION) && go build -ldflags "-X main.Version=$VERSION" -o /stream_perf_test/stream-perf-test perfTest/perftest.go
 
 FROM ubuntu:20.04
