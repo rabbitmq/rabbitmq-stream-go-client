@@ -23,6 +23,7 @@ var (
 	ErrEmptyBatch            = errors.New("batch list is empty")
 	ErrUntrackedConfirmation = errors.New("message confirmation not tracked")
 	ErrEnqueueTimeout        = errors.New("timed out queueing message")
+	ErrMaxMessagesInFlight   = errors.New("maximum number of messages in flight")
 )
 
 type ByteCapacity uint64

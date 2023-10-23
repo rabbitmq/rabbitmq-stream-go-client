@@ -211,7 +211,7 @@ var _ = Describe("Smart Producer", func() {
 
 		})
 
-		Context("message confirmations", Focus, func() {
+		Context("message confirmations", func() {
 			It("calls the confirmation handler", func() {
 				// setup
 				pingBack := make(chan MessageConfirmation, 1)
@@ -260,8 +260,8 @@ var _ = Describe("Smart Producer", func() {
 				Expect(mc.messages[0].Data).To(BeEquivalentTo("rabbitmq is awesome"))
 			})
 
-			When("the pending confirmations + the batch is larger than max in flight", func() {
-				It("returns an error", func() {
+			When("the pending confirmations is greater or equal than max in flight", func() {
+				It("returns an error after a timeout", func() {
 					// setup
 					wait := make(chan struct{})
 					fakeRawClient.EXPECT().
@@ -294,7 +294,31 @@ var _ = Describe("Smart Producer", func() {
 						Fail("time out waiting for the mock to unblock us")
 					}
 
-					Expect(p.Send(context.Background(), message)).To(MatchError(ErrEnqueueTimeout))
+					//Expect(p.Send(context.Background(), message)).To(MatchError(ErrEnqueueTimeout))
+					Expect(p.Send(context.Background(), message)).To(Succeed())
+				})
+
+				It("waits until some messages are confirmed", Pending, func() {
+					// setup
+					wait := make(chan struct{})
+					fakeRawClient.EXPECT().
+						Send(gomock.AssignableToTypeOf(ctxType),
+							gomock.AssignableToTypeOf(uint8(42)),
+							gomock.AssignableToTypeOf([]common.PublishingMessager{}),
+						).DoAndReturn(func(_ context.Context, _ uint8, _ []common.PublishingMessager) error {
+						close(wait)
+						return nil
+					})
+
+					p = newStandardProducer(12, fakeRawClient, &ProducerOptions{
+						MaxInFlight:          2,
+						MaxBufferedMessages:  3,
+						BatchPublishingDelay: time.Millisecond * 5000, // we want to publish on max buffered
+						EnqueueTimeout:       time.Millisecond * 10,   // we want to time out quickly
+						ConfirmationHandler:  nil,
+						stream:               "test-stream",
+					})
+
 				})
 			})
 		})

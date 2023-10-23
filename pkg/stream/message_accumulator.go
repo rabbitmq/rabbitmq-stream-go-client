@@ -8,6 +8,8 @@ import (
 type messageAccumulator struct {
 	messages chan PublishingMessage
 	cap      int
+	// Accumulator is thread-safe because it uses a channel. A channel synchronises
+	// itself
 }
 
 func newMessageAccumulator(capacity int) *messageAccumulator {
@@ -18,7 +20,7 @@ func newMessageAccumulator(capacity int) *messageAccumulator {
 // least, timeout duration before unblocking and returning an error. Returns true
 // if this queue operation filled the message queue
 func (m *messageAccumulator) addWithTimeout(message PublishingMessage, timeout time.Duration) (bool, error) {
-	if m == nil {
+	if message == nil {
 		return false, errors.New("message can't be nil")
 	}
 	select {

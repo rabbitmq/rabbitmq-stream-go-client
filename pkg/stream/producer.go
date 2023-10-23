@@ -7,6 +7,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
+	"log"
 	"sync"
 	"time"
 )
@@ -108,9 +109,7 @@ func (s *standardProducer) close() {
 }
 
 // synchronously sends the messages accumulated in the message buffer. If sending
-// is successful, it clears the message buffer. The caller MUST hold a lock
-// on the buffer mutex. Calling this function without a lock on buffer mutex is
-// undefined behaviour
+// is successful, it clears the message buffer.
 func (s *standardProducer) doSend(ctx context.Context) error {
 	s.rawClientMu.Lock()
 	defer s.rawClientMu.Unlock()
@@ -127,6 +126,19 @@ func (s *standardProducer) doSend(ctx context.Context) error {
 			break
 		}
 		messages = append(messages, pm)
+
+		m := pm.Message().(*amqp.Message)
+		err := s.unconfirmedMessage.addWithTimeout(&MessageConfirmation{
+			publishingId: pm.PublishingId(),
+			messages:     []amqp.Message{*m},
+			status:       WaitingConfirmation,
+			insert:       time.Now(),
+			stream:       s.opts.stream,
+		}, s.opts.EnqueueTimeout)
+		if err != nil {
+			// TODO: log error
+			break
+		}
 	}
 
 	err := s.rawClient.Send(ctx, s.publisherId, messages)
@@ -153,8 +165,9 @@ func (s *standardProducer) sendLoopAsync(ctx context.Context) {
 			// send
 			err := s.doSend(ctx)
 			if err != nil {
-				// log error
-				panic(err)
+				// FIXME: log error using logger
+				//panic(err)
+				log.Printf("error sending: %v", err)
 			}
 		case <-s.done:
 			// exit
@@ -198,32 +211,13 @@ func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 	var send bool
 	if s.opts.EnqueueTimeout != 0 {
 		var err error
-		pm := raw.NewPublishingMessage(s.publishingIdSeq.next(), &msg)
-		err = s.unconfirmedMessage.addWithTimeout(&MessageConfirmation{
-			publishingId: pm.PublishingId(),
-			messages:     []amqp.Message{msg},
-			insert:       time.Now(),
-			stream:       s.opts.stream,
-		}, s.opts.EnqueueTimeout)
-		if err != nil {
-			return err
-		}
-
-		send, err = s.accumulator.addWithTimeout(pm, s.opts.EnqueueTimeout)
+		send, err = s.accumulator.addWithTimeout(raw.NewPublishingMessage(s.publishingIdSeq.next(), &msg), s.opts.EnqueueTimeout)
 		if err != nil {
 			return fmt.Errorf("error sending message: %w", err)
 		}
 	} else {
-		pm := raw.NewPublishingMessage(s.publishingIdSeq.next(), &msg)
-		s.unconfirmedMessage.add(&MessageConfirmation{
-			publishingId: pm.PublishingId(),
-			messages:     []amqp.Message{msg},
-			insert:       time.Now(),
-			stream:       s.opts.stream,
-		})
-
 		var err error
-		send, err = s.accumulator.add(pm)
+		send, err = s.accumulator.add(raw.NewPublishingMessage(s.publishingIdSeq.next(), &msg))
 		if err != nil {
 			return fmt.Errorf("error sending message: %w", err)
 		}

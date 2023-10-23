@@ -74,6 +74,8 @@ func newConfirmationTracker(capacity int) *confirmationTracker {
 	}
 }
 
+// Adds a message confirmation to the tracker. It blocks if the maximum
+// number of pending confirmations is reached.
 func (p *confirmationTracker) add(m *MessageConfirmation) {
 	p.mapMu.Lock()
 	defer p.mapMu.Unlock()
@@ -83,9 +85,26 @@ func (p *confirmationTracker) add(m *MessageConfirmation) {
 	p.messages[id] = m
 }
 
+// Tracks a pending message confirmation. It uses timeout to wait when the
+// maximum number of pending message confirmations is reached. If timeout is 0,
+// then it tries to add the message confirmation to the tracker, and returns an
+// error if the tracker is full i.e. max number of pending confirmations is
+// reached. It also returns an error if the timeout elapses and the message is
+// not added to the tracker.
 func (p *confirmationTracker) addWithTimeout(m *MessageConfirmation, timeout time.Duration) error {
 	p.mapMu.Lock()
 	defer p.mapMu.Unlock()
+
+	if timeout == 0 {
+		select {
+		case p.unconfirmedMessagesSemaphore <- struct{}{}:
+			id := m.PublishingId()
+			p.messages[id] = m
+			return nil
+		default:
+			return ErrMaxMessagesInFlight
+		}
+	}
 
 	select {
 	case p.unconfirmedMessagesSemaphore <- struct{}{}:
@@ -93,6 +112,7 @@ func (p *confirmationTracker) addWithTimeout(m *MessageConfirmation, timeout tim
 		p.messages[id] = m
 		return nil
 	case <-time.After(timeout):
+		// maybe it's better to return ErrMaxMessagesInFlight
 		return ErrEnqueueTimeout
 	}
 }
@@ -120,6 +140,8 @@ func (p *confirmationTracker) addMany(m ...*MessageConfirmation) {
 	}
 }
 
+// Removes the message confirmation for a publishing id. It returns
+// an error if the message was not tracked.
 func (p *confirmationTracker) confirm(id uint64) (*MessageConfirmation, error) {
 	p.mapMu.Lock()
 	defer p.mapMu.Unlock()
