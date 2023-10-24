@@ -207,6 +207,8 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			// FIXME: most of the time, cancelling the context will be OK and the intended shutdown
+			//		probably should not return an error, just log that frame handler is stopping
 			log.Info("context cancelled", "reason", ctx.Err())
 			return ctx.Err()
 		default:

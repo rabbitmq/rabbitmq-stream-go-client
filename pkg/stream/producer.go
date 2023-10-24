@@ -73,7 +73,7 @@ type standardProducer struct {
 	unconfirmedMessage *confirmationTracker
 	// this channel is used by the producer manager to send confirmation notifications
 	// the end-user does not have access to this channel
-	confirmedPublish chan uint64
+	confirmedPublish chan *publishConfirmOrError
 }
 
 func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *ProducerOptions) *standardProducer {
@@ -90,7 +90,7 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *Produc
 		},
 		done:               make(chan struct{}),
 		unconfirmedMessage: newConfirmationTracker(opts.MaxInFlight),
-		confirmedPublish:   make(chan uint64),
+		confirmedPublish:   make(chan *publishConfirmOrError),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -114,19 +114,22 @@ func (s *standardProducer) doSend(ctx context.Context) error {
 	s.rawClientMu.Lock()
 	defer s.rawClientMu.Unlock()
 
-	if s.accumulator.isEmpty() {
+	if !s.canSend() {
+		// TODO: maybe log a message
 		return nil
 	}
 
 	// TODO: explore if we can have this buffer in a sync.Pool
 	messages := make([]PublishingMessage, 0, s.opts.MaxBufferedMessages)
-	for batchSize := 0; batchSize < s.opts.MaxBufferedMessages; batchSize++ {
+	for batchSize := 0; batchSize < s.opts.MaxBufferedMessages && s.canSend(); batchSize++ {
 		pm := s.accumulator.get()
 		if pm == nil {
 			break
 		}
 		messages = append(messages, pm)
 
+		// the smart layer only supports AMQP 1.0 message formats
+		// we should never panic here
 		m := pm.Message().(*amqp.Message)
 		err := s.unconfirmedMessage.addWithTimeout(&MessageConfirmation{
 			publishingId: pm.PublishingId(),
@@ -141,12 +144,23 @@ func (s *standardProducer) doSend(ctx context.Context) error {
 		}
 	}
 
+	if len(messages) == 0 {
+		// this case happens when pending confirms == max in-flight messages
+		// we return so that we don't send an empty Publish frame
+		return nil
+	}
+
 	err := s.rawClient.Send(ctx, s.publisherId, messages)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (s *standardProducer) canSend() bool {
+	return len(s.unconfirmedMessage.unconfirmedMessagesSemaphore) != s.opts.MaxInFlight &&
+		!s.accumulator.isEmpty()
 }
 
 func (s *standardProducer) sendLoopAsync(ctx context.Context) {
@@ -186,14 +200,14 @@ func (s *standardProducer) confirmationListenerLoop() {
 		select {
 		case <-s.done:
 			return
-		case id := <-s.confirmedPublish:
-			msgConfirm, err := s.unconfirmedMessage.confirm(id)
+		case confirmOrError := <-s.confirmedPublish:
+			msgConfirm, err := s.unconfirmedMessage.confirm(confirmOrError.publishingId)
 			if err != nil {
 				// TODO: log the error instead
 				panic(err)
 			}
+			msgConfirm.status = confirmOrError.status()
 			if s.opts.ConfirmationHandler != nil {
-				msgConfirm.status = Confirmed
 				s.opts.ConfirmationHandler(msgConfirm)
 			}
 			// TODO: do we need an else { msgConfirm = nil } to ease the job of the GC?

@@ -248,8 +248,11 @@ var _ = Describe("Smart Producer", func() {
 					Fail("expected to be unblocked by the mock, but we are still waiting")
 				}
 
-				// faking the producer manager receiving and forwarding a publish confirm
-				p.confirmedPublish <- 0
+				// faking the producer manager receiving and forwarding a 'publish confirm'
+				p.confirmedPublish <- &publishConfirmOrError{
+					publishingId: 0,
+					statusCode:   1,
+				}
 
 				var mc MessageConfirmation
 				Eventually(pingBack).Should(Receive(&mc))
@@ -261,7 +264,7 @@ var _ = Describe("Smart Producer", func() {
 			})
 
 			When("the pending confirmations is greater or equal than max in flight", func() {
-				It("returns an error after a timeout", func() {
+				It("does not send the message and keeps the message in the message buffer", func() {
 					// setup
 					wait := make(chan struct{})
 					fakeRawClient.EXPECT().
@@ -276,7 +279,7 @@ var _ = Describe("Smart Producer", func() {
 					p = newStandardProducer(12, fakeRawClient, &ProducerOptions{
 						MaxInFlight:          3,
 						MaxBufferedMessages:  3,
-						BatchPublishingDelay: time.Millisecond * 5000, // we want to publish on max buffered
+						BatchPublishingDelay: time.Millisecond * 1500, // we want to publish on max buffered
 						EnqueueTimeout:       time.Millisecond * 10,   // we want to time out quickly
 						ConfirmationHandler:  nil,
 						stream:               "test-stream",
@@ -294,31 +297,12 @@ var _ = Describe("Smart Producer", func() {
 						Fail("time out waiting for the mock to unblock us")
 					}
 
-					//Expect(p.Send(context.Background(), message)).To(MatchError(ErrEnqueueTimeout))
 					Expect(p.Send(context.Background(), message)).To(Succeed())
-				})
-
-				It("waits until some messages are confirmed", Pending, func() {
-					// setup
-					wait := make(chan struct{})
-					fakeRawClient.EXPECT().
-						Send(gomock.AssignableToTypeOf(ctxType),
-							gomock.AssignableToTypeOf(uint8(42)),
-							gomock.AssignableToTypeOf([]common.PublishingMessager{}),
-						).DoAndReturn(func(_ context.Context, _ uint8, _ []common.PublishingMessager) error {
-						close(wait)
-						return nil
-					})
-
-					p = newStandardProducer(12, fakeRawClient, &ProducerOptions{
-						MaxInFlight:          2,
-						MaxBufferedMessages:  3,
-						BatchPublishingDelay: time.Millisecond * 5000, // we want to publish on max buffered
-						EnqueueTimeout:       time.Millisecond * 10,   // we want to time out quickly
-						ConfirmationHandler:  nil,
-						stream:               "test-stream",
-					})
-
+					Consistently(p.accumulator.messages).
+						WithPolling(time.Millisecond * 200).
+						Within(time.Millisecond * 1600).
+						Should(HaveLen(1)) // 3 messages were sent, 1 message is buffered
+					Expect(p.unconfirmedMessage.messages).To(HaveLen(3)) // 3 messages were sent, 3 confirmations are pending
 				})
 			})
 		})

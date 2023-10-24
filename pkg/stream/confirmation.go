@@ -3,6 +3,7 @@ package stream
 import (
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"sync"
 	"time"
 )
@@ -11,20 +12,25 @@ type ConfirmationStatus int
 
 const (
 	// WaitingConfirmation for a publishing message
-	WaitingConfirmation ConfirmationStatus = 0
+	WaitingConfirmation ConfirmationStatus = iota
 	// Confirmed and received message by the server
-	Confirmed ConfirmationStatus = 1
+	Confirmed
 	// ClientTimeout and gave up waiting for a confirmation
-	ClientTimeout ConfirmationStatus = 2
+	ClientTimeout
 	// NotAvailable Stream, often because stream was deleted
-	NotAvailable ConfirmationStatus = 6
+	NotAvailable
 	// InternalError from the server
-	InternalError ConfirmationStatus = 15
-	// TODO: do we need this?
-	AccessRefused         ConfirmationStatus = 16
-	PreconditionFailed    ConfirmationStatus = 17
-	PublisherDoesNotExist ConfirmationStatus = 18
-	UndefinedError        ConfirmationStatus = 200
+	InternalError
+	// AccessRefused user did not have permissions to publish to the stream
+	AccessRefused
+	// PreconditionFailed means that certain conditions required to publish
+	// were not met e.g. stream does not exist
+	PreconditionFailed
+	// PublisherDoesNotExist happens when the client tries to publish before the
+	// publisher was registered and assigned an ID
+	PublisherDoesNotExist
+	// UndefinedError is for any other error
+	UndefinedError
 )
 
 // TODO: docs
@@ -56,6 +62,31 @@ func (m *MessageConfirmation) Status() ConfirmationStatus {
 
 func (m *MessageConfirmation) Stream() string {
 	return m.stream
+}
+
+type publishConfirmOrError struct {
+	publishingId uint64
+	statusCode   uint16
+}
+
+// status translates a raw response code into a ConfirmationStatus
+func (p *publishConfirmOrError) status() ConfirmationStatus {
+	switch p.statusCode {
+	case raw.ResponseCodeOK:
+		return Confirmed
+	case raw.ResponseCodeStreamDoesNotExist, raw.ResponseCodeStreamNotAvailable:
+		return NotAvailable
+	case raw.ResponseCodeInternalError:
+		return InternalError
+	case raw.ResponseCodeAccessRefused:
+		return AccessRefused
+	case raw.ResponseCodePublisherDoesNotExist:
+		return PublisherDoesNotExist
+	case raw.ResponseCodePreconditionFailed:
+		return PreconditionFailed
+	default:
+		return UndefinedError
+	}
 }
 
 type confirmationTracker struct {
