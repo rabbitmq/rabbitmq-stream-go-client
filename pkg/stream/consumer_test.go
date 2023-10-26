@@ -14,7 +14,6 @@ import (
 )
 
 var _ = Describe("Smart Consumer", func() {
-
 	// Create a consumer
 	// Validate params
 	// Consumes Message
@@ -80,6 +79,7 @@ var _ = Describe("Smart Consumer", func() {
 			),
 			fakeRawClient.EXPECT().
 				NotifyChunk(gomock.AssignableToTypeOf(chunkChan)))
+		fakeChunk := &raw.Chunk{Messages: []byte("rabbit")}
 		opts := &ConsumerOptions{
 			OffsetType:     uint16(1),
 			SubscriptionId: uint8(1),
@@ -88,9 +88,36 @@ var _ = Describe("Smart Consumer", func() {
 		}
 		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
 		Expect(consumer).ToNot(BeNil())
-
+		chunkChan <- fakeChunk
 		//test
-		Expect(consumer.Subscribe(context.Background())).To(Succeed())
+		//  set delivery channel with NotifyChunk call
+		// Expect client.Subscribe to succeed
+		// Eventually delivery channel should receive fakeChunk
+
+		Eventually(consumer.Subscribe(context.Background()), "500ms").Should(Succeed())
+	})
+
+	It("stores the current and last known offset", func() {
+		//setup
+		var count int32
+		handleMessages := func(ctxType context.Context, message *amqp.Message) {
+			if atomic.AddInt32(&count, 1)%1000 == 0 {
+				fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
+			}
+		}
+		opts := &ConsumerOptions{
+			OffsetType:     uint16(1),
+			SubscriptionId: uint8(1),
+			Credit:         uint16(2),
+			Offset:         uint64(1),
+		}
+		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
+		consumer.setCurrentOffset(int64(666))
+		Expect(consumer.GetOffset()).To(BeNumerically("==", 666))
+		consumer.updateLastStoredOffset()
+		consumer.setCurrentOffset(int64(667))
+		Expect(consumer.GetOffset()).To(BeNumerically("==", 667))
+		Expect(consumer.GetLastStoredOffset()).To(BeNumerically("==", 666))
 	})
 
 	It("unsubscribes from the stream", func() {

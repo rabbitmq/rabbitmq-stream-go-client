@@ -10,6 +10,102 @@ import (
 	"sync"
 )
 
+type MessagesHandler func(context context.Context, message *amqp.Message)
+
+type Consumer struct {
+	mutex           *sync.Mutex
+	Stream          string
+	rawClient       raw.Clienter
+	rawClientMu     *sync.Mutex
+	opts            *ConsumerOptions
+	MessagesHandler MessagesHandler
+	// The current status of the offset. Different from ConsumerOptionsOffset.
+	currentOffset int64
+	// last stored offset to avoid storing the same value
+	lastStoredOffset int64
+}
+
+func NewConsumer(stream string, rawClient raw.Clienter, messagesHandler MessagesHandler, opts *ConsumerOptions) (*Consumer, error) {
+	if stream == "" {
+		return nil, errors.New("stream name must not be empty")
+	}
+	opts.validate()
+	c := &Consumer{
+		mutex:           &sync.Mutex{},
+		Stream:          stream,
+		rawClient:       rawClient,
+		opts:            opts,
+		MessagesHandler: messagesHandler,
+	}
+	return c, nil
+}
+
+func (c *Consumer) Subscribe(ctx context.Context) error {
+	// TODO subscribeProperties put these in opts
+	subscribeProperties := map[string]string{}
+
+	// get messages
+	// call raw client notify chunk, when chunk appears on the channel, parse it and call the messages handler with the
+	// parsed messaage
+	chunkChan := make(chan *raw.Chunk)
+	messagesChan := c.rawClient.NotifyChunk(chunkChan)
+
+	//declare consumer
+	err := c.rawClient.Subscribe(ctx, c.Stream, c.opts.OffsetType, c.opts.SubscriptionId, c.opts.Credit, subscribeProperties, c.opts.Offset)
+	if err != nil {
+		return err
+	}
+
+	chunk, ok := <-messagesChan
+	if ok {
+		fmt.Println("Channel is open!")
+	} else {
+		fmt.Println("Channel is closed!")
+	}
+
+	message := &amqp.Message{}
+	err = message.UnmarshalBinary(chunk.Messages)
+	if err != nil {
+		//log err
+	}
+	// at this point chunk.
+	c.MessagesHandler(ctx, message)
+
+	return nil
+}
+
+func (c *Consumer) Close(ctx context.Context) error {
+	return c.rawClient.Unsubscribe(ctx, c.opts.SubscriptionId)
+}
+
+func (c *Consumer) setCurrentOffset(offset int64) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.currentOffset = offset
+}
+
+func (c *Consumer) GetOffset() int64 {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.currentOffset
+}
+
+func (c *Consumer) updateLastStoredOffset() bool {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.lastStoredOffset < c.currentOffset {
+		c.lastStoredOffset = c.currentOffset
+		return true
+	}
+	return false
+}
+
+func (c *Consumer) GetLastStoredOffset() int64 {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.lastStoredOffset
+}
+
 type ConsumerOptions struct {
 	Reference              string // consumer reference name, required for single active consumer
 	SingleActiveConsumer   bool   // enable single active consumer
@@ -30,66 +126,4 @@ func (co *ConsumerOptions) validate() {
 	if co.OffsetType <= 0 {
 		co.OffsetType = constants.OffsetTypeFirst // OffsetTypeFirst as default. Start consuming from the first message in the stream
 	}
-}
-
-type MessagesHandler func(context context.Context, message *amqp.Message)
-
-type Consumer struct {
-	Stream          string
-	rawClient       raw.Clienter
-	rawClientMu     *sync.Mutex
-	opts            *ConsumerOptions
-	MessagesHandler MessagesHandler
-}
-
-func NewConsumer(stream string, rawClient raw.Clienter, messagesHandler MessagesHandler, opts *ConsumerOptions) (*Consumer, error) {
-	if stream == "" {
-		return nil, errors.New("stream name must not be empty")
-	}
-	opts.validate()
-	c := &Consumer{
-		Stream:          stream,
-		rawClient:       rawClient,
-		opts:            opts,
-		MessagesHandler: messagesHandler,
-	}
-	return c, nil
-}
-
-func (c *Consumer) Subscribe(ctx context.Context) error {
-	subscribeProperties := map[string]string{}
-
-	//declare consumer
-	err := c.rawClient.Subscribe(ctx, c.Stream, c.opts.OffsetType, c.opts.SubscriptionId, c.opts.Credit, subscribeProperties, c.opts.Offset)
-	if err != nil {
-		return err
-	}
-
-	// get messages
-	// call raw client notify chunk, when chunk appears on the channel, parse it and call the messages handler with the
-	// parsed messaage
-	chunkChan := make(chan *raw.Chunk)
-	messagesChan := c.rawClient.NotifyChunk(chunkChan)
-
-	chunk, ok := <-messagesChan
-	if ok {
-		fmt.Println("Channel is open!")
-	} else {
-		fmt.Println("Channel is closed!")
-	}
-
-	message := &amqp.Message{}
-	err = message.UnmarshalBinary(chunk.Messages)
-	if err != nil {
-		//log err
-	}
-	c.MessagesHandler(ctx, message)
-
-	return nil
-}
-
-//Todo NotifyChunk
-
-func (c *Consumer) Close(ctx context.Context) error {
-	return c.rawClient.Unsubscribe(ctx, c.opts.SubscriptionId)
 }
