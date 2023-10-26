@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"errors"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
@@ -102,9 +103,65 @@ var _ = Describe("Smart Producer", func() {
 		})
 
 		When("the pending confirmations + the batch is larger than max in flight", func() {
-			It("returns an error", func() {
-				Skip("TODO")
-			})
+			It("waits until some messages are confirmed", func(ctx context.Context) {
+				Skip("coordination is hard")
+				// setup
+				gomock.InOrder(fakeRawClient.EXPECT().
+					Send(
+						gomock.AssignableToTypeOf(ctxType),
+						gomock.Eq(uint8(10)),
+						gomock.All(
+							gomock.Len(2),
+							gomock.AssignableToTypeOf([]common.PublishingMessager{}),
+						),
+					),
+					fakeRawClient.EXPECT().
+						Send(
+							gomock.AssignableToTypeOf(ctxType),
+							gomock.Eq(uint8(10)),
+							gomock.All(
+								gomock.Len(1),
+								gomock.AssignableToTypeOf([]common.PublishingMessager{}),
+							),
+						).
+						DoAndReturn(func(_ context.Context, _ uint8, pMessages []common.PublishingMessager) error {
+							if p.opts.MaxInFlight >= 2 {
+								return errors.New("not permitted to send")
+							}
+							return nil
+						}),
+				)
+
+				const testMaxInFlight = 2
+				p = newStandardProducer(10, fakeRawClient, &ProducerOptions{
+					MaxInFlight:          testMaxInFlight,
+					MaxBufferedMessages:  2,
+					BatchPublishingDelay: 0,
+					EnqueueTimeout:       0,
+					ConfirmationHandler:  nil,
+					stream:               "batch-send-test",
+				})
+
+				// act
+				m := amqp.Message{Data: []byte("i am a message!")}
+				Expect(p.SendBatch(context.Background(), []amqp.Message{m, m})).To(Succeed())
+
+				go func() {
+					p.confirmedPublish <- &publishConfirmOrError{
+						publishingId: 0,
+						statusCode:   1, // confirmed 👍
+					}
+				}()
+
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer GinkgoRecover()
+					defer wg.Done()
+					Expect(p.SendBatch(ctx, []amqp.Message{m})).To(Succeed())
+				}()
+				wg.Wait()
+			}, SpecTimeout(time.Second))
 		})
 	})
 
@@ -303,6 +360,12 @@ var _ = Describe("Smart Producer", func() {
 						Within(time.Millisecond * 1600).
 						Should(HaveLen(1)) // 3 messages were sent, 1 message is buffered
 					Expect(p.unconfirmedMessage.messages).To(HaveLen(3)) // 3 messages were sent, 3 confirmations are pending
+				})
+			})
+
+			When("number of messages accumulated are greater than max in flight", func() {
+				It("does-something", func() {
+					Skip("TODO")
 				})
 			})
 		})

@@ -35,7 +35,7 @@ type ProducerOptions struct {
 	// unconfirmed is reached.
 	EnqueueTimeout time.Duration
 	// TODO: docs
-	ConfirmationHandler func(confirmation *MessageConfirmation)
+	ConfirmationHandler func(*MessageConfirmation)
 	// Used internally. Must be set by the producer manager
 	stream string
 }
@@ -159,8 +159,7 @@ func (s *standardProducer) doSend(ctx context.Context) error {
 }
 
 func (s *standardProducer) canSend() bool {
-	return len(s.unconfirmedMessage.unconfirmedMessagesSemaphore) != s.opts.MaxInFlight &&
-		!s.accumulator.isEmpty()
+	return len(s.unconfirmedMessage.unconfirmedMessagesSemaphore) != s.opts.MaxInFlight
 }
 
 func (s *standardProducer) sendLoopAsync(ctx context.Context) {
@@ -253,6 +252,10 @@ func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 
 // SendBatch synchronously sends messages to the broker. Each messages gets
 // a publishing ID assigned automatically.
+//
+// This function blocks if the number of messages in flight (i.e. not confirmed
+// by the broker) is greater than len(messages). This function will observe
+// context cancellation
 func (s *standardProducer) SendBatch(ctx context.Context, messages []amqp.Message) error {
 	if len(messages) == 0 {
 		return ErrEmptyBatch
@@ -264,7 +267,22 @@ func (s *standardProducer) SendBatch(ctx context.Context, messages []amqp.Messag
 
 	var pMsgs = make([]common.PublishingMessager, 0, len(messages))
 	for i := 0; i < len(messages); i++ {
-		pMsgs = append(pMsgs, raw.NewPublishingMessage(s.publishingIdSeq.next(), &messages[i]))
+		// checking context cancellation here because adding a message
+		// confirmation is blocking
+		if isContextCancelled(ctx) {
+			return ctx.Err()
+		}
+
+		next := s.publishingIdSeq.next()
+		pMsgs = append(pMsgs, raw.NewPublishingMessage(next, &messages[i]))
+
+		s.unconfirmedMessage.add(&MessageConfirmation{
+			publishingId: next,
+			messages:     []amqp.Message{messages[i]},
+			status:       WaitingConfirmation,
+			insert:       time.Now(),
+			stream:       s.opts.stream,
+		})
 	}
 
 	s.rawClientMu.Lock()

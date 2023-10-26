@@ -101,3 +101,12 @@ func validateStringParameter(p string) bool {
 
 	return true
 }
+
+func isContextCancelled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}

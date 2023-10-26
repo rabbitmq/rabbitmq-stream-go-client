@@ -64,6 +64,9 @@ func (m *MessageConfirmation) Stream() string {
 	return m.stream
 }
 
+// this type represents a publishing confirmation. In the smart layer, a
+// confirmation can be a negative/error confirmation. It is a similar concept of
+// a "nack" or negative ack in AMQP.
 type publishConfirmOrError struct {
 	publishingId uint64
 	statusCode   uint16
