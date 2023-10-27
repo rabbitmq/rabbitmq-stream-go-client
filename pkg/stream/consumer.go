@@ -19,10 +19,12 @@ type Consumer struct {
 	rawClientMu     *sync.Mutex
 	opts            *ConsumerOptions
 	MessagesHandler MessagesHandler
+	chunkCh         chan *raw.Chunk
+	closeCh         chan bool
 	// The current status of the offset. Different from ConsumerOptionsOffset.
-	currentOffset int64
+	currentOffset uint64
 	// last stored offset to avoid storing the same value
-	lastStoredOffset int64
+	lastStoredOffset uint64
 }
 
 func NewConsumer(stream string, rawClient raw.Clienter, messagesHandler MessagesHandler, opts *ConsumerOptions) (*Consumer, error) {
@@ -47,8 +49,10 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 	// get messages
 	// call raw client notify chunk, when chunk appears on the channel, parse it and call the messages handler with the
 	// parsed messaage
-	chunkChan := make(chan *raw.Chunk)
-	messagesChan := c.rawClient.NotifyChunk(chunkChan)
+	if c.chunkCh == nil {
+		c.chunkCh = make(chan *raw.Chunk)
+	}
+	messagesChan := c.rawClient.NotifyChunk(c.chunkCh)
 
 	//declare consumer
 	err := c.rawClient.Subscribe(ctx, c.Stream, c.opts.OffsetType, c.opts.SubscriptionId, c.opts.Credit, subscribeProperties, c.opts.Offset)
@@ -56,21 +60,31 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 		return err
 	}
 
-	chunk, ok := <-messagesChan
-	if ok {
-		fmt.Println("Channel is open!")
-	} else {
-		fmt.Println("Channel is closed!")
-	}
+	go func() {
+		for {
+			select {
+			// get chunk from raw client
+			case chunk, _ := <-messagesChan:
+				// store current offset
+				c.setCurrentOffset(chunk.ChunkFirstOffset)
+				// ToDo choose codec
+				message := &amqp.Message{}
+				err = message.UnmarshalBinary(chunk.Messages)
+				if err != nil {
+					fmt.Println("error parsing chunk", err)
+				}
+				// call  messages handler
+				c.MessagesHandler(ctx, message)
 
-	message := &amqp.Message{}
-	err = message.UnmarshalBinary(chunk.Messages)
-	if err != nil {
-		//log err
-	}
-	// at this point chunk.
-	c.MessagesHandler(ctx, message)
-
+			// Need someway to break and close
+			case quit := <-c.closeCh:
+				if quit {
+					fmt.Println("go routing finished")
+					return
+				}
+			}
+		}
+	}()
 	return nil
 }
 
@@ -78,13 +92,13 @@ func (c *Consumer) Close(ctx context.Context) error {
 	return c.rawClient.Unsubscribe(ctx, c.opts.SubscriptionId)
 }
 
-func (c *Consumer) setCurrentOffset(offset int64) {
+func (c *Consumer) setCurrentOffset(offset uint64) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	c.currentOffset = offset
 }
 
-func (c *Consumer) GetOffset() int64 {
+func (c *Consumer) GetOffset() uint64 {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	return c.currentOffset
@@ -100,7 +114,7 @@ func (c *Consumer) updateLastStoredOffset() bool {
 	return false
 }
 
-func (c *Consumer) GetLastStoredOffset() int64 {
+func (c *Consumer) GetLastStoredOffset() uint64 {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	return c.lastStoredOffset

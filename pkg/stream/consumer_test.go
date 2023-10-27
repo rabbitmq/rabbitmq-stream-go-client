@@ -5,6 +5,7 @@ import (
 	"fmt"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/constants"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
@@ -26,11 +27,13 @@ var _ = Describe("Smart Consumer", func() {
 		mockController *gomock.Controller
 		fakeRawClient  *MockRawClient
 		ctxType        = reflect.TypeOf((*context.Context)(nil)).Elem()
+		dataBuf        *gbytes.Buffer
 	)
 
 	BeforeEach(func() {
 		mockController = gomock.NewController(GinkgoT())
 		fakeRawClient = NewMockRawClient(mockController)
+		dataBuf = gbytes.NewBuffer()
 	})
 
 	Context("validating parameters", func() {
@@ -58,28 +61,34 @@ var _ = Describe("Smart Consumer", func() {
 
 	It("consume messages from the first offset", func() {
 		//setup
-		var count int32
 		chunkChan := make(chan *raw.Chunk)
 		handleMessages := func(ctxType context.Context, message *amqp.Message) {
-			if atomic.AddInt32(&count, 1)%1000 == 0 {
-				fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
-				// AVOID to store for each single message, it will reduce the performances
-				// The server keeps the consume tracking using the consumer name
+			_, err := dataBuf.Write(message.Data)
+			if err != nil {
+				fmt.Println("error writing message to gbytes buffer", err)
 			}
 		}
 		gomock.InOrder(fakeRawClient.EXPECT().
-			Subscribe(
-				gomock.AssignableToTypeOf(ctxType),                   //context
-				gomock.Eq("test-stream"),                             // stream
-				gomock.Eq(uint16(1)),                                 // offsetType
-				gomock.Eq(uint8(1)),                                  // subscriptionId
-				gomock.Eq(uint16(2)),                                 // credit
-				gomock.AssignableToTypeOf(raw.SubscribeProperties{}), // properties
-				gomock.Eq(uint64(1)),                                 // offset
-			),
+			NotifyChunk(gomock.AssignableToTypeOf(chunkChan)).Return(chunkChan),
 			fakeRawClient.EXPECT().
-				NotifyChunk(gomock.AssignableToTypeOf(chunkChan)))
-		fakeChunk := &raw.Chunk{Messages: []byte("rabbit")}
+				Subscribe(
+					gomock.AssignableToTypeOf(ctxType),                   //context
+					gomock.Eq("test-stream"),                             // stream
+					gomock.Eq(uint16(1)),                                 // offsetType
+					gomock.Eq(uint8(1)),                                  // subscriptionId
+					gomock.Eq(uint16(2)),                                 // credit
+					gomock.AssignableToTypeOf(raw.SubscribeProperties{}), // properties
+					gomock.Eq(uint64(1)),                                 // offset
+				))
+		// create amqp message and convert to bytes
+		s := "rabbit"
+		bs := []byte(s)
+		fakeMsg := amqp.Message{Data: bs}
+		fakeMsgBytes, err := fakeMsg.MarshalBinary()
+		Expect(err).NotTo(HaveOccurred())
+
+		fakeChunk := &raw.Chunk{Messages: fakeMsgBytes}
+
 		opts := &ConsumerOptions{
 			OffsetType:     uint16(1),
 			SubscriptionId: uint8(1),
@@ -87,14 +96,10 @@ var _ = Describe("Smart Consumer", func() {
 			Offset:         uint64(1),
 		}
 		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
-		Expect(consumer).ToNot(BeNil())
+		consumer.chunkCh = chunkChan
+		Expect(consumer.Subscribe(context.Background())).To(Succeed())
 		chunkChan <- fakeChunk
-		//test
-		//  set delivery channel with NotifyChunk call
-		// Expect client.Subscribe to succeed
-		// Eventually delivery channel should receive fakeChunk
-
-		Eventually(consumer.Subscribe(context.Background()), "500ms").Should(Succeed())
+		Eventually(dataBuf).Should(gbytes.Say("rabbit"))
 	})
 
 	It("stores the current and last known offset", func() {
@@ -112,10 +117,10 @@ var _ = Describe("Smart Consumer", func() {
 			Offset:         uint64(1),
 		}
 		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
-		consumer.setCurrentOffset(int64(666))
+		consumer.setCurrentOffset(uint64(666))
 		Expect(consumer.GetOffset()).To(BeNumerically("==", 666))
 		consumer.updateLastStoredOffset()
-		consumer.setCurrentOffset(int64(667))
+		consumer.setCurrentOffset(uint64(667))
 		Expect(consumer.GetOffset()).To(BeNumerically("==", 667))
 		Expect(consumer.GetLastStoredOffset()).To(BeNumerically("==", 666))
 	})
