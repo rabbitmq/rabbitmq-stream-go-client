@@ -2,7 +2,6 @@ package stream
 
 import (
 	"context"
-	"errors"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
@@ -100,68 +99,6 @@ var _ = Describe("Smart Producer", func() {
 				msgs := make([]amqp.Message, 10)
 				Expect(p.SendBatch(context.Background(), msgs)).To(MatchError(ErrBatchTooLarge))
 			})
-		})
-
-		When("the pending confirmations + the batch is larger than max in flight", func() {
-			It("waits until some messages are confirmed", func(ctx context.Context) {
-				Skip("coordination is hard")
-				// setup
-				gomock.InOrder(fakeRawClient.EXPECT().
-					Send(
-						gomock.AssignableToTypeOf(ctxType),
-						gomock.Eq(uint8(10)),
-						gomock.All(
-							gomock.Len(2),
-							gomock.AssignableToTypeOf([]common.PublishingMessager{}),
-						),
-					),
-					fakeRawClient.EXPECT().
-						Send(
-							gomock.AssignableToTypeOf(ctxType),
-							gomock.Eq(uint8(10)),
-							gomock.All(
-								gomock.Len(1),
-								gomock.AssignableToTypeOf([]common.PublishingMessager{}),
-							),
-						).
-						DoAndReturn(func(_ context.Context, _ uint8, pMessages []common.PublishingMessager) error {
-							if p.opts.MaxInFlight >= 2 {
-								return errors.New("not permitted to send")
-							}
-							return nil
-						}),
-				)
-
-				const testMaxInFlight = 2
-				p = newStandardProducer(10, fakeRawClient, &ProducerOptions{
-					MaxInFlight:          testMaxInFlight,
-					MaxBufferedMessages:  2,
-					BatchPublishingDelay: 0,
-					EnqueueTimeout:       0,
-					ConfirmationHandler:  nil,
-					stream:               "batch-send-test",
-				})
-
-				// act
-				m := amqp.Message{Data: []byte("i am a message!")}
-				Expect(p.SendBatch(context.Background(), []amqp.Message{m, m})).To(Succeed())
-
-				go func() {
-					p.confirmedPublish <- &publishConfirmOrError{
-						publishingId: 0,
-						statusCode:   1, // confirmed 👍
-					}
-				}()
-
-				var wg sync.WaitGroup
-				wg.Add(1)
-				go func() {
-					defer GinkgoRecover()
-					defer wg.Done()
-					Expect(p.SendBatch(ctx, []amqp.Message{m})).To(Succeed())
-				}()
-				wg.Wait()
-			}, SpecTimeout(time.Second))
 		})
 	})
 
@@ -268,10 +205,71 @@ var _ = Describe("Smart Producer", func() {
 
 		})
 
-		Context("message confirmations", func() {
-			It("calls the confirmation handler", func() {
+	})
+
+	Context("message confirmations", func() {
+		var (
+			p *standardProducer
+		)
+
+		AfterEach(func() {
+			p.close()
+		})
+
+		It("calls the confirmation handler", func() {
+			// setup
+			pingBack := make(chan MessageConfirmation, 1)
+			wait := make(chan struct{})
+			fakeRawClient.EXPECT().
+				Send(gomock.AssignableToTypeOf(ctxType),
+					gomock.AssignableToTypeOf(uint8(42)),
+					gomock.AssignableToTypeOf([]common.PublishingMessager{}),
+				).DoAndReturn(func(_ context.Context, _ uint8, _ []common.PublishingMessager) error {
+				close(wait)
+				return nil
+			})
+
+			p = newStandardProducer(12, fakeRawClient, &ProducerOptions{
+				MaxInFlight:          10,
+				MaxBufferedMessages:  10,
+				BatchPublishingDelay: time.Millisecond * 50, // we want fast batching
+				EnqueueTimeout:       0,
+				ConfirmationHandler: func(confirm *MessageConfirmation) {
+					pingBack <- *confirm
+				},
+				stream: "test-stream",
+			})
+
+			// routines started, and should not be sending (there's nothing to send)
+			Consistently(pingBack).ShouldNot(Receive())
+
+			Expect(
+				p.Send(context.Background(), amqp.Message{Data: []byte("rabbitmq is awesome")}),
+			).To(Succeed())
+			select {
+			case <-wait:
+			case <-time.After(time.Second):
+				Fail("expected to be unblocked by the mock, but we are still waiting")
+			}
+
+			// faking the producer manager receiving and forwarding a 'publish confirm'
+			p.confirmedPublish <- &publishConfirmOrError{
+				publishingId: 0,
+				statusCode:   1,
+			}
+
+			var mc MessageConfirmation
+			Eventually(pingBack).Should(Receive(&mc))
+			Expect(mc.stream).To(Equal("test-stream"))
+			Expect(mc.publishingId).To(BeNumerically("==", 0))
+			Expect(mc.status).To(Equal(Confirmed))
+			Expect(mc.messages).To(HaveLen(1))
+			Expect(mc.messages[0].Data).To(BeEquivalentTo("rabbitmq is awesome"))
+		})
+
+		When("the pending confirmations is greater or equal than max in flight", func() {
+			It("does not send the message and keeps the message in the message buffer", func() {
 				// setup
-				pingBack := make(chan MessageConfirmation, 1)
 				wait := make(chan struct{})
 				fakeRawClient.EXPECT().
 					Send(gomock.AssignableToTypeOf(ctxType),
@@ -283,91 +281,74 @@ var _ = Describe("Smart Producer", func() {
 				})
 
 				p = newStandardProducer(12, fakeRawClient, &ProducerOptions{
-					MaxInFlight:          10,
-					MaxBufferedMessages:  10,
-					BatchPublishingDelay: time.Millisecond * 50, // we want fast batching
-					EnqueueTimeout:       0,
-					ConfirmationHandler: func(confirm *MessageConfirmation) {
-						pingBack <- *confirm
-					},
-					stream: "test-stream",
+					MaxInFlight:          3,
+					MaxBufferedMessages:  3,
+					BatchPublishingDelay: time.Millisecond * 1500, // we want to publish on max buffered
+					EnqueueTimeout:       time.Millisecond * 10,   // we want to time out quickly
+					ConfirmationHandler:  nil,
+					stream:               "test-stream",
 				})
 
-				// routines started, and should not be sending (there's nothing to send)
-				Consistently(pingBack).ShouldNot(Receive())
+				// act
+				message := amqp.Message{Data: []byte("rabbitmq is the best messaging broker")}
+				Expect(p.Send(context.Background(), message)).To(Succeed())
+				Expect(p.Send(context.Background(), message)).To(Succeed())
+				Expect(p.Send(context.Background(), message)).To(Succeed())
 
-				Expect(
-					p.Send(context.Background(), amqp.Message{Data: []byte("rabbitmq is awesome")}),
-				).To(Succeed())
 				select {
 				case <-wait:
 				case <-time.After(time.Second):
-					Fail("expected to be unblocked by the mock, but we are still waiting")
+					Fail("time out waiting for the mock to unblock us")
 				}
 
-				// faking the producer manager receiving and forwarding a 'publish confirm'
-				p.confirmedPublish <- &publishConfirmOrError{
-					publishingId: 0,
-					statusCode:   1,
-				}
-
-				var mc MessageConfirmation
-				Eventually(pingBack).Should(Receive(&mc))
-				Expect(mc.stream).To(Equal("test-stream"))
-				Expect(mc.publishingId).To(BeNumerically("==", 0))
-				Expect(mc.status).To(Equal(Confirmed))
-				Expect(mc.messages).To(HaveLen(1))
-				Expect(mc.messages[0].Data).To(BeEquivalentTo("rabbitmq is awesome"))
-			})
-
-			When("the pending confirmations is greater or equal than max in flight", func() {
-				It("does not send the message and keeps the message in the message buffer", func() {
-					// setup
-					wait := make(chan struct{})
-					fakeRawClient.EXPECT().
-						Send(gomock.AssignableToTypeOf(ctxType),
-							gomock.AssignableToTypeOf(uint8(42)),
-							gomock.AssignableToTypeOf([]common.PublishingMessager{}),
-						).DoAndReturn(func(_ context.Context, _ uint8, _ []common.PublishingMessager) error {
-						close(wait)
-						return nil
-					})
-
-					p = newStandardProducer(12, fakeRawClient, &ProducerOptions{
-						MaxInFlight:          3,
-						MaxBufferedMessages:  3,
-						BatchPublishingDelay: time.Millisecond * 1500, // we want to publish on max buffered
-						EnqueueTimeout:       time.Millisecond * 10,   // we want to time out quickly
-						ConfirmationHandler:  nil,
-						stream:               "test-stream",
-					})
-
-					// act
-					message := amqp.Message{Data: []byte("rabbitmq is the best messaging broker")}
-					Expect(p.Send(context.Background(), message)).To(Succeed())
-					Expect(p.Send(context.Background(), message)).To(Succeed())
-					Expect(p.Send(context.Background(), message)).To(Succeed())
-
-					select {
-					case <-wait:
-					case <-time.After(time.Second):
-						Fail("time out waiting for the mock to unblock us")
-					}
-
-					Expect(p.Send(context.Background(), message)).To(Succeed())
-					Consistently(p.accumulator.messages).
-						WithPolling(time.Millisecond * 200).
-						Within(time.Millisecond * 1600).
-						Should(HaveLen(1)) // 3 messages were sent, 1 message is buffered
-					Expect(p.unconfirmedMessage.messages).To(HaveLen(3)) // 3 messages were sent, 3 confirmations are pending
-				})
-			})
-
-			When("number of messages accumulated are greater than max in flight", func() {
-				It("does-something", func() {
-					Skip("TODO")
-				})
+				Expect(p.Send(context.Background(), message)).To(Succeed())
+				Consistently(p.accumulator.messages).
+					WithPolling(time.Millisecond * 200).
+					Within(time.Millisecond * 1600).
+					Should(HaveLen(1)) // 3 messages were sent, 1 message is buffered
+				Expect(p.unconfirmedMessage.messages).To(HaveLen(3)) // 3 messages were sent, 3 confirmations are pending
 			})
 		})
+
+		When("number of messages accumulated are greater than max in flight", func() {
+			It("does-something", func() {
+				Skip("TODO")
+			})
+		})
+
+		It("times out messages that do not receive a timely confirmation", func() {
+			// setup
+			wait := make(chan struct{})
+			fakeRawClient.EXPECT().
+				Send(gomock.AssignableToTypeOf(ctxType),
+					gomock.AssignableToTypeOf(uint8(42)),
+					gomock.AssignableToTypeOf([]common.PublishingMessager{})).
+				Times(2)
+
+			p = newStandardProducer(123, fakeRawClient, &ProducerOptions{
+				MaxInFlight:          10,
+				MaxBufferedMessages:  10,
+				BatchPublishingDelay: time.Millisecond * 100,
+				EnqueueTimeout:       time.Millisecond * 100,
+				ConfirmationHandler: func(c *MessageConfirmation) {
+					defer GinkgoRecover()
+					defer close(wait)
+					Expect(c.status).To(Equal(ClientTimeout))
+					Expect(c.stream).To(Equal("some-stream"))
+				},
+				ConfirmTimeout: time.Millisecond * 500,
+				stream:         "some-stream",
+			})
+
+			// act
+			m := amqp.Message{Data: []byte("hello!")}
+			Expect(p.Send(context.Background(), m)).To(Succeed())
+			Eventually(wait, "1100ms", "100ms").Should(BeClosed())
+
+			wait = make(chan struct{})
+			Expect(p.SendBatch(context.Background(), []amqp.Message{m}))
+			Eventually(wait, "1100ms", "100ms").Should(BeClosed())
+		})
 	})
+
 })

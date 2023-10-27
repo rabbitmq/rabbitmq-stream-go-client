@@ -2,7 +2,6 @@ package stream
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
@@ -12,46 +11,74 @@ import (
 	"time"
 )
 
-var (
-	errMessageBufferFull = errors.New("message buffer is full")
-)
-
+// Default values for ProducerOptions
 const (
-	defaultBatchPublishingDelay = time.Millisecond * 100
-	defaultMaxInFlight          = 10_000
-	maxBufferedMessages         = 100
+	DefaultBatchPublishingDelay = time.Millisecond * 100
+	DefaultMaxInFlight          = 10_000
+	DefaultMaxBufferedMessages  = 100
+	DefaultConfirmTimeout       = time.Second * 10
+	DefaultEnqueueTimeout       = time.Second * 10
 )
 
 type ProducerOptions struct {
 	// The maximum number of unconfirmed outbound messages. Producer.Send will start
-	// blocking when the limit is reached.
+	// blocking when the limit is reached. Only accepts positive integers. Any negative
+	// value will be set to the default.
 	MaxInFlight int
 	// The maximum number of messages to accumulate before sending them to the
-	// broker.
+	// broker. Only accepts positive integers. Any negative value will be set to the
+	// default.
 	MaxBufferedMessages int
-	// Period to send a batch of messages.
+	// Accumulating period to send a batch of messages.
 	BatchPublishingDelay time.Duration
-	// Time before enqueueing of a message fail when the maximum number of
-	// unconfirmed is reached.
+	// Time before failing a message enqueue. This acts as a timeout to Send a
+	// message. If the message is not accumulated before this timeout, the publish
+	// operation will be considered failed.
 	EnqueueTimeout time.Duration
-	// TODO: docs
+	// Handler function for publish confirmations. The function receives a pointer
+	// to a message confirmation. The handler should inspect to confirmation to
+	// determine whether the message was received, timed out, or else. See also
+	// ConfirmationStatus.
+	//
+	// The following code logs the confirmations received:
+	//
+	//		opt := &ProducerOptions{
+	//			ConfirmationHandler: func(c *MessageConfirmation) {
+	//				log.Printf("Received message confirmation: ID: %d, Status: %s", c.PublishingId(), c.Status())
+	//				// some code
+	//			},
+	//		}
+	//
+	// The handler is invoked synchronously by the background routine handling
+	// confirms. It is critical to not perform long or expensive operations inside
+	// the handler, as it will stall the progress of the background routine, and
+	// subsequent invocations of confirmation handlers.
 	ConfirmationHandler func(*MessageConfirmation)
+	// Time before the client calls the confirm callback to signal outstanding
+	// unconfirmed messages timed out.
+	//
+	// Set to -1 to disable confirmation timeouts. Any other negative value
+	// is invalid, and it will be set to the default.
+	ConfirmTimeout time.Duration
 	// Used internally. Must be set by the producer manager
 	stream string
 }
 
 func (p *ProducerOptions) validate() {
 	if p.MaxInFlight <= 0 {
-		p.MaxInFlight = defaultMaxInFlight
+		p.MaxInFlight = DefaultMaxInFlight
 	}
 	if p.MaxBufferedMessages <= 0 {
-		p.MaxBufferedMessages = maxBufferedMessages
+		p.MaxBufferedMessages = DefaultMaxBufferedMessages
 	}
 	if p.BatchPublishingDelay == 0 {
-		p.BatchPublishingDelay = defaultBatchPublishingDelay
+		p.BatchPublishingDelay = DefaultBatchPublishingDelay
 	}
 	if p.EnqueueTimeout < 0 {
-		p.EnqueueTimeout = time.Second * 10
+		p.EnqueueTimeout = DefaultEnqueueTimeout
+	}
+	if p.ConfirmTimeout == 0 || p.ConfirmTimeout < -1 {
+		p.ConfirmTimeout = DefaultConfirmTimeout
 	}
 }
 
@@ -98,6 +125,11 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *Produc
 
 	go p.sendLoopAsync(ctx)
 	go p.confirmationListenerLoop()
+
+	if opts.ConfirmTimeout != -1 {
+		go p.confirmationTimeoutLoop()
+	}
+
 	return p
 }
 
@@ -166,7 +198,7 @@ func (s *standardProducer) sendLoopAsync(ctx context.Context) {
 	var publishingDelay time.Duration
 	if s.opts.BatchPublishingDelay == 0 {
 		// important to make this check because NewTicker(0) panics
-		publishingDelay = defaultBatchPublishingDelay
+		publishingDelay = DefaultBatchPublishingDelay
 	} else {
 		publishingDelay = s.opts.BatchPublishingDelay
 	}
@@ -176,12 +208,13 @@ func (s *standardProducer) sendLoopAsync(ctx context.Context) {
 		select {
 		case <-t.C:
 			// send
-			err := s.doSend(ctx)
+			ctx2, cancel := maybeApplyDefaultTimeout(ctx)
+			err := s.doSend(ctx2)
 			if err != nil {
-				// FIXME: log error using logger
-				//panic(err)
+				// FIXME: log error using slog.logger
 				log.Printf("error sending: %v", err)
 			}
+			cancel()
 		case <-s.done:
 			// exit
 			t.Stop()
@@ -210,6 +243,29 @@ func (s *standardProducer) confirmationListenerLoop() {
 				s.opts.ConfirmationHandler(msgConfirm)
 			}
 			// TODO: do we need an else { msgConfirm = nil } to ease the job of the GC?
+		}
+	}
+}
+
+func (s *standardProducer) confirmationTimeoutLoop() {
+	t := time.NewTicker(s.opts.ConfirmTimeout)
+
+	for {
+		select {
+		case now := <-t.C:
+			expiredIds := s.unconfirmedMessage.idsBefore(now.Add(-s.opts.ConfirmTimeout))
+			for _, id := range expiredIds {
+				confirmation, err := s.unconfirmedMessage.timeoutMessage(id)
+				if err != nil {
+					// TODO: log error
+					continue
+				}
+				if s.opts.ConfirmationHandler != nil {
+					s.opts.ConfirmationHandler(confirmation)
+				}
+			}
+		case <-s.done:
+			return
 		}
 	}
 }

@@ -33,7 +33,13 @@ const (
 	UndefinedError
 )
 
-// TODO: docs
+// MessageConfirmation represent a confirmation, or negative confirmation,
+// from the broker. The confirmation has the messages that have been confirmed,
+// or errored, the publishing ID assigned during Send operation, and the status
+// of the confirmation. It is important to inspect the status to determine
+// if the message has been confirmed, timed out, or errored.
+//
+// See also ConfirmationHandler in ProducerOptions.
 type MessageConfirmation struct {
 	// publishing ID of the message/s in this confirmation
 	publishingId uint64
@@ -186,4 +192,34 @@ func (p *confirmationTracker) confirm(id uint64) (*MessageConfirmation, error) {
 	<-p.unconfirmedMessagesSemaphore
 	delete(p.messages, id)
 	return pm, nil
+}
+
+// Removes a message confirmation with id from the tracker and returns a message
+// confirmation with status ClientTimeout. Returns an error if the id is not
+// tracked.
+func (p *confirmationTracker) timeoutMessage(id uint64) (*MessageConfirmation, error) {
+	p.mapMu.Lock()
+	defer p.mapMu.Unlock()
+	pm, found := p.messages[id]
+	if !found {
+		return nil, fmt.Errorf("%w: publishingID %d", ErrUntrackedConfirmation, id)
+	}
+	<-p.unconfirmedMessagesSemaphore
+	delete(p.messages, id)
+	pm.status = ClientTimeout
+	return pm, nil
+}
+
+func (p *confirmationTracker) idsBefore(t time.Time) []uint64 {
+	var s []uint64
+
+	p.mapMu.Lock()
+	for id, c := range p.messages {
+		if c.insert.Before(t) {
+			s = append(s, id)
+		}
+	}
+	p.mapMu.Unlock()
+
+	return s
 }
