@@ -103,12 +103,12 @@ type standardProducer struct {
 	confirmedPublish chan *publishConfirmOrError
 }
 
-func newStandardProducer(publisherId uint8, rawClient raw.Clienter, opts *ProducerOptions) *standardProducer {
+func newStandardProducer(publisherId uint8, rawClient raw.Clienter, clientM *sync.Mutex, opts *ProducerOptions) *standardProducer {
 	opts.validate()
 	p := &standardProducer{
 		publisherId:     publisherId,
 		rawClient:       rawClient,
-		rawClientMu:     &sync.Mutex{}, // FIXME: this has to come as argument. this mutex must be shared among all users of the client
+		rawClientMu:     clientM,
 		publishingIdSeq: autoIncrementingSequence[uint64]{},
 		opts:            opts,
 		accumulator:     newMessageAccumulator(opts.MaxBufferedMessages),
@@ -349,11 +349,10 @@ func (s *standardProducer) SendBatch(ctx context.Context, messages []amqp.Messag
 
 // SendWithId always returns an error in the standard producer because the
 // publishing ID is tracked internally.
+//
+// TODO: revisit this. We could let users set their own publishing IDs, and very strongly
+//
+//	advise to use one or the other, but not both
 func (s *standardProducer) SendWithId(_ context.Context, _ uint64, _ amqp.Message) error {
 	return fmt.Errorf("%w: standard producer does not support sending with ID", ErrUnsupportedOperation)
-}
-
-func (s *standardProducer) GetLastPublishedId() uint64 {
-	//TODO implement me
-	panic("implement me")
 }

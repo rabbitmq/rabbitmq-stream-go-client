@@ -36,7 +36,7 @@ var _ = Describe("Smart Producer", func() {
 
 		When("the batch list is empty", func() {
 			It("returns an error", func() {
-				p = newStandardProducer(0, fakeRawClient, &ProducerOptions{})
+				p = newStandardProducer(0, fakeRawClient, &sync.Mutex{}, &ProducerOptions{})
 				Expect(p.SendBatch(context.Background(), []amqp.Message{})).To(MatchError("batch list is empty"))
 			})
 		})
@@ -75,7 +75,7 @@ var _ = Describe("Smart Producer", func() {
 					}),
 			)
 
-			p = newStandardProducer(1, fakeRawClient, &ProducerOptions{
+			p = newStandardProducer(1, fakeRawClient, &sync.Mutex{}, &ProducerOptions{
 				MaxInFlight:         100,
 				MaxBufferedMessages: 100,
 			})
@@ -92,7 +92,7 @@ var _ = Describe("Smart Producer", func() {
 
 		When("the batch list is larger than max in flight", func() {
 			It("returns an error", func() {
-				p = newStandardProducer(0, fakeRawClient, &ProducerOptions{
+				p = newStandardProducer(0, fakeRawClient, &sync.Mutex{}, &ProducerOptions{
 					MaxInFlight:         1,
 					MaxBufferedMessages: 1,
 				})
@@ -139,7 +139,7 @@ var _ = Describe("Smart Producer", func() {
 					return nil
 				})
 
-			p = newStandardProducer(42, fakeRawClient, &ProducerOptions{
+			p = newStandardProducer(42, fakeRawClient, &sync.Mutex{}, &ProducerOptions{
 				MaxInFlight:          5,
 				MaxBufferedMessages:  5,
 				BatchPublishingDelay: time.Millisecond * 200, // batching delay must be lower than Eventually's timeout
@@ -177,7 +177,7 @@ var _ = Describe("Smart Producer", func() {
 				}).
 				Times(2)
 
-			p = newStandardProducer(42, fakeRawClient, &ProducerOptions{
+			p = newStandardProducer(42, fakeRawClient, &sync.Mutex{}, &ProducerOptions{
 				MaxInFlight:          10,
 				MaxBufferedMessages:  3,
 				BatchPublishingDelay: time.Minute, // long batch delay so that publishing happens because buffer is full
@@ -229,7 +229,7 @@ var _ = Describe("Smart Producer", func() {
 				return nil
 			})
 
-			p = newStandardProducer(12, fakeRawClient, &ProducerOptions{
+			p = newStandardProducer(12, fakeRawClient, &sync.Mutex{}, &ProducerOptions{
 				MaxInFlight:          10,
 				MaxBufferedMessages:  10,
 				BatchPublishingDelay: time.Millisecond * 50, // we want fast batching
@@ -280,7 +280,7 @@ var _ = Describe("Smart Producer", func() {
 					return nil
 				})
 
-				p = newStandardProducer(12, fakeRawClient, &ProducerOptions{
+				p = newStandardProducer(12, fakeRawClient, &sync.Mutex{}, &ProducerOptions{
 					MaxInFlight:          3,
 					MaxBufferedMessages:  3,
 					BatchPublishingDelay: time.Millisecond * 1500, // we want to publish on max buffered
@@ -325,7 +325,7 @@ var _ = Describe("Smart Producer", func() {
 					gomock.AssignableToTypeOf([]common.PublishingMessager{})).
 				Times(2)
 
-			p = newStandardProducer(123, fakeRawClient, &ProducerOptions{
+			p = newStandardProducer(123, fakeRawClient, &sync.Mutex{}, &ProducerOptions{
 				MaxInFlight:          10,
 				MaxBufferedMessages:  10,
 				BatchPublishingDelay: time.Millisecond * 100,

@@ -47,7 +47,11 @@ type Producer interface {
 	Send(ctx context.Context, msg amqp.Message) error
 	SendBatch(ctx context.Context, messages []amqp.Message) error
 	SendWithId(ctx context.Context, publishingId uint64, msg amqp.Message) error
-	GetLastPublishedId() uint64
+}
+
+type internalProducer interface {
+	Producer
+	close()
 }
 
 type Message = common.Message

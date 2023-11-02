@@ -342,3 +342,19 @@ func (e *Environment) QuerySequence(ctx context.Context, reference, stream strin
 
 	return uint64(0), lastError
 }
+
+func (e *Environment) CreateProducer(ctx context.Context, stream string, opts *ProducerOptions) (Producer, error) {
+	// TODO: calls the producer manager
+	/*
+		1. locate leader for stream
+		2. check if a producer manager is connected to leader
+		2a. if exists and have capacity, fetch it
+		2b. if not exists or not have capacity, continue
+		2c. if not found, create a new producer manager
+		3. create producer using publisher manager
+		4. return producer
+
+		Make a deep copy of ProducerOptions because we are going to modify the 'stream' attribute
+	*/
+	panic("implement me!")
+}
