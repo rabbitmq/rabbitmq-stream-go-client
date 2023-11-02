@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func parseURI(uri string) (broker, error) {
+func parseURI(uri string) (Broker, error) {
 	builder := defaultBroker
 
 	if strings.Contains(uri, " ") {

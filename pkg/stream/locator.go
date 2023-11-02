@@ -32,8 +32,8 @@ func newLocator(c raw.ClientConfiguration, logger *slog.Logger) *locator {
 		log: logger.
 			WithGroup("locator").
 			With(
-				slog.String("host", c.RabbitmqBrokers().Host),
-				slog.Int("port", c.RabbitmqBrokers().Port),
+				slog.String("host", c.RabbitmqBroker().Host),
+				slog.Int("port", c.RabbitmqBroker().Port),
 			),
 		rawClientConf:        c,
 		retryPolicy:          defaultBackOffPolicy,
@@ -128,7 +128,7 @@ func (l *locator) shutdownHandler() {
 const rabbitmqVersion311 = "v3.11"
 
 func (l *locator) isServer311orMore() bool {
-	v, ok := l.rawClientConf.RabbitmqBrokers().ServerProperties["version"]
+	v, ok := l.rawClientConf.RabbitmqBroker().ServerProperties["version"]
 	if !ok {
 		// version not found in server properties
 		// returning false as we can't determine
@@ -202,6 +202,7 @@ func (l *locator) operationQueryOffset(args ...any) []any {
 	offset, err := l.client.QueryOffset(ctx, reference, stream)
 	return []any{offset, err}
 }
+
 func (l *locator) operationPartitions(args ...any) []any {
 	ctx := args[0].(context.Context)
 	superstream := args[1].(string)
@@ -215,4 +216,16 @@ func (l *locator) operationQuerySequence(args ...any) []any {
 	stream := args[2].(string)
 	pubId, err := l.client.QueryPublisherSequence(ctx, reference, stream)
 	return []any{pubId, err}
+}
+
+// Locator operation wrapper for MetadataQuery
+//
+// Requires context.Context and []string
+//
+// Returns *MetadataResponse and error
+func (l *locator) operationQueryStreamMetadata(args ...any) []any {
+	ctx := args[0].(context.Context)
+	streamNames := args[1].([]string)
+	metadataResponse, err := l.client.MetadataQuery(ctx, streamNames)
+	return []any{metadataResponse, err}
 }

@@ -72,3 +72,16 @@ func (r *ClientConfiguration) SetServerProperties(keyValues ...string) {
 		r.rabbitmqBroker.ServerProperties[keyValues[i]] = keyValues[i+1]
 	}
 }
+
+func MetadataResponseForStream(name string) *MetadataResponse {
+	return internal.NewMetadataResponse(
+		123,         // correlation-id
+		1234,        // port
+		0,           // Broker reference
+		1,           // response code
+		0,           // leader reference
+		"fakehost",  // host
+		name,        // stream name
+		[]uint16{0}, // replicas references
+	)
+}

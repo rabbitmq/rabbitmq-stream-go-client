@@ -31,7 +31,7 @@ var _ = Describe("Smart Producer", func() {
 		)
 
 		AfterEach(func() {
-			p.close()
+			p.shutdown()
 		})
 
 		When("the batch list is empty", func() {
@@ -117,7 +117,7 @@ var _ = Describe("Smart Producer", func() {
 		)
 
 		AfterEach(func() {
-			p.close()
+			p.shutdown()
 		})
 
 		It("accumulates and sends messages", func() {
@@ -204,7 +204,19 @@ var _ = Describe("Smart Producer", func() {
 			))
 
 		})
+	})
 
+	When("the producer is closed", func() {
+		It("does not send messages", func() {
+			p := newStandardProducer(42, fakeRawClient, &sync.Mutex{}, &ProducerOptions{stream: "some-stream"})
+			p.Close()
+
+			message := amqp.Message{Data: []byte("not sending")}
+			Expect(p.Send(context.Background(), message)).
+				To(MatchError(ContainSubstring("producer is closed")))
+			Expect(p.SendBatch(context.Background(), []amqp.Message{message})).
+				To(MatchError(ContainSubstring("producer is closed")))
+		})
 	})
 
 	Context("message confirmations", func() {
@@ -213,7 +225,7 @@ var _ = Describe("Smart Producer", func() {
 		)
 
 		AfterEach(func() {
-			p.close()
+			p.shutdown()
 		})
 
 		It("calls the confirmation handler", func() {
@@ -351,4 +363,43 @@ var _ = Describe("Smart Producer", func() {
 		})
 	})
 
+	Describe("producer status", func() {
+		It("transitions the status", func(ctx context.Context) {
+			wait := make(chan struct{})
+			p := newStandardProducer(
+				0,
+				fakeRawClient,
+				&sync.Mutex{},
+				&ProducerOptions{},
+			)
+			p.setCloseCallback(func(int) error {
+				<-time.After(time.Millisecond * 200)
+				close(wait)
+				return nil
+			})
+
+			By("setting status to open after initialisation")
+			Expect(p.status).To(Equal(open)) // it's open after creation
+
+			By("setting status to closing after calling Close")
+			go func() {
+				defer GinkgoRecover()
+				Eventually(func() status {
+					p.m.Lock()
+					defer p.m.Unlock()
+					return p.status
+				}).Should(Equal(closing))
+			}()
+			p.Close()
+
+			By("setting status to closed after calling the callback")
+			select {
+			case <-wait:
+				// happy days!
+			case <-ctx.Done():
+				Fail("expected to receive a callback in Close")
+			}
+			Expect(p.status).To(Equal(closed))
+		}, SpecTimeout(time.Second))
+	})
 })

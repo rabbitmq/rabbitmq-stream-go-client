@@ -528,6 +528,7 @@ var _ = Describe("Environment", func() {
 		})
 
 	})
+
 	Context("query partitions", func() {
 		BeforeEach(func() {
 			mockRawClient.EXPECT().

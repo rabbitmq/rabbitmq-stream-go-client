@@ -18,13 +18,14 @@ var (
 const noReference = ""
 
 type producerManager struct {
-	m         sync.Mutex
-	id        int
-	config    EnvironmentConfiguration
-	producers []internalProducer
-	client    raw.Clienter
-	clientM   *sync.Mutex
-	open      bool
+	m                  sync.Mutex
+	id                 int
+	config             EnvironmentConfiguration
+	connectionEndpoint raw.Broker
+	producers          []internalProducer
+	client             raw.Clienter
+	clientM            *sync.Mutex
+	open               bool
 }
 
 func newProducerManager(id int, config EnvironmentConfiguration) *producerManager {
@@ -53,11 +54,15 @@ func (p *producerManager) connect(ctx context.Context, uri string) error {
 		return err
 	}
 
+	p.connectionEndpoint = conf.RabbitmqBroker()
 	p.client = c
 	p.open = true
 	return nil
 }
 
+// initialises a producer and sends a declare publisher frame. It returns
+// an error if the manager does not have capacity, or if declare publisher
+// fails
 func (p *producerManager) createProducer(ctx context.Context, producerOpts *ProducerOptions) (Producer, error) {
 	if !p.open {
 		return nil, errManagerClosed
@@ -65,11 +70,12 @@ func (p *producerManager) createProducer(ctx context.Context, producerOpts *Prod
 
 	var (
 		publisherId uint8
-		producer    internalProducer
+		producer    *standardProducer
 	)
 	if len(p.producers) == 0 {
 		publisherId = 0
 		producer = newStandardProducer(publisherId, p.client, p.clientM, producerOpts)
+		producer.setCloseCallback(p.removeProducer)
 		p.producers = append(p.producers, producer)
 	} else {
 		for i := 0; i < len(p.producers); i++ {

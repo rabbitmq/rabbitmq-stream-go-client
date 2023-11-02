@@ -2,10 +2,12 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"log/slog"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -19,6 +21,7 @@ type Environment struct {
 	locators                []*locator
 	retryPolicy             backoffDurationFunc
 	locatorSelectSequential bool
+	producerManagers        []*producerManager
 }
 
 func NewEnvironment(ctx context.Context, configuration EnvironmentConfiguration) (*Environment, error) {
@@ -356,5 +359,128 @@ func (e *Environment) CreateProducer(ctx context.Context, stream string, opts *P
 
 		Make a deep copy of ProducerOptions because we are going to modify the 'stream' attribute
 	*/
-	panic("implement me!")
+	logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("CreateProducer")
+	rn := rand.Intn(100)
+	n := len(e.locators)
+
+	// 1. locate leader for stream
+	var (
+		lastError error
+		l         *locator
+		metadata  *raw.MetadataResponse
+	)
+	for i := 0; i < n; i++ {
+		if e.locatorSelectSequential {
+			// round robin / sequential
+			l = e.locators[i]
+		} else {
+			// pick at random
+			l = e.pickLocator((i + rn) % n)
+		}
+		result := l.operationQueryStreamMetadata(ctx, []string{stream})
+		if result[1] != nil {
+			lastError = result[1].(error)
+			if isNonRetryableError(lastError) {
+				return nil, lastError
+			}
+			logger.Error("locator operation failed", slog.Any("error", lastError))
+			continue
+		}
+		metadata = result[0].(*raw.MetadataResponse)
+		lastError = nil
+		break
+	}
+
+	if lastError != nil {
+		return nil, fmt.Errorf("locator operation failed: %w", lastError)
+	}
+
+	//var found = false
+	//var pm *producerManager
+	//for _, streamMetadata := range metadata.StreamsMetadata() {
+	//	if streamMetadata.StreamName() == stream {
+	//		found = true
+	//		leaderRef := streamMetadata.LeaderReference()
+	//		brokerRef := metadata.Brokers()[leaderRef]
+	//
+	//		for i := 0; i < len(e.producerManagers); i++ {
+	//			if e.producerManagers[i].connectionEndpoint.Host == brokerRef.Host() &&
+	//				e.producerManagers[i].connectionEndpoint.Port == int(brokerRef.Port()) {
+	//				pm = &e.producerManagers[i]
+	//				break
+	//			}
+	//		}
+	//		if pm != nil {
+	//
+	//		}
+	//
+	//		break
+	//	}
+	//}
+	broker, err := findLeader(stream, metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	pm, err := e.createProducerManager(ctx, broker)
+	if err != nil {
+		return nil, err
+	}
+	o := opts.DeepCopy()
+	o.stream = stream
+
+	// FIXME: check producer manager capacity before selecting a
+	return pm.createProducer(ctx, o)
+}
+
+// initialises and connects a new producer manager
+func (e *Environment) createProducerManager(ctx context.Context, broker raw.Broker) (*producerManager, error) {
+	logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("createProducerManager")
+	// create new producer manager
+	pm := newProducerManager(len(e.producerManagers), e.configuration)
+	e.producerManagers = append(e.producerManagers, pm)
+	uri := uriFromConfigurationThatContains(
+		fmt.Sprintf("%s:%d", broker.Host, broker.Port),
+		&e.configuration,
+	)
+	if len(uri) == 0 {
+		logger.Debug("did not find an URI for leader in configuration", slog.String("leader-host", broker.Host), slog.Int("leader-port", broker.Port))
+		return nil, errors.New("empty uri in create producer manager")
+	}
+
+	return pm, pm.connect(ctx, uri)
+}
+
+func findLeader(stream string, metadata *raw.MetadataResponse) (raw.Broker, error) {
+	var leaderRef uint16
+	var found = false
+	for _, streamMetadata := range metadata.StreamsMetadata() {
+		if streamMetadata.StreamName() == stream {
+			found = true
+			leaderRef = streamMetadata.LeaderReference()
+			break
+		}
+	}
+	if !found {
+		return raw.Broker{}, errors.New("stream leader not found")
+	}
+
+	bb := raw.Broker{}
+	for _, broker := range metadata.Brokers() {
+		if broker.Reference() == leaderRef {
+			bb.Host = broker.Host()
+			bb.Port = int(broker.Port())
+			return bb, nil
+		}
+	}
+	return raw.Broker{}, errors.New("broker hosting leader not found")
+}
+
+func uriFromConfigurationThatContains(s string, c *EnvironmentConfiguration) string {
+	for _, uri := range c.Uris {
+		if strings.Contains(uri, s) {
+			return uri
+		}
+	}
+	return ""
 }

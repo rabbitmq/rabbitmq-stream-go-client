@@ -14,7 +14,7 @@ var _ = Describe("ClientTypes", func() {
 				"rabbitmq-stream://foo:bar@localparty.com:4321/party-vhost")
 			Expect(err).ToNot(HaveOccurred())
 
-			brokers := clientConf.RabbitmqBrokers()
+			brokers := clientConf.RabbitmqBroker()
 			Expect(brokers).To(MatchFields(IgnoreExtras,
 				Fields{
 					"Host":     Equal("localparty.com"),
@@ -26,11 +26,11 @@ var _ = Describe("ClientTypes", func() {
 				}))
 		})
 
-		It("accepts zero URLs and returns default broker", func() {
+		It("accepts zero URLs and returns default Broker", func() {
 			conf, err := raw.NewClientConfiguration("")
 			Expect(err).ToNot(HaveOccurred())
 
-			broker := conf.RabbitmqBrokers()
+			broker := conf.RabbitmqBroker()
 			Expect(broker).NotTo(BeNil())
 			Expect(broker).To(MatchFields(IgnoreExtras,
 				Fields{

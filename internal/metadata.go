@@ -79,10 +79,30 @@ type MetadataResponse struct {
 	streamsMetadata []StreamMetadata
 }
 
+func (m *MetadataResponse) Brokers() []Broker {
+	return m.brokers
+}
+
+func (m *MetadataResponse) StreamsMetadata() []StreamMetadata {
+	return m.streamsMetadata
+}
+
 type Broker struct {
 	reference uint16
 	host      string
 	port      uint32
+}
+
+func (b *Broker) Reference() uint16 {
+	return b.reference
+}
+
+func (b *Broker) Host() string {
+	return b.host
+}
+
+func (b *Broker) Port() uint32 {
+	return b.port
 }
 
 type StreamMetadata struct {
@@ -90,6 +110,22 @@ type StreamMetadata struct {
 	responseCode       uint16
 	leaderReference    uint16
 	replicasReferences []uint16
+}
+
+func (s *StreamMetadata) StreamName() string {
+	return s.streamName
+}
+
+func (s *StreamMetadata) ResponseCode() uint16 {
+	return s.responseCode
+}
+
+func (s *StreamMetadata) LeaderReference() uint16 {
+	return s.leaderReference
+}
+
+func (s *StreamMetadata) ReplicasReferences() []uint16 {
+	return s.replicasReferences
 }
 
 func NewMetadataResponse(correlationId,

@@ -24,6 +24,7 @@ var (
 	ErrUntrackedConfirmation = errors.New("message confirmation not tracked")
 	ErrEnqueueTimeout        = errors.New("timed out queueing message")
 	ErrMaxMessagesInFlight   = errors.New("maximum number of messages in flight")
+	ErrProducerClosed        = errors.New("producer is closed")
 )
 
 type ByteCapacity uint64
@@ -47,12 +48,21 @@ type Producer interface {
 	Send(ctx context.Context, msg amqp.Message) error
 	SendBatch(ctx context.Context, messages []amqp.Message) error
 	SendWithId(ctx context.Context, publishingId uint64, msg amqp.Message) error
+	Close()
 }
 
 type internalProducer interface {
 	Producer
-	close()
+	shutdown()
 }
 
 type Message = common.Message
 type PublishingMessage = common.PublishingMessager
+
+type status int
+
+const (
+	closed status = iota
+	closing
+	open
+)

@@ -828,7 +828,7 @@ func DefaultDial(connectionTimeout time.Duration) func(network string, addr stri
 
 // Connect performs a Stream-protocol handshake to connect to RabbitMQ. On a
 // successful connect, it returns a nil error and starts listening to incoming
-// frames from RabbitMQ. If more than 1 broker is defined in ClientConfiguration,
+// frames from RabbitMQ. If more than 1 Broker is defined in ClientConfiguration,
 // they will be tried sequentially.
 //
 // It is recommended to establish a connection via DialConfig, instead of calling

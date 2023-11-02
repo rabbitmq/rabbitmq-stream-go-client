@@ -676,9 +676,9 @@ func (rmq *fakeRabbitMQServer) fakeRabbitMQMetadataQuery(ctx context.Context, st
 	frameSize := 4 + // header
 		4 + // correlationID
 		4 + // brokers length
-		2 + // broker reference
-		9 + // broker host
-		4 + // broker port
+		2 + // Broker reference
+		9 + // Broker host
+		4 + // Broker port
 		4 + // streamMetadata length
 		8 + // streamMetadata streamName
 		2 + // streamMetadata responseCode

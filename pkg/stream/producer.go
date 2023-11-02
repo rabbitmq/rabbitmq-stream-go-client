@@ -82,8 +82,22 @@ func (p *ProducerOptions) validate() {
 	}
 }
 
+func (p *ProducerOptions) DeepCopy() *ProducerOptions {
+	r := new(ProducerOptions)
+	r.MaxInFlight = p.MaxInFlight
+	r.MaxBufferedMessages = p.MaxBufferedMessages
+	r.BatchPublishingDelay = p.BatchPublishingDelay
+	r.EnqueueTimeout = p.EnqueueTimeout
+	r.ConfirmationHandler = p.ConfirmationHandler
+	r.ConfirmTimeout = p.ConfirmTimeout
+	r.stream = p.stream
+	return r
+}
+
 type standardProducer struct {
+	m           sync.Mutex
 	publisherId uint8
+	status      status
 	// shared Raw Client connection among all clients in the same manager
 	rawClient raw.Clienter
 	// this mutex must be shared among all components that have access to this
@@ -97,6 +111,7 @@ type standardProducer struct {
 	done               chan struct{}
 	cancel             context.CancelFunc
 	destructor         sync.Once
+	closeCallback      func(int) error
 	unconfirmedMessage *confirmationTracker
 	// this channel is used by the producer manager to send confirmation notifications
 	// the end-user does not have access to this channel
@@ -106,7 +121,9 @@ type standardProducer struct {
 func newStandardProducer(publisherId uint8, rawClient raw.Clienter, clientM *sync.Mutex, opts *ProducerOptions) *standardProducer {
 	opts.validate()
 	p := &standardProducer{
+		m:               sync.Mutex{},
 		publisherId:     publisherId,
+		status:          open,
 		rawClient:       rawClient,
 		rawClientMu:     clientM,
 		publishingIdSeq: autoIncrementingSequence[uint64]{},
@@ -133,11 +150,15 @@ func newStandardProducer(publisherId uint8, rawClient raw.Clienter, clientM *syn
 	return p
 }
 
-func (s *standardProducer) close() {
+func (s *standardProducer) shutdown() {
 	s.cancel()
 	s.destructor.Do(func() {
 		close(s.done)
 	})
+}
+
+func (s *standardProducer) setCloseCallback(f func(int) error) {
+	s.closeCallback = f
 }
 
 // synchronously sends the messages accumulated in the message buffer. If sending
@@ -192,6 +213,12 @@ func (s *standardProducer) doSend(ctx context.Context) error {
 
 func (s *standardProducer) canSend() bool {
 	return len(s.unconfirmedMessage.unconfirmedMessagesSemaphore) != s.opts.MaxInFlight
+}
+
+func (s *standardProducer) isOpen() bool {
+	s.m.Lock()
+	defer s.m.Unlock()
+	return s.status == open
 }
 
 func (s *standardProducer) sendLoopAsync(ctx context.Context) {
@@ -276,7 +303,10 @@ func (s *standardProducer) confirmationTimeoutLoop() {
 // and sent after a delay, or when the buffer becomes full, whichever happens
 // first.
 func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
-	//TODO implement me
+	if !s.isOpen() {
+		return ErrProducerClosed
+	}
+
 	var send bool
 	if s.opts.EnqueueTimeout != 0 {
 		var err error
@@ -313,6 +343,10 @@ func (s *standardProducer) Send(ctx context.Context, msg amqp.Message) error {
 // by the broker) is greater than len(messages). This function will observe
 // context cancellation
 func (s *standardProducer) SendBatch(ctx context.Context, messages []amqp.Message) error {
+	if !s.isOpen() {
+		return ErrProducerClosed
+	}
+
 	if len(messages) == 0 {
 		return ErrEmptyBatch
 	}
@@ -355,4 +389,27 @@ func (s *standardProducer) SendBatch(ctx context.Context, messages []amqp.Messag
 //	advise to use one or the other, but not both
 func (s *standardProducer) SendWithId(_ context.Context, _ uint64, _ amqp.Message) error {
 	return fmt.Errorf("%w: standard producer does not support sending with ID", ErrUnsupportedOperation)
+}
+
+// Close the producer. After calling this function, the producer is considered finished
+// and not expected to send anymore messages. Subsequent attempts to send messages will
+// result in an error.
+func (s *standardProducer) Close() {
+	// TODO: should we wait for pending confirmations?
+	s.m.Lock()
+	if s.status == closing || s.status == closed {
+		s.m.Unlock()
+		return
+	}
+	s.status = closing
+	s.m.Unlock()
+
+	s.shutdown()
+	if s.closeCallback != nil {
+		_ = s.closeCallback(int(s.publisherId))
+		// TODO: log error
+	}
+	s.m.Lock()
+	s.status = closed
+	s.m.Unlock()
 }

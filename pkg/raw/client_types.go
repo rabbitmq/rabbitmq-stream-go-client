@@ -25,7 +25,7 @@ const (
 	defaultConnectionTimeout = 30 * time.Second
 )
 
-type broker struct {
+type Broker struct {
 	Host             string
 	Port             int
 	Username         string
@@ -37,7 +37,7 @@ type broker struct {
 	ServerProperties map[string]string
 }
 
-var defaultBroker = broker{
+var defaultBroker = Broker{
 	Host:     "localhost",
 	Port:     5552,
 	Username: "guest",
@@ -49,7 +49,7 @@ var defaultBroker = broker{
 }
 
 type ClientConfiguration struct {
-	rabbitmqBroker     broker
+	rabbitmqBroker     Broker
 	clientMaxFrameSize uint32
 	clientHeartbeat    uint32
 	authMechanism      []string
@@ -70,7 +70,7 @@ func (r *ClientConfiguration) SetDial(dial func(network, addr string) (net.Conn,
 	r.dial = dial
 }
 
-func (r *ClientConfiguration) RabbitmqBrokers() broker {
+func (r *ClientConfiguration) RabbitmqBroker() Broker {
 	return r.rabbitmqBroker
 }
 
@@ -88,7 +88,7 @@ func (r *ClientConfiguration) SetConnectionName(connectionName string) {
 
 func NewClientConfiguration(rabbitmqUrl string) (*ClientConfiguration, error) {
 	builder := &ClientConfiguration{
-		rabbitmqBroker:     broker{},
+		rabbitmqBroker:     Broker{},
 		clientHeartbeat:    60,
 		clientMaxFrameSize: 1_048_576,
 	}

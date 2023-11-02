@@ -3,6 +3,7 @@
 package stream_test
 
 import (
+	"context"
 	"fmt"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -11,7 +12,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/stream"
-	"golang.org/x/exp/slog"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -24,8 +25,7 @@ var _ = Describe("stream package", func() {
 		defaultRabbitmqUri = "rabbitmq-stream://guest:guest@localhost/%2F"
 	)
 	It("can create and connect to a stream, publish and receive messages", func(ctx SpecContext) {
-		h := slog.HandlerOptions{Level: slog.LevelDebug}.NewTextHandler(GinkgoWriter)
-		debugLogger := slog.New(h)
+		debugLogger := slog.New(slog.NewTextHandler(GinkgoWriter, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		itCtx := raw.NewContextWithLogger(ctx, *debugLogger)
 
 		By("creating a new environment")
@@ -118,6 +118,32 @@ var _ = Describe("stream package", func() {
 
 		By("deleting the stream")
 		Expect(env.DeleteStream(itCtx, streamName)).To(Succeed())
+	})
+
+	It("connects to RabbitMQ", Focus, func() {
+		uri := "rabbitmq-stream://localhost:5552"
+		conf := stream.NewEnvironmentConfiguration(stream.WithUri(uri), stream.WithLazyInitialization(false))
+		env, err := stream.NewEnvironment(context.Background(), conf)
+		Expect(err).ToNot(HaveOccurred())
+		streamName := "test-stream"
+		Expect(env.CreateStream(context.Background(), streamName, stream.CreateStreamOptions{})).To(Succeed())
+		// TODO
+		producer, err := env.CreateProducer(context.Background(), streamName, &stream.ProducerOptions{})
+		Expect(err).ToNot(HaveOccurred())
+
+		DeferCleanup(func() {
+			producer.Close()
+			env.Close(context.Background())
+		})
+
+		for i := 0; i < 1_000; i++ {
+			Expect(producer.Send(context.Background(), amqp.Message{Data: []byte(fmt.Sprintf("Message #%d", i))})).To(Succeed())
+		}
+
+		_, err = env.QueryStreamStats(context.Background(), streamName)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(env.DeleteStream(context.Background(), streamName)).To(Succeed())
 	})
 })
 
