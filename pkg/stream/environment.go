@@ -15,9 +15,9 @@ const (
 )
 
 type Environment struct {
-	configuration EnvironmentConfiguration
-	locators      []*locator
-	retryPolicy   backoffDurationFunc
+	configuration           EnvironmentConfiguration
+	locators                []*locator
+	retryPolicy             backoffDurationFunc
 	locatorSelectSequential bool
 }
 
