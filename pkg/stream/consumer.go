@@ -10,7 +10,11 @@ import (
 	"sync"
 )
 
-type MessagesHandler func(context context.Context, message *amqp.Message)
+type MessagesHandler func(consumerContext ConsumerContext, message *amqp.Message)
+
+type ConsumerContext struct {
+	Consumer *Consumer
+}
 
 type Consumer struct {
 	mutex           *sync.Mutex
@@ -74,7 +78,7 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 					fmt.Println("error parsing chunk", err)
 				}
 				// call  messages handler
-				c.MessagesHandler(ctx, message)
+				c.MessagesHandler(ConsumerContext{Consumer: c}, message)
 
 			// Need someway to break and close
 			case quit := <-c.closeCh:

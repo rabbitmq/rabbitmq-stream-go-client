@@ -39,7 +39,7 @@ var _ = Describe("Smart Consumer", func() {
 	Context("validating parameters", func() {
 		opts := &ConsumerOptions{}
 		var count int32
-		handleMessages := func(ctxType context.Context, message *amqp.Message) {
+		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
 			if atomic.AddInt32(&count, 1)%1000 == 0 {
 				fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
 				// AVOID to store for each single message, it will reduce the performances
@@ -62,12 +62,6 @@ var _ = Describe("Smart Consumer", func() {
 	It("consume messages from the first offset", func() {
 		//setup
 		chunkChan := make(chan *raw.Chunk)
-		handleMessages := func(ctxType context.Context, message *amqp.Message) {
-			_, err := dataBuf.Write(message.Data)
-			if err != nil {
-				fmt.Println("error writing message to gbytes buffer", err)
-			}
-		}
 		gomock.InOrder(fakeRawClient.EXPECT().
 			NotifyChunk(gomock.AssignableToTypeOf(chunkChan)).Return(chunkChan),
 			fakeRawClient.EXPECT().
@@ -95,6 +89,12 @@ var _ = Describe("Smart Consumer", func() {
 			Credit:         uint16(2),
 			Offset:         uint64(1),
 		}
+		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+			_, err := dataBuf.Write(message.Data)
+			if err != nil {
+				fmt.Println("error writing message to gbytes buffer", err)
+			}
+		}
 		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
 		consumer.chunkCh = chunkChan
 		Expect(consumer.Subscribe(context.Background())).To(Succeed())
@@ -105,7 +105,7 @@ var _ = Describe("Smart Consumer", func() {
 	It("stores the current and last known offset", func() {
 		//setup
 		var count int32
-		handleMessages := func(ctxType context.Context, message *amqp.Message) {
+		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
 			if atomic.AddInt32(&count, 1)%1000 == 0 {
 				fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
 			}
@@ -128,7 +128,7 @@ var _ = Describe("Smart Consumer", func() {
 	It("unsubscribes from the stream", func() {
 		//setup
 		var count int32
-		handleMessages := func(ctxType context.Context, message *amqp.Message) {
+		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
 			if atomic.AddInt32(&count, 1)%1000 == 0 {
 				fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
 				// AVOID to store for each single message, it will reduce the performances
