@@ -17,6 +17,7 @@ type ConsumerContext struct {
 }
 
 type Consumer struct {
+	active          int
 	mutex           *sync.Mutex
 	Stream          string
 	rawClient       raw.Clienter
@@ -46,10 +47,28 @@ func NewConsumer(stream string, rawClient raw.Clienter, messagesHandler Messages
 	return c, nil
 }
 
-func (c *Consumer) Subscribe(ctx context.Context) error {
-	// TODO subscribeProperties put these in opts
-	subscribeProperties := map[string]string{}
+func (c *Consumer) getStatus() int {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.active
+}
 
+func (c *Consumer) setStatus(status int) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.active = status
+}
+
+func (c *Consumer) subscribeProperties() raw.SubscribeProperties {
+	s := raw.SubscribeProperties{}
+
+	if c.opts.SingleActiveConsumer {
+		s["single-active-consumer"] = "true"
+	}
+	return s
+}
+
+func (c *Consumer) Subscribe(ctx context.Context) error {
 	// get messages
 	// call raw client notify chunk, when chunk appears on the channel, parse it and call the messages handler with the
 	// parsed messaage
@@ -58,6 +77,7 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 	}
 	messagesChan := c.rawClient.NotifyChunk(c.chunkCh)
 
+	subscribeProperties := c.subscribeProperties()
 	//declare consumer
 	err := c.rawClient.Subscribe(ctx, c.Stream, c.opts.OffsetType, c.opts.SubscriptionId, c.opts.Credit, subscribeProperties, c.opts.Offset)
 	if err != nil {
@@ -128,7 +148,6 @@ type ConsumerOptions struct {
 	Reference              string // consumer reference name, required for single active consumer
 	SingleActiveConsumer   bool   // enable single active consumer
 	ClientProvidedName     string // client provided name
-	Callback               func() // callback function where consumer receives messages
 	SuperStream            bool   // enable consuming messages from super stream
 	OffsetType             uint16 // offset type see constants/types.go
 	Offset                 uint64

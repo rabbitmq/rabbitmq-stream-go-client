@@ -11,7 +11,6 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"go.uber.org/mock/gomock"
 	"reflect"
-	"sync/atomic"
 )
 
 var _ = Describe("Smart Consumer", func() {
@@ -38,13 +37,8 @@ var _ = Describe("Smart Consumer", func() {
 
 	Context("validating parameters", func() {
 		opts := &ConsumerOptions{}
-		var count int32
 		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
-			if atomic.AddInt32(&count, 1)%1000 == 0 {
-				fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
-				// AVOID to store for each single message, it will reduce the performances
-				// The server keeps the consume tracking using the consumer name
-			}
+			fmt.Printf("messages: %s\n", message.Data)
 		}
 		It("stream name", func() {
 			_, err := NewConsumer("", fakeRawClient, handleMessages, opts)
@@ -104,11 +98,8 @@ var _ = Describe("Smart Consumer", func() {
 
 	It("stores the current and last known offset", func() {
 		//setup
-		var count int32
 		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
-			if atomic.AddInt32(&count, 1)%1000 == 0 {
-				fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
-			}
+			fmt.Printf("messages: %s\n", message.Data)
 		}
 		opts := &ConsumerOptions{
 			OffsetType:     uint16(1),
@@ -127,13 +118,8 @@ var _ = Describe("Smart Consumer", func() {
 
 	It("unsubscribes from the stream", func() {
 		//setup
-		var count int32
 		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
-			if atomic.AddInt32(&count, 1)%1000 == 0 {
-				fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
-				// AVOID to store for each single message, it will reduce the performances
-				// The server keeps the consume tracking using the consumer name
-			}
+			fmt.Printf("messages: %s\n", message.Data)
 		}
 		fakeRawClient.EXPECT().
 			Unsubscribe(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf(uint8(1)))
@@ -152,7 +138,38 @@ var _ = Describe("Smart Consumer", func() {
 	})
 
 	Describe("Single Active Consumer", func() {
+		It("can enable the feature", func() {
+			subscribeProperties := raw.SubscribeProperties{"single-active-consumer": "true"}
+			chunkChan := make(chan *raw.Chunk)
+			gomock.InOrder(fakeRawClient.EXPECT().
+				NotifyChunk(gomock.AssignableToTypeOf(chunkChan)).Return(chunkChan),
+				fakeRawClient.EXPECT().
+					Subscribe(
+						gomock.AssignableToTypeOf(ctxType), //context
+						gomock.Eq("test-stream"),           // stream
+						gomock.Eq(uint16(1)),               // offsetType
+						gomock.Eq(uint8(1)),                // subscriptionId
+						gomock.Eq(uint16(2)),               // credit
+						gomock.Eq(subscribeProperties),     // properties
+						gomock.Eq(uint64(1)),               // offset
+					))
 
+			opts := &ConsumerOptions{
+				SingleActiveConsumer: true,
+				OffsetType:           uint16(1),
+				SubscriptionId:       uint8(1),
+				Credit:               uint16(2),
+				Offset:               uint64(1),
+			}
+			handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+				fmt.Printf("messages: %s\n", message.Data)
+			}
+			consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
+			Expect(consumer.getStatus()).To(Equal(0))
+			consumer.setStatus(1)
+			Expect(consumer.getStatus()).To(Equal(1))
+			Expect(consumer.Subscribe(context.Background())).To(Succeed())
+		})
 	})
 
 	Describe("SuperStream Consumer", func() {
