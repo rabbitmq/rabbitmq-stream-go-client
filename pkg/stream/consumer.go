@@ -65,6 +65,9 @@ func (c *Consumer) subscribeProperties() raw.SubscribeProperties {
 	if c.opts.SingleActiveConsumer {
 		s["single-active-consumer"] = "true"
 	}
+	if c.opts.SuperStream {
+		s["super-stream"] = c.Stream
+	}
 	return s
 }
 
