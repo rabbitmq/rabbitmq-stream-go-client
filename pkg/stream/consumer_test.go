@@ -80,7 +80,7 @@ var _ = Describe("Smart Consumer", func() {
 		opts := &ConsumerOptions{
 			OffsetType:     uint16(1),
 			SubscriptionId: uint8(1),
-			Credit:         uint16(2),
+			InitialCredits: uint16(2),
 			Offset:         uint64(1),
 		}
 		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
@@ -104,7 +104,7 @@ var _ = Describe("Smart Consumer", func() {
 		opts := &ConsumerOptions{
 			OffsetType:     uint16(1),
 			SubscriptionId: uint8(1),
-			Credit:         uint16(2),
+			InitialCredits: uint16(2),
 			Offset:         uint64(1),
 		}
 		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
@@ -127,7 +127,7 @@ var _ = Describe("Smart Consumer", func() {
 		opts := &ConsumerOptions{
 			OffsetType:     uint16(1),
 			SubscriptionId: uint8(1),
-			Credit:         uint16(2),
+			InitialCredits: uint16(2),
 			Offset:         uint64(1),
 		}
 		//test
@@ -135,6 +135,47 @@ var _ = Describe("Smart Consumer", func() {
 		Expect(consumer).ToNot(BeNil())
 		Expect(consumer.Close(context.Background())).To(Succeed())
 
+	})
+
+	It("subscribes with initial credits", func() {
+		//setup
+		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+			fmt.Printf("messages: %s\n", message.Data)
+		}
+		chunkChan := make(chan *raw.Chunk)
+		gomock.InOrder(fakeRawClient.EXPECT().
+			NotifyChunk(gomock.AssignableToTypeOf(chunkChan)).Return(chunkChan),
+			fakeRawClient.EXPECT().
+				Subscribe(
+					gomock.AssignableToTypeOf(ctxType),                   //context
+					gomock.Eq("test-stream"),                             // stream
+					gomock.Eq(uint16(1)),                                 // offsetType
+					gomock.Eq(uint8(1)),                                  // subscriptionId
+					gomock.Eq(uint16(500)),                               // credit
+					gomock.AssignableToTypeOf(raw.SubscribeProperties{}), // properties
+					gomock.Eq(uint64(1)),                                 // offset
+				))
+
+		opts1 := &ConsumerOptions{
+			OffsetType:     uint16(1),
+			SubscriptionId: uint8(1),
+			Offset:         uint64(1),
+			InitialCredits: uint16(500),
+		}
+		opts2 := &ConsumerOptions{
+			OffsetType:     uint16(1),
+			SubscriptionId: uint8(1),
+			Offset:         uint64(1),
+			InitialCredits: uint16(1001),
+		}
+
+		//test
+		consumerWithValidCredits, err := NewConsumer("test-stream", fakeRawClient, handleMessages, opts1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(consumerWithValidCredits.Subscribe(context.Background())).To(Succeed())
+
+		_, err = NewConsumer("test-stream", fakeRawClient, handleMessages, opts2)
+		Expect(err).To(MatchError("initial credits cannot be greater than 1000"))
 	})
 
 	Describe("Single Active Consumer", func() {
@@ -158,7 +199,7 @@ var _ = Describe("Smart Consumer", func() {
 				SingleActiveConsumer: true,
 				OffsetType:           uint16(1),
 				SubscriptionId:       uint8(1),
-				Credit:               uint16(2),
+				InitialCredits:       uint16(2),
 				Offset:               uint64(1),
 			}
 			handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
@@ -193,7 +234,7 @@ var _ = Describe("Smart Consumer", func() {
 				SuperStream:    true,
 				OffsetType:     uint16(1),
 				SubscriptionId: uint8(1),
-				Credit:         uint16(2),
+				InitialCredits: uint16(2),
 				Offset:         uint64(1),
 			}
 			handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {

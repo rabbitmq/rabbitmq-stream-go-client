@@ -36,6 +36,11 @@ func NewConsumer(stream string, rawClient raw.Clienter, messagesHandler Messages
 	if stream == "" {
 		return nil, errors.New("stream name must not be empty")
 	}
+
+	if opts.InitialCredits > 1000 {
+		return nil, errors.New("initial credits cannot be greater than 1000")
+	}
+
 	opts.validate()
 	c := &Consumer{
 		mutex:           &sync.Mutex{},
@@ -82,7 +87,7 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 
 	subscribeProperties := c.subscribeProperties()
 	//declare consumer
-	err := c.rawClient.Subscribe(ctx, c.Stream, c.opts.OffsetType, c.opts.SubscriptionId, c.opts.Credit, subscribeProperties, c.opts.Offset)
+	err := c.rawClient.Subscribe(ctx, c.Stream, c.opts.OffsetType, c.opts.SubscriptionId, c.opts.InitialCredits, subscribeProperties, c.opts.Offset)
 	if err != nil {
 		return err
 	}
@@ -159,7 +164,6 @@ type ConsumerOptions struct {
 	Filter                 interface{} // consumer receives messages that match the filter
 	Crc32                  interface{} // check crc on delivery when set
 	SubscriptionId         uint8
-	Credit                 uint16
 }
 
 func (co *ConsumerOptions) validate() {
