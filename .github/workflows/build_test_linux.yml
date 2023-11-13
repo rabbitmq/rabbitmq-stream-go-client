@@ -24,6 +24,8 @@ jobs:
 
     - name: Test
       run: make tests-ci
+      env:
+        RABBITMQ_STREAM_SKIP_RABBIT_START: "for system tests"
 
   e2e_test:
     name: E2E Test
