@@ -66,3 +66,8 @@ const (
 	closing
 	open
 )
+
+type hostPort struct {
+	host string
+	port string
+}

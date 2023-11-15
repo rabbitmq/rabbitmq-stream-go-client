@@ -5,7 +5,6 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"golang.org/x/mod/semver"
 	"log/slog"
-	"net"
 	"sync"
 	"time"
 )
@@ -16,15 +15,14 @@ const (
 
 type locator struct {
 	sync.Mutex
-	log                  *slog.Logger
-	shutdownNotification chan struct{}
-	rawClientConf        raw.ClientConfiguration
-	client               raw.Clienter
-	isSet                bool
-	clientClose          <-chan error
-	retryPolicy          backoffDurationFunc
-	addressResolver      net.Addr // TODO: placeholder for address resolver
-
+	log           *slog.Logger
+	destructor    *sync.Once
+	done          chan struct{}
+	rawClientConf raw.ClientConfiguration
+	client        raw.Clienter
+	isSet         bool
+	clientClose   <-chan error
+	retryPolicy   backoffDurationFunc
 }
 
 func newLocator(c raw.ClientConfiguration, logger *slog.Logger) *locator {
@@ -32,15 +30,30 @@ func newLocator(c raw.ClientConfiguration, logger *slog.Logger) *locator {
 		log: logger.
 			WithGroup("locator").
 			With(
-				slog.String("host", c.RabbitmqBroker().Host),
-				slog.Int("port", c.RabbitmqBroker().Port),
+				slog.String("host", c.RabbitmqAddr.Host),
+				slog.Int("port", c.RabbitmqAddr.Port),
 			),
-		rawClientConf:        c,
-		retryPolicy:          defaultBackOffPolicy,
-		client:               nil,
-		isSet:                false,
-		addressResolver:      nil,
-		shutdownNotification: make(chan struct{}),
+		destructor:    &sync.Once{},
+		rawClientConf: c,
+		retryPolicy:   defaultBackOffPolicy,
+		client:        nil,
+		isSet:         false,
+		done:          make(chan struct{}),
+	}
+}
+
+func (l *locator) close() {
+	logger := l.log.WithGroup("close")
+	l.destructor.Do(func() {
+		close(l.done)
+	})
+	if l.isSet {
+		ctx, cancel := maybeApplyDefaultTimeout(context.Background())
+		defer cancel()
+		if err := l.client.Close(ctx); err != nil {
+			logger.Warn("error closing locator client", slog.Any("error", err))
+		}
+		l.isSet = false
 	}
 }
 
@@ -86,7 +99,7 @@ func (l *locator) shutdownHandler() {
 		// TODO: we must close the shutdown notification channel before closing the client.
 		//   Or otherwise the clientClose case will proceed (incorrectly).
 		select {
-		case <-l.shutdownNotification:
+		case <-l.done:
 			log.Debug("locator shutdown")
 			return
 		case err := <-l.clientClose:
@@ -128,7 +141,7 @@ func (l *locator) shutdownHandler() {
 const rabbitmqVersion311 = "v3.11"
 
 func (l *locator) isServer311orMore() bool {
-	v, ok := l.rawClientConf.RabbitmqBroker().ServerProperties["version"]
+	v, ok := l.rawClientConf.RabbitmqAddr.ServerProperties["version"]
 	if !ok {
 		// version not found in server properties
 		// returning false as we can't determine

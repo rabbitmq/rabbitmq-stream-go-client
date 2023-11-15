@@ -25,13 +25,13 @@ var _ = Describe("Locator", func() {
 			logger = slog.New(slog.NewTextHandler(GinkgoWriter, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 			loc = &locator{
-				log:                  logger,
-				shutdownNotification: make(chan struct{}),
-				rawClientConf:        raw.ClientConfiguration{},
-				client:               nil,
-				isSet:                true,
-				clientClose:          nil,
-				retryPolicy:          backOffPolicy,
+				log:           logger,
+				done:          make(chan struct{}),
+				rawClientConf: raw.ClientConfiguration{},
+				client:        nil,
+				isSet:         true,
+				clientClose:   nil,
+				retryPolicy:   backOffPolicy,
 			}
 		})
 

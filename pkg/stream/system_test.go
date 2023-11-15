@@ -122,12 +122,18 @@ var _ = Describe("stream package", func() {
 
 	It("connects to RabbitMQ", Focus, func() {
 		uri := "rabbitmq-stream://localhost:5552"
-		conf := stream.NewEnvironmentConfiguration(stream.WithUri(uri), stream.WithLazyInitialization(false))
+		conf := stream.NewEnvironmentConfiguration(
+			stream.WithUri(uri),
+			stream.WithLazyInitialization(false),
+			stream.WithAddressResolver(func(_ string, _ int) (_ string, _ int) {
+				return "localhost", 5552
+			}),
+			stream.WithId("system-test"),
+		)
 		env, err := stream.NewEnvironment(context.Background(), conf)
 		Expect(err).ToNot(HaveOccurred())
 		streamName := "test-stream"
 		Expect(env.CreateStream(context.Background(), streamName, stream.CreateStreamOptions{})).To(Succeed())
-		// TODO
 		producer, err := env.CreateProducer(context.Background(), streamName, &stream.ProducerOptions{})
 		Expect(err).ToNot(HaveOccurred())
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func parseURI(uri string) (Broker, error) {
+func parseURI(uri string) (RabbitmqAddress, error) {
 	builder := defaultBroker
 
 	if strings.Contains(uri, " ") {
@@ -67,11 +67,6 @@ func parseURI(uri string) (Broker, error) {
 			builder.Vhost = u.Path
 		}
 	}
-
-	// see https://www.rabbitmq.com/uri-query-parameters.html
-	params := u.Query()
-	builder.AdvHost = params.Get("advHost")
-	builder.AdvPort = params.Get("advPort")
 
 	return builder, nil
 }

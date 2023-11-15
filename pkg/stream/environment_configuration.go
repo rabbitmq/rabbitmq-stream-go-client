@@ -20,6 +20,8 @@ const (
 	DefaultId                               = "rabbitmq-stream"
 )
 
+type AddressResolver func(host string, port int) (resolvedHost string, resolvedPort int)
+
 type EnvironmentConfiguration struct {
 	// The URI of the nodes to try to connect to (cluster). This takes precedence
 	// over URI and Host + Port.
@@ -56,6 +58,10 @@ type EnvironmentConfiguration struct {
 	//
 	// Default: "/"
 	VirtualHost string
+	// TODO Docs
+	//
+	// Default: no-op
+	AddrResolver AddressResolver
 	// The maximum number of `Producer` instances a single connection can maintain
 	// before a new connection is open. The value must be between 1 and 255
 	//
@@ -232,6 +238,17 @@ func WithLazyInitialization(lazy bool) EnvironmentConfigurationOption {
 func WithId(id string) EnvironmentConfigurationOption {
 	return func(c *EnvironmentConfiguration) {
 		c.Id = id
+	}
+}
+
+// WithAddressResolver configures the environment to use resolver as
+// AddressResolver. This is required when RabbitMQ is behind a load balancer,
+// because the client will try to connect to a leader for publishing, and it
+// needs a 'hint' to translate the broker host:port to the load balancer
+// host:port. TODO: write an example
+func WithAddressResolver(resolver AddressResolver) EnvironmentConfigurationOption {
+	return func(c *EnvironmentConfiguration) {
+		c.AddrResolver = resolver
 	}
 }
 

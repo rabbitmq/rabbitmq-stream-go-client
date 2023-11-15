@@ -7,7 +7,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"log/slog"
 	"math/rand"
-	"strings"
+	"strconv"
 	"time"
 )
 
@@ -22,6 +22,7 @@ type Environment struct {
 	retryPolicy             backoffDurationFunc
 	locatorSelectSequential bool
 	producerManagers        []*producerManager
+	addressResolver         AddressResolver
 }
 
 func NewEnvironment(ctx context.Context, configuration EnvironmentConfiguration) (*Environment, error) {
@@ -48,7 +49,7 @@ func (e *Environment) start(ctx context.Context) error {
 			return err
 		}
 
-		c.SetConnectionName(fmt.Sprintf("%s-locator-%d", e.configuration.Id, i))
+		c.ConnectionName = fmt.Sprintf("%s-locator-%d", e.configuration.Id, i)
 
 		l := newLocator(*c, logger)
 		// if ctx has a lower timeout, it will be used instead of DefaultTimeout
@@ -168,15 +169,10 @@ func (e *Environment) DeleteStream(ctx context.Context, name string) error {
 // and awaits a confirmation response. If there's any error closing a connection,
 // the error is logged to a logger extracted from the context.
 func (e *Environment) Close(ctx context.Context) {
-	logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("close")
+	//logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("close")
 	// TODO: shutdown producers/consumers
 	for _, l := range e.locators {
-		if l.isSet {
-			err := l.client.Close(ctx)
-			if err != nil {
-				logger.Warn("error closing locator client", slog.Any("error", err))
-			}
-		}
+		l.close()
 	}
 }
 
@@ -377,7 +373,7 @@ func (e *Environment) CreateProducer(ctx context.Context, stream string, opts *P
 			// pick at random
 			l = e.pickLocator((i + rn) % n)
 		}
-		result := l.operationQueryStreamMetadata(ctx, []string{stream})
+		result := l.locatorOperation((*locator).operationQueryStreamMetadata, ctx, []string{stream})
 		if result[1] != nil {
 			lastError = result[1].(error)
 			if isNonRetryableError(lastError) {
@@ -395,63 +391,65 @@ func (e *Environment) CreateProducer(ctx context.Context, stream string, opts *P
 		return nil, fmt.Errorf("locator operation failed: %w", lastError)
 	}
 
-	//var found = false
-	//var pm *producerManager
-	//for _, streamMetadata := range metadata.StreamsMetadata() {
-	//	if streamMetadata.StreamName() == stream {
-	//		found = true
-	//		leaderRef := streamMetadata.LeaderReference()
-	//		brokerRef := metadata.Brokers()[leaderRef]
-	//
-	//		for i := 0; i < len(e.producerManagers); i++ {
-	//			if e.producerManagers[i].connectionEndpoint.Host == brokerRef.Host() &&
-	//				e.producerManagers[i].connectionEndpoint.Port == int(brokerRef.Port()) {
-	//				pm = &e.producerManagers[i]
-	//				break
-	//			}
-	//		}
-	//		if pm != nil {
-	//
-	//		}
-	//
-	//		break
-	//	}
-	//}
-	broker, err := findLeader(stream, metadata)
+	brokerLeader, err := findLeader(stream, metadata)
 	if err != nil {
 		return nil, err
 	}
 
-	pm, err := e.createProducerManager(ctx, broker)
-	if err != nil {
-		return nil, err
+	// if there's an address resolver, always use the address resolver
+	var pmClient raw.Clienter
+	var rc *raw.ClientConfiguration
+	if e.addressResolver != nil {
+		rc = e.locators[0].rawClientConf.DeepCopy()
+		rc.RabbitmqAddr.Host, rc.RabbitmqAddr.Port = e.addressResolver(rc.RabbitmqAddr.Host, rc.RabbitmqAddr.Port)
+		// TODO max attempts variable, depending on number of stream replicas
+		for i := 0; i < 10; i++ {
+			client, err := raw.DialConfig(ctx, rc)
+			if err != nil {
+				logger.Warn("failed to dial",
+					slog.String("host", rc.RabbitmqAddr.Host),
+					slog.Int("port", rc.RabbitmqAddr.Port),
+					slog.Any("error", err),
+				)
+			}
+			connProps := client.(*raw.Client).ConnectionProperties()
+			if connProps["advertised_host"] == brokerLeader.host && connProps["advertised_port"] == brokerLeader.port {
+				pmClient = client
+				break
+			}
+
+			logger.Debug("connected to rabbit, but not to desired node",
+				slog.String("host", connProps["advertised_host"]),
+				slog.String("port", connProps["advertised_port"]),
+			)
+			ctx2, cancel := maybeApplyDefaultTimeout(ctx)
+			_ = client.Close(ctx2)
+			cancel()
+			time.Sleep(time.Second)
+		}
+		if pmClient == nil {
+			panic("could not create a client for a new producer manager")
+		}
+	} else {
+		rc = e.locators[0].rawClientConf.DeepCopy()
+		// TODO: set connection name
+		c, err := raw.DialConfig(ctx, rc)
+		if err != nil {
+			panic(err)
+		}
+		pmClient = c
 	}
+
+	pm := newProducerManagerWithClient(0, e.configuration, pmClient, rc)
+	e.producerManagers = append(e.producerManagers, pm)
 	o := opts.DeepCopy()
 	o.stream = stream
 
-	// FIXME: check producer manager capacity before selecting a
+	// FIXME: check producer manager capacity before selecting a PM
 	return pm.createProducer(ctx, o)
 }
 
-// initialises and connects a new producer manager
-func (e *Environment) createProducerManager(ctx context.Context, broker raw.Broker) (*producerManager, error) {
-	logger := raw.LoggerFromCtxOrDiscard(ctx).WithGroup("createProducerManager")
-	// create new producer manager
-	pm := newProducerManager(len(e.producerManagers), e.configuration)
-	e.producerManagers = append(e.producerManagers, pm)
-	uri := uriFromConfigurationThatContains(
-		fmt.Sprintf("%s:%d", broker.Host, broker.Port),
-		&e.configuration,
-	)
-	if len(uri) == 0 {
-		logger.Debug("did not find an URI for leader in configuration", slog.String("leader-host", broker.Host), slog.Int("leader-port", broker.Port))
-		return nil, errors.New("empty uri in create producer manager")
-	}
-
-	return pm, pm.connect(ctx, uri)
-}
-
-func findLeader(stream string, metadata *raw.MetadataResponse) (raw.Broker, error) {
+func findLeader(stream string, metadata *raw.MetadataResponse) (hostPort, error) {
 	var leaderRef uint16
 	var found = false
 	for _, streamMetadata := range metadata.StreamsMetadata() {
@@ -462,25 +460,13 @@ func findLeader(stream string, metadata *raw.MetadataResponse) (raw.Broker, erro
 		}
 	}
 	if !found {
-		return raw.Broker{}, errors.New("stream leader not found")
+		return hostPort{}, errors.New("stream leader not found")
 	}
 
-	bb := raw.Broker{}
 	for _, broker := range metadata.Brokers() {
 		if broker.Reference() == leaderRef {
-			bb.Host = broker.Host()
-			bb.Port = int(broker.Port())
-			return bb, nil
+			return hostPort{host: broker.Host(), port: strconv.Itoa(int(broker.Port()))}, nil
 		}
 	}
-	return raw.Broker{}, errors.New("broker hosting leader not found")
-}
-
-func uriFromConfigurationThatContains(s string, c *EnvironmentConfiguration) string {
-	for _, uri := range c.Uris {
-		if strings.Contains(uri, s) {
-			return uri
-		}
-	}
-	return ""
+	return hostPort{}, errors.New("broker hosting leader not found")
 }

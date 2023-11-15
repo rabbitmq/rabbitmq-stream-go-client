@@ -25,76 +25,56 @@ const (
 	defaultConnectionTimeout = 30 * time.Second
 )
 
-type Broker struct {
+type RabbitmqAddress struct {
 	Host             string
 	Port             int
 	Username         string
 	Vhost            string
 	Password         string
 	Scheme           string
-	AdvHost          string
-	AdvPort          string
 	ServerProperties map[string]string
 }
 
-var defaultBroker = Broker{
+var defaultBroker = RabbitmqAddress{
 	Host:     "localhost",
 	Port:     5552,
 	Username: "guest",
 	Vhost:    "/",
 	Password: "guest",
 	Scheme:   "rabbitmq-stream",
-	AdvHost:  "",
-	AdvPort:  "",
 }
 
 type ClientConfiguration struct {
-	rabbitmqBroker     Broker
-	clientMaxFrameSize uint32
-	clientHeartbeat    uint32
-	authMechanism      []string
-	tlsConfig          *tls.Config
-	connectionName     string
-	dial               func(network, addr string) (net.Conn, error)
+	RabbitmqAddr       RabbitmqAddress
+	ClientMaxFrameSize uint32
+	ClientHeartbeat    uint32
+	AuthMechanism      []string
+	Tls                *tls.Config
+	ConnectionName     string
+	Dial               func(network, addr string) (net.Conn, error)
 }
 
-func (r *ClientConfiguration) TlsConfig() *tls.Config {
-	return r.tlsConfig
-}
-
-func (r *ClientConfiguration) SetTlsConfig(tlsConfig *tls.Config) {
-	r.tlsConfig = tlsConfig
-}
-
-func (r *ClientConfiguration) SetDial(dial func(network, addr string) (net.Conn, error)) {
-	r.dial = dial
-}
-
-func (r *ClientConfiguration) RabbitmqBroker() Broker {
-	return r.rabbitmqBroker
-}
-
-func (r *ClientConfiguration) SetClientMaxFrameSize(clientMaxFrameSize uint32) {
-	r.clientMaxFrameSize = clientMaxFrameSize
-}
-
-func (r *ClientConfiguration) SetClientHeartbeat(clientHeartbeat uint32) {
-	r.clientHeartbeat = clientHeartbeat
-}
-
-func (r *ClientConfiguration) SetConnectionName(connectionName string) {
-	r.connectionName = connectionName
+func (r *ClientConfiguration) DeepCopy() *ClientConfiguration {
+	deepCopy := new(ClientConfiguration)
+	deepCopy.RabbitmqAddr = r.RabbitmqAddr
+	deepCopy.ClientMaxFrameSize = r.ClientMaxFrameSize
+	deepCopy.ClientHeartbeat = r.ClientHeartbeat
+	deepCopy.AuthMechanism = make([]string, len(r.AuthMechanism))
+	copy(deepCopy.AuthMechanism, r.AuthMechanism)
+	deepCopy.Tls = r.Tls.Clone()
+	deepCopy.Dial = r.Dial
+	return deepCopy
 }
 
 func NewClientConfiguration(rabbitmqUrl string) (*ClientConfiguration, error) {
 	builder := &ClientConfiguration{
-		rabbitmqBroker:     Broker{},
-		clientHeartbeat:    60,
-		clientMaxFrameSize: 1_048_576,
+		RabbitmqAddr:       RabbitmqAddress{},
+		ClientHeartbeat:    60,
+		ClientMaxFrameSize: 1_048_576,
 	}
 
 	if len(rabbitmqUrl) == 0 {
-		builder.rabbitmqBroker = defaultBroker
+		builder.RabbitmqAddr = defaultBroker
 		return builder, nil
 	}
 
@@ -103,7 +83,7 @@ func NewClientConfiguration(rabbitmqUrl string) (*ClientConfiguration, error) {
 		return nil, err
 	}
 
-	builder.rabbitmqBroker = broker
+	builder.RabbitmqAddr = broker
 	return builder, nil
 }
 

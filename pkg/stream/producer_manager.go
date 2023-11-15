@@ -21,7 +21,7 @@ type producerManager struct {
 	m                  sync.Mutex
 	id                 int
 	config             EnvironmentConfiguration
-	connectionEndpoint raw.Broker
+	connectionEndpoint raw.RabbitmqAddress
 	producers          []internalProducer
 	client             raw.Clienter
 	clientM            *sync.Mutex
@@ -40,12 +40,20 @@ func newProducerManager(id int, config EnvironmentConfiguration) *producerManage
 	}
 }
 
+func newProducerManagerWithClient(id int, config EnvironmentConfiguration, client raw.Clienter, rc *raw.ClientConfiguration) (manager *producerManager) {
+	manager = newProducerManager(id, config)
+	manager.client = client
+	manager.open = true
+	manager.connectionEndpoint = rc.RabbitmqAddr
+	return manager
+}
+
 func (p *producerManager) connect(ctx context.Context, uri string) error {
 	conf, err := raw.NewClientConfiguration(uri)
 	if err != nil {
 		return err
 	}
-	conf.SetConnectionName(fmt.Sprintf("%s-%d", "rabbitmq-stream-producer", p.id))
+	conf.ConnectionName = fmt.Sprintf("%s-%d", "rabbitmq-stream-producer", p.id)
 
 	ctx2, cancel := maybeApplyDefaultTimeout(ctx)
 	defer cancel()
@@ -54,7 +62,7 @@ func (p *producerManager) connect(ctx context.Context, uri string) error {
 		return err
 	}
 
-	p.connectionEndpoint = conf.RabbitmqBroker()
+	p.connectionEndpoint = conf.RabbitmqAddr
 	p.client = c
 	p.open = true
 	return nil

@@ -1,3 +1,5 @@
+//go:build rabbitmq.stream.test
+
 package stream_test
 
 import (
