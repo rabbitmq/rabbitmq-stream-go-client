@@ -249,7 +249,7 @@ var _ = Describe("E2E", Serial, Label("e2e"), func() {
 		streamClientConfiguration, err := raw.NewClientConfiguration(rabbitmqUri)
 		Expect(err).ToNot(HaveOccurred())
 		connectionName := "notify-disconnection-test-1"
-		streamClientConfiguration.SetConnectionName(connectionName)
+		streamClientConfiguration.ConnectionName = connectionName
 
 		By("preparing the environment")
 		streamClient, err := raw.DialConfig(itCtx, streamClientConfiguration)
