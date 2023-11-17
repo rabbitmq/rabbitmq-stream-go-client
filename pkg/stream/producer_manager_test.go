@@ -95,6 +95,8 @@ var _ = Describe("ProducerManager", func() {
 			prepareMockDeclarePublisher(fakeRawClient, 1)
 			prepareMockDeclarePublisher(fakeRawClient, 1)
 			prepareMockDeclarePublisher(fakeRawClient, 2)
+			prepareMockDeletePublisher(fakeRawClient, 1)
+			prepareMockDeletePublisher(fakeRawClient, 2)
 			pm := newProducerManager(0, EnvironmentConfiguration{
 				MaxProducersByConnection: 5,
 			})
@@ -144,6 +146,7 @@ var _ = Describe("ProducerManager", func() {
 		It("closes the connection", func() {
 			fakeRawClient.EXPECT().Close(gomock.Any())
 			prepareMockDeclarePublisher(fakeRawClient, 0)
+			prepareMockDeletePublisher(fakeRawClient, 0) // called during producer.Close() callback
 			pm := newProducerManager(0, EnvironmentConfiguration{MaxProducersByConnection: 5})
 			pm.client = fakeRawClient
 			pm.open = true
@@ -168,5 +171,13 @@ func prepareMockDeclarePublisher(m *MockRawClient, publisherId uint8) {
 		gomock.Eq(publisherId),
 		gomock.AssignableToTypeOf(""),
 		gomock.AssignableToTypeOf(""),
+	)
+}
+
+func prepareMockDeletePublisher(m *MockRawClient, publisherId uint8) {
+	ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
+	m.EXPECT().DeletePublisher(
+		gomock.AssignableToTypeOf(ctxType),
+		gomock.Eq(publisherId),
 	)
 }

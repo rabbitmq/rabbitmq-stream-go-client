@@ -135,6 +135,12 @@ func (p *producerManager) removeProducer(id int) error {
 	if id < 0 {
 		return errNegativeId
 	}
+	ctx, cancel := maybeApplyDefaultTimeout(context.Background())
+	defer cancel()
+	p.clientM.Lock()
+	_ = p.client.DeletePublisher(ctx, uint8(id))
+	// TODO log error if not nil
+	p.clientM.Unlock()
 	p.producers[id] = nil
 	p.producerCount -= 1
 
