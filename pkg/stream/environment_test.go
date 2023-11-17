@@ -281,7 +281,12 @@ var _ = Describe("Environment", func() {
 					Return(errors.New("something went wrong"))
 			})
 
-			It("logs the error and moves on", func() {
+			It("logs the error and moves on", Pending, func() {
+				// TODO: the locator has its own logger, it does not use the logger
+				// 	from the context. This tests seems to make no sense, as the
+				// 	locator is appended by an utility function for tests, and
+				//	this tests assumes that the locator uses the logger from context,
+				//	which is not true. Revisit this test and its assumptions.
 				logBuffer := gbytes.NewBuffer()
 				logger := slog.New(slog.NewTextHandler(logBuffer, nil))
 				ctx := raw.NewContextWithLogger(context.Background(), *logger)

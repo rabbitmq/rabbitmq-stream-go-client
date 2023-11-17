@@ -128,7 +128,7 @@ var _ = Describe("Client", func() {
 			Should(BeTrue(), "expected connection to be open")
 
 		By("recording the server properties")
-		Expect(conf.RabbitmqBroker().ServerProperties).To(HaveKeyWithValue("product", "mock-rabbitmq"))
+		Expect(conf.RabbitmqAddr.ServerProperties).To(HaveKeyWithValue("product", "mock-rabbitmq"))
 
 		By("closing the client connection gracefully")
 		go fakeRabbitMQ.fakeRabbitMQConnectionClose(itCtx)

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/codecs/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
@@ -15,36 +16,72 @@ import (
 )
 
 func main() {
-	runSmartClient()
-	runRawClient()
+	runRawClientFlag := flag.Bool("run-raw-client", false, "set it to run raw client")
+	runSmartClientFlag := flag.Bool("run-smart-client", false, "set it to run raw client")
+	flag.Parse()
+	if *runRawClientFlag {
+		runRawClient()
+	}
+	if *runSmartClientFlag {
+		runSmartClient()
+	}
 }
 
 func runSmartClient() {
 	slogOpts := &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: slog.LevelInfo,
 	}
 	log := slog.New(slog.NewTextHandler(os.Stdout, slogOpts))
 
+	// FIXME: producer manager does not register notify publish
 	ctx := raw.NewContextWithLogger(context.Background(), *log)
 
 	c := stream.NewEnvironmentConfiguration(
 		stream.WithLazyInitialization(false),
 		stream.WithUri("rabbitmq-stream://localhost:5552"),
+		stream.WithAddressResolver(func(_ string, _ int) (_ string, _ int) {
+			return "localhost", 5552
+		}),
 	)
 
 	env, err := stream.NewEnvironment(ctx, c)
 	if err != nil {
 		panic(err)
 	}
-	//defer env.Close()
 
 	err = env.CreateStream(ctx, "my-stream", stream.CreateStreamOptions{})
 	if err != nil {
 		panic(err)
 	}
 
+	var nConfirm int
+	producer, err := env.CreateProducer(ctx, "my-stream", &stream.ProducerOptions{
+		MaxInFlight:         1_000,
+		MaxBufferedMessages: 100,
+		ConfirmationHandler: func(c *stream.MessageConfirmation) {
+			if c.Status() == stream.Confirmed {
+				nConfirm += 1
+				if nConfirm%1_000 == 0 {
+					log.Info("received confirmations", slog.Int("confirm-count", nConfirm))
+				}
+			} else {
+				log.Warn("message not confirmed", slog.Int("confirm-status", int(c.Status())))
+			}
+		},
+	})
+
+	for i := 0; i < 1_000_000; i++ {
+		err = producer.Send(context.Background(), amqp.Message{Data: []byte(fmt.Sprintf("Message #%d", i))})
+		if err != nil {
+			log.Warn("failed to send a message", slog.Int("message-n", i))
+		}
+		if i%1_000 == 0 {
+			log.Info("sent messages", slog.Int("send-count", i))
+		}
+	}
+
 	sc := bufio.NewScanner(os.Stdin)
-	fmt.Print("Close the connection and press enter")
+	fmt.Print("Press enter to continue and exit")
 	sc.Scan()
 
 	err = env.DeleteStream(ctx, "my-stream")
@@ -52,17 +89,7 @@ func runSmartClient() {
 		panic(err)
 	}
 
-	err = env.CreateStream(ctx, "other-stream", stream.CreateStreamOptions{})
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Print("Life good! Press enter to exit")
-	sc.Scan()
-	err = env.DeleteStream(ctx, "other-stream")
-	if err != nil {
-		panic(err)
-	}
+	env.Close(ctx)
 }
 
 func runRawClient() {
@@ -103,6 +130,12 @@ func runRawClient() {
 		log.Error("error in exchange command versions", "error", err)
 		panic(err)
 	}
+
+	metadata, err := streamClient.MetadataQuery(ctx, []string{streamName})
+	if err != nil {
+		panic(err)
+	}
+	log.Info("metadata query success", slog.Any("metadata", *metadata))
 
 	const batchSize = 100
 	const iterations = 1000

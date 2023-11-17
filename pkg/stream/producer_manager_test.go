@@ -39,20 +39,21 @@ var _ = Describe("ProducerManager", func() {
 		Expect(p.(*standardProducer).rawClient).To(Equal(pm.client))
 		Expect(p.(*standardProducer).rawClientMu).To(Equal(pm.clientM))
 		Expect(p.(*standardProducer).publisherId).To(BeEquivalentTo(0))
-		Expect(pm.producers).To(HaveLen(1))
+		Expect(pm.producers).To(ContainElement(p))
 
 		p2, err := pm.createProducer(context.Background(), &ProducerOptions{})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p2.(*standardProducer).rawClient).To(Equal(pm.client))
 		Expect(p2.(*standardProducer).rawClientMu).To(Equal(pm.clientM))
 		Expect(p2.(*standardProducer).publisherId).To(BeEquivalentTo(1))
+		Expect(pm.producers).To(ContainElement(p2))
 
 		p3, err := pm.createProducer(context.Background(), &ProducerOptions{})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p3.(*standardProducer).rawClient).To(Equal(pm.client))
 		Expect(p3.(*standardProducer).rawClientMu).To(Equal(pm.clientM))
 		Expect(p3.(*standardProducer).publisherId).To(BeEquivalentTo(2))
-		Expect(pm.producers).To(HaveLen(3))
+		Expect(pm.producers).To(ContainElement(p3))
 	})
 
 	When("manager is full", func() {
@@ -119,7 +120,7 @@ var _ = Describe("ProducerManager", func() {
 			Expect(p3.(*standardProducer).publisherId).To(BeEquivalentTo(1))
 
 			By("reusing the producer slot #1")
-			Expect(pm.producers).To(HaveLen(2)) // this ensures we have not appended to the slice
+			Expect(pm.producers[1]).ToNot(BeNil())
 
 			By("reusing publisher ID 2", func() {
 				pm.producers = append(
@@ -134,8 +135,28 @@ var _ = Describe("ProducerManager", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p4.(*standardProducer).publisherId).To(BeEquivalentTo(2))
 
-			By("reusing the producer slot #1")
-			Expect(pm.producers).To(HaveLen(5))
+			By("reusing the producer slot #2")
+			Expect(pm.producers[2]).ToNot(BeNil())
+		})
+	})
+
+	When("last producer is closed", func() {
+		It("closes the connection", func() {
+			fakeRawClient.EXPECT().Close(gomock.Any())
+			prepareMockDeclarePublisher(fakeRawClient, 0)
+			pm := newProducerManager(0, EnvironmentConfiguration{MaxProducersByConnection: 5})
+			pm.client = fakeRawClient
+			pm.open = true
+
+			producer, err := pm.createProducer(context.Background(), &ProducerOptions{})
+			Expect(err).ToNot(HaveOccurred())
+			producer.Close()
+
+			Eventually(func() Producer {
+				pm.m.Lock()
+				defer pm.m.Unlock()
+				return pm.producers[0]
+			}, "1s", "200ms").Should(BeNil())
 		})
 	})
 })

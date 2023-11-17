@@ -51,6 +51,7 @@ type Producer interface {
 	Close()
 }
 
+//go:generate mockgen -source=types.go -destination=mock_producer_test.go -package stream
 type internalProducer interface {
 	Producer
 	shutdown()

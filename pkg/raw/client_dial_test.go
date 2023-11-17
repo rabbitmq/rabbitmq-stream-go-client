@@ -51,7 +51,7 @@ var _ = Describe("ClientDial", func() {
 		<-time.After(time.Millisecond * 100) // have to introduce artificial delay for the background frame handler
 
 		conf, _ := raw.NewClientConfiguration("")
-		conf.SetDial(func(_, _ string) (net.Conn, error) {
+		conf.Dial = func(_, _ string) (net.Conn, error) {
 			c, err := net.DialTimeout("unix", serverSocketPath, time.Second)
 			if err != nil {
 				panic(err)
@@ -59,7 +59,7 @@ var _ = Describe("ClientDial", func() {
 			<-waiter
 			go fakeServer.fakeRabbitMQConnectionOpen(ctx)
 			return c, err
-		})
+		}
 
 		c, err := raw.DialConfig(ctx, conf)
 		Expect(err).ToNot(HaveOccurred())

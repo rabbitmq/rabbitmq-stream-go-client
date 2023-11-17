@@ -18,25 +18,30 @@ var (
 const noReference = ""
 
 type producerManager struct {
-	m                  sync.Mutex
-	id                 int
-	config             EnvironmentConfiguration
-	connectionEndpoint raw.RabbitmqAddress
-	producers          []internalProducer
-	client             raw.Clienter
-	clientM            *sync.Mutex
-	open               bool
+	m      sync.Mutex
+	id     int
+	config EnvironmentConfiguration
+	// records the endpoint that this manager is connected to
+	connectionEndpoint   raw.RabbitmqAddress
+	producers            []internalProducer
+	confirmationChannels []chan *publishConfirmOrError
+	// keeps track of how many producers are assigned to this manager
+	producerCount int
+	client        raw.Clienter
+	clientM       *sync.Mutex
+	open          bool
 }
 
 func newProducerManager(id int, config EnvironmentConfiguration) *producerManager {
 	return &producerManager{
-		m:         sync.Mutex{},
-		id:        id,
-		config:    config,
-		producers: make([]internalProducer, 0, config.MaxProducersByConnection),
-		client:    nil,
-		clientM:   &sync.Mutex{},
-		open:      false,
+		m:             sync.Mutex{},
+		id:            id,
+		config:        config,
+		producers:     make([]internalProducer, config.MaxProducersByConnection),
+		producerCount: 0,
+		client:        nil,
+		clientM:       &sync.Mutex{},
+		open:          false,
 	}
 }
 
@@ -65,7 +70,14 @@ func (p *producerManager) connect(ctx context.Context, uri string) error {
 	p.connectionEndpoint = conf.RabbitmqAddr
 	p.client = c
 	p.open = true
+
+	//confirmCh := c.NotifyPublish(make(chan *raw.PublishConfirm, DefaultMaxInFlight))
+
 	return nil
+}
+
+func (p *producerManager) publishConfirmationListener(ctx context.Context, c chan *raw.PublishConfirm) {
+	panic("implement me!")
 }
 
 // initialises a producer and sends a declare publisher frame. It returns
@@ -76,35 +88,27 @@ func (p *producerManager) createProducer(ctx context.Context, producerOpts *Prod
 		return nil, errManagerClosed
 	}
 
+	// TODO: optimisation - check if producerCount == len(producers) -> return errManagerFull
+
 	var (
 		publisherId uint8
 		producer    *standardProducer
 	)
-	if len(p.producers) == 0 {
-		publisherId = 0
-		producer = newStandardProducer(publisherId, p.client, p.clientM, producerOpts)
-		producer.setCloseCallback(p.removeProducer)
-		p.producers = append(p.producers, producer)
-	} else {
-		for i := 0; i < len(p.producers); i++ {
-			if p.producers[i] == nil {
-				publisherId = uint8(i)
-				producer = newStandardProducer(publisherId, p.client, p.clientM, producerOpts)
-				p.producers[i] = producer
-				break
-			}
-		}
-		// no empty slots, manager at max capacity
-		if producer == nil && len(p.producers) == p.config.MaxProducersByConnection {
-			return nil, errManagerFull
-		}
-		// no empty slots, manager has capacity
-		if producer == nil {
-			publisherId = uint8(len(p.producers))
+	for i := 0; i < len(p.producers); i++ {
+		if p.producers[i] == nil {
+			publisherId = uint8(i)
 			producer = newStandardProducer(publisherId, p.client, p.clientM, producerOpts)
-			p.producers = append(p.producers, producer)
+			p.producers[i] = producer
+			p.producerCount += 1
+			break
 		}
 	}
+	// no empty slots, manager at max capacity
+	if producer == nil {
+		return nil, errManagerFull
+	}
+
+	producer.setCloseCallback(p.removeProducer)
 
 	ctx2, cancel := maybeApplyDefaultTimeout(ctx)
 	defer cancel()
@@ -118,6 +122,12 @@ func (p *producerManager) createProducer(ctx context.Context, producerOpts *Prod
 	return producer, nil
 }
 
+/*
+Removes a producer with index == id
+
+It closes the connection and sets the manager state to closed if the last
+producer is removed.
+*/
 func (p *producerManager) removeProducer(id int) error {
 	if id >= len(p.producers) {
 		return errIdOutOfBounds
@@ -126,5 +136,18 @@ func (p *producerManager) removeProducer(id int) error {
 		return errNegativeId
 	}
 	p.producers[id] = nil
+	p.producerCount -= 1
+
+	if p.producerCount == 0 {
+		// last producer in this manager, closing connection
+		p.open = false
+		p.clientM.Lock()
+		defer p.clientM.Unlock()
+		ctx, cancel := maybeApplyDefaultTimeout(context.Background())
+		defer cancel()
+		_ = p.client.Close(ctx)
+		// FIXME: have a logger and log error
+	}
+
 	return nil
 }

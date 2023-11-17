@@ -6,6 +6,7 @@ import (
 	"context"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -36,6 +37,8 @@ func (e *Environment) AppendLocatorRawClient(c raw.Clienter) {
 		retryPolicy: func(int) time.Duration {
 			return time.Millisecond * 10
 		},
+		destructor: &sync.Once{},
+		done:       make(chan struct{}),
 	})
 }
 

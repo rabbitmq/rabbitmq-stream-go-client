@@ -413,6 +413,7 @@ func (e *Environment) CreateProducer(ctx context.Context, stream string, opts *P
 				)
 			}
 			connProps := client.(*raw.Client).ConnectionProperties()
+			// did I connect to the leader behind the load balancer?
 			if connProps["advertised_host"] == brokerLeader.host && connProps["advertised_port"] == brokerLeader.port {
 				pmClient = client
 				break
@@ -432,6 +433,8 @@ func (e *Environment) CreateProducer(ctx context.Context, stream string, opts *P
 		}
 	} else {
 		rc = e.locators[0].rawClientConf.DeepCopy()
+		rc.RabbitmqAddr.Host = brokerLeader.host
+		rc.RabbitmqAddr.Port, _ = strconv.Atoi(brokerLeader.port)
 		// TODO: set connection name
 		c, err := raw.DialConfig(ctx, rc)
 		if err != nil {
