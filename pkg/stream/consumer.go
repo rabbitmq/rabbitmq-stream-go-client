@@ -83,6 +83,9 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 	if c.chunkCh == nil {
 		c.chunkCh = make(chan *raw.Chunk)
 	}
+	// ToDo NotifyChunk should call the conusmer manager, not the raw client directly
+	c.rawClientMu.Lock()
+	defer c.rawClientMu.Unlock()
 	messagesChan := c.rawClient.NotifyChunk(c.chunkCh)
 
 	subscribeProperties := c.subscribeProperties()
@@ -96,7 +99,7 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 		for {
 			select {
 			// get chunk from raw client
-			case chunk, _ := <-messagesChan:
+			case chunk := <-messagesChan:
 				// store current offset
 				c.setCurrentOffset(chunk.ChunkFirstOffset)
 				// ToDo choose codec
@@ -121,6 +124,8 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 }
 
 func (c *Consumer) Close(ctx context.Context) error {
+	c.rawClientMu.Lock()
+	defer c.rawClientMu.Unlock()
 	return c.rawClient.Unsubscribe(ctx, c.opts.SubscriptionId)
 }
 
