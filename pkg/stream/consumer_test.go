@@ -11,6 +11,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"go.uber.org/mock/gomock"
 	"reflect"
+	"sync"
 )
 
 var _ = Describe("Smart Consumer", func() {
@@ -41,12 +42,12 @@ var _ = Describe("Smart Consumer", func() {
 			fmt.Printf("messages: %s\n", message.Data)
 		}
 		It("stream name", func() {
-			_, err := NewConsumer("", fakeRawClient, handleMessages, opts)
+			_, err := NewConsumer("", fakeRawClient, handleMessages, opts, &sync.Mutex{})
 			Expect(err).To(MatchError("stream name must not be empty"))
 		})
 
 		It("uses sensible defaults for options if unset", func() {
-			consumer, err := NewConsumer("stream", fakeRawClient, handleMessages, opts)
+			consumer, err := NewConsumer("stream", fakeRawClient, handleMessages, opts, &sync.Mutex{})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(consumer.opts.OffsetType).To(Equal(constants.OffsetTypeFirst))
@@ -89,7 +90,7 @@ var _ = Describe("Smart Consumer", func() {
 				fmt.Println("error writing message to gbytes buffer", err)
 			}
 		}
-		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
+		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts, &sync.Mutex{})
 		consumer.chunkCh = chunkChan
 		Expect(consumer.Subscribe(context.Background())).To(Succeed())
 		chunkChan <- fakeChunk
@@ -107,7 +108,7 @@ var _ = Describe("Smart Consumer", func() {
 			InitialCredits: uint16(2),
 			Offset:         uint64(1),
 		}
-		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
+		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts, &sync.Mutex{})
 		consumer.setCurrentOffset(uint64(666))
 		Expect(consumer.GetOffset()).To(BeNumerically("==", 666))
 		consumer.updateLastStoredOffset()
@@ -131,7 +132,7 @@ var _ = Describe("Smart Consumer", func() {
 			Offset:         uint64(1),
 		}
 		//test
-		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
+		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts, &sync.Mutex{})
 		Expect(consumer).ToNot(BeNil())
 		Expect(consumer.Close(context.Background())).To(Succeed())
 
@@ -170,11 +171,11 @@ var _ = Describe("Smart Consumer", func() {
 		}
 
 		//test
-		consumerWithValidCredits, err := NewConsumer("test-stream", fakeRawClient, handleMessages, opts1)
+		consumerWithValidCredits, err := NewConsumer("test-stream", fakeRawClient, handleMessages, opts1, &sync.Mutex{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumerWithValidCredits.Subscribe(context.Background())).To(Succeed())
 
-		_, err = NewConsumer("test-stream", fakeRawClient, handleMessages, opts2)
+		_, err = NewConsumer("test-stream", fakeRawClient, handleMessages, opts2, &sync.Mutex{})
 		Expect(err).To(MatchError("initial credits cannot be greater than 1000"))
 	})
 
@@ -205,7 +206,7 @@ var _ = Describe("Smart Consumer", func() {
 			handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
 				fmt.Printf("messages: %s\n", message.Data)
 			}
-			consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
+			consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts, &sync.Mutex{})
 			Expect(consumer.getStatus()).To(Equal(0))
 			consumer.setStatus(1)
 			Expect(consumer.getStatus()).To(Equal(1))
@@ -240,7 +241,7 @@ var _ = Describe("Smart Consumer", func() {
 			handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
 				fmt.Printf("messages: %s\n", message.Data)
 			}
-			consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts)
+			consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts, &sync.Mutex{})
 			Expect(consumer.Subscribe(context.Background())).To(Succeed())
 		})
 	})

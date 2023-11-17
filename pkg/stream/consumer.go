@@ -32,7 +32,7 @@ type Consumer struct {
 	lastStoredOffset uint64
 }
 
-func NewConsumer(stream string, rawClient raw.Clienter, messagesHandler MessagesHandler, opts *ConsumerOptions) (*Consumer, error) {
+func NewConsumer(stream string, rawClient raw.Clienter, messagesHandler MessagesHandler, opts *ConsumerOptions, rawClientMu *sync.Mutex) (*Consumer, error) {
 	if stream == "" {
 		return nil, errors.New("stream name must not be empty")
 	}
@@ -44,6 +44,7 @@ func NewConsumer(stream string, rawClient raw.Clienter, messagesHandler Messages
 	opts.validate()
 	c := &Consumer{
 		mutex:           &sync.Mutex{},
+		rawClientMu:     rawClientMu,
 		Stream:          stream,
 		rawClient:       rawClient,
 		opts:            opts,
