@@ -1,1 +1,1 @@
-[rabbitmq_management, rabbitmq_stream, rabbitmq_stream_management].
+[rabbitmq_amqp1_0,rabbitmq_auth_mechanism_ssl,rabbitmq_management,rabbitmq_stream,rabbitmq_stream_management].

@@ -102,12 +102,15 @@ rabbitmq-server-tls:
 	cd compose/tls; git clone https://github.com/michaelklishin/tls-gen tls-gen; cd tls-gen/basic; make
 	mv compose/tls/tls-gen/basic/result/server_*_certificate.pem compose/tls/tls-gen/basic/result/server_certificate.pem
 	mv compose/tls/tls-gen/basic/result/server_*key.pem compose/tls/tls-gen/basic/result/server_key.pem
-	docker run -it --rm --name rabbitmq-stream-go-client-test \
+	docker run -d --name rabbitmq-stream-client-test \
 		-p 5552:5552 -p 5672:5672 -p 5671:5671 -p 5551:5551 -p 15672:15672 \
 		-v  $(shell pwd)/compose/tls/conf/:/etc/rabbitmq/ -v $(shell pwd)/compose/tls/tls-gen/basic/result/:/certs \
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
 		--pull always \
-		pivotalrabbitmq/rabbitmq-stream 	
+		 docker.io/rabbitmq:3.13-rc-management
+	sleep 5
+	docker exec rabbitmq-stream-client-test rabbitmq-plugins enable rabbitmq_stream_management rabbitmq_amqp1_0 rabbitmq_auth_mechanism_ssl
+	
 
 
 
