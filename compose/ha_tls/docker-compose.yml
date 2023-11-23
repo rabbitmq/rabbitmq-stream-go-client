@@ -3,11 +3,11 @@ services:
   rabbit_node0:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node0
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node0 advertised_port 5562
     networks:
       - back
     hostname: node0
-    image: pivotalrabbitmq/rabbitmq-stream
+    image: docker.io/rabbitmq:3.13-rc-management
     ports:
       - "5561:5551"
       - "5562:5552"
@@ -18,11 +18,11 @@ services:
   rabbit_node1:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node1
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node1 advertised_port 5572
     networks:
       - back
     hostname: node1
-    image: pivotalrabbitmq/rabbitmq-stream
+    image: docker.io/rabbitmq:3.13-rc-management
     ports:
       - "5571:5551"
       - "5572:5552"
@@ -33,11 +33,11 @@ services:
   rabbit_node2:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node2
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_stream advertised_host node2 advertised_port 5582
     networks:
       - back
     hostname: node2
-    image: pivotalrabbitmq/rabbitmq-stream
+    image: docker.io/rabbitmq:3.13-rc-management
     ports:
       - "5581:5551"
       - "5582:5552"
