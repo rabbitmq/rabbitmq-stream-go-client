@@ -107,11 +107,7 @@ rabbitmq-server-tls:
 		-v  $(shell pwd)/compose/tls/conf/:/etc/rabbitmq/ -v $(shell pwd)/compose/tls/tls-gen/basic/result/:/certs \
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
 		--pull always \
-		 docker.io/rabbitmq:3.13-rc-management
-	sleep 5
-	docker exec rabbitmq-stream-client-test rabbitmq-plugins enable rabbitmq_stream_management rabbitmq_amqp1_0 rabbitmq_auth_mechanism_ssl
-	
-
+		docker.io/rabbitmq:3.13-rc-management
 
 
 
