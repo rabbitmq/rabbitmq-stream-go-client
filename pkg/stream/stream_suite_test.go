@@ -1,6 +1,8 @@
 package stream_test
 
 import (
+	"bytes"
+	"encoding/binary"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"log"
@@ -24,6 +26,40 @@ const (
 	SystemTestEnvVarName             = "RABBITMQ_STREAM_RUN_SYSTEM_TEST"
 	containerName             string = "rabbitmq-stream-go-client"
 )
+
+type plainTextMessage struct {
+	body string
+}
+
+func (p *plainTextMessage) UnmarshalBinary(data []byte) error {
+	var dataLen uint32
+	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &dataLen)
+	if err != nil {
+		return err
+	}
+
+	p.body = string(data[4 : dataLen+4])
+
+	return nil
+}
+
+func (p *plainTextMessage) MarshalBinary() ([]byte, error) {
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, binary.BigEndian, uint32(len(p.body)))
+	if err != nil {
+		return nil, err
+	}
+	err = binary.Write(buff, binary.BigEndian, []byte(p.body))
+	if err != nil {
+		return nil, err
+	}
+
+	return buff.Bytes(), nil
+}
+
+func (p *plainTextMessage) Body() string {
+	return p.body
+}
 
 var _ = SynchronizedBeforeSuite(func() {
 	// Just once
@@ -49,20 +85,20 @@ var _ = SynchronizedBeforeSuite(func() {
 		session, _ := gexec.Start(cmd, bufErr, bufErr)
 		session.Wait()
 		return bufErr
-	}).WithPolling(time.Second).WithTimeout(time.Second*10).
+	}).WithPolling(time.Second).WithTimeout(time.Second*60).
 		Should(gbytes.Say("rabbit"), "expected epmd to report rabbit app as running")
 
 	awaitStartArgs := strings.Split("exec --user rabbitmq -i "+containerName+" rabbitmqctl await_startup", " ")
 	awaitCmd := exec.Command("docker", awaitStartArgs...)
 	awaitSession, err := gexec.Start(awaitCmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).ToNot(HaveOccurred())
-	awaitSession.Wait(time.Second * 10)
+	awaitSession.Wait(time.Second * 60)
 
 	enablePluginArgs := strings.Split("exec --user rabbitmq -i "+containerName+" rabbitmq-plugins enable rabbitmq_stream", " ")
 	enablePluginCmd := exec.Command("docker", enablePluginArgs...)
 	enablePluginSession, err := gexec.Start(enablePluginCmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).ToNot(HaveOccurred())
-	enablePluginSession.Wait(time.Second * 10)
+	enablePluginSession.Wait(time.Second * 60)
 }, func() {
 	// All processes
 })
