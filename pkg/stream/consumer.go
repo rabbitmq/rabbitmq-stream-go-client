@@ -24,7 +24,7 @@ type Consumer struct {
 	rawClientMu     *sync.Mutex
 	opts            *ConsumerOptions
 	MessagesHandler MessagesHandler
-	chunkCh         chan *raw.Chunk
+	chunkCh         <-chan *raw.Chunk
 	closeCh         chan bool
 	// The current status of the offset. Different from ConsumerOptionsOffset.
 	currentOffset uint64
@@ -87,7 +87,6 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 	// ToDo NotifyChunk should call the conusmer manager, not the raw client directly
 	c.rawClientMu.Lock()
 	defer c.rawClientMu.Unlock()
-	messagesChan := c.rawClient.NotifyChunk(c.chunkCh)
 
 	subscribeProperties := c.subscribeProperties()
 	//declare consumer
@@ -100,7 +99,7 @@ func (c *Consumer) Subscribe(ctx context.Context) error {
 		for {
 			select {
 			// get chunk from raw client
-			case chunk := <-messagesChan:
+			case chunk := <-c.chunkCh:
 				// store current offset
 				c.setCurrentOffset(chunk.ChunkFirstOffset)
 				// ToDo choose codec
