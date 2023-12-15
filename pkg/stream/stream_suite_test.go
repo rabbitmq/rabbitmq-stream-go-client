@@ -22,9 +22,8 @@ func TestStream(t *testing.T) {
 }
 
 const (
-	SystemTestSkipRabbitStart        = "RABBITMQ_STREAM_SKIP_RABBIT_START"
-	SystemTestEnvVarName             = "RABBITMQ_STREAM_RUN_SYSTEM_TEST"
-	containerName             string = "rabbitmq-stream-go-client"
+	SystemTestEnvVarName        = "RABBITMQ_STREAM_RUN_SYSTEM_TEST"
+	containerName        string = "rabbitmq-stream-go-client"
 )
 
 type plainTextMessage struct {
@@ -66,10 +65,6 @@ var _ = SynchronizedBeforeSuite(func() {
 	logger := log.New(GinkgoWriter, "[SBS] ", log.Ldate|log.Lmsgprefix)
 	if _, isSet := os.LookupEnv(SystemTestEnvVarName); !isSet {
 		logger.Println("System test variable to run system test not set. Skipping system tests...")
-	}
-
-	if _, isSet := os.LookupEnv(SystemTestSkipRabbitStart); isSet {
-		logger.Println("System test variable to skip RabbitMQ start is set. Skipping...")
 		return
 	}
 

@@ -21,7 +21,7 @@ jobs:
         with:
           version: "2023.1.3"
           install-go: false
-          build-tags: "rabbitmq.stream.test,rabbitmq.stream.e2e"
+          build-tags: "rabbitmq.stream.test,rabbitmq.stream.e2e,rabbitmq.stream.system_test"
 
   format-check:
     name: Check Go Formatting

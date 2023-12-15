@@ -22,8 +22,9 @@ type producerManager struct {
 	id     int
 	config EnvironmentConfiguration
 	// records the endpoint that this manager is connected to
-	connectionEndpoint   raw.RabbitmqAddress
-	producers            []internalProducer
+	connectionEndpoint raw.RabbitmqAddress
+	producers          []internalProducer
+	//lint:ignore U1000 this is a WIP. It will be used next patches
 	confirmationChannels []chan *publishConfirmOrError
 	// keeps track of how many producers are assigned to this manager
 	producerCount int
@@ -53,6 +54,7 @@ func newProducerManagerWithClient(id int, config EnvironmentConfiguration, clien
 	return manager
 }
 
+//lint:ignore U1000 this is a WIP. It will be used next patches
 func (p *producerManager) connect(ctx context.Context, uri string) error {
 	conf, err := raw.NewClientConfiguration(uri)
 	if err != nil {
@@ -76,6 +78,7 @@ func (p *producerManager) connect(ctx context.Context, uri string) error {
 	return nil
 }
 
+//lint:ignore U1000 this is a WIP. It will be used next patches
 func (p *producerManager) publishConfirmationListener(ctx context.Context, c chan *raw.PublishConfirm) {
 	panic("implement me!")
 }

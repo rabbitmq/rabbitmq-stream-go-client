@@ -69,6 +69,9 @@ func runSmartClient() {
 			}
 		},
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	for i := 0; i < 1_000_000; i++ {
 		err = producer.Send(context.Background(), amqp.Message{Data: []byte(fmt.Sprintf("Message #%d", i))})

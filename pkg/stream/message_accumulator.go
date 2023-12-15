@@ -51,7 +51,3 @@ func (m *messageAccumulator) get() PublishingMessage {
 		return nil
 	}
 }
-
-func (m *messageAccumulator) isEmpty() bool {
-	return len(m.messages) == 0
-}

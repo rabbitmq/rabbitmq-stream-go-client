@@ -76,10 +76,6 @@ type autoIncrementingSequence[T integer] struct {
 	value T
 }
 
-func newAutoIncrementingSequence[T integer](startingValue T) *autoIncrementingSequence[T] {
-	return &autoIncrementingSequence[T]{value: startingValue}
-}
-
 func (a *autoIncrementingSequence[T]) next() (next T) {
 	a.Lock()
 	defer a.Unlock()
