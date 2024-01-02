@@ -92,6 +92,15 @@ tests-ci:
 		--fail-on-pending \
 		--keep-going
 
+.PHONY: system-tests
+system-tests: ## Run system tests. It starts a rabbitmq container. To skip starting the rabbit container, use RABBITMQ_STREAM_SKIP_RABBIT_START="skip"
+	@printf "$(GREEN)Running system tests in parallel$(NORMAL)\n"
+	RABBITMQ_STREAM_RUN_SYSTEM_TEST="run" \
+		$(GINKGO) $(GINKGO_RUN_SHARED_FLAGS) $(GINKGO_RUN_FLAGS) \
+		--tags="rabbitmq.stream.test,rabbitmq.stream.system_test" \
+		--focus 'System tests' \
+		$(GINKGO_EXTRA) ./pkg/stream/
+
 
 #### e2e test suite accepts the flags -keep-rabbit-container=true and -rabbit-debug-log=true
 #### -keep-rabbit-container=true does not delete the rabbit container after the suite run. It is useful to examine rabbit logs after a test failure

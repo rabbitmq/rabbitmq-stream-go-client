@@ -13,17 +13,25 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/stream"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 )
 
-var _ = Describe("stream package", func() {
+var _ = Describe("System tests", func() {
 	const (
 		streamName = "stream-system-test"
 		// 100 byte message
 		messageBody        = "Rabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesome!!!!!"
 		defaultRabbitmqUri = "rabbitmq-stream://guest:guest@localhost/%2F"
 	)
+
+	BeforeEach(func() {
+		if _, isSet := os.LookupEnv(SystemTestEnvVarName); !isSet {
+			Skip("System test variable to run system test not set. Skipping system tests...")
+		}
+	})
+
 	It("can create and connect to a stream, publish and receive messages", func(ctx SpecContext) {
 		debugLogger := slog.New(slog.NewTextHandler(GinkgoWriter, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		itCtx := raw.NewContextWithLogger(ctx, *debugLogger)
@@ -120,7 +128,7 @@ var _ = Describe("stream package", func() {
 		Expect(env.DeleteStream(itCtx, streamName)).To(Succeed())
 	})
 
-	It("connects to RabbitMQ", Focus, func() {
+	It("connects to RabbitMQ", func() {
 		uri := "rabbitmq-stream://localhost:5552"
 		conf := stream.NewEnvironmentConfiguration(
 			stream.WithUri(uri),
