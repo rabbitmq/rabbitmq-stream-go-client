@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"sync"
 )
@@ -19,13 +20,26 @@ type consumerManager struct {
 	open     bool
 }
 
-func newConsumerManager(config EnvironmentConfiguration) *consumerManager {
-	return &consumerManager{
+func newConsumerManager(config EnvironmentConfiguration, rawClient raw.Clienter) *consumerManager {
+	consumerManager := &consumerManager{
 		m:        sync.Mutex{},
 		config:   config,
-		client:   nil,
+		client:   rawClient,
 		clientMu: &sync.Mutex{},
 		open:     false,
+	}
+
+	consumerManager.createNotifyChannel()
+
+	return consumerManager
+}
+
+func (c *consumerManager) createNotifyChannel() {
+	// only setup channel for consumers to receive messages if it does not exist
+	if !c.open {
+		c.open = true
+		// create a channel, set it on the raw layer via Notify Chunk and set for the consumer
+		c.chunkCh = c.client.NotifyChunk(make(chan *raw.Chunk))
 	}
 }
 
@@ -42,16 +56,11 @@ func (c *consumerManager) createConsumer(stream string, messagesHandler Messages
 		if err != nil {
 			return nil, err
 		}
+		consumer.rawClient = c.client
 		c.consumers = append(c.consumers, consumer)
 		c.consumerCount += 1
-	}
-
-	// only setup channel for consumers to receive messages if it does not exist
-	if !c.open {
-		c.open = true
-		// create a channel, set it on the raw layer via Notify Chunk and set for the consumer
-		c.chunkCh = c.client.NotifyChunk(make(chan *raw.Chunk))
-		consumer.chunkCh = c.chunkCh
+	} else {
+		return nil, errors.New("consumer manager is full")
 	}
 
 	return consumer, nil

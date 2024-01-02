@@ -10,7 +10,13 @@ import (
 	"reflect"
 )
 
-var _ = Describe("ConsumerManager", func() {
+// Responsibilies of Consumer Manager
+// - Creates consumers up to maximum consumers
+// - Creates notifychunk channel for receiveing messages
+// - dispatches to messages to consumers in round robin fashion
+// - handles state of consumers in SAC scenarios
+
+var _ = FDescribe("ConsumerManager", func() {
 	var (
 		mockCtrl      *gomock.Controller
 		fakeRawClient *MockRawClient
@@ -25,8 +31,7 @@ var _ = Describe("ConsumerManager", func() {
 		prepareMockNotifyPublish(fakeRawClient)
 		cm := newConsumerManager(EnvironmentConfiguration{
 			MaxConsumersByConnection: 10,
-		})
-		cm.client = fakeRawClient
+		}, fakeRawClient)
 
 		messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
 			fmt.Printf("messages: %s\n", message.Data)
@@ -56,16 +61,18 @@ var _ = Describe("ConsumerManager", func() {
 
 	When("consumer manager is full", func() {
 		It("errors during consumer creation", func() {
+			prepareMockNotifyPublish(fakeRawClient)
 			cm := newConsumerManager(EnvironmentConfiguration{
 				MaxConsumersByConnection: 1,
-			})
-			cm.client = fakeRawClient
+			}, fakeRawClient)
 
 			messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
 				fmt.Printf("messages: %s\n", message.Data)
 			}
 			opts := &ConsumerOptions{}
 			_, err := cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
 			Expect(err).To(MatchError(ContainSubstring("consumer manager is full")))
 
 		})
