@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/golang/snappy v0.0.4
-	github.com/google/uuid v1.4.0
+	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.17.4
 	github.com/onsi/ginkgo/v2 v2.13.0
 	github.com/onsi/gomega v1.28.0
