@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"context"
 	"errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"sync"
@@ -10,6 +11,8 @@ import (
 type consumerManager struct {
 	m      sync.Mutex
 	config EnvironmentConfiguration
+	opts   ConsumerOptions
+	Stream string
 
 	consumers     []*Consumer
 	consumerCount int
@@ -31,7 +34,21 @@ func newConsumerManager(config EnvironmentConfiguration, rawClient raw.Clienter)
 
 	consumerManager.createNotifyChannel()
 
+	// start dispatcher in seperate goroutine
+	go consumerManager.dispatcher()
+
 	return consumerManager
+}
+
+// dispatcher listens for incoming messages and distributes them across the consumers
+func (c *consumerManager) dispatcher() {
+	for {
+		msg := <-c.chunkCh
+		consumers := len(c.consumers)
+		for i := 0; i < consumers; i++ {
+			c.consumers[i].chunkCh <- msg
+		}
+	}
 }
 
 func (c *consumerManager) createNotifyChannel() {
@@ -44,7 +61,7 @@ func (c *consumerManager) createNotifyChannel() {
 }
 
 // initialize a consumer and establishes a channel to receive messages
-func (c *consumerManager) createConsumer(stream string, messagesHandler MessagesHandler, opts *ConsumerOptions) (*Consumer, error) {
+func (c *consumerManager) createConsumer(stream string, messagesHandler MessagesHandler, opts *ConsumerOptions) error {
 	var (
 		consumer *Consumer
 		err      error
@@ -54,14 +71,52 @@ func (c *consumerManager) createConsumer(stream string, messagesHandler Messages
 	if len(c.consumers) < c.config.MaxConsumersByConnection {
 		consumer, err = NewConsumer(stream, c.client, messagesHandler, opts, c.clientMu)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		consumer.rawClient = c.client
 		c.consumers = append(c.consumers, consumer)
 		c.consumerCount += 1
 	} else {
-		return nil, errors.New("consumer manager is full")
+		return errors.New("consumer manager is full")
 	}
 
-	return consumer, nil
+	return nil
+}
+
+func (c *consumerManager) createMaxConsumers(stream string, messagesHandler MessagesHandler, opts *ConsumerOptions) error {
+	for i := 0; i < c.config.MaxConsumersByConnection; i++ {
+		err := c.createConsumer(stream, messagesHandler, opts)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *consumerManager) subscribeProperties() raw.SubscribeProperties {
+	s := raw.SubscribeProperties{}
+
+	if c.opts.SingleActiveConsumer {
+		s["single-active-consumer"] = "true"
+	}
+	if c.opts.SuperStream {
+		s["super-stream"] = c.Stream
+	}
+	return s
+}
+
+func (c *consumerManager) Subscribe(ctx context.Context) error {
+	// Call raw client subscribe so the chunkCh can start receiving messages message handling is done in the consumers
+	c.clientMu.Lock()
+	defer c.clientMu.Unlock()
+
+	subscribeProperties := c.subscribeProperties()
+
+	err := c.client.Subscribe(ctx, c.Stream, c.opts.OffsetType, c.opts.SubscriptionId, c.opts.InitialCredits, subscribeProperties, c.opts.Offset)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -37,26 +37,24 @@ var _ = FDescribe("ConsumerManager", func() {
 			fmt.Printf("messages: %s\n", message.Data)
 		}
 		opts := &ConsumerOptions{}
-		c, err := cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
+		err := cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(c).ToNot(BeNil())
 
 		// the same raw client is shared across all consumers
-		Expect(c.rawClient).To(Equal(cm.client))
-		Expect(c.rawClientMu).To(Equal(cm.clientMu))
-		Expect(cm.consumers).To(ContainElement(c))
+		Expect(cm.consumers[0].rawClient).To(Equal(cm.client))
+		Expect(cm.consumers[0].rawClientMu).To(Equal(cm.clientMu))
 
-		c2, err := cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
+		err = cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(c2.rawClient).To(Equal(cm.client))
-		Expect(c2.rawClientMu).To(Equal(cm.clientMu))
-		Expect(cm.consumers).To(ContainElement(c2))
+		Expect(cm.consumers).To(HaveLen(2))
+		Expect(cm.consumers[1].rawClient).To(Equal(cm.client))
+		Expect(cm.consumers[1].rawClientMu).To(Equal(cm.clientMu))
 
-		c3, err := cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
+		err = cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(c3.rawClient).To(Equal(cm.client))
-		Expect(c3.rawClientMu).To(Equal(cm.clientMu))
-		Expect(cm.consumers).To(ContainElement(c3))
+		Expect(cm.consumers).To(HaveLen(3))
+		Expect(cm.consumers[2].rawClient).To(Equal(cm.client))
+		Expect(cm.consumers[2].rawClientMu).To(Equal(cm.clientMu))
 	})
 
 	When("consumer manager is full", func() {
@@ -70,11 +68,36 @@ var _ = FDescribe("ConsumerManager", func() {
 				fmt.Printf("messages: %s\n", message.Data)
 			}
 			opts := &ConsumerOptions{}
-			_, err := cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
+			err := cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
+			err = cm.createConsumer("consumer-manager-stream", messagesHandler, opts)
 			Expect(err).To(MatchError(ContainSubstring("consumer manager is full")))
 
+		})
+	})
+
+	FWhen("a message is received", func() {
+		It("dispatches the message to a consumer", func(ctx SpecContext) {
+			//Create a manager with 2 consumers
+			// mock receiveing some chunks
+			// see that chunks a received by consumers but not duplicated
+
+			prepareMockNotifyPublish(fakeRawClient)
+			cm := newConsumerManager(EnvironmentConfiguration{
+				MaxConsumersByConnection: 2,
+			}, fakeRawClient)
+
+			messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
+				fmt.Printf("messages: %s\n", message.Data)
+			}
+			opts := &ConsumerOptions{}
+			err := cm.createMaxConsumers("consumer-manager-stream", messagesHandler, opts)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cm.consumers).To(HaveLen(2))
+
+			// Subscribe to start receiveing messages
+			err = cm.Subscribe(ctx)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

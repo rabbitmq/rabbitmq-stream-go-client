@@ -24,7 +24,7 @@ type Consumer struct {
 	rawClientMu     *sync.Mutex
 	opts            *ConsumerOptions
 	MessagesHandler MessagesHandler
-	chunkCh         <-chan *raw.Chunk
+	chunkCh         chan *raw.Chunk
 	closeCh         chan bool
 	// The current status of the offset. Different from ConsumerOptionsOffset.
 	currentOffset uint64
@@ -65,64 +65,6 @@ func (c *Consumer) setStatus(status int) {
 	c.active = status
 }
 
-func (c *Consumer) subscribeProperties() raw.SubscribeProperties {
-	s := raw.SubscribeProperties{}
-
-	if c.opts.SingleActiveConsumer {
-		s["single-active-consumer"] = "true"
-	}
-	if c.opts.SuperStream {
-		s["super-stream"] = c.Stream
-	}
-	return s
-}
-
-func (c *Consumer) Subscribe(ctx context.Context) error {
-	// get messages
-	// call raw client notify chunk, when chunk appears on the channel, parse it and call the messages handler with the
-	// parsed messaage
-	if c.chunkCh == nil {
-		c.chunkCh = make(chan *raw.Chunk)
-	}
-	// ToDo NotifyChunk should call the conusmer manager, not the raw client directly
-	c.rawClientMu.Lock()
-	defer c.rawClientMu.Unlock()
-
-	subscribeProperties := c.subscribeProperties()
-	//declare consumer
-	err := c.rawClient.Subscribe(ctx, c.Stream, c.opts.OffsetType, c.opts.SubscriptionId, c.opts.InitialCredits, subscribeProperties, c.opts.Offset)
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		for {
-			select {
-			// get chunk from raw client
-			case chunk := <-c.chunkCh:
-				// store current offset
-				c.setCurrentOffset(chunk.ChunkFirstOffset)
-				// ToDo choose codec
-				message := &amqp.Message{}
-				err = message.UnmarshalBinary(chunk.Messages)
-				if err != nil {
-					fmt.Println("error parsing chunk", err)
-				}
-				// call  messages handler
-				c.MessagesHandler(ConsumerContext{Consumer: c}, message)
-
-			// Need someway to break and close
-			case quit := <-c.closeCh:
-				if quit {
-					fmt.Println("go routing finished")
-					return
-				}
-			}
-		}
-	}()
-	return nil
-}
-
 func (c *Consumer) Close(ctx context.Context) error {
 	c.rawClientMu.Lock()
 	defer c.rawClientMu.Unlock()
@@ -155,6 +97,36 @@ func (c *Consumer) GetLastStoredOffset() uint64 {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	return c.lastStoredOffset
+}
+
+func (c *Consumer) decode() error {
+	go func() {
+		for {
+			select {
+			// get chunk from raw client
+			case chunk := <-c.chunkCh:
+				// store current offset
+				c.setCurrentOffset(chunk.ChunkFirstOffset)
+				// ToDo choose codec
+				message := &amqp.Message{}
+				err := message.UnmarshalBinary(chunk.Messages)
+				if err != nil {
+					fmt.Println("error parsing chunk", err)
+				}
+				// call  messages handler
+				c.MessagesHandler(ConsumerContext{Consumer: c}, message)
+
+			// Need someway to break and close
+			case quit := <-c.closeCh:
+				if quit {
+					fmt.Println("go routing finished")
+					return
+				}
+			}
+		}
+	}()
+
+	return nil
 }
 
 type ConsumerOptions struct {

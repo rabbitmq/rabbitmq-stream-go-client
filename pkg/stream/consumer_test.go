@@ -92,7 +92,6 @@ var _ = Describe("Smart Consumer", func() {
 		}
 		consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts, &sync.Mutex{})
 		consumer.chunkCh = chunkChan
-		Expect(consumer.Subscribe(context.Background())).To(Succeed())
 		chunkChan <- fakeChunk
 		Eventually(dataBuf).Should(gbytes.Say("rabbit"))
 	})
@@ -171,9 +170,8 @@ var _ = Describe("Smart Consumer", func() {
 		}
 
 		//test
-		consumerWithValidCredits, err := NewConsumer("test-stream", fakeRawClient, handleMessages, opts1, &sync.Mutex{})
+		_, err := NewConsumer("test-stream", fakeRawClient, handleMessages, opts1, &sync.Mutex{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(consumerWithValidCredits.Subscribe(context.Background())).To(Succeed())
 
 		_, err = NewConsumer("test-stream", fakeRawClient, handleMessages, opts2, &sync.Mutex{})
 		Expect(err).To(MatchError("initial credits cannot be greater than 1000"))
@@ -210,39 +208,11 @@ var _ = Describe("Smart Consumer", func() {
 			Expect(consumer.getStatus()).To(Equal(0))
 			consumer.setStatus(1)
 			Expect(consumer.getStatus()).To(Equal(1))
-			Expect(consumer.Subscribe(context.Background())).To(Succeed())
 		})
 	})
 
 	Describe("SuperStream Consumer", func() {
 		It("can enable the feature", func() {
-			subscribeProperties := raw.SubscribeProperties{"super-stream": "test-stream"}
-			chunkChan := make(chan *raw.Chunk)
-			gomock.InOrder(fakeRawClient.EXPECT().
-				NotifyChunk(gomock.AssignableToTypeOf(chunkChan)).Return(chunkChan),
-				fakeRawClient.EXPECT().
-					Subscribe(
-						gomock.AssignableToTypeOf(ctxType), //context
-						gomock.Eq("test-stream"),           // stream
-						gomock.Eq(uint16(1)),               // offsetType
-						gomock.Eq(uint8(1)),                // subscriptionId
-						gomock.Eq(uint16(2)),               // credit
-						gomock.Eq(subscribeProperties),     // properties
-						gomock.Eq(uint64(1)),               // offset
-					))
-
-			opts := &ConsumerOptions{
-				SuperStream:    true,
-				OffsetType:     uint16(1),
-				SubscriptionId: uint8(1),
-				InitialCredits: uint16(2),
-				Offset:         uint64(1),
-			}
-			handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
-				fmt.Printf("messages: %s\n", message.Data)
-			}
-			consumer, _ := NewConsumer("test-stream", fakeRawClient, handleMessages, opts, &sync.Mutex{})
-			Expect(consumer.Subscribe(context.Background())).To(Succeed())
 		})
 	})
 })
