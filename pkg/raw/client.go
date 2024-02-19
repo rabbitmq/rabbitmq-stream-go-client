@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/internal"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
-	"golang.org/x/exp/slog"
 	"io"
+	"log/slog"
 	"math"
 	"net"
 	"reflect"
@@ -207,6 +207,8 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			// FIXME: most of the time, cancelling the context will be OK and the intended shutdown
+			//		probably should not return an error, just log that frame handler is stopping
 			log.Info("context cancelled", "reason", ctx.Err())
 			return ctx.Err()
 		default:
@@ -362,7 +364,6 @@ func (tc *Client) handleIncoming(ctx context.Context) error {
 				case tc.publishErrorCh <- publishError:
 					log.Debug("sent a publish error", "publisherId", publishError.PublisherId())
 				}
-
 			case internal.CommandMetadataUpdate:
 				metadataUpdate := new(internal.MetadataUpdateResponse)
 				err = metadataUpdate.Read(buffer)
@@ -569,7 +570,7 @@ func (tc *Client) peerProperties(ctx context.Context) error {
 	log := LoggerFromCtxOrDiscard(ctx).WithGroup("peer properties")
 	log.Debug("starting peer properties")
 	serverPropertiesResponse, err := tc.syncRequest(ctx,
-		internal.NewPeerPropertiesRequest(tc.configuration.connectionName))
+		internal.NewPeerPropertiesRequest(tc.configuration.ConnectionName))
 	if err != nil {
 		return err
 	}
@@ -582,7 +583,7 @@ func (tc *Client) peerProperties(ctx context.Context) error {
 		"properties",
 		response.ServerProperties,
 	)
-	tc.configuration.rabbitmqBroker.ServerProperties = response.ServerProperties
+	tc.configuration.RabbitmqAddr.ServerProperties = response.ServerProperties
 	return streamErrorOrNil(response.ResponseCode())
 }
 
@@ -607,7 +608,7 @@ func (tc *Client) saslHandshake(ctx context.Context) error {
 		return err
 	}
 
-	tc.configuration.authMechanism = saslMechanismResponse.Mechanisms
+	tc.configuration.AuthMechanism = saslMechanismResponse.Mechanisms
 	return streamErrorOrNil(saslMechanismResponse.ResponseCode())
 }
 
@@ -617,12 +618,12 @@ func (tc *Client) saslAuthenticate(ctx context.Context) error {
 	log := LoggerFromCtxOrDiscard(ctx).WithGroup("sasl authenticate")
 	log.Debug("starting SASL authenticate")
 
-	for _, mechanism := range tc.configuration.authMechanism {
+	for _, mechanism := range tc.configuration.AuthMechanism {
 		if strings.EqualFold(mechanism, "PLAIN") {
 			log.Debug("found PLAIN mechanism as supported")
 			saslPlain := internal.NewSaslPlainMechanism(
-				tc.configuration.rabbitmqBroker.Username,
-				tc.configuration.rabbitmqBroker.Password,
+				tc.configuration.RabbitmqAddr.Username,
+				tc.configuration.RabbitmqAddr.Password,
 			)
 			saslAuthReq := internal.NewSaslAuthenticateRequest(mechanism)
 			err := saslAuthReq.SetChallengeResponse(saslPlain)
@@ -648,7 +649,7 @@ func (tc *Client) open(ctx context.Context) error {
 	log := LoggerFromCtxOrDiscard(ctx).WithGroup("open")
 	log.Debug("starting open")
 
-	rabbit := tc.configuration.rabbitmqBroker
+	rabbit := tc.configuration.RabbitmqAddr
 	openReq := internal.NewOpenRequest(rabbit.Vhost)
 	openRespCommand, err := tc.syncRequest(ctx, openReq)
 	if err != nil {
@@ -752,14 +753,14 @@ func (tc *Client) handleClose(ctx context.Context, req *internal.CloseRequest) e
 // call Client.Connect() after this function.
 //
 // ClientConfiguration must not be nil. ClientConfiguration should be initialised
-// using NewClientConfiguration(). A custom dial function can be set using
+// using NewClientConfiguration(). A custom Dial function can be set using
 // ClientConfiguration.SetDial(). Check ClientConfiguration.SetDial() for more
-// information. If dial function is not provided, DefaultDial is used with a
+// information. If Dial function is not provided, DefaultDial is used with a
 // timeout of 30 seconds. DefaultDial uses net.Dial
 //
-// If you want to implement a custom timeout or dial-retry mechanism, provide
-// your own dial function using [raw.ClientConfiguration] SetDial(). A simple
-// dial function could be as follows:
+// If you want to implement a custom timeout or Dial-retry mechanism, provide
+// your own Dial function using [raw.ClientConfiguration] SetDial(). A simple
+// Dial function could be as follows:
 //
 //	cfg.SetDial(func(network, addr string) (net.Conn, error) {
 //		return net.DialTimeout(network, addr, time.Second)
@@ -777,7 +778,7 @@ func DialConfig(ctx context.Context, config *ClientConfiguration) (Clienter, err
 	var err error
 	var conn net.Conn
 
-	dialer := config.dial
+	dialer := config.Dial
 	if dialer == nil {
 		log.Debug("no dial function provided, using default Dial")
 		dialer = DefaultDial(defaultConnectionTimeout)
@@ -790,7 +791,7 @@ func DialConfig(ctx context.Context, config *ClientConfiguration) (Clienter, err
 	}
 
 	// TODO: TLS if scheme is rabbitmq-stream+tls
-	addr := net.JoinHostPort(config.rabbitmqBroker.Host, strconv.FormatInt(int64(config.rabbitmqBroker.Port), 10))
+	addr := net.JoinHostPort(config.RabbitmqAddr.Host, strconv.FormatInt(int64(config.RabbitmqAddr.Port), 10))
 	conn, err = dialer("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial RabbitMQ '%s': %w", addr, err)
@@ -826,7 +827,7 @@ func DefaultDial(connectionTimeout time.Duration) func(network string, addr stri
 
 // Connect performs a Stream-protocol handshake to connect to RabbitMQ. On a
 // successful connect, it returns a nil error and starts listening to incoming
-// frames from RabbitMQ. If more than 1 broker is defined in ClientConfiguration,
+// frames from RabbitMQ. If more than 1 RabbitmqAddress is defined in ClientConfiguration,
 // they will be tried sequentially.
 //
 // It is recommended to establish a connection via DialConfig, instead of calling
@@ -897,8 +898,8 @@ func (tc *Client) Connect(ctx context.Context) error {
 			panic("could not polymorph SyncCommandRead into TuneRequest")
 		}
 
-		desiredFrameSize := math.Min(float64(tuneReq.FrameMaxSize()), float64(tc.configuration.clientMaxFrameSize))
-		desiredHeartbeat := math.Min(float64(tuneReq.HeartbeatPeriod()), float64(tc.configuration.clientHeartbeat))
+		desiredFrameSize := math.Min(float64(tuneReq.FrameMaxSize()), float64(tc.configuration.ClientMaxFrameSize))
+		desiredHeartbeat := math.Min(float64(tuneReq.HeartbeatPeriod()), float64(tc.configuration.ClientHeartbeat))
 
 		log.Debug(
 			"desired tune options",
@@ -1028,18 +1029,19 @@ func (tc *Client) Send(ctx context.Context, publisherId uint8, publishingMessage
 	return tc.request(ctx, internal.NewPublishRequest(publisherId, uint32(len(publishingMessages)), buff.Bytes()))
 }
 
-// SendSubEntryBatch aggregates, compress and publishes a batch of messages.
-// Similar to Send, but it aggregates the messages for a single publishingId.
-// For a single publishingId there could be multiple messages (max ushort).
-// The compression is done via common.CompresserCodec interface see common.CompresserCodec for more details.
-// The use case for SendSubEntryBatch is to compress a batch of messages for example sending logs.
+/*
+SendSubEntryBatch aggregates, compress and publishes a batch of messages.
+Similar to Send, but it aggregates the messages for a single publishingId.
+For a single publishingId there could be multiple messages (max ushort).
+The compression is done via common.CompresserCodec interface see common.CompresserCodec for more details.
+The use case for SendSubEntryBatch is to compress a batch of messages for example sending logs.
 
-// SendSubEntryBatch is fire and forget, like the send function the client will receive the confirmation from the server.
-// The server sends only the confirmation for the `publishingId`.
+SendSubEntryBatch is fire and forget, like the send function the client will receive the confirmation from the server.
+The server sends only the confirmation for the `publishingId`.
 
-// The publishingId should be the last id of []common.PublishingMessager but we leave the api open to allow
-// the caller to choose the publishingId.
-
+The publishingId should be the last id of []common.PublishingMessager but we leave the api open to allow
+the caller to choose the publishingId.
+*/
 func (tc *Client) SendSubEntryBatch(ctx context.Context, publisherId uint8,
 	publishingId uint64, compress common.CompresserCodec, messages []common.Message) error {
 	if ctx == nil {
@@ -1235,7 +1237,7 @@ func (tc *Client) Credit(ctx context.Context, subscriptionID uint8, credits uint
 //
 //	MetadataResponse{
 //		correlationID uint32
-//		brokers []Broker{
+//		brokers []RabbitmqAddress{
 //			reference uint16
 //			host string
 //			port uint32
@@ -1466,4 +1468,8 @@ func (tc *Client) ConsumerUpdateResponse(ctx context.Context, correlationId uint
 // or timeout to avoid deadlock scenario if RabbitMQ server is unresponsive.
 func (tc *Client) SendHeartbeat() error {
 	return internal.WriteCommand(internal.NewHeartbeat(), tc.connection.GetWriter())
+}
+
+func (tc *Client) ConnectionProperties() map[string]string {
+	return tc.connectionProperties
 }

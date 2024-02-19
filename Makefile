@@ -21,23 +21,27 @@ help:
 
 GO ?= $(shell which go)
 GOPATH ?= $(shell $(GO) env GOPATH)
+GOBIN ?= $(CURDIR)/bin
+$(GOBIN):
+	mkdir -pv $(GOBIN)
+
 define GO_TOOLS
-"github.com/golang/mock/mockgen" \
+"go.uber.org/mock/mockgen" \
 "github.com/onsi/ginkgo/v2/ginkgo"
 endef
 
-GINKGO ?= $(GOPATH)/bin/ginkgo
-$(GINKGO):
+GINKGO ?= $(GOBIN)/ginkgo
+$(GINKGO): | $(GOBIN)
 	@printf "$(GREEN)Installing ginkgo CLI$(NORMAL)\n"
-	$(GO) install -mod=mod github.com/onsi/ginkgo/v2/ginkgo
+	GOBIN="$(GOBIN)" $(GO) install -mod=mod github.com/onsi/ginkgo/v2/ginkgo
 
 .PHONY: ginkgo
 ginkgo: | $(GINKGO)
 
-MOCKGEN ?= $(GOPATH)/bin/mockgen
+MOCKGEN ?= $(GOBIN)/mockgen
 $(MOCKGEN):
 	@printf "$(GREEN)Installing mockgen CLI$(NORMAL)\n"
-	$(GO) install -mod=mod go.uber.org/mock/mockgen
+	GOBIN="$(GOBIN)" $(GO) install -mod=mod go.uber.org/mock/mockgen
 
 .PHONY: mockgen
 mockgen: | $(MOCKGEN)
@@ -50,8 +54,8 @@ install-tools: ## Install tool dependencies for development
 ### Golang targets
 
 .PHONY: go-mod-tidy
-go-mod-tidy: ## Run 'go mod tidy' with compatibility to Go 1.19
-	$(GO) mod tidy -go=1.19
+go-mod-tidy: ## Run 'go mod tidy' with compatibility to Go 1.21
+	$(GO) mod tidy -go=1.21
 
 .PHONY: go-generate-mocks
 go-generate-mocks: | $(MOCKGEN) ## Generate Mocks for testing
@@ -87,6 +91,15 @@ tests-ci:
 		--skip-package "e2e" \
 		--fail-on-pending \
 		--keep-going
+
+.PHONY: system-tests
+system-tests: ## Run system tests. It starts a rabbitmq container. To skip starting the rabbit container, use RABBITMQ_STREAM_SKIP_RABBIT_START="skip"
+	@printf "$(GREEN)Running system tests in parallel$(NORMAL)\n"
+	RABBITMQ_STREAM_RUN_SYSTEM_TEST="run" \
+		$(GINKGO) $(GINKGO_RUN_SHARED_FLAGS) $(GINKGO_RUN_FLAGS) \
+		--tags="rabbitmq.stream.test,rabbitmq.stream.system_test" \
+		--focus 'System tests' \
+		$(GINKGO_EXTRA) ./pkg/stream/
 
 
 #### e2e test suite accepts the flags -keep-rabbit-container=true and -rabbit-debug-log=true

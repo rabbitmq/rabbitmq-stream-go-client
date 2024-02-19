@@ -17,7 +17,8 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: oldstable
+        go-version: stable
+#        go-version: oldstable
 
     - name: Build
       run: make build
@@ -50,7 +51,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: oldstable
+          go-version: stable
+#          go-version: oldstable
 
       - name: E2E Tests
         env:

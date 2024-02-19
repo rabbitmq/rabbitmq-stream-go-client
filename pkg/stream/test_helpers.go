@@ -5,7 +5,8 @@ package stream
 import (
 	"context"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
-	"golang.org/x/exp/slog"
+	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -33,9 +34,11 @@ func (e *Environment) AppendLocatorRawClient(c raw.Clienter) {
 		client: c,
 		isSet:  true,
 		log:    slog.New(&discardHandler{}),
-		backOffPolicy: func(int) time.Duration {
+		retryPolicy: func(int) time.Duration {
 			return time.Millisecond * 10
 		},
+		destructor: &sync.Once{},
+		done:       make(chan struct{}),
 	})
 }
 
@@ -49,7 +52,7 @@ func (e *Environment) SetServerVersion(v string) {
 }
 
 func (e *Environment) SetBackoffPolicy(f func(int) time.Duration) {
-	e.backOffPolicy = f
+	e.retryPolicy = f
 }
 
 func (e *Environment) SetLocatorSelectSequential(v bool) {

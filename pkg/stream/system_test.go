@@ -3,6 +3,7 @@
 package stream_test
 
 import (
+	"context"
 	"fmt"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -11,21 +12,28 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/common"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/stream"
-	"golang.org/x/exp/slog"
+	"log/slog"
+	"os"
 	"sync"
 	"time"
 )
 
-var _ = Describe("stream package", func() {
+var _ = Describe("System tests", func() {
 	const (
 		streamName = "stream-system-test"
 		// 100 byte message
 		messageBody        = "Rabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesomeRabbitmq-is-awesome!!!!!"
 		defaultRabbitmqUri = "rabbitmq-stream://guest:guest@localhost/%2F"
 	)
+
+	BeforeEach(func() {
+		if _, isSet := os.LookupEnv(SystemTestEnvVarName); !isSet {
+			Skip("System test variable to run system test not set. Skipping system tests...")
+		}
+	})
+
 	It("can create and connect to a stream, publish and receive messages", func(ctx SpecContext) {
-		h := slog.HandlerOptions{Level: slog.LevelDebug}.NewTextHandler(GinkgoWriter)
-		debugLogger := slog.New(h)
+		debugLogger := slog.New(slog.NewTextHandler(GinkgoWriter, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		itCtx := raw.NewContextWithLogger(ctx, *debugLogger)
 
 		By("creating a new environment")
@@ -118,6 +126,38 @@ var _ = Describe("stream package", func() {
 
 		By("deleting the stream")
 		Expect(env.DeleteStream(itCtx, streamName)).To(Succeed())
+	})
+
+	It("connects to RabbitMQ", func() {
+		uri := "rabbitmq-stream://localhost:5552"
+		conf := stream.NewEnvironmentConfiguration(
+			stream.WithUri(uri),
+			stream.WithLazyInitialization(false),
+			stream.WithAddressResolver(func(_ string, _ int) (_ string, _ int) {
+				return "localhost", 5552
+			}),
+			stream.WithId("system-test"),
+		)
+		env, err := stream.NewEnvironment(context.Background(), conf)
+		Expect(err).ToNot(HaveOccurred())
+		streamName := "test-stream"
+		Expect(env.CreateStream(context.Background(), streamName, stream.CreateStreamOptions{})).To(Succeed())
+		producer, err := env.CreateProducer(context.Background(), streamName, &stream.ProducerOptions{})
+		Expect(err).ToNot(HaveOccurred())
+
+		DeferCleanup(func() {
+			producer.Close()
+			env.Close(context.Background())
+		})
+
+		for i := 0; i < 1_000; i++ {
+			Expect(producer.Send(context.Background(), amqp.Message{Data: []byte(fmt.Sprintf("Message #%d", i))})).To(Succeed())
+		}
+
+		_, err = env.QueryStreamStats(context.Background(), streamName)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(env.DeleteStream(context.Background(), streamName)).To(Succeed())
 	})
 })
 

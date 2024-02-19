@@ -3,9 +3,8 @@ package stream
 import (
 	"context"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/v2/pkg/raw"
-	"golang.org/x/exp/slog"
 	"golang.org/x/mod/semver"
-	"net"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -16,15 +15,14 @@ const (
 
 type locator struct {
 	sync.Mutex
-	log                  *slog.Logger
-	shutdownNotification chan struct{}
-	rawClientConf        raw.ClientConfiguration
-	client               raw.Clienter
-	isSet                bool
-	clientClose          <-chan error
-	backOffPolicy        func(int) time.Duration
-	addressResolver      net.Addr // TODO: placeholder for address resolver
-
+	log           *slog.Logger
+	destructor    *sync.Once
+	done          chan struct{}
+	rawClientConf raw.ClientConfiguration
+	client        raw.Clienter
+	isSet         bool
+	clientClose   <-chan error
+	retryPolicy   backoffDurationFunc
 }
 
 func newLocator(c raw.ClientConfiguration, logger *slog.Logger) *locator {
@@ -32,17 +30,30 @@ func newLocator(c raw.ClientConfiguration, logger *slog.Logger) *locator {
 		log: logger.
 			WithGroup("locator").
 			With(
-				slog.String("host", c.RabbitmqBrokers().Host),
-				slog.Int("port", c.RabbitmqBrokers().Port),
+				slog.String("host", c.RabbitmqAddr.Host),
+				slog.Int("port", c.RabbitmqAddr.Port),
 			),
+		destructor:    &sync.Once{},
 		rawClientConf: c,
-		backOffPolicy: func(attempt int) time.Duration {
-			return time.Second * time.Duration(attempt<<1)
-		},
-		client:               nil,
-		isSet:                false,
-		addressResolver:      nil,
-		shutdownNotification: make(chan struct{}),
+		retryPolicy:   defaultBackOffPolicy,
+		client:        nil,
+		isSet:         false,
+		done:          make(chan struct{}),
+	}
+}
+
+func (l *locator) close() {
+	logger := l.log.WithGroup("close")
+	l.destructor.Do(func() {
+		close(l.done)
+	})
+	if l.isSet {
+		ctx, cancel := maybeApplyDefaultTimeout(context.Background())
+		defer cancel()
+		if err := l.client.Close(ctx); err != nil {
+			logger.Warn("error closing locator client", slog.Any("error", err))
+		}
+		l.isSet = false
 	}
 }
 
@@ -88,7 +99,7 @@ func (l *locator) shutdownHandler() {
 		// TODO: we must close the shutdown notification channel before closing the client.
 		//   Or otherwise the clientClose case will proceed (incorrectly).
 		select {
-		case <-l.shutdownNotification:
+		case <-l.done:
 			log.Debug("locator shutdown")
 			return
 		case err := <-l.clientClose:
@@ -130,7 +141,7 @@ func (l *locator) shutdownHandler() {
 const rabbitmqVersion311 = "v3.11"
 
 func (l *locator) isServer311orMore() bool {
-	v, ok := l.rawClientConf.RabbitmqBrokers().ServerProperties["version"]
+	v, ok := l.rawClientConf.RabbitmqAddr.ServerProperties["version"]
 	if !ok {
 		// version not found in server properties
 		// returning false as we can't determine
@@ -204,6 +215,7 @@ func (l *locator) operationQueryOffset(args ...any) []any {
 	offset, err := l.client.QueryOffset(ctx, reference, stream)
 	return []any{offset, err}
 }
+
 func (l *locator) operationPartitions(args ...any) []any {
 	ctx := args[0].(context.Context)
 	superstream := args[1].(string)
@@ -217,4 +229,16 @@ func (l *locator) operationQuerySequence(args ...any) []any {
 	stream := args[2].(string)
 	pubId, err := l.client.QueryPublisherSequence(ctx, reference, stream)
 	return []any{pubId, err}
+}
+
+// Locator operation wrapper for MetadataQuery
+//
+// Requires context.Context and []string
+//
+// Returns *MetadataResponse and error
+func (l *locator) operationQueryStreamMetadata(args ...any) []any {
+	ctx := args[0].(context.Context)
+	streamNames := args[1].([]string)
+	metadataResponse, err := l.client.MetadataQuery(ctx, streamNames)
+	return []any{metadataResponse, err}
 }

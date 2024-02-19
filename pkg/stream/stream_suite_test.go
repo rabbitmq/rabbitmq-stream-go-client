@@ -64,8 +64,14 @@ func (p *plainTextMessage) Body() string {
 var _ = SynchronizedBeforeSuite(func() {
 	// Just once
 	logger := log.New(GinkgoWriter, "[SBS] ", log.Ldate|log.Lmsgprefix)
+	if _, isSet := os.LookupEnv(SystemTestEnvVarName); !isSet {
+		// variable to run system tests is not set. We skip all the setup.
+		// Individual specs will be skipped in the system test specific nodes
+		return
+	}
+
 	if _, isSet := os.LookupEnv(SystemTestSkipRabbitStart); isSet {
-		logger.Println("System test variable to skip RabbitMQ start is set. Skipping...")
+		logger.Println("System test variable to skip RabbitMQ start is set. RabbitMQ container won't be started")
 		return
 	}
 
