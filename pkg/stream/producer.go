@@ -508,15 +508,17 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 
 func (producer *Producer) flushUnConfirmedMessages() {
 	producer.mutex.Lock()
-	if producer.publishConfirm != nil {
-		for _, msg := range producer.unConfirmedMessages {
-			msg.confirmed = false
-			msg.err = ConnectionClosed
-			msg.errorCode = connectionCloseError
+
+	for _, msg := range producer.unConfirmedMessages {
+		msg.confirmed = false
+		msg.err = ConnectionClosed
+		msg.errorCode = connectionCloseError
+		if producer.publishConfirm != nil {
 			producer.publishConfirm <- []*ConfirmationStatus{msg}
-			delete(producer.unConfirmedMessages, msg.publishingId)
 		}
+		delete(producer.unConfirmedMessages, msg.publishingId)
 	}
+
 	producer.mutex.Unlock()
 }
 
