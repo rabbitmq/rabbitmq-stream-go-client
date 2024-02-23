@@ -415,9 +415,8 @@ func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offse
 func (c *Client) creditNotificationFrameHandler(readProtocol *ReaderProtocol,
 	r *bufio.Reader) {
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
-	//subscriptionId := readByte(r)
-	_ = readByte(r)
-	// TODO ASK WHAT TO DO HERE
+	subscriptionId := readByte(r)
+	logs.LogWarn("received a credit for an unknown subscriptionId: %d", subscriptionId)
 }
 
 func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol,

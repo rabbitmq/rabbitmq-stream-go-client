@@ -515,6 +515,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		BatchPublishingDelay: options.BatchPublishingDelay,
 		SubEntrySize:         options.SubEntrySize,
 		Compression:          options.Compression,
+		ConfirmationTimeOut:  options.ConfirmationTimeOut,
 	})
 
 	if err != nil {
@@ -523,6 +524,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	res := c.internalDeclarePublisher(streamName, producer)
 	if res.Err == nil {
 		producer.startPublishTask()
+		producer.startUnconfirmedMessagesTimeOutTask()
 	}
 	return producer, res.Err
 }

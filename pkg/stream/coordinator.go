@@ -102,11 +102,11 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 		time.Sleep(200 * time.Millisecond)
 		tentatives++
 	}
-	producer.FlushUnConfirmedMessages()
 
 	if producer.closeHandler != nil {
 		producer.closeHandler <- reason
 	}
+
 	return coordinator.removeById(id, coordinator.producers)
 }
 

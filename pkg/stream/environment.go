@@ -109,6 +109,9 @@ func (env *Environment) DeclareStream(streamName string, options *StreamOptions)
 		if err != nil {
 			return
 		}
+		if err != nil {
+			return
+		}
 	}(client)
 	if err != nil {
 		return err

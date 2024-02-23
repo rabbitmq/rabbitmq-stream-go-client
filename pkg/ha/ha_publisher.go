@@ -6,6 +6,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +16,7 @@ const (
 	StatusOpen               = 1
 	StatusClosed             = 2
 	StatusStreamDoesNotExist = 3
+	StatusReconnecting       = 4
 )
 
 func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
@@ -22,6 +24,26 @@ func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishCo
 		for messagesIds := range confirms {
 			atomic.AddInt32(&p.count, int32(len(messagesIds)))
 			p.confirmMessageHandler(messagesIds)
+		}
+	}()
+}
+
+func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
+	go func() {
+		for event := range channelClose {
+			// TODO: Convert the string to a constant
+			if event.Reason == "socket client closed" {
+				logs.LogError("[RProducer] - producer closed unexpectedly.. Reconnecting..")
+				err, reconnected := p.retry()
+				if err != nil {
+					// TODO: Handle stream is not available
+					return
+				}
+				if reconnected {
+					p.setStatus(StatusOpen)
+				}
+				p.reconnectionSignal <- struct{}{}
+			}
 		}
 	}()
 }
@@ -36,11 +58,12 @@ type ReliableProducer struct {
 	mutex                 *sync.Mutex
 	mutexStatus           *sync.Mutex
 	status                int
+	reconnectionSignal    chan struct{}
 }
 
 type ConfirmMessageHandler func(messageConfirm []*stream.ConfirmationStatus)
 
-func NewHAProducer(env *stream.Environment, streamName string,
+func NewReliableProducer(env *stream.Environment, streamName string,
 	producerOptions *stream.ProducerOptions,
 	confirmMessageHandler ConfirmMessageHandler) (*ReliableProducer, error) {
 	res := &ReliableProducer{
@@ -52,6 +75,7 @@ func NewHAProducer(env *stream.Environment, streamName string,
 		mutex:                 &sync.Mutex{},
 		mutexStatus:           &sync.Mutex{},
 		confirmMessageHandler: confirmMessageHandler,
+		reconnectionSignal:    make(chan struct{}),
 	}
 	if confirmMessageHandler == nil {
 		return nil, fmt.Errorf("the confirmation message handler is mandatory")
@@ -71,6 +95,8 @@ func (p *ReliableProducer) newProducer() error {
 		return err
 	}
 	channelPublishConfirm := producer.NotifyPublishConfirmation()
+	channelNotifyClose := producer.NotifyClose()
+	p.handleNotifyClose(channelNotifyClose)
 	p.handlePublishConfirm(channelPublishConfirm)
 	p.producer = producer
 	return err
@@ -81,16 +107,23 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		return stream.StreamDoesNotExist
 	}
 	if p.getStatus() == StatusClosed {
-		return errors.New("Producer is closed")
+		return errors.New("producer is closed")
 	}
+
+	if p.getStatus() == StatusReconnecting {
+		logs.LogDebug("[RProducer] - producer is reconnecting")
+		<-p.reconnectionSignal
+		logs.LogDebug("[RProducer] - producer reconnected")
+	}
+
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	errW := p.producer.Send(message)
 
 	if errW != nil {
-		switch errW {
-		case stream.FrameTooLarge:
+		switch {
+		case errors.Is(errW, stream.FrameTooLarge):
 			{
 				return stream.FrameTooLarge
 			}
@@ -98,54 +131,15 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 			logs.LogError("[RProducer] - error during send %s", errW.Error())
 		}
 
-	}
-
-	if errW != nil {
-		err, done := p.retry()
-		if done {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (p *ReliableProducer) BatchSend(messages []message.StreamMessage) error {
-	if p.getStatus() == StatusStreamDoesNotExist {
-		return stream.StreamDoesNotExist
-	}
-	if p.getStatus() == StatusClosed {
-		return errors.New("Producer is closed")
-	}
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	errW := p.producer.BatchSend(messages)
-
-	if errW != nil {
-		switch errW {
-		case stream.FrameTooLarge:
-			{
-				return stream.FrameTooLarge
-			}
-		default:
-			logs.LogError("[RProducer] - error during send %s", errW.Error())
-		}
-
-	}
-
-	if errW != nil {
-		err, done := p.retry()
-		if done {
-			return err
-		}
 	}
 
 	return nil
 }
 
 func (p *ReliableProducer) retry() (error, bool) {
-	time.Sleep(200 * time.Millisecond)
+	p.setStatus(StatusReconnecting)
+	sleepValue := rand.Intn(int(p.producerOptions.ConfirmationTimeOut.Seconds()) - 2)
+	time.Sleep(time.Duration(sleepValue) * time.Second)
 	exists, errS := p.env.StreamExists(p.streamName)
 	if errS != nil {
 		return errS, true
@@ -153,7 +147,6 @@ func (p *ReliableProducer) retry() (error, bool) {
 	}
 	if exists {
 		logs.LogDebug("[RProducer] - stream %s exists. Reconnecting the producer.", p.streamName)
-		p.producer.FlushUnConfirmedMessages()
 		return p.newProducer(), true
 	} else {
 		logs.LogError("[RProducer] - stream %s does not exist. Closing..", p.streamName)
@@ -187,7 +180,6 @@ func (p *ReliableProducer) GetBroker() *stream.Broker {
 
 func (p *ReliableProducer) Close() error {
 	p.setStatus(StatusClosed)
-	p.producer.FlushUnConfirmedMessages()
 	err := p.producer.Close()
 	if err != nil {
 		return err

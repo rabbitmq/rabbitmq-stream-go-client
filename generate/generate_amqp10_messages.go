@@ -59,6 +59,7 @@ func main() {
 
 	msg := amqp.NewMessage([]byte(""))
 	binary, err := msg.MarshalBinary()
+	//msg.UnmarshalBinary()
 	if err != nil {
 		return
 	}

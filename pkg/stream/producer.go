@@ -12,6 +12,7 @@ import (
 )
 
 type ConfirmationStatus struct {
+	inserted     time.Time
 	message      message.StreamMessage
 	producerID   uint8
 	publishingId int64
@@ -80,12 +81,13 @@ type Producer struct {
 type ProducerOptions struct {
 	client               *Client
 	streamName           string
-	Name                 string      // Producer name, it is useful to handle deduplication messages
-	QueueSize            int         // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
-	BatchSize            int         // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput
-	BatchPublishingDelay int         // Period to send a batch of messages.
-	SubEntrySize         int         // Size of sub Entry, to aggregate more subEntry using one publishing id
-	Compression          Compression // Compression type, it is valid only if SubEntrySize > 1
+	Name                 string        // Producer name, it is useful to handle deduplication messages
+	QueueSize            int           // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
+	BatchSize            int           // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput
+	BatchPublishingDelay int           // Period to send a batch of messages.
+	SubEntrySize         int           // Size of sub Entry, to aggregate more subEntry using one publishing id
+	Compression          Compression   // Compression type, it is valid only if SubEntrySize > 1
+	ConfirmationTimeOut  time.Duration // Time to wait for the confirmation
 }
 
 func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
@@ -118,6 +120,11 @@ func (po *ProducerOptions) SetCompression(compression Compression) *ProducerOpti
 	return po
 }
 
+func (po *ProducerOptions) SetConfirmationTimeOut(duration time.Duration) *ProducerOptions {
+	po.ConfirmationTimeOut = duration
+	return po
+}
+
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{
 		QueueSize:            defaultQueuePublisherSize,
@@ -125,6 +132,7 @@ func NewProducerOptions() *ProducerOptions {
 		BatchPublishingDelay: defaultBatchPublishingDelay,
 		SubEntrySize:         1,
 		Compression:          Compression{},
+		ConfirmationTimeOut:  defaultConfirmationTimeOut,
 	}
 }
 
@@ -138,6 +146,7 @@ func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamM
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
 	producer.unConfirmedMessages[sequence] = &ConfirmationStatus{
+		inserted:     time.Now(),
 		message:      message,
 		producerID:   producerID,
 		publishingId: sequence,
@@ -215,6 +224,32 @@ func (producer *Producer) sendBufferedMessages() {
 		producer.pendingMessages.size = initBufferPublishSize
 	}
 }
+
+func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
+
+	go func() {
+		for producer.getStatus() == open {
+			time.Sleep(1 * time.Second)
+			producer.mutex.Lock()
+			for _, msg := range producer.unConfirmedMessages {
+				if time.Since(msg.inserted) > producer.options.ConfirmationTimeOut {
+					msg.err = ConfirmationTimoutError
+					msg.errorCode = timeoutError
+					msg.confirmed = false
+					if producer.publishConfirm != nil {
+						producer.publishConfirm <- []*ConfirmationStatus{msg}
+					}
+					delete(producer.unConfirmedMessages, msg.publishingId)
+				}
+			}
+			producer.mutex.Unlock()
+		}
+		time.Sleep(producer.options.ConfirmationTimeOut)
+		producer.flushUnConfirmedMessages()
+	}()
+
+}
+
 func (producer *Producer) startPublishTask() {
 	go func(ch chan messageSequence) {
 		var ticker = time.NewTicker(time.Duration(producer.options.BatchPublishingDelay) * time.Millisecond)
@@ -225,7 +260,7 @@ func (producer *Producer) startPublishTask() {
 			case msg, running := <-ch:
 				{
 					if !running {
-						producer.FlushUnConfirmedMessages()
+						producer.flushUnConfirmedMessages()
 						if producer.publishConfirm != nil {
 							close(producer.publishConfirm)
 							producer.publishConfirm = nil
@@ -465,15 +500,13 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	if err != nil {
 		// This sleep is need to wait the
 		// 800 milliseconds to flush all the pending messages
-
 		producer.setStatus(closed)
-		producer.FlushUnConfirmedMessages()
 		return err
 	}
 	return nil
 }
 
-func (producer *Producer) FlushUnConfirmedMessages() {
+func (producer *Producer) flushUnConfirmedMessages() {
 	producer.mutex.Lock()
 	if producer.publishConfirm != nil {
 		for _, msg := range producer.unConfirmedMessages {
@@ -521,7 +554,6 @@ func (producer *Producer) Close() error {
 	}
 
 	close(producer.messageSequenceCh)
-
 	return nil
 }
 
