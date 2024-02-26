@@ -138,7 +138,7 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 
 func (p *ReliableProducer) retry() (error, bool) {
 	p.setStatus(StatusReconnecting)
-	sleepValue := rand.Intn(int(p.producerOptions.ConfirmationTimeOut.Seconds()) - 2)
+	sleepValue := rand.Intn(int(p.producerOptions.ConfirmationTimeOut.Seconds()-2+1) + 2)
 	time.Sleep(time.Duration(sleepValue) * time.Second)
 	exists, errS := p.env.StreamExists(p.streamName)
 	if errS != nil {

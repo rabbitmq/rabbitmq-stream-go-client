@@ -229,7 +229,7 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 
 	go func() {
 		for producer.getStatus() == open {
-			time.Sleep(1 * time.Second)
+			time.Sleep(2 * time.Second)
 			producer.mutex.Lock()
 			for _, msg := range producer.unConfirmedMessages {
 				if time.Since(msg.inserted) > producer.options.ConfirmationTimeOut {
@@ -244,8 +244,8 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 			}
 			producer.mutex.Unlock()
 		}
-		time.Sleep(producer.options.ConfirmationTimeOut)
-		producer.flushUnConfirmedMessages()
+		time.Sleep(5 * time.Second)
+		producer.flushUnConfirmedMessages(timeoutError, ConfirmationTimoutError)
 	}()
 
 }
@@ -260,7 +260,8 @@ func (producer *Producer) startPublishTask() {
 			case msg, running := <-ch:
 				{
 					if !running {
-						producer.flushUnConfirmedMessages()
+
+						producer.flushUnConfirmedMessages(connectionCloseError, ConnectionClosed)
 						if producer.publishConfirm != nil {
 							close(producer.publishConfirm)
 							producer.publishConfirm = nil
@@ -506,13 +507,13 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	return nil
 }
 
-func (producer *Producer) flushUnConfirmedMessages() {
+func (producer *Producer) flushUnConfirmedMessages(errorCode uint16, err error) {
 	producer.mutex.Lock()
 
 	for _, msg := range producer.unConfirmedMessages {
 		msg.confirmed = false
-		msg.err = ConnectionClosed
-		msg.errorCode = connectionCloseError
+		msg.err = err
+		msg.errorCode = errorCode
 		if producer.publishConfirm != nil {
 			producer.publishConfirm <- []*ConfirmationStatus{msg}
 		}
