@@ -75,6 +75,8 @@ const (
 	/// responses out of protocol
 	closeChannel         = uint16(60)
 	connectionCloseError = uint16(61)
+	timeoutError         = uint16(62)
+
 	///
 	defaultSocketCallTimeout = 10 * time.Second
 
@@ -99,6 +101,7 @@ const (
 
 	defaultBatchSize            = 100
 	defaultBatchPublishingDelay = 100
+	defaultConfirmationTimeOut  = 10 * time.Second
 	//
 
 	StreamTcpPort = "5552"
@@ -121,6 +124,7 @@ var StreamNotAvailable = errors.New("Stream Not Available")
 var UnknownFrame = errors.New("Unknown Frame")
 var InternalError = errors.New("Internal Error")
 var AuthenticationFailureLoopbackError = errors.New("Authentication Failure Loopback Error")
+var ConfirmationTimoutError = errors.New("Confirmation Timeout Error")
 
 var LeaderNotReady = errors.New("Leader not Ready yet")
 

@@ -7,8 +7,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/examples/haProducer/http"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
@@ -26,21 +24,21 @@ func CheckErr(err error) {
 	}
 }
 
-var counter int32 = 0
+var confirmed int32 = 0
 var fail int32 = 0
+var mutex = sync.Mutex{}
+var unConfirmedMessages []message.StreamMessage
 
 func handlePublishConfirm(messageStatus []*stream.ConfirmationStatus) {
 	go func() {
-		for _, message := range messageStatus {
-			if message.IsConfirmed() {
-
-				if atomic.AddInt32(&counter, 1)%20000 == 0 {
-					fmt.Printf("Confirmed %d messages\n", atomic.LoadInt32(&counter))
-				}
+		for _, msgStatus := range messageStatus {
+			if msgStatus.IsConfirmed() {
+				atomic.AddInt32(&confirmed, 1)
 			} else {
-				if atomic.AddInt32(&fail, 1)%20000 == 0 {
-					fmt.Printf("NOT Confirmed %d messages\n", atomic.LoadInt32(&fail))
-				}
+				atomic.AddInt32(&fail, 1)
+				mutex.Lock()
+				unConfirmedMessages = append(unConfirmedMessages, msgStatus.GetMessage())
+				mutex.Unlock()
 			}
 
 		}
@@ -52,6 +50,7 @@ func main() {
 
 	fmt.Println("HA producer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
+	const messagesToSend = 20_000_000
 
 	addresses := []string{
 		"rabbitmq-stream://guest:guest@localhost:5552/%2f",
@@ -63,82 +62,49 @@ func main() {
 			SetUris(addresses))
 	CheckErr(err)
 
-	streamName := uuid.New().String()
+	streamName := "golang-reliable-producer-Test"
+	env.DeleteStream(streamName)
+
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
 			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
 		},
 	)
 
-	rProducer, err := ha.NewHAProducer(env, streamName, nil, handlePublishConfirm)
+	rProducer, err := ha.NewReliableProducer(env,
+		streamName,
+		stream.NewProducerOptions().SetConfirmationTimeOut(5*time.Second), handlePublishConfirm)
 	CheckErr(err)
-	rProducer1, err := ha.NewHAProducer(env, streamName, nil, handlePublishConfirm)
-	CheckErr(err)
-
-	wg := sync.WaitGroup{}
-
 	var sent int32
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func(wg *sync.WaitGroup) {
-			for i := 0; i < 100000; i++ {
-				msg := amqp.NewMessage([]byte("ha"))
-				err := rProducer.Send(msg)
-				CheckErr(err)
-				err = rProducer1.BatchSend([]message.StreamMessage{msg})
-				if atomic.AddInt32(&sent, 2)%20000 == 0 {
-					time.Sleep(100 * time.Millisecond)
-					fmt.Printf("Sent..%d messages\n", atomic.LoadInt32(&sent))
-				}
-				if err != nil {
-					break
-				}
-			}
-			wg.Done()
-		}(&wg)
-	}
-	isActive := true
+	isRunning := true
 	go func() {
-		for isActive {
-			coo, err := http.Connections("15672")
-			if err != nil {
-				return
-			}
-
-			for _, connection := range coo {
-				_ = http.DropConnection(connection.Name, "15672")
-			}
-			time.Sleep(2 * time.Second)
+		for isRunning {
+			totalHandled := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
+			fmt.Printf("%s - ToSend: %d - Sent:%d  - Confirmed:%d  - Not confirmed:%d - Total :%d \n",
+				time.Now().Format(time.RFC822), messagesToSend, sent, confirmed, fail, totalHandled)
+			time.Sleep(5 * time.Second)
 		}
 	}()
 
-	wg.Wait()
-	isActive = false
-	time.Sleep(2 * time.Second)
+	for i := 0; i < messagesToSend; i++ {
+		msg := amqp.NewMessage([]byte("ha"))
+		mutex.Lock()
+		for _, confirmedMessage := range unConfirmedMessages {
+			err := rProducer.Send(confirmedMessage)
+			atomic.AddInt32(&sent, 1)
+			CheckErr(err)
+		}
+		unConfirmedMessages = []message.StreamMessage{}
+		mutex.Unlock()
+		err := rProducer.Send(msg)
+		atomic.AddInt32(&sent, 1)
+		CheckErr(err)
+	}
 
-	fmt.Println("Terminated. Press any key to see the report. ")
+	fmt.Println("Terminated. Press enter to close the connections.")
 	_, _ = reader.ReadString('\n')
-	time.Sleep(200 * time.Millisecond)
-	totalHandled := atomic.LoadInt32(&counter) + atomic.LoadInt32(&fail)
-	fmt.Printf("[Report]\n - Sent:%d \n - Confirmed:%d\n - Not confirmed:%d\n - Total messages handeld:%d \n",
-		sent, counter, fail, totalHandled)
-	if sent == totalHandled {
-		fmt.Printf(" - Messages sent %d match with handled: %d! yea! \n\n", sent, totalHandled)
-	}
-
-	if totalHandled > sent {
-		fmt.Printf(" - Messages sent %d are lower than handled: %d! some duplication, can happens ! \n\n", sent, totalHandled)
-	}
-
-	if sent > totalHandled {
-		fmt.Printf(" - Messages handled %d are lower than send: %d! that's not good!\n\n", totalHandled, sent)
-	}
-
+	isRunning = false
 	err = rProducer.Close()
-	CheckErr(err)
-	err = rProducer1.Close()
-	CheckErr(err)
-	err = env.DeleteStream(streamName)
 	CheckErr(err)
 	err = env.Close()
 	CheckErr(err)

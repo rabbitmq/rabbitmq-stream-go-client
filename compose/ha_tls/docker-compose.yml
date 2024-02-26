@@ -7,10 +7,12 @@ services:
     networks:
       - back
     hostname: node0
-    image: docker.io/rabbitmq:3.13-rc-management
+    image: rabbitmq:3.13-rc-management
+    pull_policy: always
     ports:
       - "5561:5551"
       - "5562:5552"
+      - "5682:5672"
     tty: true
     volumes:
      - ./conf/:/etc/rabbitmq/
@@ -22,10 +24,12 @@ services:
     networks:
       - back
     hostname: node1
-    image: docker.io/rabbitmq:3.13-rc-management
+    image: rabbitmq:3.13-rc-management
+    pull_policy: always
     ports:
       - "5571:5551"
       - "5572:5552"
+      - "5692:5672"
     tty: true
     volumes:
       - ./conf/:/etc/rabbitmq/
@@ -37,10 +41,12 @@ services:
     networks:
       - back
     hostname: node2
-    image: docker.io/rabbitmq:3.13-rc-management
+    image: rabbitmq:3.13-rc-management
+    pull_policy: always
     ports:
       - "5581:5551"
       - "5582:5552"
+      - "5602:5672"
     tty: true
     volumes:
       - ./conf/:/etc/rabbitmq/
@@ -52,6 +58,7 @@ services:
     ports:
       - "5553:5552"
       - "5554:5551"
+      - "5674:5672"
       - "15673:15672"
     networks:
       - back

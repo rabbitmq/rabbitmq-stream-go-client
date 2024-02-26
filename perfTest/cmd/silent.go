@@ -264,7 +264,7 @@ func startPublisher(streamName string) error {
 		logInfo("Enable SubEntrySize: %d, compression: %s", subEntrySize, cp)
 	}
 
-	rPublisher, err := ha.NewHAProducer(simulEnvironment,
+	rPublisher, err := ha.NewReliableProducer(simulEnvironment,
 		streamName,
 		producerOptions,
 		handlePublishConfirms)
@@ -315,9 +315,11 @@ func startPublisher(streamName string) error {
 			}
 
 			atomic.AddInt64(&messagesSent, int64(len(arr)))
-			err = prod.BatchSend(arr)
+			for _, streamMessage := range arr {
+				err = prod.Send(streamMessage)
+				checkErr(err)
+			}
 			atomic.AddInt32(&publisherMessageCount, int32(len(arr)))
-			checkErr(err)
 
 		}
 	}(rPublisher, arr)
