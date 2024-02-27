@@ -291,7 +291,6 @@ func (producer *Producer) startPublishTask() {
 				producer.sendBufferedMessages()
 				producer.mutexPending.Unlock()
 			}
-
 		}
 	}(producer.messageSequenceCh)
 
@@ -317,6 +316,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 			publishingId:     sequence,
 		}
 	} else {
+		// TODO: Change the error message with a typed error
 		return fmt.Errorf("producer id: %d  closed", producer.id)
 	}
 

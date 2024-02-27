@@ -143,7 +143,11 @@ func (c *Client) connect() error {
 		c.tuneState.requestedHeartbeat = int(c.tcpParameters.RequestedHeartbeat.Seconds())
 
 		servAddr := net.JoinHostPort(host, port)
-		tcpAddr, _ := net.ResolveTCPAddr("tcp", servAddr)
+		tcpAddr, errorResolve := net.ResolveTCPAddr("tcp", servAddr)
+		if errorResolve != nil {
+			logs.LogDebug("Resolve error %s", errorResolve)
+			return errorResolve
+		}
 		connection, errorConnection := net.DialTCP("tcp", nil, tcpAddr)
 		if errorConnection != nil {
 			logs.LogDebug("%s", errorConnection)

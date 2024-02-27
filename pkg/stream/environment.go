@@ -87,9 +87,12 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 	err := client.connect()
 	tentatives := 1
 	for err != nil {
-		logs.LogError("Can't connect the locator client, error:%s, retry in %d seconds, broker: ", err, tentatives,
+		sleepTime := rand.Intn(5000) + (tentatives * 1000)
+
+		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: ", err, sleepTime,
 			client.broker)
-		time.Sleep(time.Duration(tentatives) * time.Second)
+
+		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 		rand.Seed(time.Now().UnixNano())
 		n := rand.Intn(len(env.options.ConnectionParameters))
 		client = newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
