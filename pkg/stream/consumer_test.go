@@ -164,6 +164,7 @@ var _ = Describe("Streaming Consumers", func() {
 				atomic.AddInt32(&messagesReceived, 1)
 			}, NewConsumerOptions().
 				SetOffset(OffsetSpecification{}.Offset(50)).
+				SetClientProvidedName("consumer_test").
 				SetCRCCheck(true))
 		Expect(err).NotTo(HaveOccurred())
 

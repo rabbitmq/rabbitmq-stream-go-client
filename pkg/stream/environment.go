@@ -542,9 +542,13 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 			break
 		}
 	}
+	clientProvidedName := "go-stream-producer"
+	if options != nil && options.ClientProvidedName != "" {
+		clientProvidedName = options.ClientProvidedName
+	}
 
 	if clientResult == nil {
-		clientResult = cc.newClientForProducer(leader, tcpParameters, saslConfiguration)
+		clientResult = cc.newClientForProducer(clientProvidedName, leader, tcpParameters, saslConfiguration)
 	}
 
 	err := clientResult.connect()
@@ -561,7 +565,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 		if err != nil {
 			return nil, err
 		}
-		clientResult = cc.newClientForProducer(leader, tcpParameters, saslConfiguration)
+		clientResult = cc.newClientForProducer(options.ClientProvidedName, leader, tcpParameters, saslConfiguration)
 		err = clientResult.connect()
 		if err != nil {
 			return nil, err
@@ -578,8 +582,8 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 	return producer, nil
 }
 
-func (cc *environmentCoordinator) newClientForProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
-	clientResult := newClient("go-stream-producer", leader, tcpParameters, saslConfiguration)
+func (cc *environmentCoordinator) newClientForProducer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
+	clientResult := newClient(connectionName, leader, tcpParameters, saslConfiguration)
 	chMeta := make(chan metaDataUpdateEvent, 1)
 	clientResult.metadataListener = chMeta
 	go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -598,7 +602,7 @@ func (cc *environmentCoordinator) newClientForProducer(leader *Broker, tcpParame
 	return clientResult
 }
 
-func (cc *environmentCoordinator) newConsumer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration,
+func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration,
 	streamName string, messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
 	cc.mutex.Lock()
@@ -614,7 +618,7 @@ func (cc *environmentCoordinator) newConsumer(leader *Broker, tcpParameters *TCP
 	}
 
 	if clientResult == nil {
-		clientResult = newClient("go-stream-consumer", leader, tcpParameters, saslConfiguration)
+		clientResult = newClient(connectionName, leader, tcpParameters, saslConfiguration)
 		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -762,8 +766,14 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 		}
 	}
 	consumerBroker.cloneFrom(clientLocator.broker, resolver)
+	clientProvidedName := "go-stream-consumer"
+	if consumerOptions != nil && consumerOptions.ClientProvidedName != "" {
+		clientProvidedName = consumerOptions.ClientProvidedName
+	}
 	consumer, err := ps.consumersCoordinator[coordinatorKey].
-		newConsumer(consumerBroker, clientLocator.tcpParameters, clientLocator.saslConfiguration, streamName, messagesHandler, consumerOptions)
+		newConsumer(clientProvidedName, consumerBroker, clientLocator.tcpParameters,
+			clientLocator.saslConfiguration,
+			streamName, messagesHandler, consumerOptions)
 	if err != nil {
 		return nil, err
 	}

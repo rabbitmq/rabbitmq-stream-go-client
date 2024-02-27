@@ -88,6 +88,7 @@ type ProducerOptions struct {
 	SubEntrySize         int           // Size of sub Entry, to aggregate more subEntry using one publishing id
 	Compression          Compression   // Compression type, it is valid only if SubEntrySize > 1
 	ConfirmationTimeOut  time.Duration // Time to wait for the confirmation
+	ClientProvidedName   string        // Client provider name that will be shown in the management UI
 }
 
 func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
@@ -125,6 +126,11 @@ func (po *ProducerOptions) SetConfirmationTimeOut(duration time.Duration) *Produ
 	return po
 }
 
+func (po *ProducerOptions) SetClientProvidedName(name string) *ProducerOptions {
+	po.ClientProvidedName = name
+	return po
+}
+
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{
 		QueueSize:            defaultQueuePublisherSize,
@@ -133,6 +139,7 @@ func NewProducerOptions() *ProducerOptions {
 		SubEntrySize:         1,
 		Compression:          Compression{},
 		ConfirmationTimeOut:  defaultConfirmationTimeOut,
+		ClientProvidedName:   "go-stream-producer",
 	}
 }
 

@@ -12,8 +12,13 @@ type queue struct {
 	Messages int `json:"messages"`
 }
 
+type client_properties struct {
+	Connection_name string `json:"connection_name"`
+}
+
 type connection struct {
-	Name string `json:"name"`
+	Name             string            `json:"name"`
+	ClientProperties client_properties `json:"client_properties"`
 }
 
 func messagesReady(queueName string, port string) (int, error) {
@@ -82,8 +87,12 @@ func baseCall(url, username, password string, method string) (string, error) {
 			return "", err2
 		}
 		return string(bodyBytes), nil
-
 	}
+
+	if resp.StatusCode == 204 { // No Content
+		return "", nil
+	}
+
 	return "", errors.New(strconv.Itoa(resp.StatusCode))
 
 }

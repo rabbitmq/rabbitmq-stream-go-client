@@ -101,6 +101,7 @@ func main() {
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
+			SetClientProvidedName("my_consumer").            // connection name
 			SetConsumerName("my_consumer").                  // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First()). // start consuming from the beginning
 			SetCRCCheck(false))                              // Disable crc control, increase the performances
