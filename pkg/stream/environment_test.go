@@ -225,7 +225,6 @@ var _ = Describe("Environment test", func() {
 	})
 
 	Describe("Environment Validations", func() {
-
 		_, err := NewEnvironment(NewEnvironmentOptions().
 			SetMaxConsumersPerClient(0).
 			SetMaxProducersPerClient(0))

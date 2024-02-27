@@ -7,7 +7,7 @@ services:
     networks:
       - back
     hostname: node0
-    image: rabbitmq:3.13-rc-management
+    image: rabbitmq:3.13-management
     pull_policy: always
     ports:
       - "5561:5551"
@@ -24,7 +24,7 @@ services:
     networks:
       - back
     hostname: node1
-    image: rabbitmq:3.13-rc-management
+    image: rabbitmq:3.13-management
     pull_policy: always
     ports:
       - "5571:5551"
@@ -41,7 +41,7 @@ services:
     networks:
       - back
     hostname: node2
-    image: rabbitmq:3.13-rc-management
+    image: rabbitmq:3.13-management
     pull_policy: always
     ports:
       - "5581:5551"
