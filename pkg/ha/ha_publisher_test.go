@@ -7,6 +7,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	. "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"sync/atomic"
+	"time"
 )
 
 var _ = Describe("Reliable Producer", func() {
@@ -59,29 +60,51 @@ var _ = Describe("Reliable Producer", func() {
 	// the client provider name is not exposed to the user.
 	// we need to expose it than kill the connection
 
-	//It("restart Reliable Producer in case of killing connection", func() {
-	//	signal := make(chan struct{})
-	//	var confirmed int32
-	//	producer, err := NewReliableProducer(envForRProducer,
-	//		streamForRProducer, &ProducerOptions{}, func(messageConfirm []*ConfirmationStatus) {
-	//			for _, confirm := range messageConfirm {
-	//				Expect(confirm.IsConfirmed()).To(BeTrue())
-	//			}
-	//			if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == 10 {
-	//				signal <- struct{}{}
-	//			}
-	//		})
-	//	Expect(err).NotTo(HaveOccurred())
-	//
-	//	// kill the connection
-	//
-	//	for i := 0; i < 10; i++ {
-	//		msg := amqp.NewMessage([]byte("ha"))
-	//		err := producer.Send(msg)
-	//		Expect(err).NotTo(HaveOccurred())
-	//	}
-	//	<-signal
-	//	Expect(producer.Close()).NotTo(HaveOccurred())
-	//})
+	It("restart Reliable Producer in case of killing connection", func() {
+		signal := make(chan struct{})
+		var confirmed int32
+		clientProvidedName := uuid.New().String()
+		producer, err := NewReliableProducer(envForRProducer,
+			streamForRProducer, NewProducerOptions().SetClientProvidedName(clientProvidedName), func(messageConfirm []*ConfirmationStatus) {
+				for _, confirm := range messageConfirm {
+					Expect(confirm.IsConfirmed()).To(BeTrue())
+				}
+				if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == 10 {
+					signal <- struct{}{}
+				}
+			})
+		Expect(err).NotTo(HaveOccurred())
+
+		time.Sleep(1 * time.Second)
+		connectionToDrop := ""
+		Eventually(func() bool {
+			connections, err := Connections("15672")
+			if err != nil {
+				return false
+			}
+			for _, connection := range connections {
+				if connection.ClientProperties.Connection_name == clientProvidedName {
+					connectionToDrop = connection.Name
+					return true
+				}
+			}
+			return false
+		}, time.Second*5).
+			Should(BeTrue())
+
+		Expect(connectionToDrop).NotTo(BeEmpty())
+		// kill the connection
+		errDrop := DropConnection(connectionToDrop, "15672")
+		Expect(errDrop).NotTo(HaveOccurred())
+
+		time.Sleep(2 * time.Second) // we give some time to the client to reconnect
+		for i := 0; i < 10; i++ {
+			msg := amqp.NewMessage([]byte("ha"))
+			err := producer.Send(msg)
+			Expect(err).NotTo(HaveOccurred())
+		}
+		<-signal
+		Expect(producer.Close()).NotTo(HaveOccurred())
+	})
 
 })

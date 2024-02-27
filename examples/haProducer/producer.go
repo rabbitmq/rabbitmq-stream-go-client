@@ -70,7 +70,9 @@ func main() {
 		var unConfirmedMessages []message.StreamMessage
 		rProducer, err := ha.NewReliableProducer(env,
 			streamName,
-			stream.NewProducerOptions().SetConfirmationTimeOut(5*time.Second),
+			stream.NewProducerOptions().
+				SetConfirmationTimeOut(5*time.Second).
+				SetClientProvidedName(fmt.Sprintf("producer-%d", i)),
 			func(messageStatus []*stream.ConfirmationStatus) {
 				go func() {
 					for _, msgStatus := range messageStatus {

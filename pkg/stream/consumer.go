@@ -136,6 +136,7 @@ type ConsumerOptions struct {
 	Offset             OffsetSpecification
 	CRCCheck           bool
 	initialCredits     int16
+	ClientProvidedName string
 }
 
 func NewConsumerOptions() *ConsumerOptions {
@@ -145,6 +146,7 @@ func NewConsumerOptions() *ConsumerOptions {
 		autoCommitStrategy: NewAutoCommitStrategy(),
 		CRCCheck:           false,
 		initialCredits:     10,
+		ClientProvidedName: "go-stream-consumer",
 	}
 }
 
@@ -179,6 +181,11 @@ func (c *ConsumerOptions) SetManualCommit() *ConsumerOptions {
 }
 func (c *ConsumerOptions) SetOffset(offset OffsetSpecification) *ConsumerOptions {
 	c.Offset = offset
+	return c
+}
+
+func (c *ConsumerOptions) SetClientProvidedName(clientProvidedName string) *ConsumerOptions {
+	c.ClientProvidedName = clientProvidedName
 	return c
 }
 
