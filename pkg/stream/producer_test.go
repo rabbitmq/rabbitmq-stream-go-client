@@ -141,6 +141,7 @@ var _ = Describe("Streaming Producers", func() {
 					NewProducerOptions().
 						SetBatchSize(BatchSize).
 						SetSubEntrySize(SubEntrySize).
+						SetClientProvidedName("batch-go-stream-producer").
 						SetConfirmationTimeOut(1*time.Second).
 						SetCompression(Compression{}.None()),
 					&messagesReceived,
