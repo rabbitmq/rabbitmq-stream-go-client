@@ -24,7 +24,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
 			if event.Reason == stream.SocketCloseError {
-				logs.LogError("[RProducer] - consumer closed unexpectedly.. Reconnecting..")
+				logs.LogWarn("[RProducer] - consumer closed unexpectedly.. Reconnecting..")
 				err, reconnected := retry(0, p)
 				if err != nil {
 					// TODO: Handle stream is not available
