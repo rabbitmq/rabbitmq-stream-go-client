@@ -15,6 +15,7 @@ type ReliableConsumer struct {
 	streamName      string
 	consumerOptions *stream.ConsumerOptions
 	mutexStatus     *sync.Mutex
+	mutexConnection *sync.Mutex
 	status          int
 	messagesHandler stream.MessagesHandler
 	currentPosition int64
@@ -47,6 +48,7 @@ func NewReliableConsumer(env *stream.Environment, streamName string,
 		streamName:      streamName,
 		consumerOptions: consumerOptions,
 		mutexStatus:     &sync.Mutex{},
+		mutexConnection: &sync.Mutex{},
 		messagesHandler: messagesHandler,
 		currentPosition: 0,
 		bootstrap:       true,
@@ -96,6 +98,8 @@ func (c *ReliableConsumer) getTimeOut() time.Duration {
 }
 
 func (c *ReliableConsumer) newConsumer() error {
+	c.mutexConnection.Lock()
+	defer c.mutexConnection.Unlock()
 	offset := stream.OffsetSpecification{}.Offset(c.currentPosition + 1)
 	if c.bootstrap {
 		offset = c.consumerOptions.Offset
@@ -103,7 +107,9 @@ func (c *ReliableConsumer) newConsumer() error {
 	logs.LogDebug("[RConsumer] - Creating consumer: %s. Boot: %s. StartOffset: %s", c.getInfo(),
 		c.bootstrap, offset)
 	consumer, err := c.env.NewConsumer(c.streamName, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		c.mutexConnection.Lock()
 		c.currentPosition = consumerContext.Consumer.GetOffset()
+		c.mutexConnection.Unlock()
 		c.messagesHandler(consumerContext, message)
 	}, c.consumerOptions.SetOffset(offset))
 	if err != nil {

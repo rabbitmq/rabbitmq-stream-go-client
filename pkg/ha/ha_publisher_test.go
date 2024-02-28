@@ -56,10 +56,6 @@ var _ = Describe("Reliable Producer", func() {
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
-	//TODO: The test is commented out because it is not possible to kill the connection from the client side
-	// the client provider name is not exposed to the user.
-	// we need to expose it than kill the connection
-
 	It("restart Reliable Producer in case of killing connection", func() {
 		signal := make(chan struct{})
 		var confirmed int32
