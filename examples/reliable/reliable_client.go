@@ -6,11 +6,13 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+	"math/rand"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -26,14 +28,19 @@ func CheckErr(err error) {
 
 var confirmed int32 = 0
 var fail int32 = 0
+var consumed int32 = 0
+var sent int32
+var reSent int32
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Println("HA producer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
-	const messagesToSend = 500_000
-	const numberOfProducers = 7
+	const messagesToSend = 1_500_000
+	const numberOfProducers = 3
+	const numberOfConsumers = 3
+	const sendDelay = 10 * time.Millisecond
 
 	addresses := []string{
 		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
@@ -54,13 +61,18 @@ func main() {
 			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
 		},
 	)
-	var sent int32
+
 	isRunning := true
 	go func() {
 		for isRunning {
 			totalHandled := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
-			fmt.Printf("%s - ToSend: %d - Sent:%d  - Confirmed:%d  - Not confirmed:%d - Total :%d \n",
-				time.Now().Format(time.RFC822), messagesToSend*numberOfProducers, sent, confirmed, fail, totalHandled)
+			fmt.Printf("%s - ToSend: %d - nProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC822),
+				messagesToSend*numberOfProducers, numberOfProducers, numberOfConsumers)
+			fmt.Printf("Sent:%d - ReSent %d - Confirmed:%d  - Not confirmed:%d - Total :%d \n",
+				sent, reSent, confirmed, fail, totalHandled)
+			fmt.Printf("Total Consumed: %d - Per consumer: %d  \n", consumed, consumed/numberOfConsumers)
+			fmt.Printf("********************************************\n")
+
 			time.Sleep(5 * time.Second)
 		}
 	}()
@@ -84,7 +96,6 @@ func main() {
 							unConfirmedMessages = append(unConfirmedMessages, msgStatus.GetMessage())
 							mutex.Unlock()
 						}
-
 					}
 				}()
 			})
@@ -97,21 +108,47 @@ func main() {
 				mutex.Lock()
 				for _, confirmedMessage := range unConfirmedMessages {
 					err := rProducer.Send(confirmedMessage)
-					atomic.AddInt32(&sent, 1)
+					atomic.AddInt32(&reSent, 1)
 					CheckErr(err)
 				}
 				unConfirmedMessages = []message.StreamMessage{}
 				mutex.Unlock()
 				err := rProducer.Send(msg)
-				time.Sleep(1 * time.Millisecond)
+				time.Sleep(sendDelay)
 				atomic.AddInt32(&sent, 1)
 				CheckErr(err)
 			}
 		}()
+	}
+	for i := 0; i < numberOfConsumers; i++ {
+		go func(name string) {
+			isActive := true
+			offset := stream.OffsetSpecification{}.First()
+			for isActive {
+				fmt.Printf("Creating consumer for stream: %s \n", name)
+				consumer, err := newConsumer(env, name, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+					offset = stream.OffsetSpecification{}.Offset(consumerContext.Consumer.GetOffset() + 1)
+					atomic.AddInt32(&consumed, 1)
+				}, stream.NewConsumerOptions().
+					SetConsumerName("my_consumer").
+					SetOffset(offset))
+				if errors.Is(err, stream.StreamNotAvailable) {
+					sleepValue := rand.Intn(int((5-2+1)+2)*1000) + 2*1000
+					fmt.Printf("Stream not available: %s reconnecting in %d milliseconds \n", name, sleepValue)
+					time.Sleep(time.Duration(sleepValue) * time.Millisecond)
+					continue
+				}
+				event := consumer.NotifyClose()
+				a := <-event
+				fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", a.Name, a.StreamName, a.Reason)
+				time.Sleep(1 * time.Second)
+				isActive = a.Reason == "socket client closed"
+			}
 
+		}(streamName)
 	}
 
-	fmt.Println("Terminated. Press enter to close the connections.")
+	fmt.Println("Press enter to close the connections.")
 	_, _ = reader.ReadString('\n')
 	for _, producer := range producers {
 		err := producer.Close()
@@ -122,4 +159,14 @@ func main() {
 	isRunning = false
 	err = env.Close()
 	CheckErr(err)
+
+}
+
+func newConsumer(env *stream.Environment, streamName string, handleMessages func(consumerContext stream.ConsumerContext, message *amqp.Message), consumerConfig *stream.ConsumerOptions) (*stream.Consumer, error) {
+	consumer, err := env.NewConsumer(
+		streamName,
+		handleMessages,
+		consumerConfig,
+	)
+	return consumer, err
 }
