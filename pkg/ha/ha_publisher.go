@@ -24,7 +24,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
 			if event.Reason == stream.SocketCloseError {
-				logs.LogError("[RProducer] - producer closed unexpectedly.. Reconnecting..")
+				logs.LogError("[RProducer] - consumer closed unexpectedly.. Reconnecting..")
 				err, reconnected := retry(0, p)
 				if err != nil {
 					// TODO: Handle stream is not available
@@ -98,13 +98,13 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		return stream.StreamDoesNotExist
 	}
 	if p.getStatus() == StatusClosed {
-		return errors.New("producer is closed")
+		return errors.New("consumer is closed")
 	}
 
 	if p.getStatus() == StatusReconnecting {
-		logs.LogDebug("[RProducer] - send producer is reconnecting")
+		logs.LogDebug("[Reliable] %s is reconnecting. The send is blocked", p.getInfo())
 		<-p.reconnectionSignal
-		logs.LogDebug("[RProducer] - send producer reconnected")
+		logs.LogDebug("[Reliable] %s reconnected. The send is unlocked", p.getInfo())
 	}
 
 	p.mutex.Lock()
@@ -120,7 +120,7 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 			}
 		default:
 			time.Sleep(500 * time.Millisecond)
-			logs.LogError("[RProducer] - error during send %s", errW.Error())
+			logs.LogError("[Reliable] %s - error during send %s", p.getInfo(), errW.Error())
 		}
 
 	}
@@ -140,7 +140,7 @@ func (p *ReliableProducer) getStatus() int {
 	return p.status
 }
 
-// Reliabler interface
+// IReliable interface
 func (p *ReliableProducer) setStatus(value int) {
 	p.mutexStatus.Lock()
 	defer p.mutexStatus.Unlock()
@@ -148,7 +148,7 @@ func (p *ReliableProducer) setStatus(value int) {
 }
 
 func (p *ReliableProducer) getInfo() string {
-	return fmt.Sprintf("producer %s for stream %s",
+	return fmt.Sprintf("consumer %s for stream %s",
 		p.producerOptions.ClientProvidedName, p.streamName)
 }
 
@@ -168,7 +168,7 @@ func (p *ReliableProducer) getStreamName() string {
 	return p.streamName
 }
 
-// End of Reliabler interface
+// End of IReliable interface
 
 func (p *ReliableProducer) GetBroker() *stream.Broker {
 	p.mutex.Lock()

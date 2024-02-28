@@ -6,13 +6,12 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"math/rand"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -34,18 +33,19 @@ var reSent int32
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
-
+	stream.SetLevelInfo(logs.DEBUG)
 	fmt.Println("HA producer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
-	const messagesToSend = 1_500_000
-	const numberOfProducers = 3
-	const numberOfConsumers = 3
-	const sendDelay = 10 * time.Millisecond
+	const messagesToSend = 5_000_000
+	const numberOfProducers = 2
+	const numberOfConsumers = 2
+	const sendDelay = 1 * time.Millisecond
+	const delayEachMessages = 10
 
 	addresses := []string{
 		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
 		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
-		"rabbitmq-stream://guest:guest@localhost:5552/%2f"}
+		"rabbitmq-stream://guest:guest@localhost:5572/%2f"}
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
@@ -65,12 +65,13 @@ func main() {
 	isRunning := true
 	go func() {
 		for isRunning {
-			totalHandled := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
+			totalConfirmed := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
 			fmt.Printf("%s - ToSend: %d - nProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC822),
 				messagesToSend*numberOfProducers, numberOfProducers, numberOfConsumers)
-			fmt.Printf("Sent:%d - ReSent %d - Confirmed:%d  - Not confirmed:%d - Total :%d \n",
-				sent, reSent, confirmed, fail, totalHandled)
-			fmt.Printf("Total Consumed: %d - Per consumer: %d  \n", consumed, consumed/numberOfConsumers)
+			fmt.Printf("Sent:%d - ReSent %d - Confirmed:%d  - Not confirmed:%d - Fail+Confirmed  :%d \n",
+				sent, atomic.LoadInt32(&reSent), atomic.LoadInt32(&confirmed), atomic.LoadInt32(&fail), totalConfirmed)
+			fmt.Printf("Total Consumed: %d - Per consumer: %d  \n", atomic.LoadInt32(&consumed),
+				atomic.LoadInt32(&consumed)/numberOfConsumers)
 			fmt.Printf("********************************************\n")
 
 			time.Sleep(5 * time.Second)
@@ -114,37 +115,26 @@ func main() {
 				unConfirmedMessages = []message.StreamMessage{}
 				mutex.Unlock()
 				err := rProducer.Send(msg)
-				time.Sleep(sendDelay)
+				if i%delayEachMessages == 0 {
+					time.Sleep(sendDelay)
+				}
 				atomic.AddInt32(&sent, 1)
 				CheckErr(err)
 			}
 		}()
 	}
+	var consumers []*ha.ReliableConsumer
+
 	for i := 0; i < numberOfConsumers; i++ {
 		go func(name string) {
-			isActive := true
-			offset := stream.OffsetSpecification{}.First()
-			for isActive {
-				fmt.Printf("Creating consumer for stream: %s \n", name)
-				consumer, err := newConsumer(env, name, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-					offset = stream.OffsetSpecification{}.Offset(consumerContext.Consumer.GetOffset() + 1)
+			consumer, err := ha.NewReliableConsumer(env,
+				streamName,
+				stream.NewConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()),
+				func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 					atomic.AddInt32(&consumed, 1)
-				}, stream.NewConsumerOptions().
-					SetConsumerName("my_consumer").
-					SetOffset(offset))
-				if errors.Is(err, stream.StreamNotAvailable) {
-					sleepValue := rand.Intn(int((5-2+1)+2)*1000) + 2*1000
-					fmt.Printf("Stream not available: %s reconnecting in %d milliseconds \n", name, sleepValue)
-					time.Sleep(time.Duration(sleepValue) * time.Millisecond)
-					continue
-				}
-				event := consumer.NotifyClose()
-				a := <-event
-				fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", a.Name, a.StreamName, a.Reason)
-				time.Sleep(1 * time.Second)
-				isActive = a.Reason == "socket client closed"
-			}
-
+				})
+			CheckErr(err)
+			consumers = append(consumers, consumer)
 		}(streamName)
 	}
 
@@ -156,17 +146,16 @@ func main() {
 			CheckErr(err)
 		}
 	}
+	for _, consumer := range consumers {
+		err := consumer.Close()
+		if err != nil {
+			CheckErr(err)
+		}
+	}
 	isRunning = false
+	fmt.Println("Connections Closed. Press enter to close the environment.")
+	_, _ = reader.ReadString('\n')
+
 	err = env.Close()
 	CheckErr(err)
-
-}
-
-func newConsumer(env *stream.Environment, streamName string, handleMessages func(consumerContext stream.ConsumerContext, message *amqp.Message), consumerConfig *stream.ConsumerOptions) (*stream.Consumer, error) {
-	consumer, err := env.NewConsumer(
-		streamName,
-		handleMessages,
-		consumerConfig,
-	)
-	return consumer, err
 }
