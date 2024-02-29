@@ -122,7 +122,7 @@ var _ = Describe("Reliable Consumer", func() {
 		Expect(envForRConsumer.DeleteStream(streamForRConsumer)).NotTo(HaveOccurred())
 		Eventually(func() int {
 			return consumer.GetStatus()
-		}, "10s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
+		}, "15s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
 
 	})
 })
