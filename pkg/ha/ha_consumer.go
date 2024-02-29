@@ -26,7 +26,7 @@ func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
 			if event.Reason == stream.SocketCloseError {
-				logs.LogWarn("[RConsumer] - Consumer closed unexpectedly.. Reconnecting..")
+				logs.LogWarn("[RConsumer] - Consumer %s closed unexpectedly.. Reconnecting..", c.getInfo())
 				c.bootstrap = false
 				err, reconnected := retry(0, c)
 				if err != nil {
@@ -70,7 +70,7 @@ func (c *ReliableConsumer) setStatus(value int) {
 	c.status = value
 }
 
-func (c *ReliableConsumer) getStatus() int {
+func (c *ReliableConsumer) GetStatus() int {
 	c.mutexStatus.Lock()
 	defer c.mutexStatus.Unlock()
 	return c.status

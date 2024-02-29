@@ -19,6 +19,7 @@ type newEntityInstance func() error
 
 type IReliable interface {
 	setStatus(value int)
+	GetStatus() int
 	getInfo() string
 	getEnv() *stream.Environment
 	getNewInstance() newEntityInstance

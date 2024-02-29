@@ -24,7 +24,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
 			if event.Reason == stream.SocketCloseError {
-				logs.LogWarn("[RProducer] - consumer closed unexpectedly.. Reconnecting..")
+				logs.LogWarn("[RProducer] - producer %s closed unexpectedly.. Reconnecting..", p.getInfo())
 				err, reconnected := retry(0, p)
 				if err != nil {
 					// TODO: Handle stream is not available
@@ -94,14 +94,14 @@ func (p *ReliableProducer) newProducer() error {
 }
 
 func (p *ReliableProducer) Send(message message.StreamMessage) error {
-	if p.getStatus() == StatusStreamDoesNotExist {
+	if p.GetStatus() == StatusStreamDoesNotExist {
 		return stream.StreamDoesNotExist
 	}
-	if p.getStatus() == StatusClosed {
-		return errors.New("consumer is closed")
+	if p.GetStatus() == StatusClosed {
+		return errors.New("producer is closed")
 	}
 
-	if p.getStatus() == StatusReconnecting {
+	if p.GetStatus() == StatusReconnecting {
 		logs.LogDebug("[Reliable] %s is reconnecting. The send is blocked", p.getInfo())
 		<-p.reconnectionSignal
 		logs.LogDebug("[Reliable] %s reconnected. The send is unlocked", p.getInfo())
@@ -134,7 +134,7 @@ func (p *ReliableProducer) IsOpen() bool {
 	return p.status == StatusOpen
 }
 
-func (p *ReliableProducer) getStatus() int {
+func (p *ReliableProducer) GetStatus() int {
 	p.mutexStatus.Lock()
 	defer p.mutexStatus.Unlock()
 	return p.status
@@ -148,7 +148,7 @@ func (p *ReliableProducer) setStatus(value int) {
 }
 
 func (p *ReliableProducer) getInfo() string {
-	return fmt.Sprintf("consumer %s for stream %s",
+	return fmt.Sprintf("producer %s for stream %s",
 		p.producerOptions.ClientProvidedName, p.streamName)
 }
 
