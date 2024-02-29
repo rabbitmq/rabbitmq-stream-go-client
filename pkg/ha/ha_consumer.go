@@ -41,7 +41,7 @@ func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 				}
 
 			} else {
-				logs.LogError("[RConsumer] - Consumer %s closed normally. Reason: %s", c.getInfo(), event.Reason)
+				logs.LogInfo("[RConsumer] - Consumer %s closed normally. Reason: %s", c.getInfo(), event.Reason)
 				c.setStatus(StatusClosed)
 			}
 		}

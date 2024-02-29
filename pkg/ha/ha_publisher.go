@@ -37,7 +37,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 					p.setStatus(StatusClosed)
 				}
 			} else {
-				logs.LogError("[RProducer] - Producer %s closed normally. Reason: %s", p.getInfo(), event.Reason)
+				logs.LogInfo("[RProducer] - Producer %s closed normally. Reason: %s", p.getInfo(), event.Reason)
 				p.setStatus(StatusClosed)
 			}
 
