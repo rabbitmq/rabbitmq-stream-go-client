@@ -104,7 +104,8 @@ const (
 	defaultConfirmationTimeOut  = 10 * time.Second
 	//
 
-	SocketCloseError = "socket client closed"
+	SocketClosed   = "socket client closed"
+	MetaDataUpdate = "metadata Data update"
 
 	StreamTcpPort = "5552"
 )

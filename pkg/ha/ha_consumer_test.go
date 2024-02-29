@@ -25,7 +25,11 @@ var _ = Describe("Reliable Consumer", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 	AfterEach(func() {
-		Expect(envForRConsumer.DeleteStream(streamForRConsumer)).NotTo(HaveOccurred())
+		exists, err := envForRConsumer.StreamExists(streamForRConsumer)
+		Expect(err).NotTo(HaveOccurred())
+		if exists {
+			Expect(envForRConsumer.DeleteStream(streamForRConsumer)).NotTo(HaveOccurred())
+		}
 	})
 
 	It("Validate confirm handler", func() {
@@ -107,4 +111,18 @@ var _ = Describe("Reliable Consumer", func() {
 		Expect(consumer.GetStatus()).To(Equal(StatusClosed))
 	})
 
+	It("Delete the stream should close the consumer", func() {
+		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer,
+			NewConsumerOptions(),
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+			})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(consumer).NotTo(BeNil())
+		Expect(consumer.GetStatus()).To(Equal(StatusOpen))
+		Expect(envForRConsumer.DeleteStream(streamForRConsumer)).NotTo(HaveOccurred())
+		Eventually(func() int {
+			return consumer.GetStatus()
+		}, "10s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
+
+	})
 })

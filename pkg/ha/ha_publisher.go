@@ -6,6 +6,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,17 +24,26 @@ func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishCo
 func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
-			if event.Reason == stream.SocketCloseError {
+			if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
 				logs.LogWarn("[RProducer] - producer %s closed unexpectedly.. Reconnecting..", p.getInfo())
 				err, reconnected := retry(0, p)
 				if err != nil {
-					// TODO: Handle stream is not available
-					return
+					logs.LogInfo(""+
+						"[RProducer] - %s won't be reconnected. Error: %s", p.getInfo(), err)
 				}
 				if reconnected {
 					p.setStatus(StatusOpen)
+				} else {
+					p.setStatus(StatusClosed)
 				}
-				p.reconnectionSignal <- struct{}{}
+			} else {
+				logs.LogError("[RProducer] - Producer %s closed normally. Reason: %s", p.getInfo(), event.Reason)
+				p.setStatus(StatusClosed)
+			}
+
+			select {
+			case p.reconnectionSignal <- struct{}{}:
+			case <-time.After(2 * time.Second):
 			}
 		}
 	}()
@@ -98,6 +108,7 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		return stream.StreamDoesNotExist
 	}
 	if p.GetStatus() == StatusClosed {
+
 		return errors.New("producer is closed")
 	}
 

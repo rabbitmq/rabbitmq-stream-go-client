@@ -5,6 +5,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+	"strings"
 	"sync"
 	"time"
 )
@@ -25,17 +26,23 @@ type ReliableConsumer struct {
 func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
-			if event.Reason == stream.SocketCloseError {
+			if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
 				logs.LogWarn("[RConsumer] - Consumer %s closed unexpectedly.. Reconnecting..", c.getInfo())
 				c.bootstrap = false
 				err, reconnected := retry(0, c)
 				if err != nil {
-					// TODO: Handle stream is not available
-					return
+					logs.LogInfo(""+
+						"[RConsumer] - %s won't be reconnected. Error: %s", c.getInfo(), err)
 				}
 				if reconnected {
 					c.setStatus(StatusOpen)
+				} else {
+					c.setStatus(StatusClosed)
 				}
+
+			} else {
+				logs.LogError("[RConsumer] - Consumer %s closed normally. Reason: %s", c.getInfo(), event.Reason)
+				c.setStatus(StatusClosed)
 			}
 		}
 	}()

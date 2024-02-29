@@ -412,7 +412,7 @@ func (c *Client) Close() error {
 			Command:    CommandClose,
 			StreamName: p.(*Producer).GetStreamName(),
 			Name:       p.(*Producer).GetName(),
-			Reason:     "socket client closed",
+			Reason:     SocketClosed,
 			Err:        nil,
 		})
 
@@ -426,7 +426,7 @@ func (c *Client) Close() error {
 			Command:    CommandClose,
 			StreamName: cs.(*Consumer).GetStreamName(),
 			Name:       cs.(*Consumer).GetName(),
-			Reason:     "socket client closed",
+			Reason:     SocketClosed,
 			Err:        nil,
 		})
 		if err != nil {

@@ -1,21 +1,22 @@
 package main
 
-// The ha producer provides a way to auto-reconnect in case of connection problems
-// the function handlePublishConfirm is mandatory
-// in case of problems the messages have the message.Confirmed == false
-
 import (
 	"bufio"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
+)
+
+// The ha producer and consumer provide a way to auto-reconnect in case of connection problems
+
+import (
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 func CheckErr(err error) {
@@ -40,7 +41,9 @@ func main() {
 	const numberOfProducers = 2
 	const numberOfConsumers = 2
 	const sendDelay = 1 * time.Millisecond
-	const delayEachMessages = 10
+	const delayEachMessages = 200
+	const maxProducersPerClient = 4
+	const maxConsumersPerClient = 2
 
 	addresses := []string{
 		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
@@ -49,7 +52,8 @@ func main() {
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
-			SetMaxProducersPerClient(4).
+			SetMaxProducersPerClient(maxProducersPerClient).
+			SetMaxConsumersPerClient(maxConsumersPerClient).
 			SetUris(addresses))
 	CheckErr(err)
 
@@ -73,7 +77,6 @@ func main() {
 			fmt.Printf("Total Consumed: %d - Per consumer: %d  \n", atomic.LoadInt32(&consumed),
 				atomic.LoadInt32(&consumed)/numberOfConsumers)
 			fmt.Printf("********************************************\n")
-
 			time.Sleep(5 * time.Second)
 		}
 	}()
@@ -102,7 +105,6 @@ func main() {
 			})
 		CheckErr(err)
 		producers = append(producers, rProducer)
-
 		go func() {
 			for i := 0; i < messagesToSend; i++ {
 				msg := amqp.NewMessage([]byte("ha"))

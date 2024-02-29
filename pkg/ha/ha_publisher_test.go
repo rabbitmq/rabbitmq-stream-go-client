@@ -25,7 +25,11 @@ var _ = Describe("Reliable Producer", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 	AfterEach(func() {
-		Expect(envForRProducer.DeleteStream(streamForRProducer)).NotTo(HaveOccurred())
+		exists, err := envForRProducer.StreamExists(streamForRProducer)
+		Expect(err).NotTo(HaveOccurred())
+		if exists {
+			Expect(envForRProducer.DeleteStream(streamForRProducer)).NotTo(HaveOccurred())
+		}
 	})
 
 	It("Validate confirm handler", func() {
@@ -101,6 +105,19 @@ var _ = Describe("Reliable Producer", func() {
 		}
 		<-signal
 		Expect(producer.Close()).NotTo(HaveOccurred())
+	})
+
+	It("Delete the stream should close the producer", func() {
+		producer, err := NewReliableProducer(envForRProducer,
+			streamForRProducer, NewProducerOptions(), func(messageConfirm []*ConfirmationStatus) {
+			})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer).NotTo(BeNil())
+		Expect(envForRProducer.DeleteStream(streamForRProducer)).NotTo(HaveOccurred())
+		Eventually(func() int {
+			return producer.GetStatus()
+		}, "10s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
+
 	})
 
 })
