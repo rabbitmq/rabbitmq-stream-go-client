@@ -16,4 +16,5 @@ Note:
 
 The `reliable_common.go/retry` function does different checks because during the restart broker can happen different events, please check:
 - [this presentation](https://docs.google.com/presentation/d/111PccBLRGb-RNpYEKeIm2MQvdky-fXrQ/edit?usp=sharing&ouid=106772747306273309885&rtpof=true&sd=true) for more details.
-- [The code](../../pkq/ha/reliable_common.go) for the implementation details.
+- [the code](../../pkg/ha/reliable_common.go) for the implementation details.
+
