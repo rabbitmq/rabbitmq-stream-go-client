@@ -25,11 +25,11 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
 			if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
-				logs.LogWarn("[RProducer] - producer %s closed unexpectedly.. Reconnecting..", p.getInfo())
+				logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting..", p.getInfo())
 				err, reconnected := retry(0, p)
 				if err != nil {
 					logs.LogInfo(""+
-						"[RProducer] - %s won't be reconnected. Error: %s", p.getInfo(), err)
+						"[Reliable] - %s won't be reconnected. Error: %s", p.getInfo(), err)
 				}
 				if reconnected {
 					p.setStatus(StatusOpen)
@@ -37,7 +37,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 					p.setStatus(StatusClosed)
 				}
 			} else {
-				logs.LogInfo("[RProducer] - Producer %s closed normally. Reason: %s", p.getInfo(), event.Reason)
+				logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", p.getInfo(), event.Reason)
 				p.setStatus(StatusClosed)
 			}
 
@@ -49,6 +49,10 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 	}()
 }
 
+// ReliableProducer is a producer that can reconnect in case of connection problems
+// the function handlePublishConfirm is mandatory
+// in case of problems the messages have the message.Confirmed == false
+// The function `send` is blocked during the reconnection
 type ReliableProducer struct {
 	env                   *stream.Environment
 	producer              *stream.Producer
@@ -81,6 +85,9 @@ func NewReliableProducer(env *stream.Environment, streamName string,
 	if confirmMessageHandler == nil {
 		return nil, fmt.Errorf("the confirmation message handler is mandatory")
 	}
+	if producerOptions == nil {
+		return nil, fmt.Errorf("the producer options is mandatory")
+	}
 
 	err := res.newProducer()
 	if err == nil {
@@ -90,7 +97,6 @@ func NewReliableProducer(env *stream.Environment, streamName string,
 }
 
 func (p *ReliableProducer) newProducer() error {
-
 	producer, err := p.env.NewProducer(p.streamName, p.producerOptions)
 	if err != nil {
 		return err
@@ -108,8 +114,7 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		return stream.StreamDoesNotExist
 	}
 	if p.GetStatus() == StatusClosed {
-
-		return errors.New("producer is closed")
+		return errors.New(fmt.Sprintf("%s is closed", p.getInfo()))
 	}
 
 	if p.GetStatus() == StatusReconnecting {

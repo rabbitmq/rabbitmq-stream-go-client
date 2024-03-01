@@ -27,6 +27,19 @@ type IReliable interface {
 	getStreamName() string
 }
 
+// Retry is a function that retries the IReliable to the stream
+// The first step is to set the status to reconnecting
+// Then it sleeps for a random time between 2 and the timeout to avoid overlapping with other reconnecting
+// Then it checks if the stream exists. During the restart the stream could be deleted
+// If the stream does not exist it returns a StreamDoesNotExist error
+// If the stream exists it tries to create a new instance of the IReliable
+
+//
+// The stream could be in a `StreamNotAvailable` status or the `LeaderNotReady`
+// `StreamNotAvailable`  is a server side error: Stream exists but is not available for the producer and consumer
+// `LeaderNotReady` is a client side error: Stream exists it is Ready but the leader is not elected yet. It is mandatory for the Producer
+// In both cases it retries the reconnection
+
 func retry(backoff int, reliable IReliable) (error, bool) {
 	reliable.setStatus(StatusReconnecting)
 	sleepValue := rand.Intn(int((reliable.getTimeOut().Seconds()-2+1)+2)*1000) + backoff*1000

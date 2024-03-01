@@ -32,9 +32,12 @@ var _ = Describe("Reliable Consumer", func() {
 		}
 	})
 
-	It("Validate confirm handler", func() {
+	It("Validate mandatory fields", func() {
 		_, err := NewReliableConsumer(envForRConsumer,
 			streamForRConsumer, &ConsumerOptions{}, nil)
+		Expect(err).To(HaveOccurred())
+		_, err = NewReliableConsumer(envForRConsumer, streamForRConsumer, nil, func(consumerContext ConsumerContext, message *amqp.Message) {
+		})
 		Expect(err).To(HaveOccurred())
 	})
 

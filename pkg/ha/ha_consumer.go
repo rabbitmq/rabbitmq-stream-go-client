@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+// ReliableConsumer is a consumer that can reconnect in case of connection problems
+// the function messagesHandler is mandatory
 type ReliableConsumer struct {
 	env             *stream.Environment
 	consumer        *stream.Consumer
@@ -19,20 +21,23 @@ type ReliableConsumer struct {
 	mutexConnection *sync.Mutex
 	status          int
 	messagesHandler stream.MessagesHandler
-	currentPosition int64
-	bootstrap       bool
+	currentPosition int64 // the last offset consumed. It is needed in case of restart
+
+	//bootstrap: if true the consumer will start from the user offset.
+	// If false it will start from the last offset consumed (currentPosition)
+	bootstrap bool
 }
 
 func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
 			if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
-				logs.LogWarn("[RConsumer] - Consumer %s closed unexpectedly.. Reconnecting..", c.getInfo())
+				logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting..", c.getInfo())
 				c.bootstrap = false
 				err, reconnected := retry(0, c)
 				if err != nil {
 					logs.LogInfo(""+
-						"[RConsumer] - %s won't be reconnected. Error: %s", c.getInfo(), err)
+						"[Reliable] - %s won't be reconnected. Error: %s", c.getInfo(), err)
 				}
 				if reconnected {
 					c.setStatus(StatusOpen)
@@ -41,7 +46,7 @@ func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 				}
 
 			} else {
-				logs.LogInfo("[RConsumer] - Consumer %s closed normally. Reason: %s", c.getInfo(), event.Reason)
+				logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", c.getInfo(), event.Reason)
 				c.setStatus(StatusClosed)
 			}
 		}
@@ -62,6 +67,9 @@ func NewReliableConsumer(env *stream.Environment, streamName string,
 	}
 	if messagesHandler == nil {
 		return nil, fmt.Errorf("the messages handler is mandatory")
+	}
+	if consumerOptions == nil {
+		return nil, fmt.Errorf("the consumer options is mandatory")
 	}
 
 	err := res.newConsumer()
@@ -111,10 +119,11 @@ func (c *ReliableConsumer) newConsumer() error {
 	if c.bootstrap {
 		offset = c.consumerOptions.Offset
 	}
-	logs.LogDebug("[RConsumer] - Creating consumer: %s. Boot: %s. StartOffset: %s", c.getInfo(),
+	logs.LogDebug("[Reliable] - creating %s. Boot: %s. StartOffset: %s", c.getInfo(),
 		c.bootstrap, offset)
 	consumer, err := c.env.NewConsumer(c.streamName, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		c.mutexConnection.Lock()
+
 		c.currentPosition = consumerContext.Consumer.GetOffset()
 		c.mutexConnection.Unlock()
 		c.messagesHandler(consumerContext, message)

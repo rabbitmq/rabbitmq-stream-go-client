@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
@@ -33,10 +34,7 @@ var sent int32
 var reSent int32
 
 func main() {
-	reader := bufio.NewReader(os.Stdin)
-	stream.SetLevelInfo(logs.DEBUG)
-	fmt.Println("HA producer example")
-	fmt.Println("Connecting to RabbitMQ streaming ...")
+	// Tune the parameters to test the reliability
 	const messagesToSend = 5_000_000
 	const numberOfProducers = 2
 	const numberOfConsumers = 2
@@ -44,11 +42,17 @@ func main() {
 	const delayEachMessages = 200
 	const maxProducersPerClient = 4
 	const maxConsumersPerClient = 2
+	//
+
+	reader := bufio.NewReader(os.Stdin)
+	stream.SetLevelInfo(logs.DEBUG)
+	fmt.Println("Reliable Producer/Consumer example")
+	fmt.Println("Connecting to RabbitMQ streaming ...")
 
 	addresses := []string{
 		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
 		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
-		"rabbitmq-stream://guest:guest@localhost:5572/%2f"}
+		"rabbitmq-stream://guest:guest@localhost:5552/%2f"}
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
@@ -56,15 +60,22 @@ func main() {
 			SetMaxConsumersPerClient(maxConsumersPerClient).
 			SetUris(addresses))
 	CheckErr(err)
+	fmt.Printf("Environment created with %d producers and %d consumers\n\n", maxProducersPerClient, maxConsumersPerClient)
 
-	streamName := "golang-reliable-producer-Test"
-	env.DeleteStream(streamName)
+	streamName := "golang-reliable-Test"
 
+	err = env.DeleteStream(streamName)
+	// If the stream does not exist,
+	// we don't care here as we are going to create it anyway
+	if !errors.Is(err, stream.StreamDoesNotExist) {
+		CheckErr(err)
+	}
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
 			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
 		},
 	)
+	CheckErr(err)
 
 	isRunning := true
 	go func() {
@@ -83,6 +94,9 @@ func main() {
 	var producers []*ha.ReliableProducer
 	for i := 0; i < numberOfProducers; i++ {
 		var mutex = sync.Mutex{}
+		// Here we store the messages that have not been confirmed
+		// then we resend them.
+		// Note: This is only for test. The list can grow indefinitely
 		var unConfirmedMessages []message.StreamMessage
 		rProducer, err := ha.NewReliableProducer(env,
 			streamName,

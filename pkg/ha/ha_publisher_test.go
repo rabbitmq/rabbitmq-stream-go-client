@@ -32,9 +32,13 @@ var _ = Describe("Reliable Producer", func() {
 		}
 	})
 
-	It("Validate confirm handler", func() {
+	It("Validate mandatory  fields", func() {
 		_, err := NewReliableProducer(envForRProducer,
 			streamForRProducer, &ProducerOptions{}, nil)
+		Expect(err).To(HaveOccurred())
+		_, err = NewReliableProducer(envForRProducer, streamForRProducer, nil, func(messageConfirm []*ConfirmationStatus) {
+
+		})
 		Expect(err).To(HaveOccurred())
 	})
 
