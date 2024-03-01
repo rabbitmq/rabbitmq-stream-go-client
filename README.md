@@ -29,12 +29,12 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
         * [Publish Confirmation](#publish-confirmation)
         * [Deduplication](#deduplication)
         * [Sub Entries Batching](#sub-entries-batching)
-        * [HA producer - Experimental](#ha-producer-experimental)
     * [Consume messages](#consume-messages)
         * [Manual Track Offset](#manual-track-offset)
         * [Automatic Track Offset](#automatic-track-offset)
         * [Get consumer Offset](#get-consumer-offset)
     * [Handle Close](#handle-close)
+	* [Reliable Producer and Reliable Consumer](#reliable-producer-and-reliable-consumer)
 - [Performance test tool](#performance-test-tool)
     * [Performance test tool Docker](#performance-test-tool-docker)
 - [Build form source](#build-form-source)
@@ -379,22 +379,20 @@ producer, err := env.NewProducer(streamName, stream.NewProducerOptions().
 		SetCompression(stream.Compression{}.Gzip()))
 ```
 
-### Ha Producer Experimental
-The ha producer is built up the standard producer. </br>
+### Reliable Producer and Reliable Consumer
+
+The `ReliableProducer` and `ReliableConsumer` are built up the standard producer/consumer. </br>
+Both use the standard events to handle the close. So you can write your own code to handle the fail-over. </br>
+
 Features:
- - auto-reconnect in case of disconnection
- - handle the unconfirmed messages automatically in case of fail.
+ - [`Both`] auto-reconnect in case of disconnection.
+ - [`Both`] check if stream exists, if not they close the `ReliableProducer` and `ReliableConsumer`.
+ - [`Both`] check if the stream has a valid leader and replicas, if not they retry until the stream is ready.
+ - [`ReliableProducer`] handle the unconfirmed messages automatically in case of fail.
+ - [`ReliableConsumer`] restart from the last offset in case of restart.
 
-You can find a "HA producer" example in the [examples](./examples/) directory. </br>
+You can find a "Reliable" example in the [examples](./examples/) directory. </br>
 
-```golang
-haproducer := NewHAProducer(
-	env *stream.Environment, // mandatory
-	streamName string, // mandatory
-	producerOptions *stream.ProducerOptions, //optional
-	confirmMessageHandler ConfirmMessageHandler // mandatory
-	)
-```
 
 ### Consume messages
 

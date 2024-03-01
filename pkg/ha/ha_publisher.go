@@ -6,17 +6,10 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-)
-
-const (
-	StatusOpen               = 1
-	StatusClosed             = 2
-	StatusStreamDoesNotExist = 3
-	StatusReconnecting       = 4
 )
 
 func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
@@ -31,23 +24,35 @@ func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishCo
 func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
-			// TODO: Convert the string to a constant
-			if event.Reason == "socket client closed" {
-				logs.LogError("[RProducer] - producer closed unexpectedly.. Reconnecting..")
-				err, reconnected := p.retry(1)
+			if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
+				logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting..", p.getInfo())
+				err, reconnected := retry(0, p)
 				if err != nil {
-					// TODO: Handle stream is not available
-					return
+					logs.LogInfo(""+
+						"[Reliable] - %s won't be reconnected. Error: %s", p.getInfo(), err)
 				}
 				if reconnected {
 					p.setStatus(StatusOpen)
+				} else {
+					p.setStatus(StatusClosed)
 				}
-				p.reconnectionSignal <- struct{}{}
+			} else {
+				logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", p.getInfo(), event.Reason)
+				p.setStatus(StatusClosed)
+			}
+
+			select {
+			case p.reconnectionSignal <- struct{}{}:
+			case <-time.After(2 * time.Second):
 			}
 		}
 	}()
 }
 
+// ReliableProducer is a producer that can reconnect in case of connection problems
+// the function handlePublishConfirm is mandatory
+// in case of problems the messages have the message.Confirmed == false
+// The function `send` is blocked during the reconnection
 type ReliableProducer struct {
 	env                   *stream.Environment
 	producer              *stream.Producer
@@ -80,6 +85,9 @@ func NewReliableProducer(env *stream.Environment, streamName string,
 	if confirmMessageHandler == nil {
 		return nil, fmt.Errorf("the confirmation message handler is mandatory")
 	}
+	if producerOptions == nil {
+		return nil, fmt.Errorf("the producer options is mandatory")
+	}
 
 	err := res.newProducer()
 	if err == nil {
@@ -89,7 +97,6 @@ func NewReliableProducer(env *stream.Environment, streamName string,
 }
 
 func (p *ReliableProducer) newProducer() error {
-
 	producer, err := p.env.NewProducer(p.streamName, p.producerOptions)
 	if err != nil {
 		return err
@@ -103,17 +110,17 @@ func (p *ReliableProducer) newProducer() error {
 }
 
 func (p *ReliableProducer) Send(message message.StreamMessage) error {
-	if p.getStatus() == StatusStreamDoesNotExist {
+	if p.GetStatus() == StatusStreamDoesNotExist {
 		return stream.StreamDoesNotExist
 	}
-	if p.getStatus() == StatusClosed {
-		return errors.New("producer is closed")
+	if p.GetStatus() == StatusClosed {
+		return errors.New(fmt.Sprintf("%s is closed", p.getInfo()))
 	}
 
-	if p.getStatus() == StatusReconnecting {
-		logs.LogDebug("[RProducer] - send producer is reconnecting")
+	if p.GetStatus() == StatusReconnecting {
+		logs.LogDebug("[Reliable] %s is reconnecting. The send is blocked", p.getInfo())
 		<-p.reconnectionSignal
-		logs.LogDebug("[RProducer] - send producer reconnected")
+		logs.LogDebug("[Reliable] %s reconnected. The send is unlocked", p.getInfo())
 	}
 
 	p.mutex.Lock()
@@ -129,49 +136,12 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 			}
 		default:
 			time.Sleep(500 * time.Millisecond)
-			logs.LogError("[RProducer] - error during send %s", errW.Error())
+			logs.LogError("[Reliable] %s - error during send %s", p.getInfo(), errW.Error())
 		}
 
 	}
 
 	return nil
-}
-
-func (p *ReliableProducer) retry(backoff int) (error, bool) {
-	p.setStatus(StatusReconnecting)
-	sleepValue := rand.Intn(int((p.producerOptions.ConfirmationTimeOut.Seconds()-2+1)+2)*1000) + backoff*1000
-	logs.LogInfo("[RProducer] - The producer for the stream %s is in reconnection in %d milliseconds", p.streamName, sleepValue)
-	time.Sleep(time.Duration(sleepValue) * time.Millisecond)
-	streamMetaData, errS := p.env.StreamMetaData(p.streamName)
-	if errors.Is(errS, stream.StreamDoesNotExist) {
-		return errS, true
-	}
-	if errors.Is(errS, stream.StreamNotAvailable) {
-		logs.LogInfo("[RProducer] - stream %s is not available. Trying to reconnect", p.streamName)
-		return p.retry(backoff + 1)
-	}
-	if streamMetaData.Leader == nil {
-		logs.LogInfo("[RProducer] - The leader for the stream %s is not ready. Trying to reconnect")
-		return p.retry(backoff + 1)
-	}
-
-	var result error
-	if streamMetaData != nil {
-		logs.LogInfo("[RProducer] - stream %s exists. Reconnecting the producer.", p.streamName)
-		result = p.newProducer()
-		if result == nil {
-			logs.LogInfo("[RProducer] - stream %s exists. Producer reconnected.", p.streamName)
-		} else {
-			logs.LogInfo("[RProducer] - error creating producer for the stream %s exists. Trying to reconnect", p.streamName)
-			return p.retry(backoff + 1)
-		}
-	} else {
-		logs.LogError("[RProducer] - stream %s does not exist. Closing..", p.streamName)
-		result = stream.StreamDoesNotExist
-	}
-
-	return result, true
-
 }
 
 func (p *ReliableProducer) IsOpen() bool {
@@ -180,17 +150,41 @@ func (p *ReliableProducer) IsOpen() bool {
 	return p.status == StatusOpen
 }
 
-func (p *ReliableProducer) getStatus() int {
+func (p *ReliableProducer) GetStatus() int {
 	p.mutexStatus.Lock()
 	defer p.mutexStatus.Unlock()
 	return p.status
 }
 
+// IReliable interface
 func (p *ReliableProducer) setStatus(value int) {
 	p.mutexStatus.Lock()
 	defer p.mutexStatus.Unlock()
 	p.status = value
 }
+
+func (p *ReliableProducer) getInfo() string {
+	return fmt.Sprintf("producer %s for stream %s",
+		p.producerOptions.ClientProvidedName, p.streamName)
+}
+
+func (p *ReliableProducer) getEnv() *stream.Environment {
+	return p.env
+}
+
+func (p *ReliableProducer) getNewInstance() newEntityInstance {
+	return p.newProducer
+}
+
+func (p *ReliableProducer) getTimeOut() time.Duration {
+	return p.producerOptions.ConfirmationTimeOut
+}
+
+func (p *ReliableProducer) getStreamName() string {
+	return p.streamName
+}
+
+// End of IReliable interface
 
 func (p *ReliableProducer) GetBroker() *stream.Broker {
 	p.mutex.Lock()

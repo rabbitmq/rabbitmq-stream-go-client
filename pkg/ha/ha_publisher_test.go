@@ -25,12 +25,20 @@ var _ = Describe("Reliable Producer", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 	AfterEach(func() {
-		Expect(envForRProducer.DeleteStream(streamForRProducer)).NotTo(HaveOccurred())
+		exists, err := envForRProducer.StreamExists(streamForRProducer)
+		Expect(err).NotTo(HaveOccurred())
+		if exists {
+			Expect(envForRProducer.DeleteStream(streamForRProducer)).NotTo(HaveOccurred())
+		}
 	})
 
-	It("Validate confirm handler", func() {
+	It("Validate mandatory  fields", func() {
 		_, err := NewReliableProducer(envForRProducer,
 			streamForRProducer, &ProducerOptions{}, nil)
+		Expect(err).To(HaveOccurred())
+		_, err = NewReliableProducer(envForRProducer, streamForRProducer, nil, func(messageConfirm []*ConfirmationStatus) {
+
+		})
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -55,10 +63,6 @@ var _ = Describe("Reliable Producer", func() {
 		<-signal
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
-
-	//TODO: The test is commented out because it is not possible to kill the connection from the client side
-	// the client provider name is not exposed to the user.
-	// we need to expose it than kill the connection
 
 	It("restart Reliable Producer in case of killing connection", func() {
 		signal := make(chan struct{})
@@ -105,6 +109,19 @@ var _ = Describe("Reliable Producer", func() {
 		}
 		<-signal
 		Expect(producer.Close()).NotTo(HaveOccurred())
+	})
+
+	It("Delete the stream should close the producer", func() {
+		producer, err := NewReliableProducer(envForRProducer,
+			streamForRProducer, NewProducerOptions(), func(messageConfirm []*ConfirmationStatus) {
+			})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer).NotTo(BeNil())
+		Expect(envForRProducer.DeleteStream(streamForRProducer)).NotTo(HaveOccurred())
+		Eventually(func() int {
+			return producer.GetStatus()
+		}, "15s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
+
 	})
 
 })

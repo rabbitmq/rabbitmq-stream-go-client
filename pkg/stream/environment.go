@@ -226,6 +226,9 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	}
 	streamsMetadata := client.metaData(streamName)
 	streamMetadata := streamsMetadata.Get(streamName)
+	if streamMetadata.responseCode != responseCodeOk {
+		return nil, lookErrorCode(streamMetadata.responseCode)
+	}
 
 	tentatives := 0
 	for streamMetadata == nil || streamMetadata.Leader == nil && tentatives < 3 {
@@ -487,7 +490,7 @@ func (c *Client) maybeCleanProducers(streamName string) {
 				Command:    CommandMetadataUpdate,
 				StreamName: streamName,
 				Name:       producer.(*Producer).GetName(),
-				Reason:     "Meta data update",
+				Reason:     MetaDataUpdate,
 				Err:        nil,
 			})
 			if err != nil {
@@ -512,7 +515,7 @@ func (c *Client) maybeCleanConsumers(streamName string) {
 				Command:    CommandMetadataUpdate,
 				StreamName: streamName,
 				Name:       consumer.(*Consumer).GetName(),
-				Reason:     "Meta data update",
+				Reason:     MetaDataUpdate,
 				Err:        nil,
 			})
 			if err != nil {
