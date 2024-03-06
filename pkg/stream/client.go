@@ -60,9 +60,10 @@ type Client struct {
 	tcpParameters        *TCPParameters
 	saslConfiguration    *SaslConfiguration
 
-	mutex            *sync.Mutex
-	metadataListener metadataListener
-	lastHeartBeat    HeartBeat
+	mutex             *sync.Mutex
+	metadataListener  metadataListener
+	lastHeartBeat     HeartBeat
+	socketCallTimeout time.Duration
 }
 
 func newClient(connectionName string, broker *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
@@ -94,6 +95,7 @@ func newClient(connectionName string, broker *Broker, tcpParameters *TCPParamete
 			mutex:      &sync.Mutex{},
 			destructor: &sync.Once{},
 		},
+		socketCallTimeout: defaultSocketCallTimeout,
 	}
 	c.setConnectionName(connectionName)
 	return c
@@ -605,11 +607,12 @@ func (c *Client) queryPublisherSequence(publisherReference string, stream string
 	writeString(b, publisherReference)
 	writeString(b, stream)
 	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
-	sequence := <-resp.data
-	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	if err.Err != nil {
 		return 0, err.Err
 	}
+
+	sequence := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return sequence.(int64), nil
 
 }
@@ -719,12 +722,12 @@ func (c *Client) queryOffset(consumerName string, streamName string) (int64, err
 	writeString(b, consumerName)
 	writeString(b, streamName)
 	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
-	offset := <-resp.data
-	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	if err.Err != nil {
 		return 0, err.Err
 	}
 
+	offset := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return offset.(int64), nil
 }
 
@@ -846,11 +849,12 @@ func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
 	writeString(b, streamName)
 
 	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
-	offset := <-resp.data
-	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	if err.Err != nil {
 		return nil, err.Err
 	}
+
+	offset := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	m, ok := offset.(map[string]int64)
 	if !ok {
 		return nil, fmt.Errorf("invalid response, expected map[string]int64 but got %T", offset)

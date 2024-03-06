@@ -41,11 +41,11 @@ func waitCodeWithTimeOut(response *Response, timeout time.Duration) responseErro
 		}
 		return newResponseError(nil, false)
 	case <-time.After(timeout):
-		logs.LogError("timeout %d ns - waiting Code, operation: %s", defaultSocketCallTimeout.Milliseconds(), response.commandDescription)
+		logs.LogError("timeout %d ns - waiting Code, operation: %s", timeout.Milliseconds(), response.commandDescription)
 
 		return newResponseError(
 			fmt.Errorf("timeout %d ms - waiting Code, operation: %s ",
-				defaultSocketCallTimeout.Milliseconds(), response.commandDescription), true)
+				timeout.Milliseconds(), response.commandDescription), true)
 	}
 }
 

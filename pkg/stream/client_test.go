@@ -1,6 +1,8 @@
 package stream
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"time"
 
@@ -178,5 +180,35 @@ var _ = Describe("Streaming testEnvironment", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(fmt.Sprintf("%s", err)).
 			To(ContainSubstring("stream Name can't be empty"))
+	})
+
+	It("Client.queryOffset won't hang if timeout happens", func() {
+		cli := newClient("connName", nil, nil, nil)
+		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
+		cli.socketCallTimeout = time.Millisecond
+
+		res, err := cli.queryOffset("cons", "stream")
+		Expect(err.Error()).To(ContainSubstring("timeout 1 ms - waiting Code, operation: CommandQueryOffset"))
+		Expect(res).To(BeZero())
+	})
+
+	It("Client.queryPublisherSequence won't hang if timeout happens", func() {
+		cli := newClient("connName", nil, nil, nil)
+		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
+		cli.socketCallTimeout = time.Millisecond
+
+		res, err := cli.queryPublisherSequence("ref", "stream")
+		Expect(err.Error()).To(ContainSubstring("timeout 1 ms - waiting Code, operation: Command not handled 5"))
+		Expect(res).To(BeZero())
+	})
+
+	It("Client.StreamStats won't hang if timeout happens", func() {
+		cli := newClient("connName", nil, nil, nil)
+		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
+		cli.socketCallTimeout = time.Millisecond
+
+		res, err := cli.StreamStats("stream")
+		Expect(err.Error()).To(ContainSubstring("timeout 1 ms - waiting Code, operation: Command not handled 28"))
+		Expect(res).To(BeNil())
 	})
 })

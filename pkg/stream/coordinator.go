@@ -132,7 +132,7 @@ func newResponse(commandDescription string) *Response {
 	res := &Response{}
 	res.commandDescription = commandDescription
 	res.code = make(chan Code, 1)
-	res.data = make(chan interface{})
+	res.data = make(chan interface{}, 1)
 	res.offsetMessages = make(chan offsetMessages, 100)
 	return res
 }
