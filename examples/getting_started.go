@@ -78,7 +78,7 @@ func main() {
 
 	// the send method automatically aggregates the messages
 	// based on batch size
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10000; i++ {
 		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 		CheckErr(err)
 	}
@@ -94,7 +94,9 @@ func main() {
 	//}, nil)
 	// if you need to track the offset you need a consumer name like:
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
+
+		fmt.Printf("consumer name: %s, data: %s, message offset %d, chunk entities count: %d   \n ",
+			consumerContext.Consumer.GetName(), message.Data, consumerContext.Consumer.GetOffset(), consumerContext.GetEntriesCount())
 	}
 
 	consumer, err := env.NewConsumer(

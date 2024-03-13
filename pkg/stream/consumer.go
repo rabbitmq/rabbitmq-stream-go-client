@@ -101,7 +101,12 @@ func (consumer *Consumer) NotifyClose() ChannelClose {
 }
 
 type ConsumerContext struct {
-	Consumer *Consumer
+	Consumer  *Consumer
+	chunkInfo *chunkInfo
+}
+
+func (cc ConsumerContext) GetEntriesCount() uint16 {
+	return cc.chunkInfo.numEntries
 }
 
 type MessagesHandler func(consumerContext ConsumerContext, message *amqp.Message)
