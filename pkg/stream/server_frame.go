@@ -303,7 +303,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		logs.LogWarn("Invalid chunkType: %d ", chunkType)
 	}
 
-	_ = readUShort(r)
+	numEntries := readUShort(r)
 	numRecords, _ := readUInt(r)
 	_ = readInt64(r)       // timestamp
 	_ = readInt64(r)       // epoch, unsigned long
@@ -325,6 +325,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	//messages
 	var batchConsumingMessages offsetMessages
+	var chunk chunkInfo
+	chunk.numEntries = numEntries
 	var bytesBuffer = make([]byte, int(dataLength))
 	_, err = io.ReadFull(r, bytesBuffer)
 	if err != nil {
@@ -388,8 +390,9 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		}
 	}
 
+	chunk.offsetMessages = batchConsumingMessages
 	if consumer.getStatus() == open {
-		consumer.response.offsetMessages <- batchConsumingMessages
+		consumer.response.chunkForConsumer <- chunk
 
 	}
 
