@@ -67,7 +67,7 @@ func (c *Client) handleWrite(buffer []byte, response *Response) responseError {
 
 func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, removeResponse bool) responseError {
 	result := c.socket.writeAndFlush(buffer)
-	resultCode := waitCodeWithDefaultTimeOut(response)
+	resultCode := waitCodeWithTimeOut(response, c.socketCallTimeout)
 	/// we need to remove the response before evaluate the
 	// buffer errSocket
 	if removeResponse {

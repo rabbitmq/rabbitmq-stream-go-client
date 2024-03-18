@@ -136,7 +136,7 @@ func newResponse(commandDescription string) *Response {
 	res := &Response{}
 	res.commandDescription = commandDescription
 	res.code = make(chan Code, 1)
-	res.data = make(chan interface{})
+	res.data = make(chan interface{}, 1)
 	res.chunkForConsumer = make(chan chunkInfo, 100)
 	return res
 }
