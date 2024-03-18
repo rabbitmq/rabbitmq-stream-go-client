@@ -29,11 +29,15 @@ type offsetMessage struct {
 }
 
 type offsetMessages = []*offsetMessage
+type chunkInfo struct {
+	offsetMessages offsetMessages
+	numEntries     uint16
+}
 
 type Response struct {
 	code               chan Code
 	data               chan interface{}
-	offsetMessages     chan offsetMessages
+	chunkForConsumer   chan chunkInfo
 	commandDescription string
 	correlationid      int
 }
@@ -119,7 +123,7 @@ func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {
 	err = coordinator.removeById(fmt.Sprintf("%d", id), coordinator.responses)
 	close(resp.code)
 	close(resp.data)
-	close(resp.offsetMessages)
+	close(resp.chunkForConsumer)
 	return err
 }
 
@@ -133,7 +137,7 @@ func newResponse(commandDescription string) *Response {
 	res.commandDescription = commandDescription
 	res.code = make(chan Code, 1)
 	res.data = make(chan interface{}, 1)
-	res.offsetMessages = make(chan offsetMessages, 100)
+	res.chunkForConsumer = make(chan chunkInfo, 100)
 	return res
 }
 

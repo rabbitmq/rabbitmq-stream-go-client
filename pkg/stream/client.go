@@ -814,10 +814,10 @@ func (c *Client) DeclareSubscriber(streamName string,
 					return
 				}
 
-			case offsetMessages := <-consumer.response.offsetMessages:
-				for _, offMessage := range offsetMessages {
+			case chunk := <-consumer.response.chunkForConsumer:
+				for _, offMessage := range chunk.offsetMessages {
 					consumer.setCurrentOffset(offMessage.offset)
-					consumer.MessagesHandler(ConsumerContext{Consumer: consumer}, offMessage.message)
+					consumer.MessagesHandler(ConsumerContext{Consumer: consumer, chunkInfo: &chunk}, offMessage.message)
 					if consumer.options.autocommit {
 						consumer.messageCountBeforeStorage += 1
 						if consumer.messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage {

@@ -14,6 +14,10 @@ func saveMessageToFile(filename string, data []byte) {
 		return
 	}
 	getwd += "/generate" + "/" + "files"
+	err = os.MkdirAll(getwd, os.ModePerm)
+	if err != nil {
+		fmt.Printf("can't create directory: %s", err)
+	}
 
 	outf, err := os.Create(getwd + "/" + filename)
 	if err != nil {
@@ -32,7 +36,7 @@ func saveMessageToFile(filename string, data []byte) {
 }
 
 func init() {
-	rand.Seed(time.Now().UnixNano())
+	rand.Seed(1)
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -46,6 +50,11 @@ func generateString(n int) string {
 }
 
 func main() {
+	var uuidValue amqp.UUID // Value 00112233-4455-6677-8899-aabbccddeeff
+	for i := byte(0); i < 16; i++ {
+		uuidValue[i] = i<<4 | i
+	}
+
 	chineseStringTest :=
 		"Alan Mathison Turing（1912 年 6 月 23 日 - 1954 年 6 月 7 日）是英国数学家、计算机科学家、逻辑学家、密码分析家、哲学家和理论生物学家。 [6] 图灵在理论计算机科学的发展中具有很大的影响力，用图灵机提供了算法和计算概念的形式化，可以被认为是通用计算机的模型。[7][8][9] 他被广泛认为是理论计算机科学和人工智能之父。 [10]"
 
@@ -104,6 +113,7 @@ func main() {
 		generateString(4):   int16(12),
 		generateString(5):   int32(6000),
 		generateString(6):   int64(6_000_000),
+		generateString(7):   uuidValue,
 	}
 	binary, err = msg.MarshalBinary()
 	if err != nil {
@@ -130,11 +140,11 @@ func main() {
 		To:                 generateString(50),
 		Subject:            generateString(30),
 		ReplyTo:            generateString(30),
-		CorrelationID:      nil,
+		CorrelationID:      uuidValue,
 		ContentType:        "json",
 		ContentEncoding:    "myCoding",
-		AbsoluteExpiryTime: time.Now(),
-		CreationTime:       time.Now(),
+		AbsoluteExpiryTime: time.Unix(1710440652, 0),
+		CreationTime:       time.Unix(1710440652, 0),
 		GroupID:            generateString(50),
 		GroupSequence:      10,
 		ReplyToGroupID:     generateString(50),
@@ -194,6 +204,16 @@ func main() {
 		saveMessageToFile("message_unicode_message", binary)
 	}
 
+	msg = amqp.NewMessage([]byte(""))
+	msg.Properties = &amqp.MessageProperties{
+		MessageID:     uuidValue,
+		CorrelationID: uuidValue,
+	}
+	binary, err = msg.MarshalBinary()
+	if err == nil {
+		saveMessageToFile("uuid_message", binary)
+	}
+
 	msg = amqp.NewMessage(nil)
 	msg.Properties = &amqp.MessageProperties{
 		MessageID:     nil,
@@ -211,6 +231,7 @@ func main() {
 		"int_value":  1,
 		"float":      1.1,
 		"double":     1.1,
+		"uuid":       uuidValue,
 		"null":       nil,
 	}
 	binary, err = msg.MarshalBinary()
