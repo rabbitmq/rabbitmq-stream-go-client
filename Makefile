@@ -78,15 +78,18 @@ perf-test-docker-build: perf-test-build
 perf-test-docker-push: perf-test-docker-build
 	$(BUILDKIT) push pivotalrabbitmq/go-stream-perf-test:$(VERSION)
 
-RABBITMQ_OCI ?= pivotalrabbitmq/rabbitmq-stream
+RABBITMQ_OCI ?= rabbitmq:3-management
 BUILDKIT_RUN_ARGS ?= --pull always
 .PHONY: rabbitmq-server
 rabbitmq-server:
-	$(BUILDKIT) run -it --rm --name rabbitmq-stream-go-client-test \
+	$(BUILDKIT) run -d --rm --name rabbitmq-stream-go-client-test \
 		-p 5552:5552 -p 5672:5672 -p 15672:15672 \
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
 		$(BUILDKIT_RUN_ARGS) \
 		$(RABBITMQ_OCI)
+	sleep 5
+	$(BUILDKIT) exec rabbitmq-stream-go-client-test rabbitmq-plugins enable rabbitmq_stream_management rabbitmq_amqp1_0
+
 
 rabbitmq-ha-proxy:
 	cd compose/ha_tls; rm -rf tls-gen;
@@ -107,7 +110,7 @@ rabbitmq-server-tls:
 		-v  $(shell pwd)/compose/tls/conf/:/etc/rabbitmq/ -v $(shell pwd)/compose/tls/tls-gen/basic/result/:/certs \
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
 		--pull always \
-		docker.io/rabbitmq:3.13-rc-management
+		docker.io/rabbitmq:3-management
 
 
 

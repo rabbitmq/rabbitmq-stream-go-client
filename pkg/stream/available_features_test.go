@@ -17,6 +17,18 @@ var _ = Describe("Available Features", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(fmt.Sprintf("%s", err)).To(ContainSubstring("invalid version format: 1.2"))
 
+		_, err = parseVersion("error.3.3")
+		Expect(err).To(HaveOccurred())
+		Expect(fmt.Sprintf("%s", err)).To(ContainSubstring("invalid major version: error"))
+
+		_, err = parseVersion("1.error.3")
+		Expect(err).To(HaveOccurred())
+		Expect(fmt.Sprintf("%s", err)).To(ContainSubstring("invalid minor version: error"))
+
+		_, err = parseVersion("1.2.error")
+		Expect(err).To(HaveOccurred())
+		Expect(fmt.Sprintf("%s", err)).To(ContainSubstring("invalid patch version: error"))
+
 		v, err = parseVersion(extractVersion("3.12.1-rc1"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(v).To(Equal(Version{Major: 3, Minor: 12, Patch: 1}))
@@ -34,6 +46,10 @@ var _ = Describe("Available Features", func() {
 		Expect(IsVersionGreaterOrEqual("1.2.3", "2.2.3")).To(BeFalse())
 		Expect(IsVersionGreaterOrEqual("3.1.3-alpha.1", "2.2.3")).To(BeFalse())
 		Expect(IsVersionGreaterOrEqual("3.3.3-rc.1", "2.2.3")).To(BeFalse())
+
+		Expect(IsVersionGreaterOrEqual("error.3.2", "2.2.3")).To(BeFalse())
+		Expect(IsVersionGreaterOrEqual("4.3.2", "2.error.3")).To(BeFalse())
+
 	})
 
 	It("Available Features", func() {
