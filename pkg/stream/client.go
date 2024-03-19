@@ -182,12 +182,18 @@ func (c *Client) connect() error {
 		c.socket.setOpen()
 
 		go c.handleResponse()
-		err2 := c.peerProperties()
+		serverProperties, err2 := c.peerProperties()
 
 		if err2 != nil {
 			logs.LogError("Can't set the peer-properties. Check if the stream server is running/reachable")
 			return err2
 		}
+		logs.LogDebug("Server properties: %s", serverProperties)
+		if serverProperties["version"] == "" {
+			logs.LogInfo(
+				"Server version is less than 3.11.0, skipping command version exchange")
+		}
+
 		pwd, _ := u.User.Password()
 		err2 = c.authenticate(u.User.Username(), pwd)
 		if err2 != nil {
@@ -216,7 +222,7 @@ func (c *Client) setConnectionName(connectionName string) {
 	c.clientProperties.items["connection_name"] = connectionName
 }
 
-func (c *Client) peerProperties() error {
+func (c *Client) peerProperties() (map[string]string, error) {
 	clientPropertiesSize := 4 // size of the map, always there
 
 	c.clientProperties.items["product"] = "RabbitMQ Stream"
@@ -241,7 +247,15 @@ func (c *Client) peerProperties() error {
 		writeString(b, element)
 	}
 
-	return c.handleWrite(b.Bytes(), resp).Err
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	if err.Err != nil {
+		return nil, err.Err
+	}
+
+	serverProperties := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	return serverProperties.(map[string]string), nil
+
 }
 
 func (c *Client) authenticate(user string, password string) error {

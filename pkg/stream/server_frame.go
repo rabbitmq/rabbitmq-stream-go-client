@@ -158,6 +158,7 @@ func (c *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Rea
 		return
 	}
 	res.code <- Code{id: readProtocol.ResponseCode}
+	res.data <- serverProperties
 
 }
 
