@@ -18,7 +18,8 @@ jobs:
       - name: Build and export
         uses: docker/build-push-action@v5
         with:
-          context: CiDockerfile
+          context: .
+          file: CiDockerfile
           tags: rabbitmq_tls:latest
           outputs: type=docker,dest=/tmp/rabbitmq_tls.tar
       - name: Upload artifact
