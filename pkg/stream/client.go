@@ -188,11 +188,6 @@ func (c *Client) connect() error {
 			logs.LogError("Can't set the peer-properties. Check if the stream server is running/reachable")
 			return err2
 		}
-		logs.LogDebug("Server properties: %s", serverProperties)
-		if serverProperties["version"] == "" {
-			logs.LogInfo(
-				"Server version is less than 3.11.0, skipping command version exchange")
-		}
 
 		pwd, _ := u.User.Password()
 		err2 = c.authenticate(u.User.Username(), pwd)
@@ -208,6 +203,18 @@ func (c *Client) connect() error {
 		if err2 != nil {
 			logs.LogDebug("%s", err2)
 			return err2
+		}
+
+		logs.LogDebug("Server properties: %s", serverProperties)
+		if serverProperties["version"] == "" {
+			logs.LogInfo(
+				"Server version is less than 3.11.0, skipping command version exchange")
+		} else {
+			err := c.exchangeVersion(serverProperties["version"])
+			if err != nil {
+				return err
+			}
+			logs.LogInfo("available features: %s", availableFeaturesInstance())
 		}
 
 		c.heartBeat()
@@ -255,7 +262,6 @@ func (c *Client) peerProperties() (map[string]string, error) {
 	serverProperties := <-resp.data
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return serverProperties.(map[string]string), nil
-
 }
 
 func (c *Client) authenticate(user string, password string) error {
@@ -325,6 +331,45 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	}
 
 	return c.socket.writeAndFlush(tuneData.([]byte))
+}
+
+func (c *Client) exchangeVersion(serverVersion string) error {
+	// if already parsed, skip
+	// This is an optimization to avoid sending the command multiple times
+	// when the client is reconnected
+	if availableFeaturesInstance().IsAlreadyParsed() {
+		return nil
+	}
+	_ = availableFeaturesInstance().SetVersion(serverVersion)
+
+	commands := availableFeaturesInstance().GetCommands()
+
+	length := 2 + 2 + 4 +
+		4 + // commands size
+		len(commands)*(2+2+2)
+	resp := c.coordinator.NewResponse(commandExchangeVersion)
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandExchangeVersion,
+		correlationId)
+
+	writeInt(b, len(commands))
+
+	for _, command := range commands {
+		writeUShort(b, command.GetCommandKey())
+		writeUShort(b, command.GetMinVersion())
+		writeUShort(b, command.GetMaxVersion())
+	}
+
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	if err.Err != nil {
+		return err.Err
+	}
+
+	commandsResponse := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	availableFeaturesInstance().ParseCommandVersions(commandsResponse.([]commandVersion))
+	return nil
 }
 
 func (c *Client) open(virtualHost string) error {

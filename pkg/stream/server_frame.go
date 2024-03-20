@@ -111,6 +111,10 @@ func (c *Client) handleResponse() {
 			{
 				c.closeFrameHandler(readerProtocol, buffer)
 			}
+		case commandExchangeVersion:
+			{
+				c.handleExchangeVersionResponse(readerProtocol, buffer)
+			}
 		default:
 			{
 				logs.LogWarn("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
@@ -566,6 +570,26 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol,
 		return
 	}
 
+}
+
+func (c *Client) handleExchangeVersionResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = readUInt(r)
+	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
+	commandsSize, _ := readUInt(r)
+	commands := make([]commandVersion, 0)
+	for i := 0; i < int(commandsSize); i++ {
+		commandKey := readUShort(r)
+		minVersion := readUShort(r)
+		maxVersion := readUShort(r)
+		commands = append(commands, newCommandVersionResponse(minVersion, maxVersion, commandKey))
+	}
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	if err != nil {
+		logs.LogError("handleExchangeVersionResponse response not found")
+		return
+	}
+	res.code <- Code{id: readProtocol.ResponseCode}
+	res.data <- commands
 }
 
 func (c *Client) handleHeartbeat() {
