@@ -547,7 +547,7 @@ A docker image is available: `pivotalrabbitmq/go-stream-perf-test`, to test it:
 Run the server is host mode:
 ```shell
  docker run -it --rm --name rabbitmq --network host \
-    rabbitmq:3.9-management
+    rabbitmq:3-management
 ```
 enable the plugin:
 ```
