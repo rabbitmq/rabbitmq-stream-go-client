@@ -82,13 +82,11 @@ RABBITMQ_OCI ?= rabbitmq:3-management
 BUILDKIT_RUN_ARGS ?= --pull always
 .PHONY: rabbitmq-server
 rabbitmq-server:
-	$(BUILDKIT) run -d --rm --name rabbitmq-stream-go-client-test \
-		-p 5552:5552 -p 5672:5672 -p 15672:15672 \
+	$(BUILDKIT) build -t rabbitmq-tls-test -f CiDockerfile .
+	$(BUILDKIT) run -it --rm --name rabbitmq-tls-test \
+		-p 5552:5552 -p 5551:5551 -p 5672:5672 -p 15672:15672 \
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
-		$(BUILDKIT_RUN_ARGS) \
-		$(RABBITMQ_OCI)
-	sleep 5
-	$(BUILDKIT) exec rabbitmq-stream-go-client-test rabbitmq-plugins enable rabbitmq_stream_management rabbitmq_amqp1_0
+		rabbitmq-tls-test
 
 
 rabbitmq-ha-proxy:
