@@ -14,9 +14,11 @@ var (
 )
 
 type availableFeatures struct {
-	is313OrMore   bool
-	is311OrMore   bool
-	brokerVersion string
+	is313OrMore         bool
+	is311OrMore         bool
+	brokerFilterEnabled bool
+	brokerVersion       string
+	alreadyParsed       bool
 }
 
 func availableFeaturesInstance() *availableFeatures {
@@ -38,6 +40,10 @@ func (a *availableFeatures) Is313OrMore() bool {
 	return a.is313OrMore
 }
 
+func (a *availableFeatures) BrokerFilterEnabled() bool {
+	return a.brokerFilterEnabled
+}
+
 func (a *availableFeatures) SetVersion(version string) error {
 	if extractVersion(version) == "" {
 		return fmt.Errorf("invalid version format: %s", version)
@@ -46,6 +52,30 @@ func (a *availableFeatures) SetVersion(version string) error {
 	a.is311OrMore = IsVersionGreaterOrEqual(extractVersion(version), "3.11.0")
 	a.is313OrMore = IsVersionGreaterOrEqual(extractVersion(version), "3.13.0")
 	return nil
+}
+
+func (a *availableFeatures) GetCommands() []commandVersion {
+	return []commandVersion{
+		&PublishFilter{},
+	}
+}
+
+func (a *availableFeatures) ParseCommandVersions(commandVersions []commandVersion) {
+	for _, commandVersion := range commandVersions {
+		if commandVersion.GetCommandKey() == commandPublish {
+			a.brokerFilterEnabled = commandVersion.GetMinVersion() <= PublishFilter{}.GetMinVersion() &&
+				commandVersion.GetMaxVersion() >= PublishFilter{}.GetMaxVersion()
+		}
+	}
+	a.alreadyParsed = true
+}
+
+func (a *availableFeatures) IsAlreadyParsed() bool {
+	return a.alreadyParsed
+}
+
+func (a *availableFeatures) String() string {
+	return fmt.Sprintf("brokerVersion: %s, is311OrMore: %t, is313OrMore: %t, brokerFilterEnabled: %t", a.brokerVersion, a.is311OrMore, a.is313OrMore, a.brokerFilterEnabled)
 }
 
 func extractVersion(fullVersion string) string {

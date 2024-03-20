@@ -44,12 +44,14 @@ const (
 	commandOpen                   = 21
 	CommandClose                  = 22
 	commandHeartbeat              = 23
+	commandExchangeVersion        = 27
 	commandStreamStatus           = 28
 
 	/// used only for tests
 	commandUnitTest = 99
 
 	version1    = 1
+	version2    = 2
 	unicodeNull = "\u0000"
 
 	responseCodeOk                            = uint16(1)

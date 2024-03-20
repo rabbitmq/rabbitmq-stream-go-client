@@ -52,7 +52,7 @@ var _ = Describe("Available Features", func() {
 
 	})
 
-	It("Available Features", func() {
+	It("Available Features check Version", func() {
 		var availableFeatures = availableFeaturesInstance()
 		Expect(availableFeatures).NotTo(BeNil())
 		Expect(availableFeatures.SetVersion("error")).NotTo(BeNil())
@@ -68,5 +68,15 @@ var _ = Describe("Available Features", func() {
 		Expect(availableFeatures.SetVersion("3.13.1-alpha.234")).To(BeNil())
 		Expect(availableFeatures.Is311OrMore()).To(BeTrue())
 		Expect(availableFeatures.Is313OrMore()).To(BeTrue())
+	})
+	It("Available Features parse command", func() {
+		Expect(availableFeaturesInstance().SetVersion("3.13.0")).To(BeNil())
+		availableFeaturesInstance().ParseCommandVersions(
+			[]commandVersion{
+				PublishFilter{},
+			},
+		)
+		Expect(availableFeaturesInstance().IsAlreadyParsed()).To(BeTrue())
+		Expect(availableFeaturesInstance().BrokerFilterEnabled()).To(BeTrue())
 	})
 })
