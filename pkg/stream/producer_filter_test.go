@@ -41,4 +41,24 @@ var _ = Describe("Streaming Producer Filtering", func() {
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
+	It("Validate Producer Filtering not supported", func() {
+
+		client, err := testEnvironment.newReconnectClient()
+
+		Expect(err).NotTo(HaveOccurred())
+
+		// here we inject a fake response to simulate a server that
+		// does not support broker filtering.
+		// so we can validate it
+		// This method is not thread safe and should be used only for testing purposes
+		client.availableFeatures.brokerFilterEnabled = false
+
+		_, err = client.DeclarePublisher(testProducerStream, NewProducerOptions().SetFilter(
+			NewProducerFilter(func(message message.StreamMessage) string {
+				return fmt.Sprintf("%s", message.GetApplicationProperties()["ID"])
+			}),
+		))
+		Expect(err).To(Equal(FilterNotSupported))
+	})
+
 })

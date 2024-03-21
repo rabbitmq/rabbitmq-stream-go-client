@@ -9,9 +9,6 @@ import (
 )
 
 var lock = &sync.Mutex{}
-var (
-	instance availableFeatures
-)
 
 type availableFeatures struct {
 	is313OrMore         bool
@@ -23,8 +20,7 @@ type availableFeatures struct {
 func newAvailableFeatures() *availableFeatures {
 	lock.Lock()
 	defer lock.Unlock()
-	instance = availableFeatures{}
-	return &instance
+	return &availableFeatures{}
 }
 
 func (a *availableFeatures) Is311OrMore() bool {

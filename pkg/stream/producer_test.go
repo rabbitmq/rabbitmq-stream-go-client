@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"strconv"
 	"sync"
@@ -212,17 +213,19 @@ var _ = Describe("Streaming Producers", func() {
 		go func(ch ChannelPublishConfirm, p *Producer) {
 			defer GinkgoRecover()
 			for ids := range ch {
-				atomic.AddInt32(&messagesReceived, int32(len(ids)))
+
 				for i, msg := range ids {
+					logs.LogInfo(fmt.Sprintf("Message %d confirmed - publishingId %d", i, msg.GetPublishingId()))
 					Expect(msg.GetError()).NotTo(HaveOccurred())
 					Expect(msg.GetProducerID()).To(Equal(p.id))
-					Expect(msg.GetPublishingId()).NotTo(Equal(int64(0)))
+					Expect(msg.GetPublishingId()).To(Equal(int64(i + 1)))
 					Expect(msg.IsConfirmed()).To(Equal(true))
 					Expect(msg.message.GetPublishingId()).To(Equal(int64(0)))
 					Expect(msg.message.HasPublishingId()).To(Equal(false))
 					body := string(msg.message.GetData()[0][:])
 					Expect(body).To(Equal("test_" + strconv.Itoa(i)))
 				}
+				atomic.AddInt32(&messagesReceived, int32(len(ids)))
 			}
 		}(chConfirm, producer)
 
