@@ -209,10 +209,12 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := producer.NotifyPublishConfirmation()
+		// we need an external nRecv since the producer can send the confirmation
+		// in multiple send
+		var nRecv int64
 		go func(ch ChannelPublishConfirm, p *Producer) {
 			defer GinkgoRecover()
 			for ids := range ch {
-				var nRecv int64
 				for i, msg := range ids {
 					atomic.AddInt64(&nRecv, 1)
 					logs.LogInfo(fmt.Sprintf("Message i: %d confirmed - publishingId %d, iteration %d",
