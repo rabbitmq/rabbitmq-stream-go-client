@@ -64,6 +64,7 @@ type Client struct {
 	metadataListener  metadataListener
 	lastHeartBeat     HeartBeat
 	socketCallTimeout time.Duration
+	availableFeatures *availableFeatures
 }
 
 func newClient(connectionName string, broker *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
@@ -96,6 +97,7 @@ func newClient(connectionName string, broker *Broker, tcpParameters *TCPParamete
 			destructor: &sync.Once{},
 		},
 		socketCallTimeout: defaultSocketCallTimeout,
+		availableFeatures: newAvailableFeatures(),
 	}
 	c.setConnectionName(connectionName)
 	return c
@@ -214,7 +216,7 @@ func (c *Client) connect() error {
 			if err != nil {
 				return err
 			}
-			logs.LogInfo("available features: %s", availableFeaturesInstance())
+			logs.LogDebug("available features: %s", c.availableFeatures)
 		}
 
 		c.heartBeat()
@@ -334,15 +336,9 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 }
 
 func (c *Client) exchangeVersion(serverVersion string) error {
-	// if already parsed, skip
-	// This is an optimization to avoid sending the command multiple times
-	// when the client is reconnected
-	if availableFeaturesInstance().IsAlreadyParsed() {
-		return nil
-	}
-	_ = availableFeaturesInstance().SetVersion(serverVersion)
+	_ = c.availableFeatures.SetVersion(serverVersion)
 
-	commands := availableFeaturesInstance().GetCommands()
+	commands := c.availableFeatures.GetCommands()
 
 	length := 2 + 2 + 4 +
 		4 + // commands size
@@ -368,7 +364,7 @@ func (c *Client) exchangeVersion(serverVersion string) error {
 
 	commandsResponse := <-resp.data
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
-	availableFeaturesInstance().ParseCommandVersions(commandsResponse.([]commandVersion))
+	c.availableFeatures.ParseCommandVersions(commandsResponse.([]commandVersion))
 	return nil
 }
 
@@ -537,6 +533,10 @@ func (c *Client) ReusePublisher(streamName string, existingProducer *Producer) (
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
 	if options == nil {
 		options = NewProducerOptions()
+	}
+
+	if options.IsFilterEnabled() && !c.availableFeatures.BrokerFilterEnabled() {
+		return nil, FilterNotSupported
 	}
 
 	if options.QueueSize < minQueuePublisherSize || options.QueueSize > maxQueuePublisherSize {

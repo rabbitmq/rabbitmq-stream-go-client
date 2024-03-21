@@ -130,6 +130,8 @@ var UnknownFrame = errors.New("Unknown Frame")
 var InternalError = errors.New("Internal Error")
 var AuthenticationFailureLoopbackError = errors.New("Authentication Failure Loopback Error")
 var ConfirmationTimoutError = errors.New("Confirmation Timeout Error")
+var FilterNotSupported = errors.New("Filtering is not supported by the broker " +
+	"(requires RabbitMQ 3.13+ and stream_filtering feature flag activated)")
 
 var LeaderNotReady = errors.New("Leader not Ready yet")
 

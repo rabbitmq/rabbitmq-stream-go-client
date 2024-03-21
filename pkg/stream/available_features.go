@@ -18,33 +18,36 @@ type availableFeatures struct {
 	is311OrMore         bool
 	brokerFilterEnabled bool
 	brokerVersion       string
-	alreadyParsed       bool
 }
 
-func availableFeaturesInstance() *availableFeatures {
-	if instance == (availableFeatures{}) {
-		lock.Lock()
-		defer lock.Unlock()
-		if instance == (availableFeatures{}) {
-			instance = availableFeatures{}
-		}
-	}
+func newAvailableFeatures() *availableFeatures {
+	lock.Lock()
+	defer lock.Unlock()
+	instance = availableFeatures{}
 	return &instance
 }
 
 func (a *availableFeatures) Is311OrMore() bool {
+	lock.Lock()
+	defer lock.Unlock()
 	return a.is311OrMore
 }
 
 func (a *availableFeatures) Is313OrMore() bool {
+	lock.Lock()
+	defer lock.Unlock()
 	return a.is313OrMore
 }
 
 func (a *availableFeatures) BrokerFilterEnabled() bool {
+	lock.Lock()
+	defer lock.Unlock()
 	return a.brokerFilterEnabled
 }
 
 func (a *availableFeatures) SetVersion(version string) error {
+	lock.Lock()
+	defer lock.Unlock()
 	if extractVersion(version) == "" {
 		return fmt.Errorf("invalid version format: %s", version)
 	}
@@ -55,23 +58,22 @@ func (a *availableFeatures) SetVersion(version string) error {
 }
 
 func (a *availableFeatures) GetCommands() []commandVersion {
+	lock.Lock()
+	defer lock.Unlock()
 	return []commandVersion{
 		&PublishFilter{},
 	}
 }
 
 func (a *availableFeatures) ParseCommandVersions(commandVersions []commandVersion) {
+	lock.Lock()
+	defer lock.Unlock()
 	for _, commandVersion := range commandVersions {
 		if commandVersion.GetCommandKey() == commandPublish {
 			a.brokerFilterEnabled = commandVersion.GetMinVersion() <= PublishFilter{}.GetMinVersion() &&
 				commandVersion.GetMaxVersion() >= PublishFilter{}.GetMaxVersion()
 		}
 	}
-	a.alreadyParsed = true
-}
-
-func (a *availableFeatures) IsAlreadyParsed() bool {
-	return a.alreadyParsed
 }
 
 func (a *availableFeatures) String() string {
