@@ -44,6 +44,11 @@ func writeBUShort(inputBuff *bufio.Writer, value uint16) {
 	inputBuff.Write(buff)
 }
 
+func writeBString(inputBuff *bufio.Writer, value string) {
+	writeBUShort(inputBuff, uint16(len(value)))
+	inputBuff.Write([]byte(value))
+}
+
 func writeByte(inputBuff *bytes.Buffer, value byte) {
 	var buff = make([]byte, 1)
 	buff[0] = value

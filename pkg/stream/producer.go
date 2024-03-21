@@ -59,6 +59,7 @@ type messageSequence struct {
 	messageBytes     []byte
 	unCompressedSize int
 	publishingId     int64
+	filterValue      string
 }
 
 type Producer struct {
@@ -336,6 +337,11 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return FrameTooLarge
 	}
 
+	filterValue := ""
+	if producer.options.IsFilterEnabled() {
+		filterValue = producer.options.Filter.FilterValue(streamMessage)
+	}
+
 	sequence := producer.assignPublishingID(streamMessage)
 	producer.addUnConfirmed(sequence, streamMessage, producer.id)
 
@@ -344,6 +350,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 			messageBytes:     msgBytes,
 			unCompressedSize: len(msgBytes),
 			publishingId:     sequence,
+			filterValue:      filterValue,
 		}
 	} else {
 		// TODO: Change the error message with a typed error
@@ -370,12 +377,18 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		if err != nil {
 			return err
 		}
+		filterValue := ""
+		if producer.options.IsFilterEnabled() {
+			filterValue = producer.options.Filter.FilterValue(batchMessage)
+		}
+
 		sequence := producer.assignPublishingID(batchMessage)
 		totalBufferToSend += len(messageBytes)
 		messagesSequence[i] = messageSequence{
 			messageBytes:     messageBytes,
 			unCompressedSize: len(messageBytes),
 			publishingId:     sequence,
+			filterValue:      filterValue,
 		}
 
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
@@ -484,6 +497,10 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 	defer producer.options.client.socket.mutex.Unlock()
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.id)
+	}
+
+	if producer.options.IsFilterEnabled() {
+		return producer.sendWithFilter(messagesSequence, producerID)
 	}
 
 	var msgLen int
@@ -621,6 +638,40 @@ func (producer *Producer) GetName() string {
 		return ""
 	}
 	return producer.options.Name
+}
+
+func (producer *Producer) sendWithFilter(messagesSequence []messageSequence, producerID uint8) error {
+	frameHeaderLength := initBufferPublishSize
+	var msgLen int
+	for _, msg := range messagesSequence {
+		msgLen += msg.unCompressedSize + 8 + 4
+		if msg.filterValue != "" {
+			msgLen += 2 + len(msg.filterValue)
+		}
+	}
+	length := frameHeaderLength + msgLen
+
+	writeBProtocolHeaderVersion(producer.options.client.socket.writer, length, commandPublish, version2)
+	writeBByte(producer.options.client.socket.writer, producerID)
+	numberOfMessages := len(messagesSequence)
+	writeBInt(producer.options.client.socket.writer, numberOfMessages)
+
+	for _, msg := range messagesSequence {
+		writeBLong(producer.options.client.socket.writer, msg.publishingId)
+		if msg.filterValue != "" {
+			writeBString(producer.options.client.socket.writer, msg.filterValue)
+		} else {
+			writeBInt(producer.options.client.socket.writer, -1)
+		}
+		writeBInt(producer.options.client.socket.writer, len(msg.messageBytes)) // len
+		_, err := producer.options.client.socket.writer.Write(msg.messageBytes)
+		if err != nil {
+			return err
+		}
+	}
+
+	return producer.options.client.socket.writer.Flush()
+
 }
 
 func (c *Client) deletePublisher(publisherId byte) error {

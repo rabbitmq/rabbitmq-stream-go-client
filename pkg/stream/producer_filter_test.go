@@ -5,7 +5,9 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"strconv"
 	"time"
 )
 
@@ -59,6 +61,23 @@ var _ = Describe("Streaming Producer Filtering", func() {
 			}),
 		))
 		Expect(err).To(Equal(FilterNotSupported))
+	})
+
+	It("Send messages with Filtering", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream, NewProducerOptions().SetFilter(
+			NewProducerFilter(func(message message.StreamMessage) string {
+				return fmt.Sprintf("%s", message.GetApplicationProperties()["ID"])
+			}),
+		))
+
+		for i := 0; i < 10; i++ {
+			msg := amqp.NewMessage([]byte(strconv.Itoa(i)))
+			msg.ApplicationProperties = map[string]interface{}{"ID": i}
+			Expect(producer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
 })

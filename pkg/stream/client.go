@@ -581,6 +581,8 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		SubEntrySize:         options.SubEntrySize,
 		Compression:          options.Compression,
 		ConfirmationTimeOut:  options.ConfirmationTimeOut,
+		ClientProvidedName:   options.ClientProvidedName,
+		Filter:               options.Filter,
 	})
 
 	if err != nil {
