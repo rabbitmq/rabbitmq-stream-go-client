@@ -93,7 +93,7 @@ var _ = Describe("Streaming Filtering", func() {
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
-	It("Validate filter Consumer", func() {
+	It("Validate filter Producer/Consumer ", func() {
 		postFilter := func(message *amqp.Message) bool {
 			return message.ApplicationProperties["state"] == "New York"
 		}
@@ -113,6 +113,15 @@ var _ = Describe("Streaming Filtering", func() {
 		filter = NewConsumerFilter([]string{""}, true, postFilter)
 		_, err = testEnvironment.NewConsumer(testProducerStream, handleMessages, NewConsumerOptions().SetFilter(filter))
 		Expect(err).To(HaveOccurred())
+
+		// subentrybatch is not supported with filtering
+		_, err = testEnvironment.NewProducer(testProducerStream,
+			NewProducerOptions().
+				SetFilter(NewProducerFilter(func(message message.StreamMessage) string {
+					return fmt.Sprintf("%s", message.GetApplicationProperties()["ID"])
+				})).SetSubEntrySize(1000))
+		Expect(err).To(HaveOccurred())
+
 	})
 
 	It("Consume messages with Filtering", func() {
@@ -192,9 +201,17 @@ var _ = Describe("Streaming Filtering", func() {
 })
 
 func send(producer *Producer, state string) {
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 25; i++ {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("message %d, state %s", i, state)))
 		msg.ApplicationProperties = map[string]interface{}{"state": state}
 		Expect(producer.Send(msg)).NotTo(HaveOccurred())
 	}
+	var messages []message.StreamMessage
+	for i := 0; i < 25; i++ {
+		msg := amqp.NewMessage([]byte(fmt.Sprintf("message %d, state %s", i, state)))
+		msg.ApplicationProperties = map[string]interface{}{"state": state}
+		messages = append(messages, msg)
+	}
+	Expect(producer.BatchSend(messages)).NotTo(HaveOccurred())
+
 }
