@@ -12,6 +12,7 @@ Stream examples
    Use the [RabbitMQ TLS cluster](../compose) to run a TLS and no TLS cluster. <br />
    For more details: https://blog.rabbitmq.com/posts/2021/07/connecting-to-streams/
  - [Sub Entries Batching](./sub-entries-batching/sub_entries_batching.go) - Sub Entries Batching example
+ - [Stream Filtering](./filtering/filtering.go) - Stream Filtering example
 
  - [Reliable](./reliable) - Reliable Producer and Reliable Consumer example
 

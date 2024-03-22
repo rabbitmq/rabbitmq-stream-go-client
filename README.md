@@ -29,10 +29,12 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
         * [Publish Confirmation](#publish-confirmation)
         * [Deduplication](#deduplication)
         * [Sub Entries Batching](#sub-entries-batching)
+        * [Publish Filtering](#publish-filtering)
     * [Consume messages](#consume-messages)
         * [Manual Track Offset](#manual-track-offset)
         * [Automatic Track Offset](#automatic-track-offset)
         * [Get consumer Offset](#get-consumer-offset)
+        * [Consume Filtering](#consume-filtering)
     * [Handle Close](#handle-close)
 	* [Reliable Producer and Reliable Consumer](#reliable-producer-and-reliable-consumer)
 - [Performance test tool](#performance-test-tool)
@@ -379,6 +381,14 @@ producer, err := env.NewProducer(streamName, stream.NewProducerOptions().
 		SetCompression(stream.Compression{}.Gzip()))
 ```
 
+### Publish Filtering
+Stream filtering is a new feature in RabbitMQ 3.13. It allows to save bandwidth between the broker and consuming applications when those applications need only a subset of the messages of a stream.
+See this [blog post](https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-filtering/) for more details.
+The blog post also contains a Java example but the Go client is similar.
+See the [Filtering](./examples/filtering/filtering.go) example in the [examples](./examples/) directory.
+
+
+
 ### Reliable Producer and Reliable Consumer
 
 The `ReliableProducer` and `ReliableConsumer` are built up the standard producer/consumer. </br>
@@ -496,6 +506,14 @@ It is possible to query the consumer offset using:
 offset, err := env.QueryOffset("consumer_name", "streamName")
 ```
 An error is returned if the offset doesn't exist.
+
+
+### Consume Filtering
+Stream filtering is a new feature in RabbitMQ 3.13. It allows to save bandwidth between the broker and consuming applications when those applications need only a subset of the messages of a stream.
+See this [blog post](https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-filtering/) for more details.
+The blog post also contains a Java example but the Go client is similar.
+See the [Filtering](./examples/filtering/filtering.go) example in the [examples](./examples/) directory.
+
 
 
 ### Handle Close

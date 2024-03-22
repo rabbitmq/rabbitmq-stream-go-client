@@ -41,7 +41,8 @@ func consumerClose(channelClose stream.ChannelClose) {
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Println("Filtering example")
+	//You need RabbitMQ 3.13.0 or later to run this example
+	fmt.Println("Filtering example.")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
 	// Connect to the broker ( or brokers )
@@ -71,55 +72,69 @@ func main() {
 
 	CheckErr(err)
 
-	// Get a new producer for a stream
 	producer, err := env.NewProducer(streamName,
 		stream.NewProducerOptions().SetFilter(
+			// Here we enable the filter
+			// for each message we set the filter key.
+			// the filter result is a string
 			stream.NewProducerFilter(func(message message.StreamMessage) string {
 				return fmt.Sprintf("%s", message.GetApplicationProperties()["state"])
 			})))
 	CheckErr(err)
 
-	//optional publish confirmation channel
 	chPublishConfirm := producer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
 
+	// Send messages with the state property == New York
 	send(producer, "New York")
 	// Here we wait a bit to be sure that the messages are stored in the same chunk
 	// and we can filter them
 	// This is only for the example, in a real case you don't need to wait
 	time.Sleep(2 * time.Second)
 
+	// Send messages with the state property == Alabama
 	send(producer, "Alabama")
 
-	time.Sleep(2 * time.Second)
+	// Here we wait a bit to be sure that the messages are stored in another chunk
+	// only for testing the filter
+	time.Sleep(1 * time.Second)
 
 	err = producer.Close()
 	CheckErr(err)
 
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-
-		fmt.Printf("consumer name: %s, data: %s, message offset %d, chunk entities count: %d   \n ",
-			consumerContext.Consumer.GetName(), message.Data, consumerContext.Consumer.GetOffset(), consumerContext.GetEntriesCount())
-	}
-
+	// post filter is applied client side after the server side filter
+	// the server side filter is applied on the broker side
+	// In real scenarios, the chunk could contain messages that do not match the filter
+	// that's why we need to apply the filter client side
+	// NOTE: This code _must_ be simple and fast. Don't introduce complex logic here with possible bugs
+	// Post filter is mandatory as function even you can return always true
 	postFilter := func(message *amqp.Message) bool {
+		// you can use any amqp.Message field to filter
+		// be sure the field is set ann valid before sending the message
 		return message.ApplicationProperties["state"] == "New York"
 	}
 
+	// Here we create a consumer with a filter
+	// the filter is applied server side
+	// with "New York" as a filter
 	filter := stream.NewConsumerFilter([]string{"New York"}, true, postFilter)
+
+	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		// Here you should process received only messages that match the filter
+		// "New York" messages should be received
+		// "Alabama" messages should not be received
+		fmt.Printf("consumer name: %s, data: %s, message offset %d, chunk entities count: %d   \n ",
+			consumerContext.Consumer.GetName(), message.Data, consumerContext.Consumer.GetOffset(), consumerContext.GetEntriesCount())
+	}
 
 	consumer, err := env.NewConsumer(
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetClientProvidedName("my_consumer").            // connection name
-			SetConsumerName("my_consumer").                  // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First()). // start consuming from the beginning
-			SetFilter(filter))
+			SetFilter(filter))                               // set the filter
 	CheckErr(err)
 	channelClose := consumer.NotifyClose()
-	// channelClose receives all the closing events, here you can handle the
-	// client reconnection or just log
 	defer consumerClose(channelClose)
 
 	fmt.Println("Press any key to stop ")

@@ -93,6 +93,28 @@ var _ = Describe("Streaming Filtering", func() {
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
+	It("Validate filter Consumer", func() {
+		postFilter := func(message *amqp.Message) bool {
+			return message.ApplicationProperties["state"] == "New York"
+		}
+
+		filter := NewConsumerFilter([]string{"New York"}, true, nil)
+		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+		}
+
+		_, err := testEnvironment.NewConsumer(testProducerStream, handleMessages,
+			NewConsumerOptions().SetFilter(filter))
+		Expect(err).To(HaveOccurred())
+
+		filter = NewConsumerFilter(nil, true, postFilter)
+		_, err = testEnvironment.NewConsumer(testProducerStream, handleMessages, NewConsumerOptions().SetFilter(filter))
+		Expect(err).To(HaveOccurred())
+
+		filter = NewConsumerFilter([]string{""}, true, postFilter)
+		_, err = testEnvironment.NewConsumer(testProducerStream, handleMessages, NewConsumerOptions().SetFilter(filter))
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("Consume messages with Filtering", func() {
 
 		postFilterAlwaysTrue := func(message *amqp.Message) bool {
