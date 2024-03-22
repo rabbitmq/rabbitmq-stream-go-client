@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
 	"net"
 	"net/url"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -64,6 +66,7 @@ type Client struct {
 	metadataListener  metadataListener
 	lastHeartBeat     HeartBeat
 	socketCallTimeout time.Duration
+	availableFeatures *availableFeatures
 }
 
 func newClient(connectionName string, broker *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
@@ -96,6 +99,7 @@ func newClient(connectionName string, broker *Broker, tcpParameters *TCPParamete
 			destructor: &sync.Once{},
 		},
 		socketCallTimeout: defaultSocketCallTimeout,
+		availableFeatures: newAvailableFeatures(),
 	}
 	c.setConnectionName(connectionName)
 	return c
@@ -214,7 +218,7 @@ func (c *Client) connect() error {
 			if err != nil {
 				return err
 			}
-			logs.LogInfo("available features: %s", availableFeaturesInstance())
+			logs.LogDebug("available features: %s", c.availableFeatures)
 		}
 
 		c.heartBeat()
@@ -334,15 +338,9 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 }
 
 func (c *Client) exchangeVersion(serverVersion string) error {
-	// if already parsed, skip
-	// This is an optimization to avoid sending the command multiple times
-	// when the client is reconnected
-	if availableFeaturesInstance().IsAlreadyParsed() {
-		return nil
-	}
-	_ = availableFeaturesInstance().SetVersion(serverVersion)
+	_ = c.availableFeatures.SetVersion(serverVersion)
 
-	commands := availableFeaturesInstance().GetCommands()
+	commands := c.availableFeatures.GetCommands()
 
 	length := 2 + 2 + 4 +
 		4 + // commands size
@@ -368,7 +366,7 @@ func (c *Client) exchangeVersion(serverVersion string) error {
 
 	commandsResponse := <-resp.data
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
-	availableFeaturesInstance().ParseCommandVersions(commandsResponse.([]commandVersion))
+	c.availableFeatures.ParseCommandVersions(commandsResponse.([]commandVersion))
 	return nil
 }
 
@@ -539,6 +537,10 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		options = NewProducerOptions()
 	}
 
+	if options.IsFilterEnabled() && !c.availableFeatures.BrokerFilterEnabled() {
+		return nil, FilterNotSupported
+	}
+
 	if options.QueueSize < minQueuePublisherSize || options.QueueSize > maxQueuePublisherSize {
 		return nil, fmt.Errorf("QueueSize values must be between %d and %d",
 			minQueuePublisherSize, maxQueuePublisherSize)
@@ -581,6 +583,8 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		SubEntrySize:         options.SubEntrySize,
 		Compression:          options.Compression,
 		ConfirmationTimeOut:  options.ConfirmationTimeOut,
+		ClientProvidedName:   options.ClientProvidedName,
+		Filter:               options.Filter,
 	})
 
 	if err != nil {
@@ -801,6 +805,26 @@ func (c *Client) DeclareSubscriber(streamName string,
 		options.initialCredits = 10
 	}
 
+	if options.IsFilterEnabled() && !c.availableFeatures.BrokerFilterEnabled() {
+		return nil, FilterNotSupported
+	}
+
+	if options.IsFilterEnabled() && options.Filter.PostFilter == nil {
+		return nil, fmt.Errorf("filter enabled but post filter is nil. Post filter must be set")
+	}
+
+	if options.IsFilterEnabled() && (options.Filter.Values == nil || len(options.Filter.Values) == 0) {
+		return nil, fmt.Errorf("filter enabled but no values. At least one value must be set")
+	}
+
+	if options.IsFilterEnabled() {
+		for _, value := range options.Filter.Values {
+			if value == "" {
+				return nil, fmt.Errorf("filter enabled but one of the value is empty")
+			}
+		}
+	}
+
 	if options.Offset.typeOfs <= 0 || options.Offset.typeOfs > 6 {
 		return nil, fmt.Errorf("specify a valid Offset")
 	}
@@ -815,9 +839,9 @@ func (c *Client) DeclareSubscriber(streamName string,
 
 	if options.Offset.isLastConsumed() {
 		lastOffset, err := c.queryOffset(options.ConsumerName, streamName)
-		switch err {
-		case nil, OffsetNotFoundError:
-			if err == OffsetNotFoundError {
+		switch {
+		case err == nil, errors.Is(err, OffsetNotFoundError):
+			if errors.Is(err, OffsetNotFoundError) {
 				options.Offset.typeOfs = typeFirst
 				options.Offset.offset = 0
 				break
@@ -846,6 +870,32 @@ func (c *Client) DeclareSubscriber(streamName string,
 	// consumer.current offset will be moved when reading
 	consumer.setCurrentOffset(options.Offset.offset)
 
+	/// define the consumerOptions
+	consumerProperties := make(map[string]string)
+
+	if options.ConsumerName != "" {
+		consumerProperties["name"] = options.ConsumerName
+	}
+
+	if options.Filter != nil {
+		for i, filterValue := range options.Filter.Values {
+			k := fmt.Sprintf("%s%d", subscriptionPropertyFilterPrefix, i)
+			consumerProperties[k] = filterValue
+		}
+
+		consumerProperties[subscriptionPropertyMatchUnfiltered] = strconv.FormatBool(options.Filter.MatchUnfiltered)
+	}
+
+	if len(consumerProperties) > 0 {
+		length += 4 // size of the properties map
+
+		for k, v := range consumerProperties {
+			length += 2 + len(k)
+			length += 2 + len(v)
+
+		}
+	}
+
 	resp := c.coordinator.NewResponse(commandSubscribe, streamName)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -862,8 +912,22 @@ func (c *Client) DeclareSubscriber(streamName string,
 		writeLong(b, options.Offset.offset)
 	}
 	writeShort(b, options.initialCredits)
+	if len(consumerProperties) > 0 {
+		writeInt(b, len(consumerProperties))
+		for k, v := range consumerProperties {
+			writeString(b, k)
+			writeString(b, v)
+		}
+	}
 
 	err := c.handleWrite(b.Bytes(), resp)
+
+	canDispatch := func(offsetMessage *offsetMessage) bool {
+		if options.IsFilterEnabled() && options.Filter.PostFilter != nil {
+			return options.Filter.PostFilter(offsetMessage.message)
+		}
+		return true
+	}
 
 	go func() {
 		for {
@@ -876,7 +940,9 @@ func (c *Client) DeclareSubscriber(streamName string,
 			case chunk := <-consumer.response.chunkForConsumer:
 				for _, offMessage := range chunk.offsetMessages {
 					consumer.setCurrentOffset(offMessage.offset)
-					consumer.MessagesHandler(ConsumerContext{Consumer: consumer, chunkInfo: &chunk}, offMessage.message)
+					if canDispatch(offMessage) {
+						consumer.MessagesHandler(ConsumerContext{Consumer: consumer, chunkInfo: &chunk}, offMessage.message)
+					}
 					if consumer.options.autocommit {
 						consumer.messageCountBeforeStorage += 1
 						if consumer.messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage {

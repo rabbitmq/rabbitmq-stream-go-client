@@ -6,8 +6,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -209,20 +209,28 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := producer.NotifyPublishConfirmation()
+		// we need an external nRecv since the producer can send the confirmation
+		// in multiple send
+		var nRecv int64
 		go func(ch ChannelPublishConfirm, p *Producer) {
 			defer GinkgoRecover()
 			for ids := range ch {
-				atomic.AddInt32(&messagesReceived, int32(len(ids)))
 				for i, msg := range ids {
+					atomic.AddInt64(&nRecv, 1)
+					logs.LogInfo(fmt.Sprintf("Message i: %d confirmed - publishingId %d, iteration %d",
+						i, msg.GetPublishingId(), atomic.LoadInt64(&nRecv)))
 					Expect(msg.GetError()).NotTo(HaveOccurred())
 					Expect(msg.GetProducerID()).To(Equal(p.id))
-					Expect(msg.GetPublishingId()).To(Equal(int64(i + 1)))
+					Expect(msg.GetPublishingId()).To(Equal(atomic.LoadInt64(&nRecv)))
 					Expect(msg.IsConfirmed()).To(Equal(true))
 					Expect(msg.message.GetPublishingId()).To(Equal(int64(0)))
 					Expect(msg.message.HasPublishingId()).To(Equal(false))
 					body := string(msg.message.GetData()[0][:])
-					Expect(body).To(Equal("test_" + strconv.Itoa(i)))
+					// -1 because the first message is 0
+					be := fmt.Sprintf("test_%d", atomic.LoadInt64(&nRecv)-1)
+					Expect(body).To(Equal(be))
 				}
+				atomic.AddInt32(&messagesReceived, int32(len(ids)))
 			}
 		}(chConfirm, producer)
 

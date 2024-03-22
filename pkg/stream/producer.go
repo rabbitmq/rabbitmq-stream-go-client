@@ -59,6 +59,7 @@ type messageSequence struct {
 	messageBytes     []byte
 	unCompressedSize int
 	publishingId     int64
+	filterValue      string
 }
 
 type Producer struct {
@@ -78,17 +79,30 @@ type Producer struct {
 	pendingMessages   pendingMessagesSequence
 }
 
+type FilterValue func(message message.StreamMessage) string
+
+type ProducerFilter struct {
+	FilterValue FilterValue
+}
+
+func NewProducerFilter(filterValue FilterValue) *ProducerFilter {
+	return &ProducerFilter{
+		FilterValue: filterValue,
+	}
+}
+
 type ProducerOptions struct {
 	client               *Client
 	streamName           string
-	Name                 string        // Producer name, it is useful to handle deduplication messages
-	QueueSize            int           // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
-	BatchSize            int           // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput
-	BatchPublishingDelay int           // Period to send a batch of messages.
-	SubEntrySize         int           // Size of sub Entry, to aggregate more subEntry using one publishing id
-	Compression          Compression   // Compression type, it is valid only if SubEntrySize > 1
-	ConfirmationTimeOut  time.Duration // Time to wait for the confirmation
-	ClientProvidedName   string        // Client provider name that will be shown in the management UI
+	Name                 string          // Producer name, it is useful to handle deduplication messages
+	QueueSize            int             // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
+	BatchSize            int             // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput
+	BatchPublishingDelay int             // Period to send a batch of messages.
+	SubEntrySize         int             // Size of sub Entry, to aggregate more subEntry using one publishing id
+	Compression          Compression     // Compression type, it is valid only if SubEntrySize > 1
+	ConfirmationTimeOut  time.Duration   // Time to wait for the confirmation
+	ClientProvidedName   string          // Client provider name that will be shown in the management UI
+	Filter               *ProducerFilter // Enable the filter feature, by default is disabled. Pointer nil
 }
 
 func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
@@ -131,6 +145,15 @@ func (po *ProducerOptions) SetClientProvidedName(name string) *ProducerOptions {
 	return po
 }
 
+func (po *ProducerOptions) SetFilter(filter *ProducerFilter) *ProducerOptions {
+	po.Filter = filter
+	return po
+}
+
+func (po *ProducerOptions) IsFilterEnabled() bool {
+	return po.Filter != nil
+}
+
 func NewProducerOptions() *ProducerOptions {
 	return &ProducerOptions{
 		QueueSize:            defaultQueuePublisherSize,
@@ -140,6 +163,7 @@ func NewProducerOptions() *ProducerOptions {
 		Compression:          Compression{},
 		ConfirmationTimeOut:  defaultConfirmationTimeOut,
 		ClientProvidedName:   "go-stream-producer",
+		Filter:               nil,
 	}
 }
 
@@ -313,6 +337,11 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return FrameTooLarge
 	}
 
+	filterValue := ""
+	if producer.options.IsFilterEnabled() {
+		filterValue = producer.options.Filter.FilterValue(streamMessage)
+	}
+
 	sequence := producer.assignPublishingID(streamMessage)
 	producer.addUnConfirmed(sequence, streamMessage, producer.id)
 
@@ -321,6 +350,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 			messageBytes:     msgBytes,
 			unCompressedSize: len(msgBytes),
 			publishingId:     sequence,
+			filterValue:      filterValue,
 		}
 	} else {
 		// TODO: Change the error message with a typed error
@@ -347,12 +377,18 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		if err != nil {
 			return err
 		}
+		filterValue := ""
+		if producer.options.IsFilterEnabled() {
+			filterValue = producer.options.Filter.FilterValue(batchMessage)
+		}
+
 		sequence := producer.assignPublishingID(batchMessage)
 		totalBufferToSend += len(messageBytes)
 		messagesSequence[i] = messageSequence{
 			messageBytes:     messageBytes,
 			unCompressedSize: len(messageBytes),
 			publishingId:     sequence,
+			filterValue:      filterValue,
 		}
 
 		producer.addUnConfirmed(sequence, batchMessage, producer.id)
@@ -463,6 +499,10 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
+	if producer.options.IsFilterEnabled() {
+		return producer.sendWithFilter(messagesSequence, producerID)
+	}
+
 	var msgLen int
 	var aggregation subEntries
 
@@ -484,7 +524,6 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 
 	frameHeaderLength := initBufferPublishSize
 	length := frameHeaderLength + msgLen
-	//var b = bytes.NewBuffer(make([]byte, 0, length+4))
 
 	writeBProtocolHeader(producer.options.client.socket.writer, length, commandPublish)
 	writeBByte(producer.options.client.socket.writer, producerID)
@@ -506,8 +545,7 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 
 	err := producer.options.client.socket.writer.Flush() //writeAndFlush(b.Bytes())
 	if err != nil {
-		// This sleep is need to wait the
-		// 800 milliseconds to flush all the pending messages
+		logs.LogError("Producer BatchSend error during flush: %s", err)
 		producer.setStatus(closed)
 		return err
 	}
@@ -600,6 +638,40 @@ func (producer *Producer) GetName() string {
 		return ""
 	}
 	return producer.options.Name
+}
+
+func (producer *Producer) sendWithFilter(messagesSequence []messageSequence, producerID uint8) error {
+	frameHeaderLength := initBufferPublishSize
+	var msgLen int
+	for _, msg := range messagesSequence {
+		msgLen += msg.unCompressedSize + 8 + 4
+		if msg.filterValue != "" {
+			msgLen += 2 + len(msg.filterValue)
+		}
+	}
+	length := frameHeaderLength + msgLen
+
+	writeBProtocolHeaderVersion(producer.options.client.socket.writer, length, commandPublish, version2)
+	writeBByte(producer.options.client.socket.writer, producerID)
+	numberOfMessages := len(messagesSequence)
+	writeBInt(producer.options.client.socket.writer, numberOfMessages)
+
+	for _, msg := range messagesSequence {
+		writeBLong(producer.options.client.socket.writer, msg.publishingId)
+		if msg.filterValue != "" {
+			writeBString(producer.options.client.socket.writer, msg.filterValue)
+		} else {
+			writeBInt(producer.options.client.socket.writer, -1)
+		}
+		writeBInt(producer.options.client.socket.writer, len(msg.messageBytes)) // len
+		_, err := producer.options.client.socket.writer.Write(msg.messageBytes)
+		if err != nil {
+			return err
+		}
+	}
+
+	return producer.options.client.socket.writer.Flush()
+
 }
 
 func (c *Client) deletePublisher(publisherId byte) error {
