@@ -528,6 +528,9 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		return nil, FilterNotSupported
 	}
 
+	if options.isSubEntriesBatching() && options.IsFilterEnabled() {
+		return nil, fmt.Errorf("sub-entry batching can't be enabled with filter")
+	}
 	if options.QueueSize < minQueuePublisherSize || options.QueueSize > maxQueuePublisherSize {
 		return nil, fmt.Errorf("QueueSize values must be between %d and %d",
 			minQueuePublisherSize, maxQueuePublisherSize)

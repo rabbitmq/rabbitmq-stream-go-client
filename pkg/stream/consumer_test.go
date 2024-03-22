@@ -180,9 +180,6 @@ var _ = Describe("Streaming Consumers", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch send
-		Expect(err).NotTo(HaveOccurred())
-		Expect(producer.Close()).NotTo(HaveOccurred())
 		var messagesCount int32 = 0
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
@@ -190,12 +187,13 @@ var _ = Describe("Streaming Consumers", func() {
 			}, NewConsumerOptions().
 				SetOffset(OffsetSpecification{}.First()))
 		Expect(err).NotTo(HaveOccurred())
-
+		err = producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch send
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesCount)
 		}, 5*time.Second).Should(Equal(int32(5)),
-			"chunkInfo should be 5") // 30 messages since the offset is 10 but all the messages are received
-
+			"chunkInfo should be 5")
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 

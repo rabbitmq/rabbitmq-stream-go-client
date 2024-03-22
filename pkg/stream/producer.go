@@ -499,7 +499,9 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequ
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
-	if producer.options.IsFilterEnabled() {
+	if producer.options.IsFilterEnabled() &&
+		// this check is just for safety. The producer can't be created with Filter and SubEntry > 1
+		!producer.options.isSubEntriesBatching() {
 		return producer.sendWithFilter(messagesSequence, producerID)
 	}
 
