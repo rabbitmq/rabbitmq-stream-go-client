@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	logs "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"time"
 )
@@ -133,7 +132,7 @@ func NewAutoCommitStrategy() *AutoCommitStrategy {
 	}
 }
 
-type PostFilter func(message message.StreamMessage) bool
+type PostFilter func(message *amqp.Message) bool
 
 type ConsumerFilter struct {
 	Values          []string

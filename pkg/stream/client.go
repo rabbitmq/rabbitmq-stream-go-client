@@ -805,6 +805,10 @@ func (c *Client) DeclareSubscriber(streamName string,
 		options.initialCredits = 10
 	}
 
+	if options.IsFilterEnabled() && !c.availableFeatures.BrokerFilterEnabled() {
+		return nil, FilterNotSupported
+	}
+
 	if options.Offset.typeOfs <= 0 || options.Offset.typeOfs > 6 {
 		return nil, fmt.Errorf("specify a valid Offset")
 	}
@@ -902,6 +906,13 @@ func (c *Client) DeclareSubscriber(streamName string,
 
 	err := c.handleWrite(b.Bytes(), resp)
 
+	canDispatch := func(offsetMessage *offsetMessage) bool {
+		if options.IsFilterEnabled() && options.Filter.PostFilter != nil {
+			return options.Filter.PostFilter(offsetMessage.message)
+		}
+		return true
+	}
+
 	go func() {
 		for {
 			select {
@@ -913,7 +924,9 @@ func (c *Client) DeclareSubscriber(streamName string,
 			case chunk := <-consumer.response.chunkForConsumer:
 				for _, offMessage := range chunk.offsetMessages {
 					consumer.setCurrentOffset(offMessage.offset)
-					consumer.MessagesHandler(ConsumerContext{Consumer: consumer, chunkInfo: &chunk}, offMessage.message)
+					if canDispatch(offMessage) {
+						consumer.MessagesHandler(ConsumerContext{Consumer: consumer, chunkInfo: &chunk}, offMessage.message)
+					}
 					if consumer.options.autocommit {
 						consumer.messageCountBeforeStorage += 1
 						if consumer.messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage {

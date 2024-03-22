@@ -102,8 +102,8 @@ func main() {
 			consumerContext.Consumer.GetName(), message.Data, consumerContext.Consumer.GetOffset(), consumerContext.GetEntriesCount())
 	}
 
-	postFilter := func(message message.StreamMessage) bool {
-		return true
+	postFilter := func(message *amqp.Message) bool {
+		return message.ApplicationProperties["state"] == "New York"
 	}
 
 	filter := stream.NewConsumerFilter([]string{"New York"}, true, postFilter)
