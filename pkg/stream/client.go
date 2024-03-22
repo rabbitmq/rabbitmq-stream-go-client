@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
 	"net"
 	"net/url"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -817,9 +819,9 @@ func (c *Client) DeclareSubscriber(streamName string,
 
 	if options.Offset.isLastConsumed() {
 		lastOffset, err := c.queryOffset(options.ConsumerName, streamName)
-		switch err {
-		case nil, OffsetNotFoundError:
-			if err == OffsetNotFoundError {
+		switch {
+		case err == nil, errors.Is(err, OffsetNotFoundError):
+			if errors.Is(err, OffsetNotFoundError) {
 				options.Offset.typeOfs = typeFirst
 				options.Offset.offset = 0
 				break
@@ -848,6 +850,32 @@ func (c *Client) DeclareSubscriber(streamName string,
 	// consumer.current offset will be moved when reading
 	consumer.setCurrentOffset(options.Offset.offset)
 
+	/// define the consumerOptions
+	consumerProperties := make(map[string]string)
+
+	if options.ConsumerName != "" {
+		consumerProperties["name"] = options.ConsumerName
+	}
+
+	if options.Filter != nil {
+		for i, filterValue := range options.Filter.Values {
+			k := fmt.Sprintf("%s%d", subscriptionPropertyFilterPrefix, i)
+			consumerProperties[k] = filterValue
+		}
+
+		consumerProperties[subscriptionPropertyMatchUnfiltered] = strconv.FormatBool(options.Filter.MatchUnfiltered)
+	}
+
+	if len(consumerProperties) > 0 {
+		length += 4 // size of the properties map
+
+		for k, v := range consumerProperties {
+			length += 2 + len(k)
+			length += 2 + len(v)
+
+		}
+	}
+
 	resp := c.coordinator.NewResponse(commandSubscribe, streamName)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -864,6 +892,13 @@ func (c *Client) DeclareSubscriber(streamName string,
 		writeLong(b, options.Offset.offset)
 	}
 	writeShort(b, options.initialCredits)
+	if len(consumerProperties) > 0 {
+		writeInt(b, len(consumerProperties))
+		for k, v := range consumerProperties {
+			writeString(b, k)
+			writeString(b, v)
+		}
+	}
 
 	err := c.handleWrite(b.Bytes(), resp)
 

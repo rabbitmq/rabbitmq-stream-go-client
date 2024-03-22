@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	logs "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"time"
 )
@@ -132,6 +133,22 @@ func NewAutoCommitStrategy() *AutoCommitStrategy {
 	}
 }
 
+type PostFilter func(message message.StreamMessage) bool
+
+type ConsumerFilter struct {
+	Values          []string
+	MatchUnfiltered bool
+	PostFilter      PostFilter
+}
+
+func NewConsumerFilter(values []string, matchUnfiltered bool, postFilter PostFilter) *ConsumerFilter {
+	return &ConsumerFilter{
+		Values:          values,
+		MatchUnfiltered: matchUnfiltered,
+		PostFilter:      postFilter,
+	}
+}
+
 type ConsumerOptions struct {
 	client             *Client
 	ConsumerName       string
@@ -142,6 +159,7 @@ type ConsumerOptions struct {
 	CRCCheck           bool
 	initialCredits     int16
 	ClientProvidedName string
+	Filter             *ConsumerFilter
 }
 
 func NewConsumerOptions() *ConsumerOptions {
@@ -152,6 +170,7 @@ func NewConsumerOptions() *ConsumerOptions {
 		CRCCheck:           false,
 		initialCredits:     10,
 		ClientProvidedName: "go-stream-consumer",
+		Filter:             nil,
 	}
 }
 
@@ -192,6 +211,15 @@ func (c *ConsumerOptions) SetOffset(offset OffsetSpecification) *ConsumerOptions
 func (c *ConsumerOptions) SetClientProvidedName(clientProvidedName string) *ConsumerOptions {
 	c.ClientProvidedName = clientProvidedName
 	return c
+}
+
+func (c *ConsumerOptions) SetFilter(filter *ConsumerFilter) *ConsumerOptions {
+	c.Filter = filter
+	return c
+}
+
+func (c *ConsumerOptions) IsFilterEnabled() bool {
+	return c.Filter != nil
 }
 
 func (c *Client) credit(subscriptionId byte, credit int16) {

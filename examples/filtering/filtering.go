@@ -8,7 +8,6 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
-	"strconv"
 	"time"
 )
 
@@ -76,7 +75,7 @@ func main() {
 	producer, err := env.NewProducer(streamName,
 		stream.NewProducerOptions().SetFilter(
 			stream.NewProducerFilter(func(message message.StreamMessage) string {
-				return fmt.Sprintf("%s", message.GetApplicationProperties()["ID"])
+				return fmt.Sprintf("%s", message.GetApplicationProperties()["state"])
 			})))
 	CheckErr(err)
 
@@ -84,27 +83,30 @@ func main() {
 	chPublishConfirm := producer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
 
-	for i := 0; i < 10000; i++ {
-		msg := amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i)))
-		msg.ApplicationProperties = map[string]interface{}{"ID": i}
-		err := producer.Send(msg)
-		CheckErr(err)
-	}
+	send(producer, "New York")
+	// Here we wait a bit to be sure that the messages are stored in the same chunk
+	// and we can filter them
+	// This is only for the example, in a real case you don't need to wait
+	time.Sleep(2 * time.Second)
 
-	time.Sleep(1 * time.Second)
+	send(producer, "Alabama")
+
+	time.Sleep(2 * time.Second)
+
 	err = producer.Close()
 	CheckErr(err)
 
-	// Define a consumer per stream, there are different offset options to define a consumer, default is
-	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.message) {
-	//
-	//}, nil)
-	// if you need to track the offset you need a consumer name like:
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 
 		fmt.Printf("consumer name: %s, data: %s, message offset %d, chunk entities count: %d   \n ",
 			consumerContext.Consumer.GetName(), message.Data, consumerContext.Consumer.GetOffset(), consumerContext.GetEntriesCount())
 	}
+
+	postFilter := func(message message.StreamMessage) bool {
+		return true
+	}
+
+	filter := stream.NewConsumerFilter([]string{"New York"}, true, postFilter)
 
 	consumer, err := env.NewConsumer(
 		streamName,
@@ -113,7 +115,7 @@ func main() {
 			SetClientProvidedName("my_consumer").            // connection name
 			SetConsumerName("my_consumer").                  // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First()). // start consuming from the beginning
-			SetCRCCheck(false))                              // Disable crc control, increase the performances
+			SetFilter(filter))
 	CheckErr(err)
 	channelClose := consumer.NotifyClose()
 	// channelClose receives all the closing events, here you can handle the
@@ -129,4 +131,13 @@ func main() {
 	CheckErr(err)
 	err = env.Close()
 	CheckErr(err)
+}
+
+func send(producer *stream.Producer, state string) {
+	for i := 0; i < 100; i++ {
+		msg := amqp.NewMessage([]byte(fmt.Sprintf("message %d, state %s", i, state)))
+		msg.ApplicationProperties = map[string]interface{}{"state": state}
+		err := producer.Send(msg)
+		CheckErr(err)
+	}
 }

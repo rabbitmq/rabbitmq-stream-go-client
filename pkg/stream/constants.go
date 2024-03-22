@@ -110,6 +110,9 @@ const (
 	MetaDataUpdate = "metadata Data update"
 
 	StreamTcpPort = "5552"
+
+	subscriptionPropertyFilterPrefix    = "filter."
+	subscriptionPropertyMatchUnfiltered = "match-unfiltered"
 )
 
 var AlreadyClosed = errors.New("Already Closed")
