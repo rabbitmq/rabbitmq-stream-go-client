@@ -67,6 +67,7 @@ type Client struct {
 	lastHeartBeat     HeartBeat
 	socketCallTimeout time.Duration
 	availableFeatures *availableFeatures
+	serverProperties  map[string]string
 }
 
 func newClient(connectionName string, broker *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
@@ -187,7 +188,7 @@ func (c *Client) connect() error {
 
 		go c.handleResponse()
 		serverProperties, err2 := c.peerProperties()
-
+		c.serverProperties = serverProperties
 		if err2 != nil {
 			logs.LogError("Can't set the peer-properties. Check if the stream server is running/reachable")
 			return err2
@@ -209,12 +210,12 @@ func (c *Client) connect() error {
 			return err2
 		}
 
-		logs.LogDebug("Server properties: %s", serverProperties)
+		logs.LogDebug("Server properties: %s", c.serverProperties)
 		if serverProperties["version"] == "" {
 			logs.LogInfo(
 				"Server version is less than 3.11.0, skipping command version exchange")
 		} else {
-			err := c.exchangeVersion(serverProperties["version"])
+			err := c.exchangeVersion(c.serverProperties["version"])
 			if err != nil {
 				return err
 			}
@@ -498,7 +499,6 @@ func (c *Client) Close() error {
 		c.metadataListener = nil
 	}
 
-	var err error
 	if c.getSocket().isOpen() {
 
 		c.closeHartBeat()
@@ -516,20 +516,7 @@ func (c *Client) Close() error {
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
 	c.getSocket().shutdown(nil)
-	return err
-}
-
-func (c *Client) ReusePublisher(streamName string, existingProducer *Producer) (*Producer, error) {
-	existingProducer.options.client = c
-	_, err := c.coordinator.GetProducerById(existingProducer.id)
-	if err != nil {
-		c.coordinator.producers[existingProducer.id] = existingProducer
-	} else {
-		return nil, fmt.Errorf("can't reuse producer")
-	}
-	res := c.internalDeclarePublisher(streamName, existingProducer)
-
-	return existingProducer, res.Err
+	return nil
 }
 
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {

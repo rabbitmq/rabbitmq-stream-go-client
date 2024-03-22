@@ -108,13 +108,7 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 func (env *Environment) DeclareStream(streamName string, options *StreamOptions) error {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
-		if err != nil {
-			return
-		}
+		_ = client.Close()
 	}(client)
 	if err != nil {
 		return err
@@ -129,10 +123,7 @@ func (env *Environment) DeclareStream(streamName string, options *StreamOptions)
 func (env *Environment) DeleteStream(streamName string) error {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
+		_ = client.Close()
 	}(client)
 	if err != nil {
 		return err
@@ -143,10 +134,7 @@ func (env *Environment) DeleteStream(streamName string) error {
 func (env *Environment) NewProducer(streamName string, producerOptions *ProducerOptions) (*Producer, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
+		_ = client.Close()
 	}(client)
 	if err != nil {
 		return nil, err
@@ -158,10 +146,7 @@ func (env *Environment) NewProducer(streamName string, producerOptions *Producer
 func (env *Environment) StreamExists(streamName string) (bool, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
+		_ = client.Close()
 	}(client)
 	if err != nil {
 		return false, err
@@ -172,10 +157,7 @@ func (env *Environment) StreamExists(streamName string) (bool, error) {
 func (env *Environment) QueryOffset(consumerName string, streamName string) (int64, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
+		_ = client.Close()
 	}(client)
 	if err != nil {
 		return 0, err
@@ -188,10 +170,7 @@ func (env *Environment) QueryOffset(consumerName string, streamName string) (int
 func (env *Environment) QuerySequence(publisherReference string, streamName string) (int64, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
+		_ = client.Close()
 	}(client)
 	if err != nil {
 		return 0, err
@@ -202,10 +181,7 @@ func (env *Environment) QuerySequence(publisherReference string, streamName stri
 func (env *Environment) StreamStats(streamName string) (*StreamStats, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
+		_ = client.Close()
 	}(client)
 	if err != nil {
 		return nil, err
@@ -216,10 +192,7 @@ func (env *Environment) StreamStats(streamName string) (*StreamStats, error) {
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
+		_ = client.Close()
 	}(client)
 	if err != nil {
 		return nil, err
@@ -251,10 +224,7 @@ func (env *Environment) NewConsumer(streamName string,
 	options *ConsumerOptions) (*Consumer, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
+		_ = client.Close()
 	}(client)
 	if err != nil {
 		return nil, err

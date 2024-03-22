@@ -21,6 +21,12 @@ type ReaderProtocol struct {
 	PublishingIdCount uint64
 }
 
+func logErrorCommand(error error, details string) {
+	if error != nil {
+		logs.LogError("Error handling command response: %s - details: %s", error, details)
+	}
+}
+
 func (c *Client) handleResponse() {
 	buffer := bufio.NewReader(c.socket.connection)
 	for {
@@ -157,10 +163,7 @@ func (c *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Rea
 		serverProperties[key] = value
 	}
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
-	if err != nil {
-		// TODO handle response
-		return
-	}
+	logErrorCommand(err, "handlePeerProperties")
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- serverProperties
 
@@ -182,10 +185,7 @@ func (c *Client) handleTune(r *bufio.Reader) interface{} {
 	writeUInt(b, maxFrameSize)
 	writeUInt(b, heartbeat)
 	res, err := c.coordinator.GetResponseByName("tune")
-	if err != nil {
-		// TODO handle response
-		return err
-	}
+	logErrorCommand(err, "handleTune")
 	res.data <- b.Bytes()
 	return b.Bytes()
 
@@ -195,10 +195,7 @@ func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Re
 	readProtocol.CorrelationId, _ = readUInt(r)
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
-	if err != nil {
-		// TODO handle readProtocol
-		return
-	}
+	logErrorCommand(err, "handleGenericResponse")
 	res.code <- Code{id: readProtocol.ResponseCode}
 }
 
@@ -225,10 +222,7 @@ func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	}
 
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
-	if err != nil {
-		// TODO handle readProtocol
-		return
-	}
+	logErrorCommand(err, "commandOpen")
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- clientProperties
 
@@ -285,10 +279,7 @@ func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	sequence := readInt64(r)
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
-	if err != nil {
-		// TODO handle readProtocol
-		return
-	}
+	logErrorCommand(err, "queryPublisherSequenceFrameHandler")
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- sequence
 }
@@ -334,9 +325,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	chunk.numEntries = numEntries
 	var bytesBuffer = make([]byte, int(dataLength))
 	_, err = io.ReadFull(r, bytesBuffer)
-	if err != nil {
-		return
-	}
+	logErrorCommand(err, "handleDeliver")
 
 	/// headers ---> payload -> messages
 
@@ -411,9 +400,7 @@ func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offse
 	} else {
 		msg := &amqp.Message{}
 		err := msg.UnmarshalBinary(arrayMessage)
-		if err != nil {
-			logs.LogError("error unmarshal messages: %s", err)
-		}
+		logErrorCommand(err, "error unmarshal messages")
 		batchConsumingMessages = append(batchConsumingMessages,
 			&offsetMessage{offset: offset, message: msg})
 	}
@@ -432,10 +419,7 @@ func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol,
 	c.handleGenericResponse(readProtocol, r)
 	offset := readInt64(r)
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
-	if err != nil {
-		// TODO handle readProtocol
-		return
-	}
+	logErrorCommand(err, "queryOffsetFrameHandler")
 	res.data <- offset
 }
 
@@ -503,10 +487,7 @@ func (c *Client) streamStatusFrameHandler(readProtocol *ReaderProtocol,
 		streamStatus[key] = value
 	}
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
-	if err != nil {
-		logs.LogWarn("stream status response not found")
-		return
-	}
+	logErrorCommand(err, "streamStatusFrameHandler")
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- streamStatus
 
@@ -543,10 +524,8 @@ func (c *Client) metadataFrameHandler(readProtocol *ReaderProtocol,
 	}
 
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
-	if err != nil {
-		// TODO handle readProtocol
-		return
-	}
+	logErrorCommand(err, "metadataFrameHandler")
+
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- streamsMetadata
 }
@@ -566,9 +545,7 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol,
 	writeUShort(b, responseCodeOk)
 
 	err := c.socket.writeAndFlush(b.Bytes())
-	if err != nil {
-		return
-	}
+	logErrorCommand(err, "Socket write buffer closeFrameHandler")
 
 }
 
@@ -584,10 +561,7 @@ func (c *Client) handleExchangeVersionResponse(readProtocol *ReaderProtocol, r *
 		commands = append(commands, newCommandVersionResponse(minVersion, maxVersion, commandKey))
 	}
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
-	if err != nil {
-		logs.LogError("handleExchangeVersionResponse response not found")
-		return
-	}
+	logErrorCommand(err, "handleExchangeVersionResponse")
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- commands
 }
