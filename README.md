@@ -65,7 +65,7 @@ You may need a server to test locally. Let's start the broker:
 ```shell
 docker run -it --rm --name rabbitmq -p 5552:5552 -p 15672:15672\
     -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS='-rabbitmq_stream advertised_host localhost -rabbit loopback_users "none"' \
-    rabbitmq:3.9-management
+    rabbitmq:3-management
 ```
 The broker should start in a few seconds. When it’s ready, enable the `stream` plugin and `stream_management`:
 ```shell
