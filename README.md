@@ -383,7 +383,7 @@ producer, err := env.NewProducer(streamName, stream.NewProducerOptions().
 
 ### Publish Filtering
 Stream filtering is a new feature in RabbitMQ 3.13. It allows to save bandwidth between the broker and consuming applications when those applications need only a subset of the messages of a stream.
-See this [blog post](https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-filtering/) for more details.
+See this [blog post](https://www.rabbitmq.com/blog/2023/10/16/stream-filtering) for more details.
 The blog post also contains a Java example but the Go client is similar.
 See the [Filtering](./examples/filtering/filtering.go) example in the [examples](./examples/) directory.
 
@@ -510,7 +510,7 @@ An error is returned if the offset doesn't exist.
 
 ### Consume Filtering
 Stream filtering is a new feature in RabbitMQ 3.13. It allows to save bandwidth between the broker and consuming applications when those applications need only a subset of the messages of a stream.
-See this [blog post](https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-filtering/) for more details.
+See this [blog post](https://www.rabbitmq.com/blog/2023/10/16/stream-filtering) for more details.
 The blog post also contains a Java example but the Go client is similar.
 See the [Filtering](./examples/filtering/filtering.go) example in the [examples](./examples/) directory.
 
