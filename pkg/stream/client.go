@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -793,6 +794,17 @@ func (c *Client) DeclareSubscriber(streamName string,
 
 	if options.initialCredits <= 0 {
 		options.initialCredits = 10
+	}
+	if containsOnlySpaces(options.ConsumerName) {
+		return nil, fmt.Errorf("consumer name contains only spaces")
+	}
+
+	if options.IsSingleActiveConsumerEnabled() && !c.availableFeatures.IsBrokerSingleActiveConsumerEnabled() {
+		return nil, SingleActiveConsumerNotSupported
+	}
+
+	if options.IsSingleActiveConsumerEnabled() && strings.TrimSpace(options.ConsumerName) == "" {
+		return nil, fmt.Errorf("single active enabled but name is empty. You need to set a name")
 	}
 
 	if options.IsFilterEnabled() && !c.availableFeatures.BrokerFilterEnabled() {

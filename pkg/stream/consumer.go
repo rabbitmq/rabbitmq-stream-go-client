@@ -149,16 +149,17 @@ func NewConsumerFilter(values []string, matchUnfiltered bool, postFilter PostFil
 }
 
 type ConsumerOptions struct {
-	client             *Client
-	ConsumerName       string
-	streamName         string
-	autocommit         bool
-	autoCommitStrategy *AutoCommitStrategy
-	Offset             OffsetSpecification
-	CRCCheck           bool
-	initialCredits     int16
-	ClientProvidedName string
-	Filter             *ConsumerFilter
+	client                      *Client
+	ConsumerName                string
+	streamName                  string
+	autocommit                  bool
+	autoCommitStrategy          *AutoCommitStrategy
+	Offset                      OffsetSpecification
+	CRCCheck                    bool
+	initialCredits              int16
+	ClientProvidedName          string
+	Filter                      *ConsumerFilter
+	SingleActiveConsumerEnabled bool
 }
 
 func NewConsumerOptions() *ConsumerOptions {
@@ -215,6 +216,15 @@ func (c *ConsumerOptions) SetClientProvidedName(clientProvidedName string) *Cons
 func (c *ConsumerOptions) SetFilter(filter *ConsumerFilter) *ConsumerOptions {
 	c.Filter = filter
 	return c
+}
+
+func (c *ConsumerOptions) EnableSingleActiveConsumer() *ConsumerOptions {
+	c.SingleActiveConsumerEnabled = true
+	return c
+}
+
+func (c *ConsumerOptions) IsSingleActiveConsumerEnabled() bool {
+	return c.SingleActiveConsumerEnabled
 }
 
 func (c *ConsumerOptions) IsFilterEnabled() bool {
