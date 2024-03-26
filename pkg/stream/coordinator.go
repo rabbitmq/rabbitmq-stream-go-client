@@ -198,10 +198,11 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextConsumerItem()
 	var item = &Consumer{ID: lastId, options: parameters,
-		response:        newResponse(lookUpCommand(commandSubscribe)),
-		status:          open,
-		mutex:           &sync.Mutex{},
-		MessagesHandler: messagesHandler,
+		response:           newResponse(lookUpCommand(commandSubscribe)),
+		status:             open,
+		mutex:              &sync.Mutex{},
+		MessagesHandler:    messagesHandler,
+		isPromotedAsActive: true,
 	}
 
 	coordinator.consumers[lastId] = item

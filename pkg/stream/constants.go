@@ -44,8 +44,10 @@ const (
 	commandOpen                   = 21
 	CommandClose                  = 22
 	commandHeartbeat              = 23
+	consumerUpdateQueryResponse   = 26
 	commandExchangeVersion        = 27
 	commandStreamStatus           = 28
+	commandConsumerUpdate         = 0x801a
 
 	/// used only for tests
 	commandUnitTest = 99

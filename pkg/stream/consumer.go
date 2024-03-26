@@ -30,6 +30,12 @@ type Consumer struct {
 	messageCountBeforeStorage int
 
 	status int
+
+	// Single Active consumer. The consumer can be running
+	// but not active. This flag is used to know if the consumer
+	// is in waiting mode or not.
+	// in normal mode, the consumer is always isPromotedAsActive==true
+	isPromotedAsActive bool
 }
 
 func (consumer *Consumer) setStatus(status int) {
@@ -68,6 +74,21 @@ func (consumer *Consumer) GetOffset() int64 {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
 	return consumer.currentOffset
+}
+
+// isActive returns true if the consumer is promoted as active
+// used for Single Active Consumer. Always true in other cases
+func (consumer *Consumer) isActive() bool {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	return consumer.isPromotedAsActive
+}
+
+func (consumer *Consumer) setPromotedAsActive(promoted bool) {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	consumer.isPromotedAsActive = promoted
+
 }
 
 func (consumer *Consumer) GetLastStoredOffset() int64 {
@@ -148,18 +169,32 @@ func NewConsumerFilter(values []string, matchUnfiltered bool, postFilter PostFil
 	}
 }
 
+type ConsumerUpdate func(isActive bool) OffsetSpecification
+
+type SingleActiveConsumer struct {
+	Enabled        bool
+	ConsumerUpdate ConsumerUpdate
+}
+
+func NewSingleActiveConsumer(ConsumerUpdate ConsumerUpdate) *SingleActiveConsumer {
+	return &SingleActiveConsumer{
+		Enabled:        true,
+		ConsumerUpdate: ConsumerUpdate,
+	}
+}
+
 type ConsumerOptions struct {
-	client                      *Client
-	ConsumerName                string
-	streamName                  string
-	autocommit                  bool
-	autoCommitStrategy          *AutoCommitStrategy
-	Offset                      OffsetSpecification
-	CRCCheck                    bool
-	initialCredits              int16
-	ClientProvidedName          string
-	Filter                      *ConsumerFilter
-	SingleActiveConsumerEnabled bool
+	client               *Client
+	ConsumerName         string
+	streamName           string
+	autocommit           bool
+	autoCommitStrategy   *AutoCommitStrategy
+	Offset               OffsetSpecification
+	CRCCheck             bool
+	initialCredits       int16
+	ClientProvidedName   string
+	Filter               *ConsumerFilter
+	SingleActiveConsumer *SingleActiveConsumer
 }
 
 func NewConsumerOptions() *ConsumerOptions {
@@ -218,13 +253,13 @@ func (c *ConsumerOptions) SetFilter(filter *ConsumerFilter) *ConsumerOptions {
 	return c
 }
 
-func (c *ConsumerOptions) EnableSingleActiveConsumer() *ConsumerOptions {
-	c.SingleActiveConsumerEnabled = true
+func (c *ConsumerOptions) SetSingleActiveConsumer(singleActiveConsumer *SingleActiveConsumer) *ConsumerOptions {
+	c.SingleActiveConsumer = singleActiveConsumer
 	return c
 }
 
 func (c *ConsumerOptions) IsSingleActiveConsumerEnabled() bool {
-	return c.SingleActiveConsumerEnabled
+	return c.SingleActiveConsumer != nil && c.SingleActiveConsumer.Enabled
 }
 
 func (c *ConsumerOptions) IsFilterEnabled() bool {
@@ -339,6 +374,29 @@ func (consumer *Consumer) writeOffsetToSocket(offset int64) error {
 	writeLong(b, offset)
 	return consumer.options.client.socket.writeAndFlush(b.Bytes())
 }
+
+func (consumer *Consumer) writeConsumeUpdateOffsetToSocket(correlationID uint32, offsetSpec OffsetSpecification) error {
+	length := 2 + 2 + 4 + 2 + 2
+	if offsetSpec.isOffset() ||
+		offsetSpec.isTimestamp() {
+		length += 8
+	}
+
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandConsumerUpdate)
+
+	writeUInt(b, correlationID)
+	writeUShort(b, responseCodeOk)
+
+	writeShort(b, offsetSpec.typeOfs)
+
+	if offsetSpec.isOffset() ||
+		offsetSpec.isTimestamp() {
+		writeLong(b, offsetSpec.offset)
+	}
+	return consumer.options.client.socket.writeAndFlush(b.Bytes())
+}
+
 func (consumer *Consumer) QueryOffset() (int64, error) {
 	return consumer.options.client.queryOffset(consumer.options.ConsumerName, consumer.options.streamName)
 }

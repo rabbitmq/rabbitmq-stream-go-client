@@ -154,7 +154,8 @@ var _ = Describe("Streaming Filtering", func() {
 
 		send(producer, "Alabama")   // this message should not be consumed due of the filter
 		time.Sleep(1 * time.Second) // to be sure the messages are stored but won't be consumed
-		Eventually(atomic.LoadInt32(&consumerNewYork) == 50, time.Millisecond*300).Should(BeTrue(), "Expected testEnvironment to be closed")
+		Eventually(atomic.LoadInt32(&consumerNewYork) == 50, time.Millisecond*300).Should(BeTrue(),
+			"Expected consumerNewYork is equal to 50")
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
@@ -193,7 +194,8 @@ var _ = Describe("Streaming Filtering", func() {
 		send(producer, "Alabama") // no sleep here, messages should end up in same chunk
 
 		time.Sleep(2 * time.Second) // to be sure the messages are stored but won't be consumed
-		Eventually(atomic.LoadInt32(&consumerNewYork) == 50, time.Millisecond*300).Should(BeTrue(), "Expected testEnvironment to be closed")
+		Eventually(atomic.LoadInt32(&consumerNewYork) == 50, time.Millisecond*300).Should(BeTrue(),
+			"Expected consumerNewYork is equal to 50")
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())

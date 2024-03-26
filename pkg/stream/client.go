@@ -879,6 +879,11 @@ func (c *Client) DeclareSubscriber(streamName string,
 		consumerProperties["name"] = options.ConsumerName
 	}
 
+	if options.IsSingleActiveConsumerEnabled() {
+		consumerProperties["single-active-consumer"] = "true"
+
+	}
+
 	if options.Filter != nil {
 		for i, filterValue := range options.Filter.Values {
 			k := fmt.Sprintf("%s%d", subscriptionPropertyFilterPrefix, i)
@@ -925,6 +930,11 @@ func (c *Client) DeclareSubscriber(streamName string,
 	err := c.handleWrite(b.Bytes(), resp)
 
 	canDispatch := func(offsetMessage *offsetMessage) bool {
+		if !consumer.isActive() {
+			logs.LogDebug("The consumer is not active anymore the message will be skipped")
+			return false
+		}
+
 		if options.IsFilterEnabled() && options.Filter.PostFilter != nil {
 			return options.Filter.PostFilter(offsetMessage.message)
 		}
