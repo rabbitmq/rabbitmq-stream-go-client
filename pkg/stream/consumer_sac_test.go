@@ -75,6 +75,14 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 			}),
 		))
 		Expect(err).To(Equal(SingleActiveConsumerNotSupported))
+
+		// Consumer update is nil and it must be set
+		_, err4 := testEnvironment.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+
+			},
+			NewConsumerOptions().SetSingleActiveConsumer(NewSingleActiveConsumer(nil)))
+		Expect(err4).To(HaveOccurred())
 	})
 
 	It("The second consumer should not receive messages", func() {
@@ -150,7 +158,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 			}, NewConsumerOptions().SetConsumerName(appName).
 				SetSingleActiveConsumer(NewSingleActiveConsumer(
 					func(isActive bool) OffsetSpecification {
-						// Here the consumer is promoted and it will restart from
+						// Here the consumer is promoted it will restart from
 						// offset 10
 						// so c2ReceivedMessages should be 20
 						return OffsetSpecification{}.Offset(10)
@@ -168,8 +176,10 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		Expect(c1.Close()).NotTo(HaveOccurred())
 
 		// only 20 messages since the OffsetSpecification{}.Offset(10)
-		Eventually(atomic.LoadInt32(&c2ReceivedMessages), time.Millisecond*300).
-			Within(5*time.Second).Should(Equal(20),
+		Eventually(func() bool {
+			return atomic.LoadInt32(&c2ReceivedMessages) == 20
+		}, 2*time.Second).
+			Within(5*time.Second).Should(BeTrue(),
 			"Expected c2ReceivedMessages should receive 20 messages")
 
 		Expect(c2.Close()).NotTo(HaveOccurred())

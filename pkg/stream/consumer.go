@@ -174,6 +174,12 @@ type ConsumerUpdate func(isActive bool) OffsetSpecification
 type SingleActiveConsumer struct {
 	Enabled        bool
 	ConsumerUpdate ConsumerUpdate
+	// This offset is the one form the user that decides from the ConsumerUpdate function
+	// nothing to do with: ConsumerOptions.Offset
+	// the ConsumerOptions.Offset is the initial offset and in case of SingleActiveConsumer
+	// is not used because the consumer will be promoted and the offset will be set by the ConsumerUpdate
+	// This is needed to filter the messages during the promotion where needed
+	OffsetSpecification OffsetSpecification
 }
 
 func NewSingleActiveConsumer(ConsumerUpdate ConsumerUpdate) *SingleActiveConsumer {

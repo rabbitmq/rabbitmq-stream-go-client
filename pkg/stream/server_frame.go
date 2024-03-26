@@ -318,8 +318,24 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	var offsetLimit int64 = -1
 
-	if consumer.options.Offset.isOffset() {
-		offsetLimit = consumer.GetOffset()
+	// we can have two cases
+	// 1. single active consumer is enabled
+	// 2. single active consumer is not enabled
+
+	// single active consumer is enabled
+	// we need to check if the consumer has an offset
+	// if the consumer has an offset we need to filter the messages
+
+	if consumer.options.IsSingleActiveConsumerEnabled() {
+		if consumer.options.SingleActiveConsumer.OffsetSpecification.isOffset() {
+			offsetLimit = consumer.options.SingleActiveConsumer.OffsetSpecification.offset
+		}
+	} else {
+		// single active consumer is not enabled
+		// So the standard offset is used
+		if consumer.options.Offset.isOffset() {
+			offsetLimit = consumer.GetOffset()
+		}
 	}
 
 	filter := offsetLimit != -1
@@ -566,7 +582,7 @@ func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Rea
 	}
 	consumer.setPromotedAsActive(isActive == 1)
 	responseOff := consumer.options.SingleActiveConsumer.ConsumerUpdate(isActive == 1)
-
+	consumer.options.SingleActiveConsumer.OffsetSpecification = responseOff
 	err = consumer.writeConsumeUpdateOffsetToSocket(readProtocol.CorrelationId, responseOff)
 	logErrorCommand(err, "handleConsumerUpdate writeConsumeUpdateOffsetToSocket")
 }

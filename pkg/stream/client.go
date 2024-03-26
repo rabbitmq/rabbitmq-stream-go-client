@@ -807,6 +807,10 @@ func (c *Client) DeclareSubscriber(streamName string,
 		return nil, fmt.Errorf("single active enabled but name is empty. You need to set a name")
 	}
 
+	if options.IsSingleActiveConsumerEnabled() && options.SingleActiveConsumer.ConsumerUpdate == nil {
+		return nil, fmt.Errorf("single active enabled but consumer update function  is nil. Consumer update must be set")
+	}
+
 	if options.IsFilterEnabled() && !c.availableFeatures.BrokerFilterEnabled() {
 		return nil, FilterNotSupported
 	}
