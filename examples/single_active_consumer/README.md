@@ -55,6 +55,7 @@ Press any key to stop
 
 4. Stop the first consumer:
 
-In the first terminal, press any key to stop the first consumer. 
-The second consumer should be promoted to active status and start processing messages.
+In the first terminal, press any key to stop the first consumer. <br />
+The second consumer should be promoted to active status and restart processing messages from the last stored offset.
+
 
