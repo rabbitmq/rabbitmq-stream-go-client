@@ -538,6 +538,7 @@ One of the way is to store the offset server side and restart from the last offs
 The [Single Active Consumer](./examples/single_active_consumer) example uses the server side 
 offset to restart the consumer.
 
+See also this post for more details: https://www.rabbitmq.com/blog/2022/07/05/rabbitmq-3-11-feature-preview-single-active-consumer-for-streams
 
 
 ### Handle Close
