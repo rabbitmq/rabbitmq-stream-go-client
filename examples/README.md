@@ -13,6 +13,6 @@ Stream examples
    For more details: https://blog.rabbitmq.com/posts/2021/07/connecting-to-streams/
  - [Sub Entries Batching](./sub-entries-batching/sub_entries_batching.go) - Sub Entries Batching example
  - [Stream Filtering](./filtering/filtering.go) - Stream Filtering example
-
+ - [Single Active Consumer](./single_active_consumer) - Single Active Consumer example
  - [Reliable](./reliable) - Reliable Producer and Reliable Consumer example
 

@@ -6,7 +6,6 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
-	"strconv"
 	"time"
 )
 
@@ -22,19 +21,14 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 		for confirmed := range confirms {
 			for _, msg := range confirmed {
 				if msg.IsConfirmed() {
-					fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
+					fmt.Printf("message %s stored \n", msg.GetMessage().GetData())
 				} else {
-					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
+					fmt.Printf("message %s failed \n", msg.GetMessage().GetData())
 				}
 
 			}
 		}
 	}()
-}
-
-func consumerClose(channelClose stream.ChannelClose) {
-	event := <-channelClose
-	fmt.Printf("Consumer: %s closed on the stream: %s, reason: %s \n", event.Name, event.StreamName, event.Reason)
 }
 
 func main() {
@@ -76,10 +70,11 @@ func main() {
 
 	// Put some sleep to make the example easy
 	for i := 0; i < 10000; i++ {
-		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
+		var body = fmt.Sprintf("hello_world_%d", i)
+		fmt.Printf("sending message %s ...\n", body)
+		err := producer.Send(amqp.NewMessage([]byte(body)))
 		CheckErr(err)
 		time.Sleep(3 * time.Second)
-		fmt.Printf("message %d sent", i)
 	}
 
 	err = producer.Close()

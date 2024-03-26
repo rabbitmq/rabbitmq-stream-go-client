@@ -6,6 +6,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
+	"time"
 )
 
 func CheckErrConsumer(err error) {
@@ -19,9 +20,7 @@ func main() {
 		fmt.Printf("You need to specify the Name\n")
 		os.Exit(1)
 	}
-
 	appName := os.Args[1]
-
 	reader := bufio.NewReader(os.Stdin)
 
 	//You need RabbitMQ 3.11.0 or later to run this example
@@ -46,25 +45,46 @@ func main() {
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		fmt.Printf("[ %s ] - consumer name: %s, data: %s, message offset %d,   \n ", appName,
 			consumerContext.Consumer.GetName(), message.Data, consumerContext.Consumer.GetOffset())
+		// This is only for the example, in a real application you should not store the offset
+		// for each message, it is better to store the offset for a batch of messages
+		err := consumerContext.Consumer.StoreOffset()
+		CheckErrConsumer(err)
+	}
+
+	consumerUpdate := func(isActive bool) stream.OffsetSpecification {
+		// This function is called when the consumer is promoted to active
+		// be careful with the logic here, it is called in the consumer thread
+		// the code here should be fast, non-blocking and without side effects
+		fmt.Printf("Consumer promoted. Active status: %t\n", isActive)
+
+		// In this example, we store the offset server side and we retrieve it
+		// when the consumer is promoted to active
+		offset, err := env.QueryOffset(consumerName, streamName)
+		if err != nil {
+			// If the offset is not found, we start from the beginning
+			return stream.OffsetSpecification{}.First()
+		}
+
+		// If the offset is found, we start from the last offset
+		return stream.OffsetSpecification{}.Offset(offset)
 	}
 
 	consumer, err := env.NewConsumer(
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetOffset(stream.OffsetSpecification{}.First()).
 			SetConsumerName(consumerName).
 			SetSingleActiveConsumer(
-				stream.NewSingleActiveConsumer(func(isActive bool) stream.OffsetSpecification {
-					fmt.Printf("Consumer promoted. Active status: %t\n", isActive)
-					return stream.OffsetSpecification{}.First()
-				})))
+				stream.NewSingleActiveConsumer(consumerUpdate)))
+
 	CheckErrConsumer(err)
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')
 	err = consumer.Close()
 	CheckErrConsumer(err)
+	fmt.Println("the Consumer stopped.... in 5 seconds the environment will be closed")
+	time.Sleep(5 * time.Second)
 	err = env.Close()
 	CheckErrConsumer(err)
 

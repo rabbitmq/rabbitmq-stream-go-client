@@ -50,7 +50,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 
 			},
-			NewConsumerOptions().SetSingleActiveConsumer(NewSingleActiveConsumer(
+			NewConsumerOptions().SetConsumerName("     ").SetSingleActiveConsumer(NewSingleActiveConsumer(
 				func(isActive bool) OffsetSpecification {
 					return OffsetSpecification{}.Last()
 				})))

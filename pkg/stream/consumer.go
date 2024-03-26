@@ -172,7 +172,10 @@ func NewConsumerFilter(values []string, matchUnfiltered bool, postFilter PostFil
 type ConsumerUpdate func(isActive bool) OffsetSpecification
 
 type SingleActiveConsumer struct {
-	Enabled        bool
+	Enabled bool
+	// ConsumerUpdate is the function that will be called when the consumer is promoted
+	// that is when the consumer is active. The function will receive a boolean that is true
+	// the user can decide to return a new offset to start from.
 	ConsumerUpdate ConsumerUpdate
 	// This offset is the one form the user that decides from the ConsumerUpdate function
 	// nothing to do with: ConsumerOptions.Offset
