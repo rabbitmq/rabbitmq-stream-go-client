@@ -1002,3 +1002,32 @@ func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
 	}
 	return newStreamStats(m, streamName), nil
 }
+
+func (c *Client) DeclareSuperStream(superStream string, partitions []string, bindingKeys []string, args map[string]string) error {
+
+	if superStream == "" || containsOnlySpaces(superStream) {
+		return fmt.Errorf("super Stream Name can't be empty")
+	}
+
+	if partitions == nil || len(partitions) == 0 {
+		return fmt.Errorf("partitions can't be empty")
+	}
+
+	if bindingKeys == nil || len(bindingKeys) == 0 {
+		return fmt.Errorf("binding keys can't be empty")
+	}
+
+	for _, key := range bindingKeys {
+		if key == "" || containsOnlySpaces(key) {
+			return fmt.Errorf("binding key can't be empty")
+		}
+	}
+
+	for _, partition := range partitions {
+		if partition == "" || containsOnlySpaces(partition) {
+			return fmt.Errorf("partition can't be empty")
+		}
+	}
+
+	return nil
+}
