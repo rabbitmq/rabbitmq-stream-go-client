@@ -11,10 +11,11 @@ import (
 var lock = &sync.Mutex{}
 
 type availableFeatures struct {
-	is313OrMore         bool
-	is311OrMore         bool
-	brokerFilterEnabled bool
-	brokerVersion       string
+	is313OrMore                       bool
+	is311OrMore                       bool
+	brokerFilterEnabled               bool
+	brokerVersion                     string
+	brokerSingleActiveConsumerEnabled bool
 }
 
 func newAvailableFeatures() *availableFeatures {
@@ -41,6 +42,12 @@ func (a *availableFeatures) BrokerFilterEnabled() bool {
 	return a.brokerFilterEnabled
 }
 
+func (a *availableFeatures) IsBrokerSingleActiveConsumerEnabled() bool {
+	lock.Lock()
+	defer lock.Unlock()
+	return a.brokerSingleActiveConsumerEnabled == a.is311OrMore
+}
+
 func (a *availableFeatures) SetVersion(version string) error {
 	lock.Lock()
 	defer lock.Unlock()
@@ -50,6 +57,7 @@ func (a *availableFeatures) SetVersion(version string) error {
 	a.brokerVersion = version
 	a.is311OrMore = IsVersionGreaterOrEqual(extractVersion(version), "3.11.0")
 	a.is313OrMore = IsVersionGreaterOrEqual(extractVersion(version), "3.13.0")
+	a.brokerSingleActiveConsumerEnabled = a.is311OrMore
 	return nil
 }
 

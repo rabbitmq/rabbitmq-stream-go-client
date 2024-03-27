@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -794,6 +795,21 @@ func (c *Client) DeclareSubscriber(streamName string,
 	if options.initialCredits <= 0 {
 		options.initialCredits = 10
 	}
+	if containsOnlySpaces(options.ConsumerName) {
+		return nil, fmt.Errorf("consumer name contains only spaces")
+	}
+
+	if options.IsSingleActiveConsumerEnabled() && !c.availableFeatures.IsBrokerSingleActiveConsumerEnabled() {
+		return nil, SingleActiveConsumerNotSupported
+	}
+
+	if options.IsSingleActiveConsumerEnabled() && strings.TrimSpace(options.ConsumerName) == "" {
+		return nil, fmt.Errorf("single active enabled but name is empty. You need to set a name")
+	}
+
+	if options.IsSingleActiveConsumerEnabled() && options.SingleActiveConsumer.ConsumerUpdate == nil {
+		return nil, fmt.Errorf("single active enabled but consumer update function  is nil. Consumer update must be set")
+	}
 
 	if options.IsFilterEnabled() && !c.availableFeatures.BrokerFilterEnabled() {
 		return nil, FilterNotSupported
@@ -867,6 +883,11 @@ func (c *Client) DeclareSubscriber(streamName string,
 		consumerProperties["name"] = options.ConsumerName
 	}
 
+	if options.IsSingleActiveConsumerEnabled() {
+		consumerProperties["single-active-consumer"] = "true"
+
+	}
+
 	if options.Filter != nil {
 		for i, filterValue := range options.Filter.Values {
 			k := fmt.Sprintf("%s%d", subscriptionPropertyFilterPrefix, i)
@@ -913,6 +934,11 @@ func (c *Client) DeclareSubscriber(streamName string,
 	err := c.handleWrite(b.Bytes(), resp)
 
 	canDispatch := func(offsetMessage *offsetMessage) bool {
+		if !consumer.isActive() {
+			logs.LogDebug("The consumer is not active anymore the message will be skipped")
+			return false
+		}
+
 		if options.IsFilterEnabled() && options.Filter.PostFilter != nil {
 			return options.Filter.PostFilter(offsetMessage.message)
 		}

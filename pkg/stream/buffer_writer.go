@@ -96,11 +96,11 @@ func writeBytes(inputBuff *bytes.Buffer, value []byte) {
 
 // writeProtocolHeader  protocol utils functions
 func writeProtocolHeader(inputBuff *bytes.Buffer,
-	length int, command int16,
+	length int, command uint16,
 	correlationId ...int) {
 
 	writeInt(inputBuff, length)
-	writeShort(inputBuff, command)
+	writeUShort(inputBuff, command)
 	writeShort(inputBuff, version1)
 	if len(correlationId) > 0 {
 		writeInt(inputBuff, correlationId[0])

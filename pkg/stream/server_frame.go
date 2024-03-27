@@ -121,6 +121,11 @@ func (c *Client) handleResponse() {
 			{
 				c.handleExchangeVersionResponse(readerProtocol, buffer)
 			}
+		case consumerUpdateQueryResponse:
+			{
+				c.handleConsumerUpdate(readerProtocol, buffer)
+			}
+
 		default:
 			{
 				logs.LogWarn("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
@@ -313,8 +318,24 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	var offsetLimit int64 = -1
 
-	if consumer.options.Offset.isOffset() {
-		offsetLimit = consumer.GetOffset()
+	// we can have two cases
+	// 1. single active consumer is enabled
+	// 2. single active consumer is not enabled
+
+	// single active consumer is enabled
+	// we need to check if the consumer has an offset
+	// if the consumer has an offset we need to filter the messages
+
+	if consumer.options.IsSingleActiveConsumerEnabled() {
+		if consumer.options.SingleActiveConsumer.OffsetSpecification.isOffset() {
+			offsetLimit = consumer.options.SingleActiveConsumer.OffsetSpecification.offset
+		}
+	} else {
+		// single active consumer is not enabled
+		// So the standard offset is used
+		if consumer.options.Offset.isOffset() {
+			offsetLimit = consumer.GetOffset()
+		}
 	}
 
 	filter := offsetLimit != -1
@@ -540,13 +561,30 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol,
 
 	length := 2 + 2 + 4 + 2
 	var b = bytes.NewBuffer(make([]byte, 0, length))
-	writeProtocolHeader(b, length, int16(uShortEncodeResponseCode(CommandClose)),
+	writeProtocolHeader(b, length, uShortEncodeResponseCode(CommandClose),
 		int(readProtocol.CorrelationId))
 	writeUShort(b, responseCodeOk)
 
 	err := c.socket.writeAndFlush(b.Bytes())
 	logErrorCommand(err, "Socket write buffer closeFrameHandler")
 
+}
+
+func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = readUInt(r)
+	subscriptionId := readByte(r)
+	isActive := readByte(r)
+	consumer, err := c.coordinator.GetConsumerById(subscriptionId)
+	logErrorCommand(err, "handleConsumerUpdate")
+	if consumer == nil {
+		logs.LogWarn("consumer not found %d. The consumer maybe removed before the update", subscriptionId)
+		return
+	}
+	consumer.setPromotedAsActive(isActive == 1)
+	responseOff := consumer.options.SingleActiveConsumer.ConsumerUpdate(isActive == 1)
+	consumer.options.SingleActiveConsumer.OffsetSpecification = responseOff
+	err = consumer.writeConsumeUpdateOffsetToSocket(readProtocol.CorrelationId, responseOff)
+	logErrorCommand(err, "handleConsumerUpdate writeConsumeUpdateOffsetToSocket")
 }
 
 func (c *Client) handleExchangeVersionResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {

@@ -35,6 +35,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
         * [Automatic Track Offset](#automatic-track-offset)
         * [Get consumer Offset](#get-consumer-offset)
         * [Consume Filtering](#consume-filtering)
+        * [Single Active Consumer](#single-active-consumer)
     * [Handle Close](#handle-close)
 	* [Reliable Producer and Reliable Consumer](#reliable-producer-and-reliable-consumer)
 - [Performance test tool](#performance-test-tool)
@@ -514,6 +515,35 @@ See this [blog post](https://www.rabbitmq.com/blog/2023/10/16/stream-filtering) 
 The blog post also contains a Java example but the Go client is similar.
 See the [Filtering](./examples/filtering/filtering.go) example in the [examples](./examples/) directory.
 
+### Single Active Consumer
+
+The Single Active Consumer pattern ensures that only one consumer processes messages from a stream at a time.
+See the [Single Active Consumer](./examples/single_active_consumer) example.
+
+To create a consumer with the Single Active Consumer pattern, you need to set the `SingleActiveConsumer` option:
+```golang
+    consumerName := "MyFirstGroupConsumer"
+	consumerUpdate := func(isActive bool) stream.OffsetSpecification {..}
+	stream.NewConsumerOptions().
+			SetConsumerName(consumerName).
+			SetSingleActiveConsumer(
+				stream.NewSingleActiveConsumer(consumerUpdate))
+```
+
+The `ConsumerUpdate` function is called when the consumer is promoted. </br>
+The new consumer will restart consuming from the offset returned by the `consumerUpdate` function. </br>
+It is up to the user to decide the offset to return. </br>
+One of the way is to store the offset server side and restart from the last offset. </br>
+The [Single Active Consumer](./examples/single_active_consumer) example uses the server side
+offset to restart the consumer.
+
+The `ConsumerName` is mandatory to enable the SAC. It is the way to create different group of consumers</br>
+Different groups of consumers can consume the same stream at the same time. </br>
+
+The `NewConsumerOptions().SetOffset()` is not necessary when the SAC is active the `ConsumerUpdate` function 
+replaces the value.
+
+See also this post for more details: https://www.rabbitmq.com/blog/2022/07/05/rabbitmq-3-11-feature-preview-single-active-consumer-for-streams
 
 
 ### Handle Close

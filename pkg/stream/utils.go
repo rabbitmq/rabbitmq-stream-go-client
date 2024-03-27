@@ -3,6 +3,7 @@ package stream
 import (
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"strings"
 	"time"
 )
 
@@ -51,4 +52,8 @@ func waitCodeWithTimeOut(response *Response, timeout time.Duration) responseErro
 
 func SetLevelInfo(value int8) {
 	logs.LogLevel = value
+}
+
+func containsOnlySpaces(input string) bool {
+	return len(input) > 0 && len(strings.TrimSpace(input)) == 0
 }
