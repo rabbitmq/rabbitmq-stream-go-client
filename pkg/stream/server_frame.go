@@ -59,7 +59,7 @@ func (c *Client) handleResponse() {
 		case commandDeclarePublisher,
 			CommandDeletePublisher, commandDeleteStream,
 			commandCreateStream, commandSaslAuthenticate, commandSubscribe,
-			CommandUnsubscribe:
+			CommandUnsubscribe, commandCreateSuperStream, commandDeleteSuperStream:
 			{
 				c.handleGenericResponse(readerProtocol, buffer)
 			}
