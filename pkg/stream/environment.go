@@ -117,7 +117,6 @@ func (env *Environment) DeclareStream(streamName string, options *StreamOptions)
 		return err
 	}
 	return nil
-
 }
 
 func (env *Environment) DeleteStream(streamName string) error {
@@ -771,4 +770,31 @@ func (ps *consumersEnvironment) getCoordinators() map[string]*environmentCoordin
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 	return ps.consumersCoordinator
+}
+
+// Super stream
+
+func (env *Environment) DeclareSuperStream(superStreamName string, options SuperStreamOptions) error {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		_ = client.Close()
+	}(client)
+	if err != nil {
+		return err
+	}
+	if err := client.DeclareSuperStream(superStreamName, options); err != nil && !errors.Is(err, StreamAlreadyExists) {
+		return err
+	}
+	return nil
+}
+
+func (env *Environment) DeleteSuperStream(superStreamName string) error {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		_ = client.Close()
+	}(client)
+	if err != nil {
+		return err
+	}
+	return client.DeleteSuperStream(superStreamName)
 }
