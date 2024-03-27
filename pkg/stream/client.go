@@ -1009,11 +1009,11 @@ func (c *Client) DeclareSuperStream(superStream string, partitions []string, bin
 		return fmt.Errorf("super Stream Name can't be empty")
 	}
 
-	if partitions == nil || len(partitions) == 0 {
+	if len(partitions) == 0 {
 		return fmt.Errorf("partitions can't be empty")
 	}
 
-	if bindingKeys == nil || len(bindingKeys) == 0 {
+	if len(bindingKeys) == 0 {
 		return fmt.Errorf("binding keys can't be empty")
 	}
 
@@ -1029,5 +1029,31 @@ func (c *Client) DeclareSuperStream(superStream string, partitions []string, bin
 		}
 	}
 
-	return nil
+	length := 2 + 2 + 4 +
+		2 + len(superStream) + 4 +
+		sizeOfStringArray(partitions) + 4 +
+		sizeOfStringArray(bindingKeys) + 4 +
+		sizeOfMapStringString(args)
+
+	resp := c.coordinator.NewResponse(commandCreateSuperStream, superStream)
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandCreateSuperStream, correlationId)
+	writeString(b, superStream)
+	writeStringArray(b, partitions)
+	writeStringArray(b, bindingKeys)
+	writeMapStringString(b, args)
+
+	return c.handleWrite(b.Bytes(), resp).Err
+}
+
+func (c *Client) DeleteSuperStream(superStream string) error {
+	length := 2 + 2 + 4 + 2 + len(superStream)
+	resp := c.coordinator.NewResponse(commandDeleteSuperStream, superStream)
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandDeleteSuperStream,
+		correlationId)
+	writeString(b, superStream)
+	return c.handleWrite(b.Bytes(), resp).Err
 }

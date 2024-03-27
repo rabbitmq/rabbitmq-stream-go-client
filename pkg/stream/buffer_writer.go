@@ -90,6 +90,22 @@ func writeString(inputBuff *bytes.Buffer, value string) {
 	inputBuff.Write([]byte(value))
 }
 
+func writeStringArray(inputBuff *bytes.Buffer, array []string) {
+	writeInt(inputBuff, len(array))
+	for _, s := range array {
+		writeString(inputBuff, s)
+	}
+}
+
+func writeMapStringString(inputBuff *bytes.Buffer, mapString map[string]string) {
+	writeInt(inputBuff, len(mapString))
+	for k, v := range mapString {
+		writeString(inputBuff, k)
+		writeString(inputBuff, v)
+	}
+
+}
+
 func writeBytes(inputBuff *bytes.Buffer, value []byte) {
 	inputBuff.Write(value)
 }
@@ -124,4 +140,20 @@ func writeBProtocolHeaderVersion(inputBuff *bufio.Writer,
 	if len(correlationId) > 0 {
 		writeBInt(inputBuff, correlationId[0])
 	}
+}
+
+func sizeOfStringArray(array []string) int {
+	size := 0
+	for _, s := range array {
+		size += 2 + len(s)
+	}
+	return size
+}
+
+func sizeOfMapStringString(mapString map[string]string) int {
+	size := 0
+	for k, v := range mapString {
+		size += 2 + len(k) + 2 + len(v)
+	}
+	return size
 }

@@ -47,6 +47,8 @@ const (
 	consumerUpdateQueryResponse   = 26
 	commandExchangeVersion        = 27
 	commandStreamStatus           = 28
+	commandCreateSuperStream      = 29
+	commandDeleteSuperStream      = 30
 	commandConsumerUpdate         = 0x801a
 
 	/// used only for tests

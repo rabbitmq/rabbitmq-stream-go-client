@@ -64,4 +64,25 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 		Expect(client.Close()).NotTo(HaveOccurred())
 	})
 
+	It("Create Super stream two times and delete it", Label("super-stream"), func() {
+		client, err := testEnvironment.newReconnectClient()
+		Expect(err).NotTo(HaveOccurred())
+
+		err = client.DeclareSuperStream("go-my_super_stream_with_2_partitions", []string{"go-partition_0", "go-partition_1"},
+			[]string{"0", "1"}, map[string]string{"queue-leader-locator": "least-leaders"})
+		Expect(err).NotTo(HaveOccurred())
+
+		err = client.DeclareSuperStream("go-my_super_stream_with_2_partitions", []string{"go-partition_0", "go-partition_1"},
+			[]string{"0", "1"}, map[string]string{"queue-leader-locator": "least-leaders"})
+		Expect(err).To(Equal(StreamAlreadyExists))
+
+		err = client.DeleteSuperStream("go-my_super_stream_with_2_partitions")
+		Expect(err).NotTo(HaveOccurred())
+
+		err = client.DeleteSuperStream("go-my_super_stream_with_2_partitions")
+		Expect(err).To(Equal(StreamDoesNotExist))
+
+		Expect(client.Close()).NotTo(HaveOccurred())
+	})
+
 })
