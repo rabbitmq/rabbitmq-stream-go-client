@@ -43,7 +43,9 @@ func main() {
 	consumerName := "MyApplication"
 
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		fmt.Printf("[ %s ] - consumer name: %s, data: %s, message offset %d,   \n ", appName,
+		fmt.Printf("[%s] - [ %s ] - consumer name: %s, data: %s, message offset %d,   \n ",
+			time.Now().Format(time.TimeOnly),
+			appName,
 			consumerContext.Consumer.GetName(), message.Data, consumerContext.Consumer.GetOffset())
 		// This is only for the example, in a real application you should not store the offset
 		// for each message, it is better to store the offset for a batch of messages
@@ -55,7 +57,7 @@ func main() {
 		// This function is called when the consumer is promoted to active
 		// be careful with the logic here, it is called in the consumer thread
 		// the code here should be fast, non-blocking and without side effects
-		fmt.Printf("Consumer promoted. Active status: %t\n", isActive)
+		fmt.Printf("[%s] - Consumer promoted. Active status: %t\n", time.Now().Format(time.TimeOnly), isActive)
 
 		// In this example, we store the offset server side and we retrieve it
 		// when the consumer is promoted to active
@@ -66,7 +68,8 @@ func main() {
 		}
 
 		// If the offset is found, we start from the last offset
-		return stream.OffsetSpecification{}.Offset(offset)
+		// we add 1 to the offset to start from the next message
+		return stream.OffsetSpecification{}.Offset(offset + 1)
 	}
 
 	consumer, err := env.NewConsumer(
@@ -74,6 +77,8 @@ func main() {
 		handleMessages,
 		stream.NewConsumerOptions().
 			SetConsumerName(consumerName).
+			// It is not needed to set the SetOffset() when the SingleActiveConsumer is active
+			// the `consumerUpdate` function replaces it
 			SetSingleActiveConsumer(
 				stream.NewSingleActiveConsumer(consumerUpdate)))
 
@@ -83,7 +88,7 @@ func main() {
 	_, _ = reader.ReadString('\n')
 	err = consumer.Close()
 	CheckErrConsumer(err)
-	fmt.Println("the Consumer stopped.... in 5 seconds the environment will be closed")
+	fmt.Printf("[%s] Consumer stopped.... in 5 seconds the environment will be closed", time.Now().Format(time.TimeOnly))
 	time.Sleep(5 * time.Second)
 	err = env.Close()
 	CheckErrConsumer(err)

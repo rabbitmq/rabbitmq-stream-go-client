@@ -21,9 +21,9 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 		for confirmed := range confirms {
 			for _, msg := range confirmed {
 				if msg.IsConfirmed() {
-					fmt.Printf("message %s stored \n", msg.GetMessage().GetData())
+					fmt.Printf("[%s] message %s stored \n", time.Now().Format(time.TimeOnly), msg.GetMessage().GetData())
 				} else {
-					fmt.Printf("message %s failed \n", msg.GetMessage().GetData())
+					fmt.Printf("[%s] message %s failed \n", time.Now().Format(time.TimeOnly), msg.GetMessage().GetData())
 				}
 
 			}
@@ -71,7 +71,7 @@ func main() {
 	// Put some sleep to make the example easy
 	for i := 0; i < 10000; i++ {
 		var body = fmt.Sprintf("hello_world_%d", i)
-		fmt.Printf("sending message %s ...\n", body)
+		fmt.Printf("[%s] sending message %s ...\n", time.Now().Format(time.TimeOnly), body)
 		err := producer.Send(amqp.NewMessage([]byte(body)))
 		CheckErr(err)
 		time.Sleep(3 * time.Second)
