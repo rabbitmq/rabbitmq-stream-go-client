@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"time"
@@ -36,21 +35,16 @@ func (t *testSuperStreamOption) getArgs() map[string]string {
 var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 
 	var (
-		testEnvironment    *Environment
-		testProducerStream string
+		testEnvironment *Environment
 	)
 
 	BeforeEach(func() {
 		client, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		testEnvironment = client
-		testProducerStream = uuid.New().String()
-		Expect(testEnvironment.DeclareStream(testProducerStream, nil)).
-			NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
-		Expect(testEnvironment.DeleteStream(testProducerStream)).NotTo(HaveOccurred())
 		Expect(testEnvironment.Close()).To(Succeed())
 		Eventually(testEnvironment.IsClosed, time.Millisecond*300).Should(BeTrue(), "Expected testEnvironment to be closed")
 	})
