@@ -106,9 +106,39 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 		Expect(client.Close()).NotTo(HaveOccurred())
 	})
 
+	It("Query Partitions With client/environment", Label("super-stream"), func() {
+		client, err := testEnvironment.newReconnectClient()
+		Expect(err).NotTo(HaveOccurred())
+
+		err = client.DeclareSuperStream("go-my_super_stream_with_query_partitions",
+			NewPartitionsSuperStreamOptions(3))
+		Expect(err).NotTo(HaveOccurred())
+
+		partitions, err := client.QueryPartitions("go-my_super_stream_with_query_partitions")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(partitions).To(HaveLen(3))
+
+		for _, partition := range partitions {
+			Expect(partition).To(MatchRegexp("go-my_super_stream_with_query_partitions-\\d"))
+		}
+
+		partitionsEnv, err := testEnvironment.QueryPartitions("go-my_super_stream_with_query_partitions")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(partitions).To(HaveLen(3))
+
+		for _, partition := range partitionsEnv {
+			Expect(partition).To(MatchRegexp("go-my_super_stream_with_query_partitions-\\d"))
+		}
+
+		Expect(client.DeleteSuperStream("go-my_super_stream_with_query_partitions")).NotTo(HaveOccurred())
+		Expect(client.Close()).NotTo(HaveOccurred())
+
+	})
+
 	It("Create Super stream with 3 Partitions and delete it with env", Label("super-stream"), func() {
 
-		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_3_partitions", NewPartitionsSuperStreamOptions(3))
+		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_3_partitions",
+			NewPartitionsSuperStreamOptions(3))
 		Expect(err).NotTo(HaveOccurred())
 
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_3_partitions")

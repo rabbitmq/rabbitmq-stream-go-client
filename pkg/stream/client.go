@@ -1061,3 +1061,27 @@ func (c *Client) DeleteSuperStream(superStream string) error {
 	writeString(b, superStream)
 	return c.handleWrite(b.Bytes(), resp).Err
 }
+
+//public async Task<PartitionsQueryResponse> QueryPartition(string superStream)
+//{
+//return await Request<PartitionsQueryRequest, PartitionsQueryResponse>(corr =>
+//new PartitionsQueryRequest(corr, superStream)).ConfigureAwait(false);
+//}
+
+func (c *Client) QueryPartitions(superStream string) ([]string, error) {
+	length := 2 + 2 + 4 + 2 + len(superStream)
+	resp := c.coordinator.NewResponse(commandQueryPartition, superStream)
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandQueryPartition,
+		correlationId)
+	writeString(b, superStream)
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	if err.Err != nil {
+		return nil, err.Err
+	}
+
+	data := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	return data.([]string), nil
+}
