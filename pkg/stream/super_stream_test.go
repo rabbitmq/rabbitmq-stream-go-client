@@ -114,7 +114,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 
 	It("Create Super stream with 3 Partitions and delete it with env", Label("super-stream"), func() {
 
-		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_3_partitions", NewPartitionSuperStreamOptions(3))
+		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_3_partitions", NewPartitionsSuperStreamOptions(3))
 		Expect(err).NotTo(HaveOccurred())
 
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_3_partitions")
@@ -123,24 +123,52 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 
 	It("Create Super stream with 2 partitions and other parameters", Label("super-stream"), func() {
 		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions_and_parameters",
-			NewPartitionSuperStreamOptions(2).
-				SetMaxAge(10*time.Second).
+			NewPartitionsSuperStreamOptions(2).
+				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
 				SetLeaderLocator("least-leaders"))
 		Expect(err).NotTo(HaveOccurred())
 
-		//errWithDifferentParameters := testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions_and_parameters",
-		//	NewPartitionSuperStreamOptions(2).
-		//		SetMaxAge(30*time.Second).
-		//		SetMaxLengthBytes(ByteCapacity{}.GB(10)).
-		//		SetMaxSegmentSizeBytes(ByteCapacity{}.KB(100)).
-		//		SetLeaderLocator("least-leaders"))
-		//Expect(errWithDifferentParameters).To(HaveOccurred())
+		// In this case we ignore that the stream already exists
+		err = testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions_and_parameters",
+			NewPartitionsSuperStreamOptions(2).
+				SetMaxAge(24*120*time.Hour).
+				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
+				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
+				SetLeaderLocator("least-leaders"))
+		Expect(err).NotTo(HaveOccurred())
 
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_2_partitions_and_parameters")
 		Expect(err).NotTo(HaveOccurred())
 
+		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_2_partitions_and_parameters")
+		Expect(err).To(Equal(StreamDoesNotExist))
+	})
+
+	It("Create Super stream with 3 keys and other parameters", Label("super-stream"), func() {
+		err := testEnvironment.DeclareSuperStream("go-countries",
+			NewBindingsSuperStreamOptions([]string{"italy", "spain", "france"}).
+				SetMaxAge(24*120*time.Hour).
+				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
+				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
+				SetLeaderLocator("least-leaders"))
+		Expect(err).NotTo(HaveOccurred())
+
+		// In this case we ignore that the stream already exists
+		err = testEnvironment.DeclareSuperStream("go-countries",
+			NewBindingsSuperStreamOptions([]string{"italy", "spain", "france"}).
+				SetMaxAge(24*120*time.Hour).
+				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
+				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
+				SetLeaderLocator("least-leaders"))
+		Expect(err).NotTo(HaveOccurred())
+
+		err = testEnvironment.DeleteSuperStream("go-countries")
+		Expect(err).NotTo(HaveOccurred())
+
+		err = testEnvironment.DeleteSuperStream("go-countries")
+		Expect(err).To(Equal(StreamDoesNotExist))
 	})
 
 })
