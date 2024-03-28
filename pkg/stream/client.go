@@ -1003,27 +1003,31 @@ func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
 	return newStreamStats(m, streamName), nil
 }
 
-func (c *Client) DeclareSuperStream(superStream string, partitions []string, bindingKeys []string, args map[string]string) error {
+func (c *Client) DeclareSuperStream(superStream string, options SuperStreamOptions) error {
 
 	if superStream == "" || containsOnlySpaces(superStream) {
 		return fmt.Errorf("super Stream Name can't be empty")
 	}
 
-	if len(partitions) == 0 {
+	if options == nil {
+		return fmt.Errorf("options can't be nil")
+	}
+
+	if len(options.getPartitions(superStream)) == 0 {
 		return fmt.Errorf("partitions can't be empty")
 	}
 
-	if len(bindingKeys) == 0 {
+	if len(options.getBindingKeys()) == 0 {
 		return fmt.Errorf("binding keys can't be empty")
 	}
 
-	for _, key := range bindingKeys {
+	for _, key := range options.getBindingKeys() {
 		if key == "" || containsOnlySpaces(key) {
 			return fmt.Errorf("binding key can't be empty")
 		}
 	}
 
-	for _, partition := range partitions {
+	for _, partition := range options.getPartitions(superStream) {
 		if partition == "" || containsOnlySpaces(partition) {
 			return fmt.Errorf("partition can't be empty")
 		}
@@ -1031,18 +1035,18 @@ func (c *Client) DeclareSuperStream(superStream string, partitions []string, bin
 
 	length := 2 + 2 + 4 +
 		2 + len(superStream) + 4 +
-		sizeOfStringArray(partitions) + 4 +
-		sizeOfStringArray(bindingKeys) + 4 +
-		sizeOfMapStringString(args)
+		sizeOfStringArray(options.getPartitions(superStream)) + 4 +
+		sizeOfStringArray(options.getBindingKeys()) + 4 +
+		sizeOfMapStringString(options.getArgs())
 
 	resp := c.coordinator.NewResponse(commandCreateSuperStream, superStream)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandCreateSuperStream, correlationId)
 	writeString(b, superStream)
-	writeStringArray(b, partitions)
-	writeStringArray(b, bindingKeys)
-	writeMapStringString(b, args)
+	writeStringArray(b, options.getPartitions(superStream))
+	writeStringArray(b, options.getBindingKeys())
+	writeMapStringString(b, options.getArgs())
 
 	return c.handleWrite(b.Bytes(), resp).Err
 }
