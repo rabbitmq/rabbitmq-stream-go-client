@@ -798,3 +798,14 @@ func (env *Environment) DeleteSuperStream(superStreamName string) error {
 	}
 	return client.DeleteSuperStream(superStreamName)
 }
+
+func (env *Environment) QueryPartitions(superStreamName string) ([]string, error) {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		_ = client.Close()
+	}(client)
+	if err != nil {
+		return nil, err
+	}
+	return client.QueryPartitions(superStreamName)
+}

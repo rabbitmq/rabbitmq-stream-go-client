@@ -125,6 +125,10 @@ func (c *Client) handleResponse() {
 			{
 				c.handleConsumerUpdate(readerProtocol, buffer)
 			}
+		case commandQueryPartition:
+			{
+				c.handleQueryPartitions(readerProtocol, buffer)
+			}
 
 		default:
 			{
@@ -585,6 +589,21 @@ func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Rea
 	consumer.options.SingleActiveConsumer.OffsetSpecification = responseOff
 	err = consumer.writeConsumeUpdateOffsetToSocket(readProtocol.CorrelationId, responseOff)
 	logErrorCommand(err, "handleConsumerUpdate writeConsumeUpdateOffsetToSocket")
+}
+
+func (c *Client) handleQueryPartitions(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = readUInt(r)
+	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
+	partitions := make([]string, 0)
+	partitionsCount, _ := readUInt(r)
+	for i := 0; i < int(partitionsCount); i++ {
+		partition := readString(r)
+		partitions = append(partitions, partition)
+	}
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	logErrorCommand(err, "handleQueryPartitions")
+	res.code <- Code{id: readProtocol.ResponseCode}
+	res.data <- partitions
 }
 
 func (c *Client) handleExchangeVersionResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {
