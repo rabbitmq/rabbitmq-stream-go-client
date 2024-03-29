@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"fmt"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
@@ -39,4 +40,47 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Entry("hello88", "hello88", "invoices-02"),
 	)
 
+	It("should create a new super stream producer", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		const superStream = "first-super-stream-producer"
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
+		superProducer := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{})
+		Expect(superProducer).NotTo(BeNil())
+		Expect(superProducer.init()).NotTo(HaveOccurred())
+		Expect(superProducer.producers).To(HaveLen(3))
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+		Expect(superProducer.producers).To(HaveLen(0))
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
+	It("should Send messages and confirmed to all the streams", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		// we do this test to be sure that the producer is able to Send messages to all the partitions
+		// the same was done in .NET client and python client
+		const superStream = "invoices"
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
+		superProducer := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
+			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+				return message.GetApplicationProperties()["routingKey"].(string)
+			}),
+		})
+
+		Expect(superProducer).NotTo(BeNil())
+		Expect(superProducer.init()).NotTo(HaveOccurred())
+		Expect(superProducer.producers).To(HaveLen(3))
+
+		for i := 0; i < 20; i++ {
+
+			msg := amqp.NewMessage(make([]byte, 0))
+			msg.ApplicationProperties = map[string]interface{}{"routingKey": fmt.Sprintf("hello%d", i)}
+			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+		//env.DeleteSuperStream(superStream)
+
+	})
 })

@@ -132,7 +132,7 @@ var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
 var OffsetNotFoundError = errors.New("Offset not found")
 var FrameTooLarge = errors.New("Frame Too Large, the buffer is too big")
 var CodeAccessRefused = errors.New("Resources Access Refused")
-var ConnectionClosed = errors.New("Can't send the message, connection closed")
+var ConnectionClosed = errors.New("Can't Send the message, connection closed")
 var StreamNotAvailable = errors.New("Stream Not Available")
 var UnknownFrame = errors.New("Unknown Frame")
 var InternalError = errors.New("Internal Error")
@@ -142,6 +142,8 @@ var FilterNotSupported = errors.New("Filtering is not supported by the broker " 
 	"(requires RabbitMQ 3.13+ and stream_filtering feature flag activated)")
 var SingleActiveConsumerNotSupported = errors.New("Single Active Consumer is not supported by the broker " +
 	"(requires RabbitMQ 3.11+ and stream_single_active_consumer feature flag activated)")
+
+var ErrProducerNotFound = errors.New("Producer not found in the SuperStream Producer")
 
 var LeaderNotReady = errors.New("Leader not Ready yet")
 

@@ -209,8 +209,8 @@ var _ = Describe("Streaming Producers", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		chConfirm := producer.NotifyPublishConfirmation()
-		// we need an external nRecv since the producer can send the confirmation
-		// in multiple send
+		// we need an external nRecv since the producer can Send the confirmation
+		// in multiple Send
 		var nRecv int64
 		go func(ch ChannelPublishConfirm, p *Producer) {
 			defer GinkgoRecover()
@@ -240,7 +240,7 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(14)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
@@ -336,7 +336,7 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(101)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
@@ -364,7 +364,7 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(2)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		By("Max frame Error")
 		s := make([]byte, 1148576)
@@ -392,15 +392,15 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesConfirmed)
 		}, 5*time.Second).Should(Equal(int32(101)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 
 	})
 
-	It("Smart Send send after", func() {
-		// this test is need to test "send after"
+	It("Smart Send Send after", func() {
+		// this test is need to test "Send after"
 		// and the time check
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -425,14 +425,14 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesConfirmed)
 		}, 5*time.Second).Should(Equal(int32(10)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
-	It("Smart Send send after BatchPublishingDelay", func() {
-		// this test is need to test "send after BatchPublishingDelay"
+	It("Smart Send Send after BatchPublishingDelay", func() {
+		// this test is need to test "Send after BatchPublishingDelay"
 		// and the time check
 		producer, err := testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchPublishingDelay(50))
@@ -462,7 +462,7 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(10)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
 		err = producer.Close()
@@ -596,7 +596,7 @@ var _ = Describe("Streaming Producers", func() {
 		}(chConfirm)
 
 		// this test is needed to test if sending the same message
-		// there are the different sequences, so send and confirmed
+		// there are the different sequences, so Send and confirmed
 		// must be the same
 		msg := amqp.NewMessage(make([]byte, 50))
 		for z := 0; z < 232; z++ {
@@ -606,11 +606,11 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesConfirmed)
 		}, 5*time.Second).Should(Equal(int32(232)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
 
-		// same test above but using batch send
+		// same test above but using batch Send
 		var arr []message.StreamMessage
 		for i := 0; i < 20; i++ {
 			arr = append(arr, amqp.NewMessage(make([]byte, 50)))
@@ -623,7 +623,7 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesConfirmed)
 		}, 5*time.Second).Should(Equal(int32(12*20)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
 
@@ -696,7 +696,7 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesConfirmed)
 		}, 5*time.Second).Should(Equal(int32(501)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
 		atomic.StoreInt32(&messagesConfirmed, 0)
@@ -709,7 +709,7 @@ var _ = Describe("Streaming Producers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesConfirmed)
 		}, 5*time.Second).Should(Equal(int32(501*5)),
-			"confirm should receive same messages send by producer")
+			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
@@ -769,7 +769,7 @@ func testCompress(producer *Producer) {
 	Eventually(func() int32 {
 		return atomic.LoadInt32(&messagesConfirmed)
 	}, 5*time.Second).Should(Equal(int32(457)),
-		"confirm should receive same messages send by producer")
+		"confirm should receive same messages Send by producer")
 
 	Expect(producer.lenUnConfirmed()).To(Equal(0))
 	atomic.StoreInt32(&messagesConfirmed, 0)
@@ -782,7 +782,7 @@ func testCompress(producer *Producer) {
 	Eventually(func() int32 {
 		return atomic.LoadInt32(&messagesConfirmed)
 	}, 5*time.Second).Should(Equal(int32(457*5)),
-		"confirm should receive same messages send by producer")
+		"confirm should receive same messages Send by producer")
 }
 
 func createProducer(producerOptions *ProducerOptions, messagesReceived *int32, testEnvironment *Environment, streamName string) *Producer {
@@ -829,7 +829,7 @@ func verifyProducerSent(producer *Producer, confirmationReceived *int32, message
 	Eventually(func() int32 {
 		return atomic.LoadInt32(confirmationReceived)
 	}, 10*time.Second, 1*time.Second).Should(Equal(int32(messageSent)),
-		"confirm should receive same messages send by producer")
+		"confirm should receive same messages Send by producer")
 
 	Expect(producer.lenUnConfirmed()).To(Equal(0))
 }

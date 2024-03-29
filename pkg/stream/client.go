@@ -512,7 +512,7 @@ func (c *Client) Close() error {
 
 		errW := c.socket.writeAndFlush(b.Bytes())
 		if errW != nil {
-			logs.LogWarn("error during send client close %s", errW)
+			logs.LogWarn("error during Send client close %s", errW)
 		}
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
@@ -1062,10 +1062,10 @@ func (c *Client) DeleteSuperStream(superStream string) error {
 	return c.handleWrite(b.Bytes(), resp).Err
 }
 
-//public async Task<PartitionsQueryResponse> QueryPartition(string superStream)
+//public async Task<PartitionsQueryResponse> QueryPartition(string SuperStream)
 //{
 //return await Request<PartitionsQueryRequest, PartitionsQueryResponse>(corr =>
-//new PartitionsQueryRequest(corr, superStream)).ConfigureAwait(false);
+//new PartitionsQueryRequest(corr, SuperStream)).ConfigureAwait(false);
 //}
 
 func (c *Client) QueryPartitions(superStream string) ([]string, error) {

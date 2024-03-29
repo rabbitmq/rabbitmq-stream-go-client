@@ -155,7 +155,7 @@ var _ = Describe("Streaming Consumers", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = producer.BatchSend(CreateArrayMessagesForTesting(30)) // batch send
+		err = producer.BatchSend(CreateArrayMessagesForTesting(30)) // batch Send
 		Expect(err).NotTo(HaveOccurred())
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		var messagesReceived int32 = 0
@@ -187,7 +187,7 @@ var _ = Describe("Streaming Consumers", func() {
 			}, NewConsumerOptions().
 				SetOffset(OffsetSpecification{}.First()))
 		Expect(err).NotTo(HaveOccurred())
-		err = producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch send
+		err = producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch Send
 		Expect(err).NotTo(HaveOccurred())
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Eventually(func() int32 {
@@ -203,7 +203,7 @@ var _ = Describe("Streaming Consumers", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Given we have produced 105 messages ...
-			err = producer.BatchSend(CreateArrayMessagesForTesting(105)) // batch send
+			err = producer.BatchSend(CreateArrayMessagesForTesting(105)) // batch Send
 			Expect(err).NotTo(HaveOccurred())
 			Expect(producer.Close()).NotTo(HaveOccurred())
 
@@ -375,7 +375,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(107)),
-			"consumer should receive same messages send by producer")
+			"consumer should receive same messages Send by producer")
 
 		Eventually(func() int64 {
 			return consumer.GetLastStoredOffset()
@@ -714,7 +714,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(10*10)),
-			"consumer should receive same messages send by producer")
+			"consumer should receive same messages Send by producer")
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
