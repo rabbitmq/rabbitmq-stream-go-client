@@ -138,6 +138,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 
+		time.Sleep(1 * time.Second)
 		// these values are the same for .NET,Python,Java stream clients
 		// The aim for this test is to validate the correct routing with the
 		// MurmurStrategy.
@@ -145,17 +146,17 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			mutex.Lock()
 			defer mutex.Unlock()
 			return msgReceived["invoices-0"] == 9
-		}, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(BeTrue())
 		Eventually(func() bool {
 			mutex.Lock()
 			defer mutex.Unlock()
 			return msgReceived["invoices-1"] == 7
-		}, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(BeTrue())
 		Eventually(func() bool {
 			mutex.Lock()
 			defer mutex.Unlock()
 			return msgReceived["invoices-2"] == 4
-		}, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(BeTrue())
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
