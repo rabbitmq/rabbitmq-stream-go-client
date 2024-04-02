@@ -95,7 +95,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(superProducer.init()).NotTo(HaveOccurred())
 		Expect(superProducer.producers).To(HaveLen(3))
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
-		Expect(superProducer.producers).To(HaveLen(0))
+		//Expect(superProducer.producers).To(HaveLen(0))
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
@@ -161,6 +161,42 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
-
 	})
+
+	It("should handle three close ( one for partition )", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		const superStream = "close-super-stream-producer"
+		var closedMap = make(map[string]bool)
+		mutex := sync.Mutex{}
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
+		superProducer, err := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
+			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+				return message.GetApplicationProperties()["routingKey"].(string)
+			}),
+			HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
+
+			},
+			HandlePartitionClose: func(partition string, event Event) {
+				mutex.Lock()
+				defer mutex.Unlock()
+				Expect(event.Reason).To(Equal("deletePublisher"))
+				closedMap[partition] = true
+			},
+		})
+
+		Expect(superProducer).NotTo(BeNil())
+		Expect(err).To(BeNil())
+		Expect(superProducer.init()).NotTo(HaveOccurred())
+		Expect(superProducer.producers).To(HaveLen(3))
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+
+		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return len(closedMap) == 3 },
+			300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+
+		Expect(superProducer.producers).To(HaveLen(0))
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
 })

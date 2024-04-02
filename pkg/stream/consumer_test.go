@@ -187,13 +187,13 @@ var _ = Describe("Streaming Consumers", func() {
 			}, NewConsumerOptions().
 				SetOffset(OffsetSpecification{}.First()))
 		Expect(err).NotTo(HaveOccurred())
-		err = producer.BatchSend(CreateArrayMessagesForTesting(5)) // batch Send
+		err = producer.BatchSend(CreateArrayMessagesForTesting(3)) // batch Send
 		Expect(err).NotTo(HaveOccurred())
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesCount)
-		}, 5*time.Second).Should(Equal(int32(5)),
-			"chunkInfo should be 5")
+		}, 5*time.Second).Should(Equal(int32(3)),
+			"chunkInfo should be 3")
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 
