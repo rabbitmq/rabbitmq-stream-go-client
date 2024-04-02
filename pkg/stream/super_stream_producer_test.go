@@ -6,6 +6,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"sync"
+	"time"
 )
 
 var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
@@ -40,12 +42,55 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Entry("hello88", "hello88", "invoices-02"),
 	)
 
+	It("validate super stream creation", func() {
+		producer, err := newSuperStreamProducer(nil, "it_does_not_matter", nil)
+		Expect(producer).To(BeNil())
+		Expect(err).To(Equal(ErrEnvironmentNotDefined))
+
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		producer, err = newSuperStreamProducer(env, "", nil)
+		Expect(producer).To(BeNil())
+		Expect(err).To(HaveOccurred())
+
+		producer, err = newSuperStreamProducer(env, "    ", nil)
+		Expect(producer).To(BeNil())
+		Expect(err).To(HaveOccurred())
+
+		producer, err = newSuperStreamProducer(env, "it_does_not_matter", nil)
+		Expect(producer).To(BeNil())
+		Expect(err).To(Equal(ErrSuperStreamProducerOptionsNotDefined))
+
+		producer, err = newSuperStreamProducer(env, "it_does_not_matter", &SuperStreamProducerOptions{})
+		Expect(producer).To(BeNil())
+		Expect(err).To(Equal(ErrSuperStreamProducerOptionsNotDefined))
+
+		producer, err = newSuperStreamProducer(env, "it_does_not_matter", &SuperStreamProducerOptions{
+			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+				return message.GetApplicationProperties()["routingKey"].(string)
+			}),
+		})
+		Expect(producer).To(BeNil())
+		Expect(err).To(Equal(ErrSuperStreamProducerOptionsNotDefined))
+
+	})
+
 	It("should create a new super stream producer", func() {
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		const superStream = "first-super-stream-producer"
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
-		superProducer := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{})
+		superProducer, err := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
+			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+
+				return message.GetApplicationProperties()["routingKey"].(string)
+			}),
+			HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
+
+			},
+		})
+		Expect(err).To(BeNil())
 		Expect(superProducer).NotTo(BeNil())
 		Expect(superProducer.init()).NotTo(HaveOccurred())
 		Expect(superProducer.producers).To(HaveLen(3))
@@ -61,26 +106,60 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		// we do this test to be sure that the producer is able to Send messages to all the partitions
 		// the same was done in .NET client and python client
 		const superStream = "invoices"
-		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
-		superProducer := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
-			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
-				return message.GetApplicationProperties()["routingKey"].(string)
-			}),
-		})
 
+		msgReceived := make(map[string]int)
+		mutex := sync.Mutex{}
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
+		superProducer, err := newSuperStreamProducer(env, superStream,
+			&SuperStreamProducerOptions{
+				RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+					return message.GetApplicationProperties()["routingKey"].(string)
+				}),
+				HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
+					Expect(confirmationStatus).NotTo(BeNil())
+					for _, status := range confirmationStatus.ConfirmationStatus {
+						Expect(status).NotTo(BeNil())
+						Expect(status.IsConfirmed()).To(BeTrue())
+					}
+					mutex.Lock()
+					msgReceived[partition] = len(confirmationStatus.ConfirmationStatus)
+					mutex.Unlock()
+				},
+			})
+
+		Expect(err).To(BeNil())
 		Expect(superProducer).NotTo(BeNil())
 		Expect(superProducer.init()).NotTo(HaveOccurred())
 		Expect(superProducer.producers).To(HaveLen(3))
 
 		for i := 0; i < 20; i++ {
-
 			msg := amqp.NewMessage(make([]byte, 0))
 			msg.ApplicationProperties = map[string]interface{}{"routingKey": fmt.Sprintf("hello%d", i)}
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 
+		// these values are the same for .NET,Python,Java stream clients
+		// The aim for this test is to validate the correct routing with the
+		// MurmurStrategy.
+		Eventually(func() bool {
+			mutex.Lock()
+			defer mutex.Unlock()
+			return msgReceived["invoices-0"] == 9
+		}, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+		Eventually(func() bool {
+			mutex.Lock()
+			defer mutex.Unlock()
+			return msgReceived["invoices-1"] == 7
+		}, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+		Eventually(func() bool {
+			mutex.Lock()
+			defer mutex.Unlock()
+			return msgReceived["invoices-2"] == 4
+		}, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
-		//env.DeleteSuperStream(superStream)
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
 
 	})
 })

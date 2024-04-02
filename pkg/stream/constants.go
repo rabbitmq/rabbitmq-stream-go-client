@@ -144,6 +144,8 @@ var SingleActiveConsumerNotSupported = errors.New("Single Active Consumer is not
 	"(requires RabbitMQ 3.11+ and stream_single_active_consumer feature flag activated)")
 
 var ErrProducerNotFound = errors.New("Producer not found in the SuperStream Producer")
+var ErrSuperStreamProducerOptionsNotDefined = errors.New("SuperStreamProducerOptions not defined. The SuperStreamProducerOptions is mandatory with the RoutingStrategy and Confirmation")
+var ErrEnvironmentNotDefined = errors.New("Environment not defined")
 
 var LeaderNotReady = errors.New("Leader not Ready yet")
 
