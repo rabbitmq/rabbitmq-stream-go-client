@@ -1062,12 +1062,6 @@ func (c *Client) DeleteSuperStream(superStream string) error {
 	return c.handleWrite(b.Bytes(), resp).Err
 }
 
-//public async Task<PartitionsQueryResponse> QueryPartition(string SuperStream)
-//{
-//return await Request<PartitionsQueryRequest, PartitionsQueryResponse>(corr =>
-//new PartitionsQueryRequest(corr, SuperStream)).ConfigureAwait(false);
-//}
-
 func (c *Client) QueryPartitions(superStream string) ([]string, error) {
 	length := 2 + 2 + 4 + 2 + len(superStream)
 	resp := c.coordinator.NewResponse(commandQueryPartition, superStream)
@@ -1084,4 +1078,25 @@ func (c *Client) QueryPartitions(superStream string) ([]string, error) {
 	data := <-resp.data
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return data.([]string), nil
+}
+
+func (c *Client) queryRoute(superStream string, routingKey string) ([]string, error) {
+
+	length := 2 + 2 + 4 + 2 + len(superStream) + 2 + len(routingKey)
+	resp := c.coordinator.NewResponse(commandQueryRoute, superStream)
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandQueryRoute,
+		correlationId)
+	writeString(b, routingKey)
+	writeString(b, superStream)
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	if err.Err != nil {
+		return nil, err.Err
+	}
+
+	data := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	return data.([]string), nil
+
 }

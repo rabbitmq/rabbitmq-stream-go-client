@@ -44,6 +44,7 @@ const (
 	commandOpen                   = 21
 	CommandClose                  = 22
 	commandHeartbeat              = 23
+	commandQueryRoute             = 24
 	commandQueryPartition         = 25
 	consumerUpdateQueryResponse   = 26
 	commandExchangeVersion        = 27

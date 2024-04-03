@@ -25,10 +25,10 @@ import (
 //set => Args["stream-max-segment-size-bytes"] = $"{value}";
 //}
 
-const max_age = "max-age"
-const max_length_bytes = "max-length-bytes"
-const queue_leader_locator = "queue-leader-locator"
-const stream_max_segment_size_bytes = "stream-max-segment-size-bytes"
+const maxAge = "max-age"
+const maxLengthBytes = "max-length-bytes"
+const queueLeaderLocator = "queue-leader-locator"
+const streamMaxSegmentSizeBytes = "stream-max-segment-size-bytes"
 
 type SuperStreamOptions interface {
 	getPartitions(prefix string) []string
@@ -91,16 +91,16 @@ func (t *PartitionsSuperStreamOptions) getBindingKeys() []string {
 
 func (t *PartitionsSuperStreamOptions) getArgs() map[string]string {
 	if t.MaxAge > 0 {
-		t.args[max_age] = fmt.Sprintf("%ds", int(t.MaxAge.Seconds()))
+		t.args[maxAge] = fmt.Sprintf("%ds", int(t.MaxAge.Seconds()))
 	}
 	if t.MaxLengthBytes != nil {
-		t.args[max_length_bytes] = fmt.Sprintf("%d", t.MaxLengthBytes.bytes)
+		t.args[maxLengthBytes] = fmt.Sprintf("%d", t.MaxLengthBytes.bytes)
 	}
 	if t.MaxSegmentSizeBytes != nil {
-		t.args[stream_max_segment_size_bytes] = fmt.Sprintf("%d", t.MaxSegmentSizeBytes.bytes)
+		t.args[streamMaxSegmentSizeBytes] = fmt.Sprintf("%d", t.MaxSegmentSizeBytes.bytes)
 	}
 	if t.LeaderLocator != "" {
-		t.args[queue_leader_locator] = t.LeaderLocator
+		t.args[queueLeaderLocator] = t.LeaderLocator
 	}
 	return t.args
 }
@@ -155,16 +155,16 @@ func (t *BindingsSuperStreamOptions) getBindingKeys() []string {
 
 func (t *BindingsSuperStreamOptions) getArgs() map[string]string {
 	if t.MaxAge > 0 {
-		t.args[max_age] = fmt.Sprintf("%ds", int(t.MaxAge.Seconds()))
+		t.args[maxAge] = fmt.Sprintf("%ds", int(t.MaxAge.Seconds()))
 	}
 	if t.MaxLengthBytes != nil {
-		t.args[max_length_bytes] = fmt.Sprintf("%d", t.MaxLengthBytes.bytes)
+		t.args[maxLengthBytes] = fmt.Sprintf("%d", t.MaxLengthBytes.bytes)
 	}
 	if t.MaxSegmentSizeBytes != nil {
-		t.args[stream_max_segment_size_bytes] = fmt.Sprintf("%d", t.MaxSegmentSizeBytes.bytes)
+		t.args[streamMaxSegmentSizeBytes] = fmt.Sprintf("%d", t.MaxSegmentSizeBytes.bytes)
 	}
 	if t.LeaderLocator != "" {
-		t.args[queue_leader_locator] = t.LeaderLocator
+		t.args[queueLeaderLocator] = t.LeaderLocator
 	}
 	return t.args
 }

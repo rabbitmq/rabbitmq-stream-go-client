@@ -11,7 +11,10 @@ const SEED = 104729
 
 type RoutingStrategy interface {
 	Route(message message.StreamMessage, partitions []string) []string
+	SetRouteParameters(superStream string, queryRoute func(superStream string, routingKey string) ([]string, error))
 }
+
+// HashRoutingMurmurStrategy is a routing strategy that uses the murmur3 hash function
 
 type HashRoutingMurmurStrategy struct {
 	RoutingKeyExtractor func(message message.StreamMessage) string
@@ -32,6 +35,62 @@ func (h *HashRoutingMurmurStrategy) Route(message message.StreamMessage, partiti
 	index := murmurHash.Sum32() % uint32(len(partitions))
 	return []string{partitions[index]}
 }
+func (h *HashRoutingMurmurStrategy) SetRouteParameters(_ string, _ func(superStream string, routingKey string) ([]string, error)) {
+}
+
+// end of HashRoutingMurmurStrategy
+
+// KeyRoutingStrategy is a routing strategy that uses the key of the message
+
+type KeyRoutingStrategy struct {
+	RoutingKeyExtractor func(message message.StreamMessage) string
+	UnRoutedMessage     func(message message.StreamMessage, cause error)
+	queryRoute          func(superStream string, routingKey string) ([]string, error)
+	superStream         string
+	cacheRouting        map[string][]string
+}
+
+func NewKeyRoutingStrategy(
+	routingKeyExtractor func(message message.StreamMessage) string, unRoutedMessage func(message message.StreamMessage, cause error)) *KeyRoutingStrategy {
+	return &KeyRoutingStrategy{
+		RoutingKeyExtractor: routingKeyExtractor,
+		UnRoutedMessage:     unRoutedMessage,
+		cacheRouting:        make(map[string][]string),
+	}
+}
+
+func (k *KeyRoutingStrategy) SetRouteParameters(superStream string, queryRoute func(superStream string, routingKey string) ([]string, error)) {
+	k.superStream = superStream
+	k.queryRoute = queryRoute
+}
+
+func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []string) []string {
+	key := k.RoutingKeyExtractor(message)
+	routing := []string{}
+	if k.cacheRouting[key] != nil {
+		routing = append(routing, k.cacheRouting[key]...)
+	} else {
+		r, err := k.queryRoute(k.superStream, key)
+		routing = append(routing, r...)
+		if err != nil {
+			k.UnRoutedMessage(message, err)
+			return nil
+		}
+		k.cacheRouting[key] = routing
+	}
+
+	for _, p := range partitions {
+		for _, r := range routing {
+			if r == p {
+				return []string{p}
+			}
+		}
+	}
+	k.UnRoutedMessage(message, fmt.Errorf("no partition found for key %s", key))
+	return nil
+}
+
+// end of KeyRoutingStrategy
 
 type HandleSuperStreamConfirmation = func(partition string, confirmationStatus *SuperStreamPublishConfirm)
 type HandlePartitionClose = func(partition string, event Event, context PartitionContext)
@@ -93,6 +152,7 @@ func newSuperStreamProducer(env *Environment, superStream string, superStreamPro
 }
 
 func (s *SuperStreamProducer) init() error {
+	s.SuperStreamProducerOptions.RoutingStrategy.SetRouteParameters(s.SuperStream, s.env.QueryRoute)
 	partitions, err := s.env.QueryPartitions(s.SuperStream)
 	if err != nil {
 		return err

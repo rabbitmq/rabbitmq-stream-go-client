@@ -7,6 +7,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -38,7 +39,10 @@ func main() {
 	}
 
 	// Create a super stream
-	err = env.DeclareSuperStream(superStreamName, stream.NewPartitionsSuperStreamOptions(3))
+	err = env.DeclareSuperStream(superStreamName,
+		// the partitions strategy is mandatory
+		// can be partition or by key
+		stream.NewPartitionsSuperStreamOptions(3))
 	CheckErr(err)
 
 	// Create a producer
@@ -64,10 +68,12 @@ func main() {
 			// in case the connection is dropped due of network issues or metadata update
 			// we can reconnect using context
 			if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
-				fmt.Printf("Partition %s closed unexpectedly.. Reconnecting..", partition)
-				time.Sleep(3 * time.Second)
+				sleepValue := rand.Intn(5) + 2
+				fmt.Printf("Partition %s closed unexpectedly! Reconnecting in %v seconds..\n", partition, sleepValue)
+				time.Sleep(time.Duration(sleepValue) * time.Second)
 				err := context.ConnectPartition(partition)
 				CheckErr(err)
+				fmt.Printf("Partition %s reconnected.\n", partition)
 			}
 		},
 		ClientProvidedName: "my-super-stream-producer",

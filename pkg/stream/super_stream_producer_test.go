@@ -255,4 +255,119 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
+	It("should return three key partitions with query route", func() {
+
+		options := NewBindingsSuperStreamOptions([]string{"italy", "spain", "france"})
+		Expect(options).NotTo(BeNil())
+		Expect(options.getBindingKeys()).To(HaveLen(3))
+		Expect(options.getBindingKeys()).To(ConsistOf("italy", "spain", "france"))
+
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		const superStream = "key-super-stream-producer"
+		Expect(env.DeclareSuperStream(superStream, options)).NotTo(HaveOccurred())
+		client, err := env.newReconnectClient()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(client).NotTo(BeNil())
+		route, err := client.queryRoute(superStream, "italy")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(route).NotTo(BeNil())
+		Expect(route).To(HaveLen(1))
+		Expect(route[0]).To(Equal("key-super-stream-producer-italy"))
+
+		route, err = client.queryRoute(superStream, "spain")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(route).NotTo(BeNil())
+		Expect(route).To(HaveLen(1))
+		Expect(route[0]).To(Equal("key-super-stream-producer-spain"))
+
+		route, err = client.queryRoute(superStream, "france")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(route).NotTo(BeNil())
+		Expect(route).To(HaveLen(1))
+		Expect(route[0]).To(Equal("key-super-stream-producer-france"))
+
+		// here we test the case where the key is not found
+		// the client should return an empty list
+		route, err = client.queryRoute(superStream, "NOT_EXIST")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(route).To(Equal([]string{}))
+
+		Expect(client.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
+	It("should return stream not found query route", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		client, err := env.newReconnectClient()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(client).NotTo(BeNil())
+		route, err := client.queryRoute("not-found", "italy")
+		Expect(err).To(HaveOccurred())
+		Expect(route).To(BeNil())
+		Expect(client.Close()).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
+	It("should confirm 6 messages and 1 unRouted", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		const superStream = "key-super-stream-producer-with-3-keys"
+		countries := []string{"italy", "france", "spain"}
+		Expect(env.DeclareSuperStream(superStream,
+			NewBindingsSuperStreamOptions(countries))).NotTo(HaveOccurred())
+
+		messagesRouted := make(map[string]int)
+		messagesUnRouted := 0
+		mutex := sync.Mutex{}
+		superProducer, err := env.NewSuperStreamProducer(superStream, &SuperStreamProducerOptions{
+			RoutingStrategy: NewKeyRoutingStrategy(
+				func(message message.StreamMessage) string {
+					return message.GetApplicationProperties()["county"].(string)
+				}, func(message message.StreamMessage, cause error) {
+					defer GinkgoRecover()
+					Expect(cause).To(HaveOccurred())
+					mutex.Lock()
+					messagesUnRouted++
+					mutex.Unlock()
+				}),
+			HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
+				mutex.Lock()
+				defer mutex.Unlock()
+				messagesRouted[partition] += len(confirmationStatus.ConfirmationStatus)
+			},
+		})
+
+		for _, country := range countries {
+			msg := amqp.NewMessage(make([]byte, 0))
+			msg.ApplicationProperties = map[string]interface{}{"county": country}
+			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
+			// two times the same country in this way we use the cached map
+			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		msg := amqp.NewMessage(make([]byte, 0))
+		msg.ApplicationProperties = map[string]interface{}{"county": "this_country_does_not_exist"}
+		Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
+
+		time.Sleep(1 * time.Second)
+		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return messagesUnRouted == 1 }, 300*time.Millisecond).
+			WithTimeout(5 * time.Second).Should(BeTrue())
+
+		for _, country := range countries {
+			Eventually(func() int {
+				mutex.Lock()
+				defer mutex.Unlock()
+				return messagesRouted[fmt.Sprintf("%s-%s", superStream, country)]
+			}, 300*time.Millisecond).Should(Equal(2))
+		}
+
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 })
