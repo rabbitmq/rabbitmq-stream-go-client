@@ -34,17 +34,22 @@ func (h *HashRoutingMurmurStrategy) Route(message message.StreamMessage, partiti
 }
 
 type HandleSuperStreamConfirmation = func(partition string, confirmationStatus *SuperStreamPublishConfirm)
-type HandlePartitionClose = func(partition string, event Event)
+type HandlePartitionClose = func(partition string, event Event, context PartitionContext)
 
 type SuperStreamProducerOptions struct {
 	RoutingStrategy               RoutingStrategy
 	HandleSuperStreamConfirmation HandleSuperStreamConfirmation
 	HandlePartitionClose          HandlePartitionClose
+	ClientProvidedName            string
 }
 
 type SuperStreamPublishConfirm struct {
 	Partition          string
 	ConfirmationStatus []*ConfirmationStatus
+}
+
+type PartitionContext interface {
+	ConnectPartition(partition string) error
 }
 
 type SuperStreamProducer struct {
@@ -111,7 +116,12 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 	}
 	s.mutex.Unlock()
 
-	producer, err := s.env.NewProducer(partition, NewProducerOptions())
+	var options = NewProducerOptions()
+	if s.SuperStreamProducerOptions.ClientProvidedName != "" {
+		options.ClientProvidedName = s.SuperStreamProducerOptions.ClientProvidedName
+	}
+
+	producer, err := s.env.NewProducer(partition, options)
 	if err != nil {
 		return err
 	}
@@ -123,9 +133,7 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 
 	go func(gpartion string, _closedEvent <-chan Event) {
 		event := <-_closedEvent
-		if s.SuperStreamProducerOptions.HandlePartitionClose != nil {
-			s.SuperStreamProducerOptions.HandlePartitionClose(gpartion, event)
-		}
+
 		s.mutex.Lock()
 		for i := range s.producers {
 			if s.producers[i].GetStreamName() == gpartion {
@@ -134,6 +142,9 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 			}
 		}
 		s.mutex.Unlock()
+		if s.SuperStreamProducerOptions.HandlePartitionClose != nil {
+			s.SuperStreamProducerOptions.HandlePartitionClose(gpartion, event, s)
+		}
 
 	}(partition, closedEvent)
 
@@ -168,6 +179,12 @@ func (s *SuperStreamProducer) getProducer(partition string) *Producer {
 		}
 	}
 	return nil
+}
+
+func (s *SuperStreamProducer) getProducers() []*Producer {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.producers
 }
 
 func (s *SuperStreamProducer) Send(message message.StreamMessage) error {

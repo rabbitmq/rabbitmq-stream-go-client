@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test_helper"
 	"sync"
 	"time"
 )
@@ -177,7 +178,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
 
 			},
-			HandlePartitionClose: func(partition string, event Event) {
+			HandlePartitionClose: func(partition string, event Event, context PartitionContext) {
 				mutex.Lock()
 				defer mutex.Unlock()
 				Expect(event.Reason).To(Equal("deletePublisher"))
@@ -195,6 +196,61 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
 
 		Expect(superProducer.producers).To(HaveLen(0))
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
+	It("should handle reconnect the producer for the partition ", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		const superStream = "reconnect-super-stream-producer"
+
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
+
+		var reconnectedMap = make(map[string]bool)
+		mutex := sync.Mutex{}
+		superProducer, err := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
+			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+				return message.GetApplicationProperties()["routingKey"].(string)
+			}),
+			HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
+
+			},
+			HandlePartitionClose: func(partition string, event Event, context PartitionContext) {
+				defer GinkgoRecover()
+				mutex.Lock()
+				defer mutex.Unlock()
+				if event.Reason == SocketClosed {
+					time.Sleep(2 * time.Second)
+					Expect(context.ConnectPartition(partition)).NotTo(HaveOccurred())
+					time.Sleep(1 * time.Second)
+					reconnectedMap[partition] = true
+				}
+			},
+			ClientProvidedName: "reconnect-super-stream-producer",
+		})
+		Expect(superProducer).NotTo(BeNil())
+		Expect(err).To(BeNil())
+		Expect(superProducer.init()).NotTo(HaveOccurred())
+
+		time.Sleep(3 * time.Second)
+		Eventually(func() error {
+			return test_helper.DropConnectionClientProvidedName("reconnect-super-stream-producer", "15672")
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).ShouldNot(HaveOccurred())
+
+		Eventually(func() bool {
+			return len(superProducer.getProducers()) == 2
+		}).WithTimeout(5 * time.Second).Should(BeTrue())
+
+		time.Sleep(1 * time.Second)
+		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return len(reconnectedMap) == 1 },
+			300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+
+		Eventually(func() bool {
+			return len(superProducer.getProducers()) == 3
+		}).WithTimeout(5 * time.Second).Should(BeTrue())
+
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})

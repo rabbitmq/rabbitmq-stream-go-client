@@ -232,6 +232,14 @@ func (env *Environment) NewConsumer(streamName string,
 	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options, env.options.AddressResolver)
 }
 
+func (env *Environment) NewSuperStreamProducer(superStream string, superStreamProducerOptions *SuperStreamProducerOptions) (*SuperStreamProducer, error) {
+	var p, err = newSuperStreamProducer(env, superStream, superStreamProducerOptions)
+	if err != nil {
+		return nil, err
+	}
+	return p, p.init()
+}
+
 func (env *Environment) Close() error {
 	_ = env.producers.close()
 	_ = env.consumers.close()
