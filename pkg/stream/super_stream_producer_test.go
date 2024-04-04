@@ -452,7 +452,31 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
+	})
 
+	It("should return an error when the producer is already connected for a partition", func() {
+
+		// Test is to validate the error when the producer is already connected
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		const superStream = "already-connected-super-stream-producer"
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
+
+		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
+			NewTestingRandomStrategy(),
+		))
+
+		Expect(err).NotTo(HaveOccurred())
+
+		err = superProducer.ConnectPartition("this-partition-does-not-exist")
+		Expect(err).To(HaveOccurred())
+
+		err = superProducer.ConnectPartition("already-connected-super-stream-producer-0")
+		Expect(err).To(HaveOccurred())
+
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
 })

@@ -31,12 +31,12 @@ func main() {
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions())
 	CheckErr(err)
-	superStreamName := "MySuperStream"
+	superStreamName := "MySuperStream-Partitions"
 	err = env.DeleteSuperStream(superStreamName)
 	if err != nil && errors.Is(err, stream.StreamDoesNotExist) {
 		// we can ignore the error if the stream does not exist
 		// it will be created later
-		fmt.Printf("error deleting suepr stream: %s", err)
+		fmt.Printf("error deleting super stream: %s", err)
 	} else {
 		CheckErr(err)
 	}
@@ -57,7 +57,7 @@ func main() {
 				// here the code must fast and be safe
 				// The code evaluation is before sending the message
 				return message.GetApplicationProperties()["myKey"].(string)
-			})).SetClientProvidedName("my-superStreamProducer"))
+			})).SetClientProvidedName("my-super-stream-producer"))
 	CheckErr(err)
 
 	// HandlePartitionClose it not mandatory, but it is a good practice to handle it
@@ -120,7 +120,6 @@ func main() {
 		} else {
 			CheckErr(err)
 		}
-
 		time.Sleep(200 * time.Millisecond)
 	}
 

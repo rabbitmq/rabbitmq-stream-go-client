@@ -96,7 +96,9 @@ func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []s
 		r, err := k.queryRoute(k.superStream, key)
 		if err != nil {
 			// The message is not routed due of an error in the queryRoute
-			k.UnRoutedMessage(message, err)
+			if k.UnRoutedMessage != nil {
+				k.UnRoutedMessage(message, err)
+			}
 			return nil
 		}
 		routing = append(routing, r...)
@@ -114,7 +116,9 @@ func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []s
 	// The message is not routed since does not have a partition based on the key
 	// It can happen if the key selected is not in the routing table
 	// differently from the hash strategy the key strategy can have zero partitions
-	k.UnRoutedMessage(message, fmt.Errorf("no partition found for key %s", key))
+	if k.UnRoutedMessage != nil {
+		k.UnRoutedMessage(message, fmt.Errorf("no partition found for key %s", key))
+	}
 	return nil
 }
 
@@ -233,14 +237,27 @@ func (s *SuperStreamProducer) init() error {
 // that should be used only in case of disconnection
 func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 	logs.LogDebug("[SuperStreamProducer] ConnectPartition for partition: %s", partition)
+
 	s.mutex.Lock()
+	found := false
+	for _, p := range s.partitions {
+		if p == partition {
+			found = true
+			break
+		}
+	}
+	if !found {
+		s.mutex.Unlock()
+		return fmt.Errorf("partition %s not found in the super stream %s", partition, s.SuperStream)
+	}
 	for _, producer := range s.activeProducers {
 		if producer.GetStreamName() == partition {
+			s.mutex.Unlock()
 			return fmt.Errorf("partition %s already connected", partition)
 		}
 	}
-	s.mutex.Unlock()
 
+	s.mutex.Unlock()
 	var options = NewProducerOptions()
 	if s.SuperStreamProducerOptions.ClientProvidedName != "" {
 		options.ClientProvidedName = s.SuperStreamProducerOptions.ClientProvidedName
