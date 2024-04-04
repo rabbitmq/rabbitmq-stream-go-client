@@ -14,6 +14,10 @@ import (
 var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 	DescribeTable("Partitioning using Murmur3",
+
+		// validate the Murmur hash function
+		// the table is the same for .NET,Python,Java stream clients
+		// The aim for this test is to validate the correct routing with the same keys
 		func(key string, partition string) {
 
 			routingMurmur := NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
@@ -44,6 +48,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 	)
 
 	It("validate super stream creation", func() {
+		// Validate the producer creation with invalid parameters
+		// the env is not defined
 		producer, err := newSuperStreamProducer(nil, "it_does_not_matter", nil)
 		Expect(producer).To(BeNil())
 		Expect(err).To(Equal(ErrEnvironmentNotDefined))
@@ -51,57 +57,60 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
+		// the super stream name is not defined
 		producer, err = newSuperStreamProducer(env, "", nil)
 		Expect(producer).To(BeNil())
 		Expect(err).To(HaveOccurred())
 
+		// the super stream name contains spaces only
 		producer, err = newSuperStreamProducer(env, "    ", nil)
 		Expect(producer).To(BeNil())
 		Expect(err).To(HaveOccurred())
 
+		// the options are not defined
 		producer, err = newSuperStreamProducer(env, "it_does_not_matter", nil)
 		Expect(producer).To(BeNil())
 		Expect(err).To(Equal(ErrSuperStreamProducerOptionsNotDefined))
 
+		// the routing strategy is not defined
 		producer, err = newSuperStreamProducer(env, "it_does_not_matter", &SuperStreamProducerOptions{})
-		Expect(producer).To(BeNil())
-		Expect(err).To(Equal(ErrSuperStreamProducerOptionsNotDefined))
-
-		producer, err = newSuperStreamProducer(env, "it_does_not_matter", &SuperStreamProducerOptions{
-			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
-				return message.GetApplicationProperties()["routingKey"].(string)
-			}),
-		})
 		Expect(producer).To(BeNil())
 		Expect(err).To(Equal(ErrSuperStreamProducerOptionsNotDefined))
 
 	})
 
 	It("should create a new super stream producer", func() {
+		// Simple test to validate the creation of the producer
+
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		const superStream = "first-super-stream-producer"
-		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
+		Expect(env.DeclareSuperStream(superStream,
+			NewPartitionsOptions(3).
+				SetLeaderLocator("balanced").
+				SetMaxAge(3*time.Hour).
+				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
+				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(1024)),
+		)).NotTo(HaveOccurred())
 		superProducer, err := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
 			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
-
 				return message.GetApplicationProperties()["routingKey"].(string)
 			}),
-			HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
-
-			},
 		})
 		Expect(err).To(BeNil())
 		Expect(superProducer).NotTo(BeNil())
 		Expect(superProducer.init()).NotTo(HaveOccurred())
 		Expect(superProducer.producers).To(HaveLen(3))
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
-		//Expect(superProducer.producers).To(HaveLen(0))
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
 	It("should Send messages and confirmed to all the streams", func() {
+		// The same as Partitioning using Murmur3
+		// but using the producer to send the messages and confirm the messages
+		// from the partitions
+
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		// we do this test to be sure that the producer is able to Send messages to all the partitions
@@ -110,23 +119,27 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 		msgReceived := make(map[string]int)
 		mutex := sync.Mutex{}
-		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 		superProducer, err := newSuperStreamProducer(env, superStream,
 			&SuperStreamProducerOptions{
 				RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
 					return message.GetApplicationProperties()["routingKey"].(string)
-				}),
-				HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
-					Expect(confirmationStatus).NotTo(BeNil())
-					for _, status := range confirmationStatus.ConfirmationStatus {
-						Expect(status).NotTo(BeNil())
-						Expect(status.IsConfirmed()).To(BeTrue())
-					}
-					mutex.Lock()
-					msgReceived[partition] = len(confirmationStatus.ConfirmationStatus)
-					mutex.Unlock()
-				},
-			})
+				})})
+
+		go func(ch <-chan PartitionPublishConfirm) {
+			defer GinkgoRecover()
+			for superStreamPublishConfirm := range ch {
+				Expect(superStreamPublishConfirm).NotTo(BeNil())
+				for _, status := range superStreamPublishConfirm.ConfirmationStatus {
+					Expect(status).NotTo(BeNil())
+					Expect(status.IsConfirmed()).To(BeTrue())
+				}
+				mutex.Lock()
+				msgReceived[superStreamPublishConfirm.Partition] = len(superStreamPublishConfirm.ConfirmationStatus)
+				mutex.Unlock()
+			}
+
+		}(superProducer.NotifyPublishConfirmation())
 
 		Expect(err).To(BeNil())
 		Expect(superProducer).NotTo(BeNil())
@@ -170,21 +183,22 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		const superStream = "close-super-stream-producer"
 		var closedMap = make(map[string]bool)
 		mutex := sync.Mutex{}
-		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
-		superProducer, err := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
-			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
+		superProducer, err := newSuperStreamProducer(env, superStream, NewSuperStreamProducerOptions(
+			NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
 				return message.GetApplicationProperties()["routingKey"].(string)
-			}),
-			HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
+			})))
 
-			},
-			HandlePartitionClose: func(partition string, event Event, context PartitionContext) {
+		go func(ch <-chan PartitionClose) {
+			defer GinkgoRecover()
+			for chq := range ch {
 				mutex.Lock()
-				defer mutex.Unlock()
-				Expect(event.Reason).To(Equal("deletePublisher"))
-				closedMap[partition] = true
-			},
-		})
+				Expect(chq.Event.Reason).To(Equal("deletePublisher"))
+				closedMap[chq.Partition] = true
+				mutex.Unlock()
+			}
+
+		}(superProducer.NotifyPartitionClose())
 
 		Expect(superProducer).NotTo(BeNil())
 		Expect(err).To(BeNil())
@@ -201,11 +215,14 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 	})
 
 	It("should handle reconnect the producer for the partition ", func() {
+		// The scope is to test the reconnection of the producer
+		// with context PartitionContext
+
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		const superStream = "reconnect-super-stream-producer"
 
-		Expect(env.DeclareSuperStream(superStream, NewPartitionsSuperStreamOptions(3))).NotTo(HaveOccurred())
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 		var reconnectedMap = make(map[string]bool)
 		mutex := sync.Mutex{}
@@ -213,25 +230,28 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
 				return message.GetApplicationProperties()["routingKey"].(string)
 			}),
-			HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
 
-			},
-			HandlePartitionClose: func(partition string, event Event, context PartitionContext) {
-				defer GinkgoRecover()
-				mutex.Lock()
-				defer mutex.Unlock()
-				if event.Reason == SocketClosed {
-					time.Sleep(2 * time.Second)
-					Expect(context.ConnectPartition(partition)).NotTo(HaveOccurred())
-					time.Sleep(1 * time.Second)
-					reconnectedMap[partition] = true
-				}
-			},
 			ClientProvidedName: "reconnect-super-stream-producer",
 		})
 		Expect(superProducer).NotTo(BeNil())
 		Expect(err).To(BeNil())
 		Expect(superProducer.init()).NotTo(HaveOccurred())
+
+		go func(ch <-chan PartitionClose) {
+			defer GinkgoRecover()
+			for chq := range ch {
+				if chq.Event.Reason == SocketClosed {
+					time.Sleep(2 * time.Second)
+					Expect(chq.Context.ConnectPartition(chq.Partition)).NotTo(HaveOccurred())
+					time.Sleep(1 * time.Second)
+					mutex.Lock()
+					reconnectedMap[chq.Partition] = true
+					mutex.Unlock()
+
+				}
+			}
+
+		}(superProducer.NotifyPartitionClose())
 
 		time.Sleep(3 * time.Second)
 		Eventually(func() error {
@@ -257,7 +277,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 	It("should return three key partitions with query route", func() {
 
-		options := NewBindingsSuperStreamOptions([]string{"italy", "spain", "france"})
+		options := NewBindingsOptions([]string{"italy", "spain", "france"})
 		Expect(options).NotTo(BeNil())
 		Expect(options.getBindingKeys()).To(HaveLen(3))
 		Expect(options.getBindingKeys()).To(ConsistOf("italy", "spain", "france"))
@@ -265,7 +285,12 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		const superStream = "key-super-stream-producer"
-		Expect(env.DeclareSuperStream(superStream, options)).NotTo(HaveOccurred())
+		Expect(env.DeclareSuperStream(superStream, options.
+			SetMaxSegmentSizeBytes(ByteCapacity{}.GB(1)).
+			SetMaxAge(3*time.Hour).
+			SetLeaderLocator("balanced").
+			SetMaxLengthBytes(ByteCapacity{}.KB(1024))),
+		).NotTo(HaveOccurred())
 		client, err := env.newReconnectClient()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(client).NotTo(BeNil())
@@ -312,18 +337,22 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 	})
 
 	It("should confirm 6 messages and 1 unRouted", func() {
+		// Messages confirmed and unRouted
+		// send 3 messages that will be routed to the correct partitions
+		// and one message with the wrong key
+
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 		const superStream = "key-super-stream-producer-with-3-keys"
 		countries := []string{"italy", "france", "spain"}
 		Expect(env.DeclareSuperStream(superStream,
-			NewBindingsSuperStreamOptions(countries))).NotTo(HaveOccurred())
+			NewBindingsOptions(countries))).NotTo(HaveOccurred())
 
 		messagesRouted := make(map[string]int)
 		messagesUnRouted := 0
 		mutex := sync.Mutex{}
-		superProducer, err := env.NewSuperStreamProducer(superStream, &SuperStreamProducerOptions{
-			RoutingStrategy: NewKeyRoutingStrategy(
+		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
+			NewKeyRoutingStrategy(
 				func(message message.StreamMessage) string {
 					return message.GetApplicationProperties()["county"].(string)
 				}, func(message message.StreamMessage, cause error) {
@@ -333,12 +362,21 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 					messagesUnRouted++
 					mutex.Unlock()
 				}),
-			HandleSuperStreamConfirmation: func(partition string, confirmationStatus *SuperStreamPublishConfirm) {
+		))
+
+		go func(ch <-chan PartitionPublishConfirm) {
+			defer GinkgoRecover()
+			for superStreamPublishConfirm := range ch {
+				Expect(superStreamPublishConfirm).NotTo(BeNil())
+				for _, status := range superStreamPublishConfirm.ConfirmationStatus {
+					Expect(status).NotTo(BeNil())
+					Expect(status.IsConfirmed()).To(BeTrue())
+				}
 				mutex.Lock()
-				defer mutex.Unlock()
-				messagesRouted[partition] += len(confirmationStatus.ConfirmationStatus)
-			},
-		})
+				messagesRouted[superStreamPublishConfirm.Partition] += len(superStreamPublishConfirm.ConfirmationStatus)
+				mutex.Unlock()
+			}
+		}(superProducer.NotifyPublishConfirmation())
 
 		for _, country := range countries {
 			msg := amqp.NewMessage(make([]byte, 0))
@@ -347,7 +385,6 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			// two times the same country in this way we use the cached map
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
-
 		msg := amqp.NewMessage(make([]byte, 0))
 		msg.ApplicationProperties = map[string]interface{}{"county": "this_country_does_not_exist"}
 		Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
@@ -360,6 +397,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			Eventually(func() int {
 				mutex.Lock()
 				defer mutex.Unlock()
+				// validate if the messages are confirmed in the correct partition
 				return messagesRouted[fmt.Sprintf("%s-%s", superStream, country)]
 			}, 300*time.Millisecond).Should(Equal(2))
 		}

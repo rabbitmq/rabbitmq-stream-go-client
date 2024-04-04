@@ -36,7 +36,7 @@ type SuperStreamOptions interface {
 	getArgs() map[string]string
 }
 
-type PartitionsSuperStreamOptions struct {
+type PartitionsOptions struct {
 	Partitions          int
 	MaxAge              time.Duration
 	MaxLengthBytes      *ByteCapacity
@@ -45,34 +45,34 @@ type PartitionsSuperStreamOptions struct {
 	args                map[string]string
 }
 
-func NewPartitionsSuperStreamOptions(partitions int) *PartitionsSuperStreamOptions {
-	return &PartitionsSuperStreamOptions{
+func NewPartitionsOptions(partitions int) *PartitionsOptions {
+	return &PartitionsOptions{
 		Partitions: partitions,
 		args:       make(map[string]string),
 	}
 }
 
-func (t *PartitionsSuperStreamOptions) SetMaxAge(maxAge time.Duration) *PartitionsSuperStreamOptions {
+func (t *PartitionsOptions) SetMaxAge(maxAge time.Duration) *PartitionsOptions {
 	t.MaxAge = maxAge
 	return t
 }
 
-func (t *PartitionsSuperStreamOptions) SetMaxLengthBytes(maxLengthBytes *ByteCapacity) *PartitionsSuperStreamOptions {
+func (t *PartitionsOptions) SetMaxLengthBytes(maxLengthBytes *ByteCapacity) *PartitionsOptions {
 	t.MaxLengthBytes = maxLengthBytes
 	return t
 }
 
-func (t *PartitionsSuperStreamOptions) SetMaxSegmentSizeBytes(maxSegmentSizeBytes *ByteCapacity) *PartitionsSuperStreamOptions {
+func (t *PartitionsOptions) SetMaxSegmentSizeBytes(maxSegmentSizeBytes *ByteCapacity) *PartitionsOptions {
 	t.MaxSegmentSizeBytes = maxSegmentSizeBytes
 	return t
 }
 
-func (t *PartitionsSuperStreamOptions) SetLeaderLocator(leaderLocator string) *PartitionsSuperStreamOptions {
+func (t *PartitionsOptions) SetLeaderLocator(leaderLocator string) *PartitionsOptions {
 	t.LeaderLocator = leaderLocator
 	return t
 }
 
-func (t *PartitionsSuperStreamOptions) getPartitions(prefix string) []string {
+func (t *PartitionsOptions) getPartitions(prefix string) []string {
 	var partitions []string
 	for i := 0; i < t.Partitions; i++ {
 		partitions = append(partitions, fmt.Sprintf("%s-%d", prefix, i))
@@ -81,7 +81,7 @@ func (t *PartitionsSuperStreamOptions) getPartitions(prefix string) []string {
 	return partitions
 }
 
-func (t *PartitionsSuperStreamOptions) getBindingKeys() []string {
+func (t *PartitionsOptions) getBindingKeys() []string {
 	var bindingKeys []string
 	for i := 0; i < t.Partitions; i++ {
 		bindingKeys = append(bindingKeys, fmt.Sprintf("%d", i))
@@ -89,7 +89,7 @@ func (t *PartitionsSuperStreamOptions) getBindingKeys() []string {
 	return bindingKeys
 }
 
-func (t *PartitionsSuperStreamOptions) getArgs() map[string]string {
+func (t *PartitionsOptions) getArgs() map[string]string {
 	if t.MaxAge > 0 {
 		t.args[maxAge] = fmt.Sprintf("%ds", int(t.MaxAge.Seconds()))
 	}
@@ -105,7 +105,7 @@ func (t *PartitionsSuperStreamOptions) getArgs() map[string]string {
 	return t.args
 }
 
-type BindingsSuperStreamOptions struct {
+type BindingsOptions struct {
 	Bindings            []string
 	MaxAge              time.Duration
 	MaxLengthBytes      *ByteCapacity
@@ -114,34 +114,34 @@ type BindingsSuperStreamOptions struct {
 	args                map[string]string
 }
 
-func NewBindingsSuperStreamOptions(bindings []string) *BindingsSuperStreamOptions {
-	return &BindingsSuperStreamOptions{
+func NewBindingsOptions(bindings []string) *BindingsOptions {
+	return &BindingsOptions{
 		Bindings: bindings,
 		args:     make(map[string]string),
 	}
 }
 
-func (t *BindingsSuperStreamOptions) SetMaxAge(maxAge time.Duration) *BindingsSuperStreamOptions {
+func (t *BindingsOptions) SetMaxAge(maxAge time.Duration) *BindingsOptions {
 	t.MaxAge = maxAge
 	return t
 }
 
-func (t *BindingsSuperStreamOptions) SetMaxLengthBytes(maxLengthBytes *ByteCapacity) *BindingsSuperStreamOptions {
+func (t *BindingsOptions) SetMaxLengthBytes(maxLengthBytes *ByteCapacity) *BindingsOptions {
 	t.MaxLengthBytes = maxLengthBytes
 	return t
 }
 
-func (t *BindingsSuperStreamOptions) SetMaxSegmentSizeBytes(maxSegmentSizeBytes *ByteCapacity) *BindingsSuperStreamOptions {
+func (t *BindingsOptions) SetMaxSegmentSizeBytes(maxSegmentSizeBytes *ByteCapacity) *BindingsOptions {
 	t.MaxSegmentSizeBytes = maxSegmentSizeBytes
 	return t
 }
 
-func (t *BindingsSuperStreamOptions) SetLeaderLocator(leaderLocator string) *BindingsSuperStreamOptions {
+func (t *BindingsOptions) SetLeaderLocator(leaderLocator string) *BindingsOptions {
 	t.LeaderLocator = leaderLocator
 	return t
 }
 
-func (t *BindingsSuperStreamOptions) getPartitions(prefix string) []string {
+func (t *BindingsOptions) getPartitions(prefix string) []string {
 	var partitions []string
 	for _, bindingKey := range t.Bindings {
 		partitions = append(partitions, fmt.Sprintf("%s-%s", prefix, bindingKey))
@@ -149,11 +149,11 @@ func (t *BindingsSuperStreamOptions) getPartitions(prefix string) []string {
 	return partitions
 }
 
-func (t *BindingsSuperStreamOptions) getBindingKeys() []string {
+func (t *BindingsOptions) getBindingKeys() []string {
 	return t.Bindings
 }
 
-func (t *BindingsSuperStreamOptions) getArgs() map[string]string {
+func (t *BindingsOptions) getArgs() map[string]string {
 	if t.MaxAge > 0 {
 		t.args[maxAge] = fmt.Sprintf("%ds", int(t.MaxAge.Seconds()))
 	}

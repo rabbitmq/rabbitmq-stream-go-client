@@ -2,9 +2,11 @@ package stream
 
 import (
 	"fmt"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/spaolacci/murmur3"
 	"sync"
+	"time"
 )
 
 const SEED = 104729
@@ -30,7 +32,7 @@ func (h *HashRoutingMurmurStrategy) Route(message message.StreamMessage, partiti
 
 	key := h.RoutingKeyExtractor(message)
 	murmurHash := murmur3.New32WithSeed(SEED)
-	murmurHash.Write([]byte(key))
+	_, _ = murmurHash.Write([]byte(key))
 	murmurHash.Sum32()
 	index := murmurHash.Sum32() % uint32(len(partitions))
 	return []string{partitions[index]}
@@ -66,7 +68,7 @@ func (k *KeyRoutingStrategy) SetRouteParameters(superStream string, queryRoute f
 
 func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []string) []string {
 	key := k.RoutingKeyExtractor(message)
-	routing := []string{}
+	var routing []string
 	if k.cacheRouting[key] != nil {
 		routing = append(routing, k.cacheRouting[key]...)
 	} else {
@@ -92,19 +94,33 @@ func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []s
 
 // end of KeyRoutingStrategy
 
-type HandleSuperStreamConfirmation = func(partition string, confirmationStatus *SuperStreamPublishConfirm)
-type HandlePartitionClose = func(partition string, event Event, context PartitionContext)
-
 type SuperStreamProducerOptions struct {
-	RoutingStrategy               RoutingStrategy
-	HandleSuperStreamConfirmation HandleSuperStreamConfirmation
-	HandlePartitionClose          HandlePartitionClose
-	ClientProvidedName            string
+	RoutingStrategy    RoutingStrategy
+	ClientProvidedName string
 }
 
-type SuperStreamPublishConfirm struct {
+// these values are mandatory
+
+func NewSuperStreamProducerOptions(routingStrategy RoutingStrategy) *SuperStreamProducerOptions {
+	return &SuperStreamProducerOptions{
+		RoutingStrategy: routingStrategy,
+	}
+}
+
+func (o SuperStreamProducerOptions) SetClientProvidedName(clientProvidedName string) *SuperStreamProducerOptions {
+	o.ClientProvidedName = clientProvidedName
+	return &o
+}
+
+type PartitionPublishConfirm struct {
 	Partition          string
 	ConfirmationStatus []*ConfirmationStatus
+}
+
+type PartitionClose struct {
+	Partition string
+	Event     Event
+	Context   PartitionContext
 }
 
 type PartitionContext interface {
@@ -112,11 +128,13 @@ type PartitionContext interface {
 }
 
 type SuperStreamProducer struct {
-	producers                  []*Producer
-	env                        *Environment
-	mutex                      sync.Mutex
-	SuperStream                string
-	SuperStreamProducerOptions *SuperStreamProducerOptions
+	producers                   []*Producer
+	env                         *Environment
+	mutex                       sync.Mutex
+	SuperStream                 string
+	SuperStreamProducerOptions  *SuperStreamProducerOptions
+	chNotifyPublishConfirmation chan PartitionPublishConfirm
+	chSuperStreamPartitionClose chan PartitionClose
 }
 
 func newSuperStreamProducer(env *Environment, superStream string, superStreamProducerOptions *SuperStreamProducerOptions) (*SuperStreamProducer, error) {
@@ -133,15 +151,12 @@ func newSuperStreamProducer(env *Environment, superStream string, superStreamPro
 		return nil, ErrSuperStreamProducerOptionsNotDefined
 	}
 
-	if superStreamProducerOptions.HandleSuperStreamConfirmation == nil {
-		return nil, ErrSuperStreamProducerOptionsNotDefined
-	}
-
 	if superStream == "" || containsOnlySpaces(superStream) {
 
 		return nil, fmt.Errorf("super Stream Name can't be empty")
 	}
 
+	logs.LogDebug("Creating a SuperStreamProducer for: %s", superStream)
 	return &SuperStreamProducer{
 		producers:                  make([]*Producer, 0),
 		env:                        env,
@@ -187,11 +202,12 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 	}
 	s.mutex.Lock()
 	s.producers = append(s.producers, producer)
-	chNotifyPublishConfirmation := producer.NotifyPublishConfirmation()
+	chSingleStreamPublishConfirmation := producer.NotifyPublishConfirmation()
 	closedEvent := producer.NotifyClose()
 	s.mutex.Unlock()
 
 	go func(gpartion string, _closedEvent <-chan Event) {
+		logs.LogDebug("[SuperStreamProducer] chSuperStreamPartitionClose started for partition: %s", gpartion)
 		event := <-_closedEvent
 
 		s.mutex.Lock()
@@ -202,22 +218,43 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 			}
 		}
 		s.mutex.Unlock()
-		if s.SuperStreamProducerOptions.HandlePartitionClose != nil {
-			s.SuperStreamProducerOptions.HandlePartitionClose(gpartion, event, s)
+		if s.chSuperStreamPartitionClose != nil {
+			s.chSuperStreamPartitionClose <- PartitionClose{
+				Partition: gpartion,
+				Event:     event,
+				Context:   s,
+			}
 		}
 
+		logs.LogDebug("[SuperStreamProducer] chSuperStreamPartitionClose for partition: %s", gpartion)
 	}(partition, closedEvent)
 
 	go func(gpartion string, ch <-chan []*ConfirmationStatus) {
+		logs.LogDebug("[SuperStreamProducer] chNotifyPublishConfirmation started - partition: %s", gpartion)
 		for confirmed := range ch {
-			s.SuperStreamProducerOptions.HandleSuperStreamConfirmation(gpartion, &SuperStreamPublishConfirm{
-				Partition:          gpartion,
-				ConfirmationStatus: confirmed,
-			})
+			if s.chNotifyPublishConfirmation != nil {
+				s.chNotifyPublishConfirmation <- PartitionPublishConfirm{
+					Partition:          gpartion,
+					ConfirmationStatus: confirmed,
+				}
+			}
 		}
-	}(partition, chNotifyPublishConfirmation)
+		logs.LogDebug("[SuperStreamProducer] chNotifyPublishConfirmation closed - partition: %s", gpartion)
+	}(partition, chSingleStreamPublishConfirmation)
 
 	return nil
+}
+
+func (s *SuperStreamProducer) NotifyPublishConfirmation() chan PartitionPublishConfirm {
+	ch := make(chan PartitionPublishConfirm, 1)
+	s.chNotifyPublishConfirmation = ch
+	return ch
+}
+
+func (s *SuperStreamProducer) NotifyPartitionClose() chan PartitionClose {
+	ch := make(chan PartitionClose, 1)
+	s.chSuperStreamPartitionClose = ch
+	return ch
 }
 
 func (s *SuperStreamProducer) GetPartitions() []string {
@@ -269,6 +306,7 @@ func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
 }
 
 func (s *SuperStreamProducer) Close() error {
+	logs.LogDebug("Closing a SuperStreamProducer for: %s", s.SuperStream)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	for len(s.producers) > 0 {
@@ -278,5 +316,17 @@ func (s *SuperStreamProducer) Close() error {
 		}
 		s.producers = s.producers[1:]
 	}
+
+	// give the time to raise the close event
+	go func() {
+		time.Sleep(2 * time.Second)
+		if s.chNotifyPublishConfirmation != nil {
+			close(s.chNotifyPublishConfirmation)
+		}
+		if s.chSuperStreamPartitionClose != nil {
+			close(s.chSuperStreamPartitionClose)
+		}
+	}()
+	logs.LogDebug("Closed SuperStreamProducer for: %s", s.SuperStream)
 	return nil
 }

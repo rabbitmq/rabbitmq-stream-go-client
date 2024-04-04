@@ -111,7 +111,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		err = client.DeclareSuperStream("go-my_super_stream_with_query_partitions",
-			NewPartitionsSuperStreamOptions(3))
+			NewPartitionsOptions(3))
 		Expect(err).NotTo(HaveOccurred())
 
 		partitions, err := client.QueryPartitions("go-my_super_stream_with_query_partitions")
@@ -138,7 +138,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 	It("Create Super stream with 3 Partitions and delete it with env", Label("super-stream"), func() {
 
 		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_3_partitions",
-			NewPartitionsSuperStreamOptions(3))
+			NewPartitionsOptions(3))
 		Expect(err).NotTo(HaveOccurred())
 
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_3_partitions")
@@ -147,7 +147,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 
 	It("Create Super stream with 2 partitions and other parameters", Label("super-stream"), func() {
 		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions_and_parameters",
-			NewPartitionsSuperStreamOptions(2).
+			NewPartitionsOptions(2).
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
@@ -156,7 +156,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 
 		// In this case we ignore that the stream already exists
 		err = testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions_and_parameters",
-			NewPartitionsSuperStreamOptions(2).
+			NewPartitionsOptions(2).
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
@@ -172,7 +172,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 
 	It("Create Super stream with 3 keys and other parameters", Label("super-stream"), func() {
 		err := testEnvironment.DeclareSuperStream("go-countries",
-			NewBindingsSuperStreamOptions([]string{"italy", "spain", "france"}).
+			NewBindingsOptions([]string{"italy", "spain", "france"}).
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
@@ -181,7 +181,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 
 		// In this case we ignore that the stream already exists
 		err = testEnvironment.DeclareSuperStream("go-countries",
-			NewBindingsSuperStreamOptions([]string{"italy", "spain", "france"}).
+			NewBindingsOptions([]string{"italy", "spain", "france"}).
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
