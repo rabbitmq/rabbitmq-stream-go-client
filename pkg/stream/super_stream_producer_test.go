@@ -7,9 +7,26 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test_helper"
+	"math/rand"
 	"sync"
 	"time"
 )
+
+type TestingRandomStrategy struct {
+}
+
+func (r *TestingRandomStrategy) Route(_ message.StreamMessage, partitions []string) []string {
+	return []string{partitions[rand.Intn(len(partitions))]}
+}
+
+// not used
+func (r *TestingRandomStrategy) SetRouteParameters(_ string, _ func(superStream string, routingKey string) ([]string, error)) {
+
+}
+
+func NewTestingRandomStrategy() *TestingRandomStrategy {
+	return &TestingRandomStrategy{}
+}
 
 var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
@@ -20,7 +37,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		// The aim for this test is to validate the correct routing with the same keys
 		func(key string, partition string) {
 
-			routingMurmur := NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+			routingMurmur := NewHashRoutingStrategy(func(message message.StreamMessage) string {
 				return message.GetApplicationProperties()["routingKey"].(string)
 			})
 			Expect(routingMurmur).NotTo(BeNil())
@@ -87,20 +104,20 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		const superStream = "first-super-stream-producer"
 		Expect(env.DeclareSuperStream(superStream,
 			NewPartitionsOptions(3).
-				SetLeaderLocator("balanced").
+				SetBalancedLeaderLocator().
 				SetMaxAge(3*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(1024)),
 		)).NotTo(HaveOccurred())
 		superProducer, err := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
-			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+			RoutingStrategy: NewHashRoutingStrategy(func(message message.StreamMessage) string {
 				return message.GetApplicationProperties()["routingKey"].(string)
 			}),
 		})
 		Expect(err).To(BeNil())
 		Expect(superProducer).NotTo(BeNil())
 		Expect(superProducer.init()).NotTo(HaveOccurred())
-		Expect(superProducer.producers).To(HaveLen(3))
+		Expect(superProducer.activeProducers).To(HaveLen(3))
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
@@ -122,7 +139,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 		superProducer, err := newSuperStreamProducer(env, superStream,
 			&SuperStreamProducerOptions{
-				RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+				RoutingStrategy: NewHashRoutingStrategy(func(message message.StreamMessage) string {
 					return message.GetApplicationProperties()["routingKey"].(string)
 				})})
 
@@ -144,7 +161,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(err).To(BeNil())
 		Expect(superProducer).NotTo(BeNil())
 		Expect(superProducer.init()).NotTo(HaveOccurred())
-		Expect(superProducer.producers).To(HaveLen(3))
+		Expect(superProducer.activeProducers).To(HaveLen(3))
 
 		for i := 0; i < 20; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
@@ -183,9 +200,11 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		const superStream = "close-super-stream-producer"
 		var closedMap = make(map[string]bool)
 		mutex := sync.Mutex{}
-		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
+		Expect(env.DeclareSuperStream(superStream,
+			NewPartitionsOptions(3).
+				SetClientLocalLocator())).NotTo(HaveOccurred())
 		superProducer, err := newSuperStreamProducer(env, superStream, NewSuperStreamProducerOptions(
-			NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+			NewHashRoutingStrategy(func(message message.StreamMessage) string {
 				return message.GetApplicationProperties()["routingKey"].(string)
 			})))
 
@@ -203,13 +222,13 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(superProducer).NotTo(BeNil())
 		Expect(err).To(BeNil())
 		Expect(superProducer.init()).NotTo(HaveOccurred())
-		Expect(superProducer.producers).To(HaveLen(3))
+		Expect(superProducer.activeProducers).To(HaveLen(3))
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 
 		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return len(closedMap) == 3 },
 			300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
 
-		Expect(superProducer.producers).To(HaveLen(0))
+		Expect(superProducer.activeProducers).To(HaveLen(0))
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
@@ -222,12 +241,13 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(err).NotTo(HaveOccurred())
 		const superStream = "reconnect-super-stream-producer"
 
-		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3).
+			SetBalancedLeaderLocator())).NotTo(HaveOccurred())
 
 		var reconnectedMap = make(map[string]bool)
 		mutex := sync.Mutex{}
 		superProducer, err := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
-			RoutingStrategy: NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+			RoutingStrategy: NewHashRoutingStrategy(func(message message.StreamMessage) string {
 				return message.GetApplicationProperties()["routingKey"].(string)
 			}),
 
@@ -288,7 +308,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(env.DeclareSuperStream(superStream, options.
 			SetMaxSegmentSizeBytes(ByteCapacity{}.GB(1)).
 			SetMaxAge(3*time.Hour).
-			SetLeaderLocator("balanced").
+			SetBalancedLeaderLocator().
 			SetMaxLengthBytes(ByteCapacity{}.KB(1024))),
 		).NotTo(HaveOccurred())
 		client, err := env.newReconnectClient()
@@ -406,6 +426,33 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("Implement custom routing strategy", func() {
+
+		// TestingRandomStrategy is a custom routing strategy
+
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		const superStream = "custom-routing-strategy"
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
+
+		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
+			NewTestingRandomStrategy(),
+		))
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(superProducer).NotTo(BeNil())
+
+		for i := 0; i < 10; i++ {
+			msg := amqp.NewMessage(make([]byte, 0))
+			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
 	})
 
 })

@@ -22,8 +22,8 @@ func CheckErr(err error) {
 	}
 }
 func main() {
-
-	fmt.Println("Super stream example")
+	// Example for super stream with partitions
+	fmt.Println("Super stream example - partitions")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 	stream.SetLevelInfo(logs.DEBUG)
 
@@ -46,13 +46,14 @@ func main() {
 		// the partitions strategy is mandatory
 		// can be partition or by key ( see BindingsOptions)
 		// In this case we create a super stream with 3 partitions
-		stream.NewPartitionsOptions(3))
+		stream.NewPartitionsOptions(3).
+			SetMaxLengthBytes(stream.ByteCapacity{}.GB(3)))
 	CheckErr(err)
 
 	// Create a superStreamProducer
 	superStreamProducer, err := env.NewSuperStreamProducer(superStreamName,
 		stream.NewSuperStreamProducerOptions(
-			stream.NewHashRoutingMurmurStrategy(func(message message.StreamMessage) string {
+			stream.NewHashRoutingStrategy(func(message message.StreamMessage) string {
 				// here the code must fast and be safe
 				// The code evaluation is before sending the message
 				return message.GetApplicationProperties()["myKey"].(string)
@@ -74,6 +75,7 @@ func main() {
 				fmt.Printf("Partition %s closed unexpectedly! Reconnecting in %v seconds..\n", partitionCloseEvent.Partition, sleepValue)
 				time.Sleep(time.Duration(sleepValue) * time.Second)
 				err := partitionCloseEvent.Context.ConnectPartition(partitionCloseEvent.Partition)
+				// tries only one time. Good for testing not enough for real use case
 				CheckErr(err)
 				fmt.Printf("Partition %s reconnected.\n", partitionCloseEvent.Partition)
 			}
@@ -90,6 +92,10 @@ func main() {
 						superStreamPublishConfirm.Partition,
 						atomic.AddInt32(&confirmed, 1))
 				} else {
+					// here you should store the message in another list and try again
+					// like unConfirmed.append(msg...) messages ...
+					// In this example we won't handle it to leave it simple
+					// the messages can't be stored for different reasons ( see the ConfirmationStatus for more details)
 					fmt.Printf("Message failed to be stored in partition %s\n", superStreamPublishConfirm.Partition)
 				}
 			}
@@ -97,11 +103,25 @@ func main() {
 	}(superStreamProducer.NotifyPublishConfirmation())
 
 	// Publish messages
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 500; i++ {
 		msg := amqp.NewMessage(make([]byte, 0))
 		msg.ApplicationProperties = map[string]interface{}{"myKey": fmt.Sprintf("key_%d", i)}
 		err = superStreamProducer.Send(msg)
-		CheckErr(err)
+		if errors.Is(err, stream.ErrProducerNotFound) {
+			// that's can be a temp situation.
+			// maybe the producer is in reconnection due of unexpected disconnection
+			// it is up to the user to decide what to do.
+			// In this can we can ignore the log and continue to send messages
+			logs.LogError("can't send the message ... the producer was not found")
+			// here you should store the message in another list and try again
+			// like unConfirmed.append(msg...) messages ...
+			// In this example we won't handle it to leave it simple
+			// like the superStreamPublishConfirm event for  messages
+		} else {
+			CheckErr(err)
+		}
+
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	reader := bufio.NewReader(os.Stdin)

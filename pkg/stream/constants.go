@@ -112,8 +112,10 @@ const (
 	defaultConfirmationTimeOut  = 10 * time.Second
 	//
 
-	SocketClosed   = "socket client closed"
-	MetaDataUpdate = "metadata Data update"
+	SocketClosed             = "socket client closed"
+	MetaDataUpdate           = "metadata Data update"
+	LeaderLocatorBalanced    = "balanced"
+	LeaderLocatorClientLocal = "client-local"
 
 	StreamTcpPort = "5552"
 

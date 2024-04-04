@@ -9,26 +9,41 @@ import (
 	"time"
 )
 
-const SEED = 104729
+// The base interface for routing strategies
+// The client is shipped with two routing strategies:
+// - HashRoutingStrategy
+// - KeyRoutingStrategy
+// The user can implement its own routing strategy by implementing this interface.
+// In most of the cases these two strategies are enough.
+// See the test: Implement custom routing strategy in case you need to implement a custom routing strategy
 
 type RoutingStrategy interface {
+	//Route Based on the message and the partitions the routing strategy returns the partitions where the message should be sent
+	// It could be zero, one or more partitions
 	Route(message message.StreamMessage, partitions []string) []string
+
+	// SetRouteParameters is useful for the routing key strategies to set the query route function
+	// or in general to set the parameters needed by the routing strategy
 	SetRouteParameters(superStream string, queryRoute func(superStream string, routingKey string) ([]string, error))
 }
 
 // HashRoutingMurmurStrategy is a routing strategy that uses the murmur3 hash function
 
-type HashRoutingMurmurStrategy struct {
+// DON'T Touch this value. It makes the hash compatible with the Java/.Net/Python client
+
+const SEED = 104729
+
+type HashRoutingStrategy struct {
 	RoutingKeyExtractor func(message message.StreamMessage) string
 }
 
-func NewHashRoutingMurmurStrategy(routingKeyExtractor func(message message.StreamMessage) string) *HashRoutingMurmurStrategy {
-	return &HashRoutingMurmurStrategy{
+func NewHashRoutingStrategy(routingKeyExtractor func(message message.StreamMessage) string) *HashRoutingStrategy {
+	return &HashRoutingStrategy{
 		RoutingKeyExtractor: routingKeyExtractor,
 	}
 }
 
-func (h *HashRoutingMurmurStrategy) Route(message message.StreamMessage, partitions []string) []string {
+func (h *HashRoutingStrategy) Route(message message.StreamMessage, partitions []string) []string {
 
 	key := h.RoutingKeyExtractor(message)
 	murmurHash := murmur3.New32WithSeed(SEED)
@@ -37,19 +52,22 @@ func (h *HashRoutingMurmurStrategy) Route(message message.StreamMessage, partiti
 	index := murmurHash.Sum32() % uint32(len(partitions))
 	return []string{partitions[index]}
 }
-func (h *HashRoutingMurmurStrategy) SetRouteParameters(_ string, _ func(superStream string, routingKey string) ([]string, error)) {
+func (h *HashRoutingStrategy) SetRouteParameters(_ string, _ func(superStream string, routingKey string) ([]string, error)) {
 }
 
 // end of HashRoutingMurmurStrategy
 
 // KeyRoutingStrategy is a routing strategy that uses the key of the message
-
 type KeyRoutingStrategy struct {
+	// provided by the user to define the key based on a message
 	RoutingKeyExtractor func(message message.StreamMessage) string
-	UnRoutedMessage     func(message message.StreamMessage, cause error)
-	queryRoute          func(superStream string, routingKey string) ([]string, error)
-	superStream         string
-	cacheRouting        map[string][]string
+
+	// event called when the message is not routed. The user should implement this event
+	// to keep track of the messages that are not routed
+	UnRoutedMessage func(message message.StreamMessage, cause error)
+	queryRoute      func(superStream string, routingKey string) ([]string, error)
+	superStream     string
+	cacheRouting    map[string][]string
 }
 
 func NewKeyRoutingStrategy(
@@ -69,15 +87,19 @@ func (k *KeyRoutingStrategy) SetRouteParameters(superStream string, queryRoute f
 func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []string) []string {
 	key := k.RoutingKeyExtractor(message)
 	var routing []string
+	// check if the routing is already in cache.
+	// Cache is useful to avoid multiple queries for the same key
+	// so only the first message with a key will be queried
 	if k.cacheRouting[key] != nil {
 		routing = append(routing, k.cacheRouting[key]...)
 	} else {
 		r, err := k.queryRoute(k.superStream, key)
-		routing = append(routing, r...)
 		if err != nil {
+			// The message is not routed due of an error in the queryRoute
 			k.UnRoutedMessage(message, err)
 			return nil
 		}
+		routing = append(routing, r...)
 		k.cacheRouting[key] = routing
 	}
 
@@ -88,6 +110,10 @@ func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []s
 			}
 		}
 	}
+
+	// The message is not routed since does not have a partition based on the key
+	// It can happen if the key selected is not in the routing table
+	// differently from the hash strategy the key strategy can have zero partitions
 	k.UnRoutedMessage(message, fmt.Errorf("no partition found for key %s", key))
 	return nil
 }
@@ -99,8 +125,8 @@ type SuperStreamProducerOptions struct {
 	ClientProvidedName string
 }
 
-// these values are mandatory
-
+// NewSuperStreamProducerOptions creates a new SuperStreamProducerOptions
+// The RoutingStrategy is mandatory
 func NewSuperStreamProducerOptions(routingStrategy RoutingStrategy) *SuperStreamProducerOptions {
 	return &SuperStreamProducerOptions{
 		RoutingStrategy: routingStrategy,
@@ -112,29 +138,45 @@ func (o SuperStreamProducerOptions) SetClientProvidedName(clientProvidedName str
 	return &o
 }
 
+// PartitionPublishConfirm is a struct that is used to notify the user when a message is confirmed or not per partition
+// The user can use the NotifyPublishConfirmation to get the channel
 type PartitionPublishConfirm struct {
 	Partition          string
 	ConfirmationStatus []*ConfirmationStatus
 }
 
+// PartitionClose is a struct that is used to notify the user when a partition is closed
+// The user can use the NotifyPartitionClose to get the channel
 type PartitionClose struct {
 	Partition string
 	Event     Event
 	Context   PartitionContext
 }
 
+// PartitionContext is an interface that is used to expose partition information and methods
+// to the user. The user can use the PartitionContext to reconnect a partition to the SuperStreamProducer
 type PartitionContext interface {
 	ConnectPartition(partition string) error
 }
 
 type SuperStreamProducer struct {
-	producers                   []*Producer
+	// Only the active producers are stored here
+	activeProducers []*Producer
+	// we need to copy the partitions here since the
+	//activeProducers is only the producers active
+	// in a normal situation len(partitions) == len(activeProducers)
+	// but in case of disconnection the len(partitions) can be > len(activeProducers)
+	// since the producer is in reconnection
+	partitions []string
+
 	env                         *Environment
 	mutex                       sync.Mutex
-	SuperStream                 string
-	SuperStreamProducerOptions  *SuperStreamProducerOptions
 	chNotifyPublishConfirmation chan PartitionPublishConfirm
 	chSuperStreamPartitionClose chan PartitionClose
+
+	// public
+	SuperStream                string
+	SuperStreamProducerOptions *SuperStreamProducerOptions
 }
 
 func newSuperStreamProducer(env *Environment, superStream string, superStreamProducerOptions *SuperStreamProducerOptions) (*SuperStreamProducer, error) {
@@ -158,7 +200,7 @@ func newSuperStreamProducer(env *Environment, superStream string, superStreamPro
 
 	logs.LogDebug("Creating a SuperStreamProducer for: %s", superStream)
 	return &SuperStreamProducer{
-		producers:                  make([]*Producer, 0),
+		activeProducers:            make([]*Producer, 0),
 		env:                        env,
 		SuperStream:                superStream,
 		SuperStreamProducerOptions: superStreamProducerOptions,
@@ -167,8 +209,11 @@ func newSuperStreamProducer(env *Environment, superStream string, superStreamPro
 }
 
 func (s *SuperStreamProducer) init() error {
+	// set the routing strategy parameters
 	s.SuperStreamProducerOptions.RoutingStrategy.SetRouteParameters(s.SuperStream, s.env.QueryRoute)
+
 	partitions, err := s.env.QueryPartitions(s.SuperStream)
+	s.partitions = partitions
 	if err != nil {
 		return err
 	}
@@ -181,10 +226,15 @@ func (s *SuperStreamProducer) init() error {
 	return nil
 }
 
+// ConnectPartition connects a partition to the SuperStreamProducer part of PartitionContext interface
+// The super stream producer is a producer that can send messages to multiple partitions
+// that are hidden to the user.
+// with the ConnectPartition the user can re-connect a partition to the SuperStreamProducer
+// that should be used only in case of disconnection
 func (s *SuperStreamProducer) ConnectPartition(partition string) error {
-
+	logs.LogDebug("[SuperStreamProducer] ConnectPartition for partition: %s", partition)
 	s.mutex.Lock()
-	for _, producer := range s.producers {
+	for _, producer := range s.activeProducers {
 		if producer.GetStreamName() == partition {
 			return fmt.Errorf("partition %s already connected", partition)
 		}
@@ -201,7 +251,7 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		return err
 	}
 	s.mutex.Lock()
-	s.producers = append(s.producers, producer)
+	s.activeProducers = append(s.activeProducers, producer)
 	chSingleStreamPublishConfirmation := producer.NotifyPublishConfirmation()
 	closedEvent := producer.NotifyClose()
 	s.mutex.Unlock()
@@ -211,9 +261,9 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		event := <-_closedEvent
 
 		s.mutex.Lock()
-		for i := range s.producers {
-			if s.producers[i].GetStreamName() == gpartion {
-				s.producers = append(s.producers[:i], s.producers[i+1:]...)
+		for i := range s.activeProducers {
+			if s.activeProducers[i].GetStreamName() == gpartion {
+				s.activeProducers = append(s.activeProducers[:i], s.activeProducers[i+1:]...)
 				break
 			}
 		}
@@ -225,7 +275,6 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 				Context:   s,
 			}
 		}
-
 		logs.LogDebug("[SuperStreamProducer] chSuperStreamPartitionClose for partition: %s", gpartion)
 	}(partition, closedEvent)
 
@@ -245,12 +294,15 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 	return nil
 }
 
+// NotifyPublishConfirmation returns a channel that will be notified when a message is confirmed or not per partition
 func (s *SuperStreamProducer) NotifyPublishConfirmation() chan PartitionPublishConfirm {
 	ch := make(chan PartitionPublishConfirm, 1)
 	s.chNotifyPublishConfirmation = ch
 	return ch
 }
 
+// NotifyPartitionClose returns a channel that will be notified when a partition is closed
+// Event will give the reason of the close
 func (s *SuperStreamProducer) NotifyPartitionClose() chan PartitionClose {
 	ch := make(chan PartitionClose, 1)
 	s.chSuperStreamPartitionClose = ch
@@ -260,17 +312,13 @@ func (s *SuperStreamProducer) NotifyPartitionClose() chan PartitionClose {
 func (s *SuperStreamProducer) GetPartitions() []string {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	partitions := make([]string, 0)
-	for _, producer := range s.producers {
-		partitions = append(partitions, producer.GetStreamName())
-	}
-	return partitions
+	return s.partitions
 }
 
 func (s *SuperStreamProducer) getProducer(partition string) *Producer {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	for _, p := range s.producers {
+	for _, p := range s.activeProducers {
 		if p.GetStreamName() == partition {
 			return p
 		}
@@ -281,9 +329,10 @@ func (s *SuperStreamProducer) getProducer(partition string) *Producer {
 func (s *SuperStreamProducer) getProducers() []*Producer {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return s.producers
+	return s.activeProducers
 }
 
+// Send sends a message to the partitions based on the routing strategy
 func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
 	b, err := message.MarshalBinary()
 	if err != nil {
@@ -294,6 +343,11 @@ func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
 	for _, p := range ps {
 		producer := s.getProducer(p)
 		if producer == nil {
+			// the producer is not. It can happen if the tcp connection for the partition is dropped
+			// the user can reconnect the partition using the ConnectPartition
+			// The client returns an error. Even there could be other partitions where the message can be sent.
+			// but won't to that to break the expectation of the user. The routing should be always the same
+			// for the same message. The user has to handle the error and decide to send the message again
 			return ErrProducerNotFound
 		}
 
@@ -309,12 +363,12 @@ func (s *SuperStreamProducer) Close() error {
 	logs.LogDebug("Closing a SuperStreamProducer for: %s", s.SuperStream)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	for len(s.producers) > 0 {
-		err := s.producers[0].Close()
+	for len(s.activeProducers) > 0 {
+		err := s.activeProducers[0].Close()
 		if err != nil {
 			return err
 		}
-		s.producers = s.producers[1:]
+		s.activeProducers = s.activeProducers[1:]
 	}
 
 	// give the time to raise the close event

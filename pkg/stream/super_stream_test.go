@@ -146,12 +146,16 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 	})
 
 	It("Create Super stream with 2 partitions and other parameters", Label("super-stream"), func() {
+		// Test the creation of a super stream with 2 partitions and other parameters
+		// The declaration in this level is idempotent
+		// so declaring the same stream with the same parameters will not return an error
+
 		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions_and_parameters",
 			NewPartitionsOptions(2).
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
-				SetLeaderLocator("least-leaders"))
+				SetBalancedLeaderLocator())
 		Expect(err).NotTo(HaveOccurred())
 
 		// In this case we ignore that the stream already exists
@@ -160,12 +164,14 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
-				SetLeaderLocator("least-leaders"))
+				SetBalancedLeaderLocator())
 		Expect(err).NotTo(HaveOccurred())
 
+		// Delete the stream. Ok
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_2_partitions_and_parameters")
 		Expect(err).NotTo(HaveOccurred())
 
+		// Delete a not existing stream will return an error
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_2_partitions_and_parameters")
 		Expect(err).To(Equal(StreamDoesNotExist))
 	})
@@ -176,7 +182,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
-				SetLeaderLocator("least-leaders"))
+				SetBalancedLeaderLocator())
 		Expect(err).NotTo(HaveOccurred())
 
 		// In this case we ignore that the stream already exists
@@ -185,7 +191,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
-				SetLeaderLocator("least-leaders"))
+				SetClientLocalLocator())
 		Expect(err).NotTo(HaveOccurred())
 
 		err = testEnvironment.DeleteSuperStream("go-countries")

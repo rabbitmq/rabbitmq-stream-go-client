@@ -67,8 +67,13 @@ func (t *PartitionsOptions) SetMaxSegmentSizeBytes(maxSegmentSizeBytes *ByteCapa
 	return t
 }
 
-func (t *PartitionsOptions) SetLeaderLocator(leaderLocator string) *PartitionsOptions {
-	t.LeaderLocator = leaderLocator
+func (t *PartitionsOptions) SetBalancedLeaderLocator() *PartitionsOptions {
+	t.LeaderLocator = LeaderLocatorBalanced
+	return t
+}
+
+func (t *PartitionsOptions) SetClientLocalLocator() *PartitionsOptions {
+	t.LeaderLocator = LeaderLocatorClientLocal
 	return t
 }
 
@@ -136,8 +141,13 @@ func (t *BindingsOptions) SetMaxSegmentSizeBytes(maxSegmentSizeBytes *ByteCapaci
 	return t
 }
 
-func (t *BindingsOptions) SetLeaderLocator(leaderLocator string) *BindingsOptions {
-	t.LeaderLocator = leaderLocator
+func (t *BindingsOptions) SetBalancedLeaderLocator() *BindingsOptions {
+	t.LeaderLocator = LeaderLocatorBalanced
+	return t
+}
+
+func (t *BindingsOptions) SetClientLocalLocator() *BindingsOptions {
+	t.LeaderLocator = LeaderLocatorClientLocal
 	return t
 }
 
