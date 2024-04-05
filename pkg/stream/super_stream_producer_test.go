@@ -15,8 +15,8 @@ import (
 type TestingRandomStrategy struct {
 }
 
-func (r *TestingRandomStrategy) Route(_ message.StreamMessage, partitions []string) []string {
-	return []string{partitions[rand.Intn(len(partitions))]}
+func (r *TestingRandomStrategy) Route(_ message.StreamMessage, partitions []string) ([]string, error) {
+	return []string{partitions[rand.Intn(len(partitions))]}, nil
 }
 
 // not used
@@ -47,7 +47,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			msg := amqp.NewMessage(make([]byte, 0))
 			msg.ApplicationProperties = map[string]interface{}{"routingKey": key}
 			msg.MarshalBinary()
-			routing := routingMurmur.Route(msg, partitions)
+			routing, err := routingMurmur.Route(msg, partitions)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(routing).To(HaveLen(1))
 			Expect(routing[0]).To(Equal(partition))
 		},
@@ -369,20 +370,14 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			NewBindingsOptions(countries))).NotTo(HaveOccurred())
 
 		messagesRouted := make(map[string]int)
-		messagesUnRouted := 0
 		mutex := sync.Mutex{}
 		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
 			NewKeyRoutingStrategy(
 				func(message message.StreamMessage) string {
 					return message.GetApplicationProperties()["county"].(string)
-				}, func(message message.StreamMessage, cause error) {
-					defer GinkgoRecover()
-					Expect(cause).To(HaveOccurred())
-					mutex.Lock()
-					messagesUnRouted++
-					mutex.Unlock()
-				}),
-		))
+				})))
+
+		Expect(err).NotTo(HaveOccurred())
 
 		go func(ch <-chan PartitionPublishConfirm) {
 			defer GinkgoRecover()
@@ -407,11 +402,9 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		}
 		msg := amqp.NewMessage(make([]byte, 0))
 		msg.ApplicationProperties = map[string]interface{}{"county": "this_country_does_not_exist"}
-		Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
-
-		time.Sleep(1 * time.Second)
-		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return messagesUnRouted == 1 }, 300*time.Millisecond).
-			WithTimeout(5 * time.Second).Should(BeTrue())
+		err = superProducer.Send(msg)
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(Equal(ErrMessageRouteNotFound))
 
 		for _, country := range countries {
 			Eventually(func() int {
@@ -425,7 +418,6 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
-		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("Implement custom routing strategy", func() {

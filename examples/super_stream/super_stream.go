@@ -54,7 +54,7 @@ func main() {
 	superStreamProducer, err := env.NewSuperStreamProducer(superStreamName,
 		stream.NewSuperStreamProducerOptions(
 			stream.NewHashRoutingStrategy(func(message message.StreamMessage) string {
-				// here the code must fast and be safe
+				// here the code _must_ be fast and safe
 				// The code evaluation is before sending the message
 				return message.GetApplicationProperties()["myKey"].(string)
 			})).SetClientProvidedName("my-super-stream-producer"))
@@ -83,6 +83,7 @@ func main() {
 	}(superStreamProducer.NotifyPartitionClose())
 
 	var confirmed int32
+	var failed int32
 	go func(ch <-chan stream.PartitionPublishConfirm) {
 		for superStreamPublishConfirm := range ch {
 			for _, confirm := range superStreamPublishConfirm.ConfirmationStatus {
@@ -96,6 +97,7 @@ func main() {
 					// like unConfirmed.append(msg...) messages ...
 					// In this example we won't handle it to leave it simple
 					// the messages can't be stored for different reasons ( see the ConfirmationStatus for more details)
+					atomic.AddInt32(&failed, 1)
 					fmt.Printf("Message failed to be stored in partition %s\n", superStreamPublishConfirm.Partition)
 				}
 			}
@@ -107,7 +109,10 @@ func main() {
 		msg := amqp.NewMessage(make([]byte, 0))
 		msg.ApplicationProperties = map[string]interface{}{"myKey": fmt.Sprintf("key_%d", i)}
 		err = superStreamProducer.Send(msg)
-		if errors.Is(err, stream.ErrProducerNotFound) {
+		switch {
+		case errors.Is(err, stream.ErrProducerNotFound):
+			atomic.AddInt32(&failed, 1)
+
 			// that's can be a temp situation.
 			// maybe the producer is in reconnection due of unexpected disconnection
 			// it is up to the user to decide what to do.
@@ -117,7 +122,16 @@ func main() {
 			// like unConfirmed.append(msg...) messages ...
 			// In this example we won't handle it to leave it simple
 			// like the superStreamPublishConfirm event for  messages
-		} else {
+			break
+		case errors.Is(err, stream.ErrMessageRouteNotFound):
+			atomic.AddInt32(&failed, 1)
+			// the message can't be routed to a partition
+			// this error can happen if the routing strategy can't find a partition
+			// in this specific case the routing strategy is a hash routing strategy so won't happen
+			// if the strategy is based on key routing strategy it can happen if the key is not found
+			logs.LogError("can't send the message ... the message route was not found")
+			break
+		default:
 			CheckErr(err)
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -128,6 +142,9 @@ func main() {
 	_, _ = reader.ReadString('\n')
 	err = superStreamProducer.Close()
 	CheckErr(err)
+	fmt.Printf("Producer closed. Total confirmed: %d, total failed: %d total messages: %d\n",
+		confirmed, failed, confirmed+failed)
+
 	fmt.Println("Press enter to exit")
 	_, _ = reader.ReadString('\n')
 

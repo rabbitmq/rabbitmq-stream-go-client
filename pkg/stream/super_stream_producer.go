@@ -20,7 +20,7 @@ import (
 type RoutingStrategy interface {
 	//Route Based on the message and the partitions the routing strategy returns the partitions where the message should be sent
 	// It could be zero, one or more partitions
-	Route(message message.StreamMessage, partitions []string) []string
+	Route(message message.StreamMessage, partitions []string) ([]string, error)
 
 	// SetRouteParameters is useful for the routing key strategies to set the query route function
 	// or in general to set the parameters needed by the routing strategy
@@ -43,14 +43,14 @@ func NewHashRoutingStrategy(routingKeyExtractor func(message message.StreamMessa
 	}
 }
 
-func (h *HashRoutingStrategy) Route(message message.StreamMessage, partitions []string) []string {
+func (h *HashRoutingStrategy) Route(message message.StreamMessage, partitions []string) ([]string, error) {
 
 	key := h.RoutingKeyExtractor(message)
 	murmurHash := murmur3.New32WithSeed(SEED)
 	_, _ = murmurHash.Write([]byte(key))
 	murmurHash.Sum32()
 	index := murmurHash.Sum32() % uint32(len(partitions))
-	return []string{partitions[index]}
+	return []string{partitions[index]}, nil
 }
 func (h *HashRoutingStrategy) SetRouteParameters(_ string, _ func(superStream string, routingKey string) ([]string, error)) {
 }
@@ -62,19 +62,15 @@ type KeyRoutingStrategy struct {
 	// provided by the user to define the key based on a message
 	RoutingKeyExtractor func(message message.StreamMessage) string
 
-	// event called when the message is not routed. The user should implement this event
-	// to keep track of the messages that are not routed
-	UnRoutedMessage func(message message.StreamMessage, cause error)
-	queryRoute      func(superStream string, routingKey string) ([]string, error)
-	superStream     string
-	cacheRouting    map[string][]string
+	queryRoute   func(superStream string, routingKey string) ([]string, error)
+	superStream  string
+	cacheRouting map[string][]string
 }
 
 func NewKeyRoutingStrategy(
-	routingKeyExtractor func(message message.StreamMessage) string, unRoutedMessage func(message message.StreamMessage, cause error)) *KeyRoutingStrategy {
+	routingKeyExtractor func(message message.StreamMessage) string) *KeyRoutingStrategy {
 	return &KeyRoutingStrategy{
 		RoutingKeyExtractor: routingKeyExtractor,
-		UnRoutedMessage:     unRoutedMessage,
 		cacheRouting:        make(map[string][]string),
 	}
 }
@@ -84,7 +80,7 @@ func (k *KeyRoutingStrategy) SetRouteParameters(superStream string, queryRoute f
 	k.queryRoute = queryRoute
 }
 
-func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []string) []string {
+func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []string) ([]string, error) {
 	key := k.RoutingKeyExtractor(message)
 	var routing []string
 	// check if the routing is already in cache.
@@ -95,11 +91,7 @@ func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []s
 	} else {
 		r, err := k.queryRoute(k.superStream, key)
 		if err != nil {
-			// The message is not routed due of an error in the queryRoute
-			if k.UnRoutedMessage != nil {
-				k.UnRoutedMessage(message, err)
-			}
-			return nil
+			return nil, err
 		}
 		routing = append(routing, r...)
 		k.cacheRouting[key] = routing
@@ -108,7 +100,7 @@ func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []s
 	for _, p := range partitions {
 		for _, r := range routing {
 			if r == p {
-				return []string{p}
+				return []string{p}, nil
 			}
 		}
 	}
@@ -116,10 +108,7 @@ func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []s
 	// The message is not routed since does not have a partition based on the key
 	// It can happen if the key selected is not in the routing table
 	// differently from the hash strategy the key strategy can have zero partitions
-	if k.UnRoutedMessage != nil {
-		k.UnRoutedMessage(message, fmt.Errorf("no partition found for key %s", key))
-	}
-	return nil
+	return nil, ErrMessageRouteNotFound
 }
 
 // end of KeyRoutingStrategy
@@ -356,7 +345,15 @@ func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
 		return err
 	}
 
-	ps := s.SuperStreamProducerOptions.RoutingStrategy.Route(message, s.GetPartitions())
+	ps, err := s.SuperStreamProducerOptions.RoutingStrategy.Route(message, s.GetPartitions())
+
+	// the routing strategy can return zero partitions
+	// in case the message is not routed. It can happen when the strategy is based on the key
+	// it can return ErrMessageRouteNotFound
+	if err != nil {
+		return err
+	}
+
 	for _, p := range ps {
 		producer := s.getProducer(p)
 		if producer == nil {
