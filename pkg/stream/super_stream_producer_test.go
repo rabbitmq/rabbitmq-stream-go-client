@@ -170,25 +170,25 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(3 * time.Second)
 		// these values are the same for .NET,Python,Java stream clients
 		// The aim for this test is to validate the correct routing with the
 		// MurmurStrategy.
-		Eventually(func() bool {
+		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
-			return msgReceived["invoices-0"] == 9
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(BeTrue())
-		Eventually(func() bool {
+			return msgReceived["invoices-0"]
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(Equal(9))
+		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
-			return msgReceived["invoices-1"] == 7
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(BeTrue())
-		Eventually(func() bool {
+			return msgReceived["invoices-1"]
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(Equal(7))
+		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
-			return msgReceived["invoices-2"] == 4
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(BeTrue())
+			return msgReceived["invoices-2"]
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(Equal(4))
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
