@@ -242,7 +242,7 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 	for _, producer := range s.activeProducers {
 		if producer.GetStreamName() == partition {
 			s.mutex.Unlock()
-			return fmt.Errorf("partition %s already connected", partition)
+			return fmt.Errorf("producer already connected to: %s partition ", partition)
 		}
 	}
 
@@ -374,7 +374,7 @@ func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
 }
 
 func (s *SuperStreamProducer) Close() error {
-	logs.LogDebug("Closing a SuperStreamProducer for: %s", s.SuperStream)
+	logs.LogDebug("[SuperStreamProducer] Closing a SuperStreamProducer for: %s", s.SuperStream)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	for len(s.activeProducers) > 0 {
@@ -397,6 +397,6 @@ func (s *SuperStreamProducer) Close() error {
 		}
 		s.mutex.Unlock()
 	}()
-	logs.LogDebug("Closed SuperStreamProducer for: %s", s.SuperStream)
+	logs.LogDebug("[SuperStreamProducer] Closed SuperStreamProducer for: %s", s.SuperStream)
 	return nil
 }

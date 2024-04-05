@@ -582,6 +582,7 @@ func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Rea
 	subscriptionId := readByte(r)
 	isActive := readByte(r)
 	consumer, err := c.coordinator.GetConsumerById(subscriptionId)
+
 	logErrorCommand(err, "handleConsumerUpdate")
 	if consumer == nil {
 		logs.LogWarn("consumer not found %d. The consumer maybe removed before the update", subscriptionId)
