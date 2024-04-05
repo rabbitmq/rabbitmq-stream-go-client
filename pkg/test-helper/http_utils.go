@@ -1,4 +1,4 @@
-package ha
+package test_helper
 
 import (
 	"encoding/json"
@@ -8,10 +8,6 @@ import (
 	"strconv"
 )
 
-type queue struct {
-	Messages int `json:"messages"`
-}
-
 type client_properties struct {
 	Connection_name string `json:"connection_name"`
 }
@@ -19,20 +15,6 @@ type client_properties struct {
 type connection struct {
 	Name             string            `json:"name"`
 	ClientProperties client_properties `json:"client_properties"`
-}
-
-func messagesReady(queueName string, port string) (int, error) {
-	bodyString, err := httpGet("http://localhost:"+port+"/api/queues/%2F/"+queueName, "guest", "guest")
-	if err != nil {
-		return 0, err
-	}
-
-	var data queue
-	err = json.Unmarshal([]byte(bodyString), &data)
-	if err != nil {
-		return 0, err
-	}
-	return data.Messages, nil
 }
 
 func Connections(port string) ([]connection, error) {
@@ -47,6 +29,31 @@ func Connections(port string) ([]connection, error) {
 		return nil, err
 	}
 	return data, nil
+}
+
+func DropConnectionClientProvidedName(clientProvidedName string, port string) error {
+	connections, err := Connections(port)
+	if err != nil {
+		return err
+	}
+	connectionToDrop := ""
+	for _, connection := range connections {
+		if connection.ClientProperties.Connection_name == clientProvidedName {
+			connectionToDrop = connection.Name
+			break
+		}
+	}
+
+	if connectionToDrop == "" {
+		return errors.New("connection not found")
+	}
+
+	err = DropConnection(connectionToDrop, port)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func DropConnection(name string, port string) error {

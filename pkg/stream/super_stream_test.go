@@ -106,9 +106,39 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 		Expect(client.Close()).NotTo(HaveOccurred())
 	})
 
+	It("Query Partitions With client/environment", Label("super-stream"), func() {
+		client, err := testEnvironment.newReconnectClient()
+		Expect(err).NotTo(HaveOccurred())
+
+		err = client.DeclareSuperStream("go-my_super_stream_with_query_partitions",
+			NewPartitionsOptions(3))
+		Expect(err).NotTo(HaveOccurred())
+
+		partitions, err := client.QueryPartitions("go-my_super_stream_with_query_partitions")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(partitions).To(HaveLen(3))
+
+		for _, partition := range partitions {
+			Expect(partition).To(MatchRegexp("go-my_super_stream_with_query_partitions-\\d"))
+		}
+
+		partitionsEnv, err := testEnvironment.QueryPartitions("go-my_super_stream_with_query_partitions")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(partitions).To(HaveLen(3))
+
+		for _, partition := range partitionsEnv {
+			Expect(partition).To(MatchRegexp("go-my_super_stream_with_query_partitions-\\d"))
+		}
+
+		Expect(client.DeleteSuperStream("go-my_super_stream_with_query_partitions")).NotTo(HaveOccurred())
+		Expect(client.Close()).NotTo(HaveOccurred())
+
+	})
+
 	It("Create Super stream with 3 Partitions and delete it with env", Label("super-stream"), func() {
 
-		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_3_partitions", NewPartitionsSuperStreamOptions(3))
+		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_3_partitions",
+			NewPartitionsOptions(3))
 		Expect(err).NotTo(HaveOccurred())
 
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_3_partitions")
@@ -116,46 +146,52 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 	})
 
 	It("Create Super stream with 2 partitions and other parameters", Label("super-stream"), func() {
+		// Test the creation of a super stream with 2 partitions and other parameters
+		// The declaration in this level is idempotent
+		// so declaring the same stream with the same parameters will not return an error
+
 		err := testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions_and_parameters",
-			NewPartitionsSuperStreamOptions(2).
+			NewPartitionsOptions(2).
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
-				SetLeaderLocator("least-leaders"))
+				SetBalancedLeaderLocator())
 		Expect(err).NotTo(HaveOccurred())
 
 		// In this case we ignore that the stream already exists
 		err = testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions_and_parameters",
-			NewPartitionsSuperStreamOptions(2).
+			NewPartitionsOptions(2).
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
-				SetLeaderLocator("least-leaders"))
+				SetBalancedLeaderLocator())
 		Expect(err).NotTo(HaveOccurred())
 
+		// Delete the stream. Ok
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_2_partitions_and_parameters")
 		Expect(err).NotTo(HaveOccurred())
 
+		// Delete a not existing stream will return an error
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_2_partitions_and_parameters")
 		Expect(err).To(Equal(StreamDoesNotExist))
 	})
 
 	It("Create Super stream with 3 keys and other parameters", Label("super-stream"), func() {
 		err := testEnvironment.DeclareSuperStream("go-countries",
-			NewBindingsSuperStreamOptions([]string{"italy", "spain", "france"}).
+			NewBindingsOptions([]string{"italy", "spain", "france"}).
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
-				SetLeaderLocator("least-leaders"))
+				SetBalancedLeaderLocator())
 		Expect(err).NotTo(HaveOccurred())
 
 		// In this case we ignore that the stream already exists
 		err = testEnvironment.DeclareSuperStream("go-countries",
-			NewBindingsSuperStreamOptions([]string{"italy", "spain", "france"}).
+			NewBindingsOptions([]string{"italy", "spain", "france"}).
 				SetMaxAge(24*120*time.Hour).
 				SetMaxLengthBytes(ByteCapacity{}.GB(1)).
 				SetMaxSegmentSizeBytes(ByteCapacity{}.KB(10)).
-				SetLeaderLocator("least-leaders"))
+				SetClientLocalLocator())
 		Expect(err).NotTo(HaveOccurred())
 
 		err = testEnvironment.DeleteSuperStream("go-countries")

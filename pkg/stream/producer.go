@@ -97,7 +97,7 @@ type ProducerOptions struct {
 	Name                 string          // Producer name, it is useful to handle deduplication messages
 	QueueSize            int             // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
 	BatchSize            int             // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput
-	BatchPublishingDelay int             // Period to send a batch of messages.
+	BatchPublishingDelay int             // Period to Send a batch of messages.
 	SubEntrySize         int             // Size of sub Entry, to aggregate more subEntry using one publishing id
 	Compression          Compression     // Compression type, it is valid only if SubEntrySize > 1
 	ConfirmationTimeOut  time.Duration   // Time to wait for the confirmation
@@ -327,13 +327,8 @@ func (producer *Producer) startPublishTask() {
 
 }
 
-func (producer *Producer) Send(streamMessage message.StreamMessage) error {
-	msgBytes, err := streamMessage.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	if len(msgBytes)+initBufferPublishSize > producer.options.client.getTuneState().requestedMaxFrameSize {
+func (producer *Producer) sendBytes(streamMessage message.StreamMessage, messageBytes []byte) error {
+	if len(messageBytes)+initBufferPublishSize > producer.options.client.getTuneState().requestedMaxFrameSize {
 		return FrameTooLarge
 	}
 
@@ -347,8 +342,8 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 
 	if producer.getStatus() == open {
 		producer.messageSequenceCh <- messageSequence{
-			messageBytes:     msgBytes,
-			unCompressedSize: len(msgBytes),
+			messageBytes:     messageBytes,
+			unCompressedSize: len(messageBytes),
 			publishingId:     sequence,
 			filterValue:      filterValue,
 		}
@@ -358,6 +353,14 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	}
 
 	return nil
+}
+
+func (producer *Producer) Send(streamMessage message.StreamMessage) error {
+	messageBytes, err := streamMessage.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	return producer.sendBytes(streamMessage, messageBytes)
 }
 
 func (producer *Producer) assignPublishingID(message message.StreamMessage) int64 {

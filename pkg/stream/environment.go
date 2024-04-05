@@ -232,6 +232,14 @@ func (env *Environment) NewConsumer(streamName string,
 	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options, env.options.AddressResolver)
 }
 
+func (env *Environment) NewSuperStreamProducer(superStream string, superStreamProducerOptions *SuperStreamProducerOptions) (*SuperStreamProducer, error) {
+	var p, err = newSuperStreamProducer(env, superStream, superStreamProducerOptions)
+	if err != nil {
+		return nil, err
+	}
+	return p, p.init()
+}
+
 func (env *Environment) Close() error {
 	_ = env.producers.close()
 	_ = env.consumers.close()
@@ -797,4 +805,26 @@ func (env *Environment) DeleteSuperStream(superStreamName string) error {
 		return err
 	}
 	return client.DeleteSuperStream(superStreamName)
+}
+
+func (env *Environment) QueryPartitions(superStreamName string) ([]string, error) {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		_ = client.Close()
+	}(client)
+	if err != nil {
+		return nil, err
+	}
+	return client.QueryPartitions(superStreamName)
+}
+
+func (env *Environment) QueryRoute(superStream string, routingKey string) ([]string, error) {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		_ = client.Close()
+	}(client)
+	if err != nil {
+		return nil, err
+	}
+	return client.queryRoute(superStream, routingKey)
 }

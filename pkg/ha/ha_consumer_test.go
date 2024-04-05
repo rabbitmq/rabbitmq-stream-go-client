@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	. "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 	"sync/atomic"
 	"time"
 )
@@ -89,7 +90,7 @@ var _ = Describe("Reliable Consumer", func() {
 		Expect(consumer.GetStatus()).To(Equal(StatusOpen))
 		connectionToDrop := ""
 		Eventually(func() bool {
-			connections, err := Connections("15672")
+			connections, err := test_helper.Connections("15672")
 			if err != nil {
 				return false
 			}
@@ -105,7 +106,7 @@ var _ = Describe("Reliable Consumer", func() {
 
 		Expect(connectionToDrop).NotTo(BeEmpty())
 		// kill the connection
-		errDrop := DropConnection(connectionToDrop, "15672")
+		errDrop := test_helper.DropConnection(connectionToDrop, "15672")
 		Expect(errDrop).NotTo(HaveOccurred())
 
 		time.Sleep(2 * time.Second) // we give some time to the client to reconnect

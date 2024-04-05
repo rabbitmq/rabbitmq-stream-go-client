@@ -125,7 +125,14 @@ func (c *Client) handleResponse() {
 			{
 				c.handleConsumerUpdate(readerProtocol, buffer)
 			}
-
+		case commandQueryPartition:
+			{
+				c.handleQueryPartitions(readerProtocol, buffer)
+			}
+		case commandQueryRoute:
+			{
+				c.handleQueryRoute(readerProtocol, buffer)
+			}
 		default:
 			{
 				logs.LogWarn("Command not implemented %d buff:%d \n", readerProtocol.CommandID, buffer.Buffered())
@@ -585,6 +592,38 @@ func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Rea
 	consumer.options.SingleActiveConsumer.OffsetSpecification = responseOff
 	err = consumer.writeConsumeUpdateOffsetToSocket(readProtocol.CorrelationId, responseOff)
 	logErrorCommand(err, "handleConsumerUpdate writeConsumeUpdateOffsetToSocket")
+}
+
+func (c *Client) handleQueryPartitions(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = readUInt(r)
+	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
+	partitions := make([]string, 0)
+	partitionsCount, _ := readUInt(r)
+	for i := 0; i < int(partitionsCount); i++ {
+		partition := readString(r)
+		partitions = append(partitions, partition)
+	}
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	logErrorCommand(err, "handleQueryPartitions")
+	res.code <- Code{id: readProtocol.ResponseCode}
+	res.data <- partitions
+}
+
+func (c *Client) handleQueryRoute(readProtocol *ReaderProtocol, r *bufio.Reader) {
+	readProtocol.CorrelationId, _ = readUInt(r)
+	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
+	numStreams, _ := readUInt(r)
+
+	routes := make([]string, 0)
+	for i := 0; i < int(numStreams); i++ {
+		route := readString(r)
+		routes = append(routes, route)
+	}
+
+	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
+	logErrorCommand(err, "handleQueryRoute")
+	res.code <- Code{id: readProtocol.ResponseCode}
+	res.data <- routes
 }
 
 func (c *Client) handleExchangeVersionResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {

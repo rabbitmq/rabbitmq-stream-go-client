@@ -512,7 +512,7 @@ func (c *Client) Close() error {
 
 		errW := c.socket.writeAndFlush(b.Bytes())
 		if errW != nil {
-			logs.LogWarn("error during send client close %s", errW)
+			logs.LogWarn("error during Send client close %s", errW)
 		}
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
@@ -1060,4 +1060,43 @@ func (c *Client) DeleteSuperStream(superStream string) error {
 		correlationId)
 	writeString(b, superStream)
 	return c.handleWrite(b.Bytes(), resp).Err
+}
+
+func (c *Client) QueryPartitions(superStream string) ([]string, error) {
+	length := 2 + 2 + 4 + 2 + len(superStream)
+	resp := c.coordinator.NewResponse(commandQueryPartition, superStream)
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandQueryPartition,
+		correlationId)
+	writeString(b, superStream)
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	if err.Err != nil {
+		return nil, err.Err
+	}
+
+	data := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	return data.([]string), nil
+}
+
+func (c *Client) queryRoute(superStream string, routingKey string) ([]string, error) {
+
+	length := 2 + 2 + 4 + 2 + len(superStream) + 2 + len(routingKey)
+	resp := c.coordinator.NewResponse(commandQueryRoute, superStream)
+	correlationId := resp.correlationid
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandQueryRoute,
+		correlationId)
+	writeString(b, routingKey)
+	writeString(b, superStream)
+	err := c.handleWriteWithResponse(b.Bytes(), resp, false)
+	if err.Err != nil {
+		return nil, err.Err
+	}
+
+	data := <-resp.data
+	_ = c.coordinator.RemoveResponseById(resp.correlationid)
+	return data.([]string), nil
+
 }

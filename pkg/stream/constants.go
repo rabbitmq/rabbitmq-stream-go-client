@@ -44,6 +44,8 @@ const (
 	commandOpen                   = 21
 	CommandClose                  = 22
 	commandHeartbeat              = 23
+	commandQueryRoute             = 24
+	commandQueryPartition         = 25
 	consumerUpdateQueryResponse   = 26
 	commandExchangeVersion        = 27
 	commandStreamStatus           = 28
@@ -110,8 +112,10 @@ const (
 	defaultConfirmationTimeOut  = 10 * time.Second
 	//
 
-	SocketClosed   = "socket client closed"
-	MetaDataUpdate = "metadata Data update"
+	SocketClosed             = "socket client closed"
+	MetaDataUpdate           = "metadata Data update"
+	LeaderLocatorBalanced    = "balanced"
+	LeaderLocatorClientLocal = "client-local"
 
 	StreamTcpPort = "5552"
 
@@ -131,7 +135,7 @@ var PublisherDoesNotExist = errors.New("Publisher Does Not Exist")
 var OffsetNotFoundError = errors.New("Offset not found")
 var FrameTooLarge = errors.New("Frame Too Large, the buffer is too big")
 var CodeAccessRefused = errors.New("Resources Access Refused")
-var ConnectionClosed = errors.New("Can't send the message, connection closed")
+var ConnectionClosed = errors.New("Can't Send the message, connection closed")
 var StreamNotAvailable = errors.New("Stream Not Available")
 var UnknownFrame = errors.New("Unknown Frame")
 var InternalError = errors.New("Internal Error")
@@ -141,6 +145,11 @@ var FilterNotSupported = errors.New("Filtering is not supported by the broker " 
 	"(requires RabbitMQ 3.13+ and stream_filtering feature flag activated)")
 var SingleActiveConsumerNotSupported = errors.New("Single Active Consumer is not supported by the broker " +
 	"(requires RabbitMQ 3.11+ and stream_single_active_consumer feature flag activated)")
+
+var ErrProducerNotFound = errors.New("Producer not found in the SuperStream Producer")
+var ErrMessageRouteNotFound = errors.New("Message Route not found for the message key")
+var ErrSuperStreamProducerOptionsNotDefined = errors.New("SuperStreamProducerOptions not defined. The SuperStreamProducerOptions is mandatory with the RoutingStrategy")
+var ErrEnvironmentNotDefined = errors.New("Environment not defined")
 
 var LeaderNotReady = errors.New("Leader not Ready yet")
 
