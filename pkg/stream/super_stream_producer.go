@@ -388,12 +388,14 @@ func (s *SuperStreamProducer) Close() error {
 	// give the time to raise the close event
 	go func() {
 		time.Sleep(2 * time.Second)
+		s.mutex.Lock()
 		if s.chNotifyPublishConfirmation != nil {
 			close(s.chNotifyPublishConfirmation)
 		}
 		if s.chSuperStreamPartitionClose != nil {
 			close(s.chSuperStreamPartitionClose)
 		}
+		s.mutex.Unlock()
 	}()
 	logs.LogDebug("Closed SuperStreamProducer for: %s", s.SuperStream)
 	return nil

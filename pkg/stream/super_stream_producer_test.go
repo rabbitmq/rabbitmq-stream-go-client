@@ -138,11 +138,15 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		msgReceived := make(map[string]int)
 		mutex := sync.Mutex{}
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
-		superProducer, err := newSuperStreamProducer(env, superStream,
+		superProducer, err := env.NewSuperStreamProducer(superStream,
 			&SuperStreamProducerOptions{
 				RoutingStrategy: NewHashRoutingStrategy(func(message message.StreamMessage) string {
 					return message.GetApplicationProperties()["routingKey"].(string)
 				})})
+
+		Expect(err).To(BeNil())
+		Expect(superProducer).NotTo(BeNil())
+		Expect(superProducer.activeProducers).To(HaveLen(3))
 
 		go func(ch <-chan PartitionPublishConfirm) {
 			defer GinkgoRecover()
@@ -159,36 +163,31 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 		}(superProducer.NotifyPublishConfirmation())
 
-		Expect(err).To(BeNil())
-		Expect(superProducer).NotTo(BeNil())
-		Expect(superProducer.init()).NotTo(HaveOccurred())
-		Expect(superProducer.activeProducers).To(HaveLen(3))
-
 		for i := 0; i < 20; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
 			msg.ApplicationProperties = map[string]interface{}{"routingKey": fmt.Sprintf("hello%d", i)}
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(3 * time.Second)
 		// these values are the same for .NET,Python,Java stream clients
 		// The aim for this test is to validate the correct routing with the
 		// MurmurStrategy.
-		Eventually(func() bool {
+		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
-			return msgReceived["invoices-0"] == 9
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(BeTrue())
-		Eventually(func() bool {
+			return msgReceived["invoices-0"]
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(Equal(9))
+		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
-			return msgReceived["invoices-1"] == 7
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(BeTrue())
-		Eventually(func() bool {
+			return msgReceived["invoices-1"]
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(Equal(7))
+		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
-			return msgReceived["invoices-2"] == 4
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(BeTrue())
+			return msgReceived["invoices-2"]
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(Equal(4))
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
