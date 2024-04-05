@@ -138,11 +138,15 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		msgReceived := make(map[string]int)
 		mutex := sync.Mutex{}
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
-		superProducer, err := newSuperStreamProducer(env, superStream,
+		superProducer, err := env.NewSuperStreamProducer(superStream,
 			&SuperStreamProducerOptions{
 				RoutingStrategy: NewHashRoutingStrategy(func(message message.StreamMessage) string {
 					return message.GetApplicationProperties()["routingKey"].(string)
 				})})
+
+		Expect(err).To(BeNil())
+		Expect(superProducer).NotTo(BeNil())
+		Expect(superProducer.activeProducers).To(HaveLen(3))
 
 		go func(ch <-chan PartitionPublishConfirm) {
 			defer GinkgoRecover()
@@ -158,11 +162,6 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			}
 
 		}(superProducer.NotifyPublishConfirmation())
-
-		Expect(err).To(BeNil())
-		Expect(superProducer).NotTo(BeNil())
-		Expect(superProducer.init()).NotTo(HaveOccurred())
-		Expect(superProducer.activeProducers).To(HaveLen(3))
 
 		for i := 0; i < 20; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
