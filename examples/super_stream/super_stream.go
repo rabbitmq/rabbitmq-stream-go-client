@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"math/rand"
@@ -25,7 +24,11 @@ func main() {
 	// Example for super stream with partitions
 	fmt.Println("Super stream example - partitions")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
-	stream.SetLevelInfo(logs.DEBUG)
+
+	// Set the log level to DEBUG.
+	// Enable it only for debugging purposes or to
+	// have more information about the client behavior
+	//stream.SetLevelInfo(logs.DEBUG)
 
 	// Connect to the broker ( or brokers )
 	env, err := stream.NewEnvironment(
@@ -117,7 +120,7 @@ func main() {
 			// maybe the producer is in reconnection due of unexpected disconnection
 			// it is up to the user to decide what to do.
 			// In this can we can ignore the log and continue to send messages
-			logs.LogError("can't send the message ... the producer was not found")
+			fmt.Printf("can't send the message ... the producer was not found")
 			// here you should store the message in another list and try again
 			// like unConfirmed.append(msg...) messages ...
 			// In this example we won't handle it to leave it simple
@@ -129,7 +132,7 @@ func main() {
 			// this error can happen if the routing strategy can't find a partition
 			// in this specific case the routing strategy is a hash routing strategy so won't happen
 			// if the strategy is based on key routing strategy it can happen if the key is not found
-			logs.LogError("can't send the message ... the message route was not found")
+			fmt.Printf("can't send the message ... the message route was not found")
 			break
 		default:
 			CheckErr(err)

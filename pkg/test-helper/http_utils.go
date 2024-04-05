@@ -8,10 +8,6 @@ import (
 	"strconv"
 )
 
-//type queue struct {
-//	Messages int `json:"messages"`
-//}
-
 type client_properties struct {
 	Connection_name string `json:"connection_name"`
 }
@@ -20,20 +16,6 @@ type connection struct {
 	Name             string            `json:"name"`
 	ClientProperties client_properties `json:"client_properties"`
 }
-
-//func messagesReady(queueName string, port string) (int, error) {
-//	bodyString, err := httpGet("http://localhost:"+port+"/api/queues/%2F/"+queueName, "guest", "guest")
-//	if err != nil {
-//		return 0, err
-//	}
-//
-//	var data queue
-//	err = json.Unmarshal([]byte(bodyString), &data)
-//	if err != nil {
-//		return 0, err
-//	}
-//	return data.Messages, nil
-//}
 
 func Connections(port string) ([]connection, error) {
 	bodyString, err := httpGet("http://localhost:"+port+"/api/connections/", "guest", "guest")

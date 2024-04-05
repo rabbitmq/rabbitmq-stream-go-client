@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	. "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test_helper"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 	"sync/atomic"
 	"time"
 )
