@@ -161,7 +161,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 				mutex.Unlock()
 			}
 
-		}(superProducer.NotifyPublishConfirmation())
+		}(superProducer.NotifyPublishConfirmation(1))
 
 		for i := 0; i < 20; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
@@ -208,7 +208,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 				return message.GetApplicationProperties()["routingKey"].(string)
 			})))
 
-		go func(ch <-chan PartitionClose) {
+		go func(ch <-chan PPartitionClose) {
 			defer GinkgoRecover()
 			for chq := range ch {
 				mutex.Lock()
@@ -217,7 +217,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 				mutex.Unlock()
 			}
 
-		}(superProducer.NotifyPartitionClose())
+		}(superProducer.NotifyPartitionClose(1))
 
 		Expect(superProducer).NotTo(BeNil())
 		Expect(err).To(BeNil())
@@ -235,7 +235,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 	It("should handle reconnect the producer for the partition ", func() {
 		// The scope is to test the reconnection of the producer
-		// with context PartitionContext
+		// with context PPartitionContext
 
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -257,7 +257,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(err).To(BeNil())
 		Expect(superProducer.init()).NotTo(HaveOccurred())
 
-		go func(ch <-chan PartitionClose) {
+		go func(ch <-chan PPartitionClose) {
 			defer GinkgoRecover()
 			for chq := range ch {
 				if chq.Event.Reason == SocketClosed {
@@ -271,7 +271,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 				}
 			}
 
-		}(superProducer.NotifyPartitionClose())
+		}(superProducer.NotifyPartitionClose(1))
 
 		time.Sleep(3 * time.Second)
 		Eventually(func() error {
@@ -390,7 +390,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 				messagesRouted[superStreamPublishConfirm.Partition] += len(superStreamPublishConfirm.ConfirmationStatus)
 				mutex.Unlock()
 			}
-		}(superProducer.NotifyPublishConfirmation())
+		}(superProducer.NotifyPublishConfirmation(1))
 
 		for _, country := range countries {
 			msg := amqp.NewMessage(make([]byte, 0))

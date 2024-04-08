@@ -64,7 +64,7 @@ func main() {
 	CheckErr(err)
 
 	// HandlePartitionClose it not mandatory, but it is a good practice to handle it
-	go func(ch <-chan stream.PartitionClose) {
+	go func(ch <-chan stream.PPartitionClose) {
 		// Here we deal with the partition close event
 		// in case the connection is dropped due of network issues or metadata update
 		// we can reconnect using context
@@ -83,7 +83,7 @@ func main() {
 				fmt.Printf("Partition %s reconnected.\n", partitionCloseEvent.Partition)
 			}
 		}
-	}(superStreamProducer.NotifyPartitionClose())
+	}(superStreamProducer.NotifyPartitionClose(1))
 
 	var confirmed int32
 	var failed int32
@@ -105,7 +105,7 @@ func main() {
 				}
 			}
 		}
-	}(superStreamProducer.NotifyPublishConfirmation())
+	}(superStreamProducer.NotifyPublishConfirmation(1))
 
 	// Publish messages
 	for i := 0; i < 500; i++ {

@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,7 +31,7 @@ func Send(env *Environment, superStream string) {
 			}
 		}
 
-	}(superProducer.NotifyPublishConfirmation())
+	}(superProducer.NotifyPublishConfirmation(1))
 
 	for i := 0; i < 20; i++ {
 		msg := amqp.NewMessage(make([]byte, 0))
@@ -222,6 +223,65 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		Entry("SAC enabled. Only One consumer should receive the messages", true, 20, "application_1", "application_1"),
 		Entry("SAC enabled but the Names are different. Consumers should consume independently", true, 40, "application_1", "application_2"),
 	)
+
+	It("should handle reconnect the consumer for the partition ", func() {
+		// The scope is to test the reconnection of the consumer
+		// with context CPartitionContext
+
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		const superStream = "reconnect-super-stream-consumer"
+
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3).
+			SetBalancedLeaderLocator())).NotTo(HaveOccurred())
+
+		var reconnectedMap = make(map[string]bool)
+		mutex := sync.Mutex{}
+		superConsumer, err := newSuperStreamConsumer(env, superStream, nil,
+			NewSuperStreamConsumerOptions().
+				SetClientProvidedName("reconnect-super-stream-consumer"))
+
+		Expect(err).To(BeNil())
+		Expect(superConsumer).NotTo(BeNil())
+		Expect(superConsumer.init()).NotTo(HaveOccurred())
+
+		go func(ch <-chan CPartitionClose) {
+			defer GinkgoRecover()
+			for chq := range ch {
+				if chq.Event.Reason == SocketClosed {
+					time.Sleep(2 * time.Second)
+					Expect(chq.Context.ConnectPartition(chq.Partition,
+						OffsetSpecification{}.First())).NotTo(HaveOccurred())
+					time.Sleep(1 * time.Second)
+					mutex.Lock()
+					reconnectedMap[chq.Partition] = true
+					mutex.Unlock()
+				}
+			}
+
+		}(superConsumer.NotifyPartitionClose(1))
+
+		time.Sleep(3 * time.Second)
+		Eventually(func() error {
+			return test_helper.DropConnectionClientProvidedName("reconnect-super-stream-consumer", "15672")
+		}, 300*time.Millisecond).WithTimeout(8 * time.Second).ShouldNot(HaveOccurred())
+
+		Eventually(func() bool {
+			return len(superConsumer.getConsumers()) == 2
+		}).WithTimeout(5 * time.Second).Should(BeTrue())
+
+		time.Sleep(1 * time.Second)
+		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return len(reconnectedMap) == 1 },
+			300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+
+		Eventually(func() bool {
+			return len(superConsumer.getConsumers()) == 3
+		}).WithTimeout(5 * time.Second).Should(BeTrue())
+
+		Expect(superConsumer.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
 
 	It("The second consumer should be activated and restart from first", func() {
 		env, err := NewEnvironment(nil)

@@ -830,7 +830,6 @@ func (env *Environment) QueryRoute(superStream string, routingKey string) ([]str
 }
 
 func (env *Environment) NewSuperStreamConsumer(superStream string, messagesHandler MessagesHandler, options *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {
-
 	s, err := newSuperStreamConsumer(env, superStream, messagesHandler, options)
 	if err != nil {
 		return nil, err

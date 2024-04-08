@@ -5,6 +5,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
+	"time"
 )
 
 type SuperStreamConsumerOptions struct {
@@ -40,17 +41,32 @@ func (s *SuperStreamConsumerOptions) SetConsumerName(consumerName string) *Super
 	return s
 }
 
+// CPartitionClose is a struct that is used to notify the user when a partition from a consumer is closed
+// The user can use the NotifyPartitionClose to get the channel
+type CPartitionClose struct {
+	Partition string
+	Event     Event
+	Context   CPartitionContext
+}
+
+// CPartitionContext is an interface that is used to expose partition information and methods
+// to the user. The user can use the PPartitionContext to reconnect a partition to the SuperStreamConsumer
+type CPartitionContext interface {
+	ConnectPartition(partition string, offset OffsetSpecification) error
+}
+
 type SuperStreamConsumer struct {
 	// Only the active consumers are stored here
 	activeConsumers []*Consumer
 	// we need to copy the partitions here since the
-	//activeProducers is only the producers active
+	//activeConsumers is only the consumers active
 	// in a normal situation len(partitions) == len(consumers)
 	// but in case of disconnection the len(partitions) can be > len(consumers)
 	// since the consumer is in reconnection
-	partitions []string
-	env        *Environment
-	mutex      sync.Mutex
+	partitions                  []string
+	env                         *Environment
+	mutex                       sync.Mutex
+	chSuperStreamPartitionClose chan CPartitionClose
 
 	SuperStream                string
 	SuperStreamConsumerOptions *SuperStreamConsumerOptions
@@ -96,6 +112,21 @@ func (s *SuperStreamConsumer) init() error {
 	return nil
 }
 
+// NotifyPartitionClose returns a channel that will be notified when a partition is closed
+// Event will give the reason of the close
+// size is the size of the channel
+func (s *SuperStreamConsumer) NotifyPartitionClose(size int) chan CPartitionClose {
+	ch := make(chan CPartitionClose, size)
+	s.chSuperStreamPartitionClose = ch
+	return ch
+}
+
+func (s *SuperStreamConsumer) getConsumers() []*Consumer {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.activeConsumers
+}
+
 func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSpecification) error {
 	logs.LogDebug("[SuperStreamConsumer] ConnectPartition for partition: %s", partition)
 	s.mutex.Lock()
@@ -117,22 +148,50 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 		}
 	}
 	s.mutex.Unlock()
+	var options = NewConsumerOptions().SetOffset(offset)
+	if s.SuperStreamConsumerOptions.ClientProvidedName != "" {
+		options = options.SetClientProvidedName(s.SuperStreamConsumerOptions.ClientProvidedName)
+	}
 
-	options := NewConsumerOptions().SetOffset(offset).
-		SetSingleActiveConsumer(s.SuperStreamConsumerOptions.SingleActiveConsumer).
-		SetConsumerName(s.SuperStreamConsumerOptions.ConsumerName)
 	messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
 		if s.MessagesHandler != nil {
 			s.MessagesHandler(consumerContext, message)
 		}
 	}
-	consumer, err := s.env.NewConsumer(partition, messagesHandler, options)
+	consumer, err := s.env.NewConsumer(partition, messagesHandler,
+		options.SetConsumerName(s.SuperStreamConsumerOptions.ConsumerName).
+			SetSingleActiveConsumer(s.SuperStreamConsumerOptions.SingleActiveConsumer))
 	if err != nil {
 		return err
 	}
 	s.mutex.Lock()
 	s.activeConsumers = append(s.activeConsumers, consumer)
+	closedEvent := consumer.NotifyClose()
 	s.mutex.Unlock()
+
+	go func(gpartion string, _closedEvent <-chan Event) {
+		logs.LogDebug("[SuperStreamConsumer] chSuperStreamPartitionClose started for partition: %s", gpartion)
+		event := <-_closedEvent
+
+		s.mutex.Lock()
+		for i := range s.activeConsumers {
+			if s.activeConsumers[i].GetStreamName() == gpartion {
+				s.activeConsumers = append(s.activeConsumers[:i], s.activeConsumers[i+1:]...)
+				break
+			}
+		}
+		s.mutex.Unlock()
+		if s.chSuperStreamPartitionClose != nil {
+			s.mutex.Lock()
+			s.chSuperStreamPartitionClose <- CPartitionClose{
+				Partition: gpartion,
+				Event:     event,
+				Context:   s,
+			}
+			s.mutex.Unlock()
+		}
+		logs.LogDebug("[SuperStreamConsumer] chSuperStreamPartitionClose for partition: %s", gpartion)
+	}(partition, closedEvent)
 
 	return nil
 }
@@ -148,6 +207,16 @@ func (s *SuperStreamConsumer) Close() error {
 		}
 		s.activeConsumers = s.activeConsumers[1:]
 	}
+
+	// give the time to raise the close event
+	go func() {
+		time.Sleep(2 * time.Second)
+		s.mutex.Lock()
+		if s.chSuperStreamPartitionClose != nil {
+			close(s.chSuperStreamPartitionClose)
+		}
+		s.mutex.Unlock()
+	}()
 
 	logs.LogDebug("[SuperStreamConsumer] Closed SuperStreamConsumer for: %s", s.SuperStream)
 	return nil
