@@ -169,7 +169,7 @@ func NewConsumerFilter(values []string, matchUnfiltered bool, postFilter PostFil
 	}
 }
 
-type ConsumerUpdate func(isActive bool) OffsetSpecification
+type ConsumerUpdate func(streamName string, isActive bool) OffsetSpecification
 
 type SingleActiveConsumer struct {
 	Enabled bool
@@ -182,7 +182,7 @@ type SingleActiveConsumer struct {
 	// the ConsumerOptions.Offset is the initial offset and in case of SingleActiveConsumer
 	// is not used because the consumer will be promoted and the offset will be set by the ConsumerUpdate
 	// This is needed to filter the messages during the promotion where needed
-	OffsetSpecification OffsetSpecification
+	offsetSpecification OffsetSpecification
 }
 
 func NewSingleActiveConsumer(ConsumerUpdate ConsumerUpdate) *SingleActiveConsumer {

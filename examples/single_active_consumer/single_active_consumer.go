@@ -53,11 +53,12 @@ func main() {
 		CheckErrConsumer(err)
 	}
 
-	consumerUpdate := func(isActive bool) stream.OffsetSpecification {
+	consumerUpdate := func(streamName string, isActive bool) stream.OffsetSpecification {
 		// This function is called when the consumer is promoted to active
 		// be careful with the logic here, it is called in the consumer thread
 		// the code here should be fast, non-blocking and without side effects
-		fmt.Printf("[%s] - Consumer promoted. Active status: %t\n", time.Now().Format(time.TimeOnly), isActive)
+		fmt.Printf("[%s] - Consumer promoted for: %s. Active status: %t\n", time.Now().Format(time.TimeOnly),
+			streamName, isActive)
 
 		// In this example, we store the offset server side and we retrieve it
 		// when the consumer is promoted to active

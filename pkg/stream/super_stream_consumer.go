@@ -8,8 +8,10 @@ import (
 )
 
 type SuperStreamConsumerOptions struct {
-	ClientProvidedName string
-	Offset             OffsetSpecification
+	ClientProvidedName   string
+	Offset               OffsetSpecification
+	SingleActiveConsumer *SingleActiveConsumer
+	ConsumerName         string
 }
 
 type SuperStreamConsumer struct {
@@ -75,9 +77,12 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 	}
 	s.mutex.Unlock()
 
-	options := NewConsumerOptions().SetOffset(offset)
+	options := NewConsumerOptions().SetOffset(offset).
+		SetSingleActiveConsumer(s.SuperStreamConsumerOptions.SingleActiveConsumer).SetConsumerName(s.SuperStreamConsumerOptions.ConsumerName)
 	messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
-		s.MessagesHandler(consumerContext, message)
+		if s.MessagesHandler != nil {
+			s.MessagesHandler(consumerContext, message)
+		}
 	}
 	consumer, err := s.env.NewConsumer(partition, messagesHandler, options)
 	if err != nil {
