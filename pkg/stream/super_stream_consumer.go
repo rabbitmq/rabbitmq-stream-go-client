@@ -14,6 +14,32 @@ type SuperStreamConsumerOptions struct {
 	ConsumerName         string
 }
 
+func NewSuperStreamConsumerOptions() *SuperStreamConsumerOptions {
+	return &SuperStreamConsumerOptions{
+		Offset: OffsetSpecification{}.Next(),
+	}
+}
+
+func (s *SuperStreamConsumerOptions) SetClientProvidedName(clientProvidedName string) *SuperStreamConsumerOptions {
+	s.ClientProvidedName = clientProvidedName
+	return s
+}
+
+func (s *SuperStreamConsumerOptions) SetOffset(offset OffsetSpecification) *SuperStreamConsumerOptions {
+	s.Offset = offset
+	return s
+}
+
+func (s *SuperStreamConsumerOptions) SetSingleActiveConsumer(singleActiveConsumer *SingleActiveConsumer) *SuperStreamConsumerOptions {
+	s.SingleActiveConsumer = singleActiveConsumer
+	return s
+}
+
+func (s *SuperStreamConsumerOptions) SetConsumerName(consumerName string) *SuperStreamConsumerOptions {
+	s.ConsumerName = consumerName
+	return s
+}
+
 type SuperStreamConsumer struct {
 	// Only the active consumers are stored here
 	activeConsumers []*Consumer
@@ -31,13 +57,28 @@ type SuperStreamConsumer struct {
 	MessagesHandler            MessagesHandler
 }
 
-func newSuperStreamConsumer(env *Environment, superStream string, MessagesHandler MessagesHandler, options *SuperStreamConsumerOptions) *SuperStreamConsumer {
+func newSuperStreamConsumer(env *Environment, superStream string, MessagesHandler MessagesHandler, superStreamConsumerOptions *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {
+
+	if env == nil {
+		return nil, ErrEnvironmentNotDefined
+	}
+
+	if superStreamConsumerOptions == nil {
+		return nil, ErrSuperStreamConsumerOptionsNotDefined
+	}
+
+	if superStream == "" || containsOnlySpaces(superStream) {
+		return nil, fmt.Errorf("super Stream Name can't be empty")
+	}
+
+	logs.LogDebug("Creating a SuperStreamConsumer for: %s", superStream)
+
 	return &SuperStreamConsumer{
 		env:                        env,
 		SuperStream:                superStream,
-		SuperStreamConsumerOptions: options,
+		SuperStreamConsumerOptions: superStreamConsumerOptions,
 		MessagesHandler:            MessagesHandler,
-	}
+	}, nil
 }
 
 func (s *SuperStreamConsumer) init() error {
@@ -78,7 +119,8 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 	s.mutex.Unlock()
 
 	options := NewConsumerOptions().SetOffset(offset).
-		SetSingleActiveConsumer(s.SuperStreamConsumerOptions.SingleActiveConsumer).SetConsumerName(s.SuperStreamConsumerOptions.ConsumerName)
+		SetSingleActiveConsumer(s.SuperStreamConsumerOptions.SingleActiveConsumer).
+		SetConsumerName(s.SuperStreamConsumerOptions.ConsumerName)
 	messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
 		if s.MessagesHandler != nil {
 			s.MessagesHandler(consumerContext, message)

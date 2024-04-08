@@ -45,6 +45,29 @@ func Send(env *Environment, superStream string) {
 
 var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func() {
 
+	It("Validate the Super Stream Consumer", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		consumer, err := newSuperStreamConsumer(nil, "superStream", nil, nil)
+		Expect(err).To(Equal(ErrEnvironmentNotDefined))
+		Expect(consumer).To(BeNil())
+
+		c1, err := env.NewSuperStreamConsumer("superStream", nil, nil)
+		Expect(err).To(Equal(ErrSuperStreamConsumerOptionsNotDefined))
+		Expect(c1).To(BeNil())
+
+		c2, err := env.NewSuperStreamConsumer("  ", nil, NewSuperStreamConsumerOptions())
+		Expect(err).To(HaveOccurred())
+		Expect(c2).To(BeNil())
+
+		c3, err := env.NewSuperStreamConsumer("", nil, NewSuperStreamConsumerOptions())
+		Expect(err).To(HaveOccurred())
+		Expect(c3).To(BeNil())
+
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
 	It("should create a new super stream consumer", func() {
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -58,7 +81,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 			ClientProvidedName: "client-provided-name",
 			Offset:             OffsetSpecification{}.First(),
 		}
-		superStreamConsumer := newSuperStreamConsumer(env, superStream, messagesHandler, options)
+		superStreamConsumer, err := newSuperStreamConsumer(env, superStream, messagesHandler, options)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(superStreamConsumer).NotTo(BeNil())
 		Expect(superStreamConsumer.SuperStream).To(Equal(superStream))
@@ -87,8 +110,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 			ClientProvidedName: "client-provided-name",
 			Offset:             OffsetSpecification{}.First(),
 		}
-		superStreamConsumer := newSuperStreamConsumer(env, superStream, messagesHandler, options)
-
+		superStreamConsumer, err := newSuperStreamConsumer(env, superStream, messagesHandler, options)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(superStreamConsumer.init()).NotTo(HaveOccurred())
 
 		// the consumer is already connected to the partition
@@ -118,11 +141,9 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 			mutex.Unlock()
 			atomic.AddInt32(&receivedMessages, 1)
 		}
-		options := &SuperStreamConsumerOptions{
-			ClientProvidedName: "client-provided-name",
-			Offset:             OffsetSpecification{}.First(),
-		}
-		superStreamConsumer := newSuperStreamConsumer(env, superStream, messagesHandler, options)
+
+		superStreamConsumer, err := newSuperStreamConsumer(env, superStream, messagesHandler, NewSuperStreamConsumerOptions().
+			SetConsumerName("consume-20messages"))
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(superStreamConsumer.init()).NotTo(HaveOccurred())
@@ -139,7 +160,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 	})
 
 	DescribeTable("Single active consumer in action",
-
+		// test the SAc in different scenarios
 		func(isSac bool, totalMessagesReceived int, applicationName1 string, applicationName2 string) {
 
 			env, err := NewEnvironment(nil)
@@ -159,7 +180,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 				atomic.AddInt32(&receivedMessages, 1)
 			}
 
-			firstSuperStreamConsumer := newSuperStreamConsumer(env, superStream, messagesHandler, &SuperStreamConsumerOptions{
+			firstSuperStreamConsumer, err := newSuperStreamConsumer(env, superStream, messagesHandler, &SuperStreamConsumerOptions{
 				Offset:       OffsetSpecification{}.First(),
 				ConsumerName: applicationName1,
 				SingleActiveConsumer: &SingleActiveConsumer{
@@ -169,9 +190,10 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 					},
 				},
 			})
+			Expect(err).NotTo(HaveOccurred())
 			Expect(firstSuperStreamConsumer.init()).NotTo(HaveOccurred())
 
-			secondSuperStreamConsumer := newSuperStreamConsumer(env, superStream, messagesHandler, &SuperStreamConsumerOptions{
+			secondSuperStreamConsumer, err := newSuperStreamConsumer(env, superStream, messagesHandler, &SuperStreamConsumerOptions{
 				Offset:       OffsetSpecification{}.First(),
 				ConsumerName: applicationName2,
 				SingleActiveConsumer: &SingleActiveConsumer{
@@ -181,6 +203,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 					},
 				},
 			})
+			Expect(err).NotTo(HaveOccurred())
 			Expect(secondSuperStreamConsumer.init()).NotTo(HaveOccurred())
 
 			Send(env, superStream)
@@ -198,5 +221,66 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		Entry("SAC enabled. Only One consumer should receive the messages", true, 20, "application_1", "application_1"),
 		Entry("SAC enabled but the Names are different. Consumers should consume independently", true, 40, "application_1", "application_2"),
 	)
+
+	It("The second consumer should be activated and restart from first", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		superStream := "sac-super-stream-the-second-should-restart-consume"
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
+
+		const appName = "MyApplication"
+		Send(env, superStream)
+
+		receivedMap := make(map[string]int)
+		var receivedMessages int32
+		mutex := sync.Mutex{}
+		messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
+			mutex.Lock()
+			receivedMap[consumerContext.Consumer.GetStreamName()] += 1
+			mutex.Unlock()
+			atomic.AddInt32(&receivedMessages, 1)
+		}
+
+		firstSuperStreamConsumer, err := env.NewSuperStreamConsumer(superStream, messagesHandler, NewSuperStreamConsumerOptions().
+			SetConsumerName(appName).SetSingleActiveConsumer(
+			NewSingleActiveConsumer(func(_ string, isActive bool) OffsetSpecification {
+				return OffsetSpecification{}.First()
+			})))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(firstSuperStreamConsumer).NotTo(BeNil())
+
+		secondSuperStreamConsumer, err := env.NewSuperStreamConsumer(superStream, messagesHandler, NewSuperStreamConsumerOptions().
+			SetConsumerName(appName).SetSingleActiveConsumer(NewSingleActiveConsumer(
+			func(streamName string, isActive bool) OffsetSpecification {
+				return OffsetSpecification{}.First()
+			},
+		)))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(secondSuperStreamConsumer).NotTo(BeNil())
+
+		// only the first consumer should receive the messages
+		Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(20)))
+		Expect(receivedMap).To(HaveLen(3))
+		Expect(receivedMap[fmt.Sprintf("%s-0", superStream)]).To(Equal(9))
+		Expect(receivedMap[fmt.Sprintf("%s-1", superStream)]).To(Equal(7))
+		Expect(receivedMap[fmt.Sprintf("%s-2", superStream)]).To(Equal(4))
+
+		// close the first consumer and the second consumer should be promoted to the active consumer
+		Expect(firstSuperStreamConsumer.Close()).NotTo(HaveOccurred())
+
+		// the second consumer should receive the messages from the beginning
+		// due of the SingleActiveConsumer configuration for the second consumer
+		Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(40)))
+
+		Expect(receivedMap).To(HaveLen(3))
+
+		Expect(receivedMap[fmt.Sprintf("%s-0", superStream)]).To(Equal(18))
+		Expect(receivedMap[fmt.Sprintf("%s-1", superStream)]).To(Equal(14))
+		Expect(receivedMap[fmt.Sprintf("%s-2", superStream)]).To(Equal(8))
+
+		Expect(secondSuperStreamConsumer.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+	})
 
 })

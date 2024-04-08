@@ -828,3 +828,13 @@ func (env *Environment) QueryRoute(superStream string, routingKey string) ([]str
 	}
 	return client.queryRoute(superStream, routingKey)
 }
+
+func (env *Environment) NewSuperStreamConsumer(superStream string, messagesHandler MessagesHandler, options *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {
+
+	s, err := newSuperStreamConsumer(env, superStream, messagesHandler, options)
+	if err != nil {
+		return nil, err
+	}
+	err = s.init()
+	return s, err
+}
