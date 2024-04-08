@@ -138,17 +138,17 @@ type PartitionPublishConfirm struct {
 	ConfirmationStatus []*ConfirmationStatus
 }
 
-// PartitionClose is a struct that is used to notify the user when a partition is closed
+// PPartitionClose is a struct that is used to notify the user when a partition from a producer is closed
 // The user can use the NotifyPartitionClose to get the channel
-type PartitionClose struct {
+type PPartitionClose struct {
 	Partition string
 	Event     Event
-	Context   PartitionContext
+	Context   PPartitionContext
 }
 
-// PartitionContext is an interface that is used to expose partition information and methods
-// to the user. The user can use the PartitionContext to reconnect a partition to the SuperStreamProducer
-type PartitionContext interface {
+// PPartitionContext is an interface that is used to expose partition information and methods
+// to the user. The user can use the PPartitionContext to reconnect a partition to the SuperStreamProducer
+type PPartitionContext interface {
 	ConnectPartition(partition string) error
 }
 
@@ -165,7 +165,7 @@ type SuperStreamProducer struct {
 	env                         *Environment
 	mutex                       sync.Mutex
 	chNotifyPublishConfirmation chan PartitionPublishConfirm
-	chSuperStreamPartitionClose chan PartitionClose
+	chSuperStreamPartitionClose chan PPartitionClose
 
 	// public
 	SuperStream                string
@@ -219,7 +219,7 @@ func (s *SuperStreamProducer) init() error {
 	return nil
 }
 
-// ConnectPartition connects a partition to the SuperStreamProducer part of PartitionContext interface
+// ConnectPartition connects a partition to the SuperStreamProducer part of PPartitionContext interface
 // The super stream producer is a producer that can send messages to multiple partitions
 // that are hidden to the user.
 // with the ConnectPartition the user can re-connect a partition to the SuperStreamProducer
@@ -242,7 +242,7 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 	for _, producer := range s.activeProducers {
 		if producer.GetStreamName() == partition {
 			s.mutex.Unlock()
-			return fmt.Errorf("partition %s already connected", partition)
+			return fmt.Errorf("producer already connected to: %s partition ", partition)
 		}
 	}
 
@@ -275,11 +275,13 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		}
 		s.mutex.Unlock()
 		if s.chSuperStreamPartitionClose != nil {
-			s.chSuperStreamPartitionClose <- PartitionClose{
+			s.mutex.Lock()
+			s.chSuperStreamPartitionClose <- PPartitionClose{
 				Partition: gpartion,
 				Event:     event,
 				Context:   s,
 			}
+			s.mutex.Unlock()
 		}
 		logs.LogDebug("[SuperStreamProducer] chSuperStreamPartitionClose for partition: %s", gpartion)
 	}(partition, closedEvent)
@@ -301,16 +303,18 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 }
 
 // NotifyPublishConfirmation returns a channel that will be notified when a message is confirmed or not per partition
-func (s *SuperStreamProducer) NotifyPublishConfirmation() chan PartitionPublishConfirm {
-	ch := make(chan PartitionPublishConfirm, 1)
+// size is the size of the channel
+func (s *SuperStreamProducer) NotifyPublishConfirmation(size int) chan PartitionPublishConfirm {
+	ch := make(chan PartitionPublishConfirm, size)
 	s.chNotifyPublishConfirmation = ch
 	return ch
 }
 
 // NotifyPartitionClose returns a channel that will be notified when a partition is closed
 // Event will give the reason of the close
-func (s *SuperStreamProducer) NotifyPartitionClose() chan PartitionClose {
-	ch := make(chan PartitionClose, 1)
+// size is the size of the channel
+func (s *SuperStreamProducer) NotifyPartitionClose(size int) chan PPartitionClose {
+	ch := make(chan PPartitionClose, size)
 	s.chSuperStreamPartitionClose = ch
 	return ch
 }
@@ -374,7 +378,7 @@ func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
 }
 
 func (s *SuperStreamProducer) Close() error {
-	logs.LogDebug("Closing a SuperStreamProducer for: %s", s.SuperStream)
+	logs.LogDebug("[SuperStreamProducer] Closing a SuperStreamProducer for: %s", s.SuperStream)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	for len(s.activeProducers) > 0 {
@@ -397,6 +401,6 @@ func (s *SuperStreamProducer) Close() error {
 		}
 		s.mutex.Unlock()
 	}()
-	logs.LogDebug("Closed SuperStreamProducer for: %s", s.SuperStream)
+	logs.LogDebug("[SuperStreamProducer] Closed SuperStreamProducer for: %s", s.SuperStream)
 	return nil
 }

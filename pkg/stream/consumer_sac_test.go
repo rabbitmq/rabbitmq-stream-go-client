@@ -39,7 +39,8 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 
 			}, NewConsumerOptions().SetSingleActiveConsumer(NewSingleActiveConsumer(
-				func(isActive bool) OffsetSpecification {
+				func(stream string, isActive bool) OffsetSpecification {
+					Expect(stream).To(Equal(streamName))
 					return OffsetSpecification{}.First()
 				},
 			)))
@@ -51,7 +52,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 
 			},
 			NewConsumerOptions().SetConsumerName("     ").SetSingleActiveConsumer(NewSingleActiveConsumer(
-				func(isActive bool) OffsetSpecification {
+				func(_ string, isActive bool) OffsetSpecification {
 					return OffsetSpecification{}.Last()
 				})))
 		Expect(err2).To(HaveOccurred())
@@ -70,7 +71,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		}
 
 		_, err = client.DeclareSubscriber(streamName, handleMessages, NewConsumerOptions().SetSingleActiveConsumer(
-			NewSingleActiveConsumer(func(isActive bool) OffsetSpecification {
+			NewSingleActiveConsumer(func(_ string, isActive bool) OffsetSpecification {
 				return OffsetSpecification{}.Last()
 			}),
 		))
@@ -97,7 +98,8 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 				atomic.AddInt32(&c1ReceivedMessages, 1)
 			}, NewConsumerOptions().SetConsumerName(appName).
 				SetSingleActiveConsumer(NewSingleActiveConsumer(
-					func(isActive bool) OffsetSpecification {
+					func(stream string, isActive bool) OffsetSpecification {
+						Expect(stream).To(Equal(streamName))
 						return OffsetSpecification{}.First()
 					},
 				)))
@@ -112,7 +114,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 				atomic.AddInt32(&c2ReceivedMessages, 1)
 			}, NewConsumerOptions().SetConsumerName(appName).
 				SetSingleActiveConsumer(NewSingleActiveConsumer(
-					func(isActive bool) OffsetSpecification {
+					func(_ string, isActive bool) OffsetSpecification {
 						return OffsetSpecification{}.First()
 					},
 				)))
@@ -144,7 +146,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 				atomic.AddInt32(&c1ReceivedMessages, 1)
 			}, NewConsumerOptions().SetConsumerName(appName).
 				SetSingleActiveConsumer(NewSingleActiveConsumer(
-					func(isActive bool) OffsetSpecification {
+					func(stream string, isActive bool) OffsetSpecification {
 						return OffsetSpecification{}.First()
 					},
 				)))
@@ -157,7 +159,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 				atomic.AddInt32(&c2ReceivedMessages, 1)
 			}, NewConsumerOptions().SetConsumerName(appName).
 				SetSingleActiveConsumer(NewSingleActiveConsumer(
-					func(isActive bool) OffsetSpecification {
+					func(stream string, isActive bool) OffsetSpecification {
 						// Here the consumer is promoted it will restart from
 						// offset 10
 						// so c2ReceivedMessages should be 20

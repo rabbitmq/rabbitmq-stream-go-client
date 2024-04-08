@@ -334,8 +334,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	// if the consumer has an offset we need to filter the messages
 
 	if consumer.options.IsSingleActiveConsumerEnabled() {
-		if consumer.options.SingleActiveConsumer.OffsetSpecification.isOffset() {
-			offsetLimit = consumer.options.SingleActiveConsumer.OffsetSpecification.offset
+		if consumer.options.SingleActiveConsumer.offsetSpecification.isOffset() {
+			offsetLimit = consumer.options.SingleActiveConsumer.offsetSpecification.offset
 		}
 	} else {
 		// single active consumer is not enabled
@@ -582,14 +582,16 @@ func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Rea
 	subscriptionId := readByte(r)
 	isActive := readByte(r)
 	consumer, err := c.coordinator.GetConsumerById(subscriptionId)
+
 	logErrorCommand(err, "handleConsumerUpdate")
 	if consumer == nil {
 		logs.LogWarn("consumer not found %d. The consumer maybe removed before the update", subscriptionId)
 		return
 	}
 	consumer.setPromotedAsActive(isActive == 1)
-	responseOff := consumer.options.SingleActiveConsumer.ConsumerUpdate(isActive == 1)
-	consumer.options.SingleActiveConsumer.OffsetSpecification = responseOff
+	responseOff := consumer.options.SingleActiveConsumer.ConsumerUpdate(consumer.GetStreamName(),
+		isActive == 1)
+	consumer.options.SingleActiveConsumer.offsetSpecification = responseOff
 	err = consumer.writeConsumeUpdateOffsetToSocket(readProtocol.CorrelationId, responseOff)
 	logErrorCommand(err, "handleConsumerUpdate writeConsumeUpdateOffsetToSocket")
 }
