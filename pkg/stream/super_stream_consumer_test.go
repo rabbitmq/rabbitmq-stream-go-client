@@ -180,7 +180,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 				atomic.AddInt32(&receivedMessages, 1)
 			}
 
-			firstSuperStreamConsumer, err := newSuperStreamConsumer(env, superStream, messagesHandler, &SuperStreamConsumerOptions{
+			consumer, err := newSuperStreamConsumer(env, superStream, messagesHandler, &SuperStreamConsumerOptions{
 				Offset:       OffsetSpecification{}.First(),
 				ConsumerName: applicationName1,
 				SingleActiveConsumer: &SingleActiveConsumer{
@@ -191,7 +191,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 				},
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(firstSuperStreamConsumer.init()).NotTo(HaveOccurred())
+			Expect(consumer.init()).NotTo(HaveOccurred())
 
 			secondSuperStreamConsumer, err := newSuperStreamConsumer(env, superStream, messagesHandler, &SuperStreamConsumerOptions{
 				Offset:       OffsetSpecification{}.First(),
@@ -213,6 +213,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 			Expect(receivedMap).To(HaveLen(3))
 
+			Expect(consumer.Close()).NotTo(HaveOccurred())
 			Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 			Expect(env.Close()).NotTo(HaveOccurred())
 		},
@@ -281,6 +282,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 		Expect(secondSuperStreamConsumer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
 })
