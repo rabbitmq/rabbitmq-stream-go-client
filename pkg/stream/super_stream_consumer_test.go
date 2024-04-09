@@ -160,14 +160,14 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
-	DescribeTable("Single active consumer in action",
-		// test the SAc in different scenarios
+	DescribeTable("Single active consumer in action", Label("super-stream-consumer"),
+		// test the SAC in different scenarios
 		func(isSac bool, totalMessagesReceived int, applicationName1 string, applicationName2 string) {
 
 			env, err := NewEnvironment(nil)
 			Expect(err).NotTo(HaveOccurred())
 
-			superStream := "sac-super-stream-the-second-should-not-consume"
+			superStream := "sac-super-stream-the-second-consumer-in-action"
 			Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 			var receivedMessages int32
@@ -209,6 +209,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 			Send(env, superStream)
 
+			time.Sleep(2 * time.Second)
 			Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }, 300*time.Millisecond).
 				WithTimeout(5 * time.Second).Should(Equal(int32(totalMessagesReceived)))
 
@@ -220,7 +221,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		},
 
 		Entry("SAC not enabled. Consumers should consume independently", false, 40, "application_1", "application_1"),
-		Entry("SAC enabled. Only One consumer should receive the messages", true, 20, "application_1", "application_1"),
+		Entry("SAC enabled. Both should receive the messages the total messages", true, 20, "application_1", "application_1"),
 		Entry("SAC enabled but the Names are different. Consumers should consume independently", true, 40, "application_1", "application_2"),
 	)
 
@@ -284,14 +285,14 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 	})
 
 	It("The second consumer should be activated and restart from first", func() {
+
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		superStream := "sac-super-stream-the-second-should-restart-consume"
-		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(2))).NotTo(HaveOccurred())
 
 		const appName = "MyApplication"
-		Send(env, superStream)
 
 		receivedMap := make(map[string]int)
 		var receivedMessages int32
@@ -302,15 +303,19 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 			mutex.Unlock()
 			atomic.AddInt32(&receivedMessages, 1)
 		}
-
-		firstSuperStreamConsumer, err := env.NewSuperStreamConsumer(superStream, messagesHandler, NewSuperStreamConsumerOptions().
-			SetConsumerName(appName).SetSingleActiveConsumer(
-			NewSingleActiveConsumer(func(_ string, isActive bool) OffsetSpecification {
-				return OffsetSpecification{}.First()
-			})))
+		// both consumers should consume the total 20 messages
+		// they start from the beginning of the stream
+		// firstSuperStreamConsumer takes one partition and
+		// the secondSuperStreamConsumer takes the second partition
+		firstSuperStreamConsumer, err := env.NewSuperStreamConsumer(superStream, messagesHandler,
+			NewSuperStreamConsumerOptions().
+				SetConsumerName(appName).SetSingleActiveConsumer(
+				NewSingleActiveConsumer(func(_ string, isActive bool) OffsetSpecification {
+					return OffsetSpecification{}.First()
+				})))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(firstSuperStreamConsumer).NotTo(BeNil())
-
+		// the secondSuperStreamConsumer takes the second partition
 		secondSuperStreamConsumer, err := env.NewSuperStreamConsumer(superStream, messagesHandler, NewSuperStreamConsumerOptions().
 			SetConsumerName(appName).SetSingleActiveConsumer(NewSingleActiveConsumer(
 			func(streamName string, isActive bool) OffsetSpecification {
@@ -319,26 +324,29 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		)))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(secondSuperStreamConsumer).NotTo(BeNil())
-
-		// only the first consumer should receive the messages
+		Send(env, superStream)
+		// both should consume the total 20 messages
 		Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(20)))
-		Expect(receivedMap).To(HaveLen(3))
-		Expect(receivedMap[fmt.Sprintf("%s-0", superStream)]).To(Equal(9))
-		Expect(receivedMap[fmt.Sprintf("%s-1", superStream)]).To(Equal(7))
-		Expect(receivedMap[fmt.Sprintf("%s-2", superStream)]).To(Equal(4))
+		Expect(receivedMap).To(HaveLen(2))
+		Expect(receivedMap[fmt.Sprintf("%s-0", superStream)]).To(Equal(10))
+		Expect(receivedMap[fmt.Sprintf("%s-1", superStream)]).To(Equal(10))
 
 		// close the first consumer and the second consumer should be promoted to the active consumer
+		// the secondSuperStreamConsumer already consumed the messages from the beginning from one partition
+		// here the other partition (the one held by the fist consumer) should be consumed from the beginning
 		Expect(firstSuperStreamConsumer.Close()).NotTo(HaveOccurred())
 
+		time.Sleep(2 * time.Second)
 		// the second consumer should receive the messages from the beginning
 		// due of the SingleActiveConsumer configuration for the second consumer
-		Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(40)))
+		// 30 =
+		// - 10 from the first consumer  ( partition 1)
+		// - 10 from the second consumer ( partition 2)
+		// - 10 from the second consumer ( partition 1) after the first consumer is closed
+		Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) },
+			300*time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(30)))
 
-		Expect(receivedMap).To(HaveLen(3))
-
-		Expect(receivedMap[fmt.Sprintf("%s-0", superStream)]).To(Equal(18))
-		Expect(receivedMap[fmt.Sprintf("%s-1", superStream)]).To(Equal(14))
-		Expect(receivedMap[fmt.Sprintf("%s-2", superStream)]).To(Equal(8))
+		Expect(receivedMap).To(HaveLen(2))
 
 		Expect(secondSuperStreamConsumer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())

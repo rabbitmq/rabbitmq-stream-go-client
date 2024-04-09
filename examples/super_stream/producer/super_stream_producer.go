@@ -34,15 +34,7 @@ func main() {
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions())
 	CheckErr(err)
-	superStreamName := "MySuperStream-Partitions"
-	err = env.DeleteSuperStream(superStreamName)
-	if err != nil && errors.Is(err, stream.StreamDoesNotExist) {
-		// we can ignore the error if the stream does not exist
-		// it will be created later
-		fmt.Printf("error deleting super stream: %s", err)
-	} else {
-		CheckErr(err)
-	}
+	superStreamName := "MySuperStream"
 
 	// Create a super stream
 	err = env.DeclareSuperStream(superStreamName,
@@ -108,8 +100,8 @@ func main() {
 	}(superStreamProducer.NotifyPublishConfirmation(1))
 
 	// Publish messages
-	for i := 0; i < 500; i++ {
-		msg := amqp.NewMessage(make([]byte, 0))
+	for i := 0; i < 5_000; i++ {
+		msg := amqp.NewMessage([]byte(fmt.Sprintf("hello_super_stream_%d", i)))
 		msg.ApplicationProperties = map[string]interface{}{"myKey": fmt.Sprintf("key_%d", i)}
 		err = superStreamProducer.Send(msg)
 		switch {
@@ -137,7 +129,7 @@ func main() {
 		default:
 			CheckErr(err)
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	reader := bufio.NewReader(os.Stdin)
