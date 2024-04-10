@@ -34,7 +34,7 @@ func main() {
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions())
 	CheckErr(err)
-	superStreamName := "MySuperStream"
+	superStreamName := "invoices"
 
 	// Create a super stream
 	err = env.DeclareSuperStream(superStreamName,
@@ -51,7 +51,7 @@ func main() {
 			stream.NewHashRoutingStrategy(func(message message.StreamMessage) string {
 				// here the code _must_ be fast and safe
 				// The code evaluation is before sending the message
-				return message.GetApplicationProperties()["myKey"].(string)
+				return message.GetMessageProperties().MessageID.(string)
 			})).SetClientProvidedName("my-super-stream-producer"))
 	CheckErr(err)
 
@@ -84,7 +84,7 @@ func main() {
 			for _, confirm := range superStreamPublishConfirm.ConfirmationStatus {
 				if confirm.IsConfirmed() {
 					fmt.Printf("Message with key: %s stored in partition %s, total: %d\n",
-						confirm.GetMessage().GetApplicationProperties()["myKey"],
+						confirm.GetMessage().GetMessageProperties().MessageID,
 						superStreamPublishConfirm.Partition,
 						atomic.AddInt32(&confirmed, 1))
 				} else {
@@ -102,7 +102,9 @@ func main() {
 	// Publish messages
 	for i := 0; i < 5_000; i++ {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("hello_super_stream_%d", i)))
-		msg.ApplicationProperties = map[string]interface{}{"myKey": fmt.Sprintf("key_%d", i)}
+		msg.Properties = &amqp.MessageProperties{
+			MessageID: fmt.Sprintf("key_%d", i),
+		}
 		err = superStreamProducer.Send(msg)
 		switch {
 		case errors.Is(err, stream.ErrProducerNotFound):

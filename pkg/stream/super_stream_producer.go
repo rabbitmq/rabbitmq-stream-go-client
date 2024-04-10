@@ -290,12 +290,11 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		logs.LogDebug("[SuperStreamProducer] chNotifyPublishConfirmation started - partition: %s", gpartion)
 		for confirmed := range ch {
 			if s.chNotifyPublishConfirmation != nil {
-				s.mutex.Lock()
 				s.chNotifyPublishConfirmation <- PartitionPublishConfirm{
 					Partition:          gpartion,
 					ConfirmationStatus: confirmed,
 				}
-				s.mutex.Unlock()
+
 			}
 		}
 		logs.LogDebug("[SuperStreamProducer] chNotifyPublishConfirmation closed - partition: %s", gpartion)
@@ -397,9 +396,11 @@ func (s *SuperStreamProducer) Close() error {
 		s.mutex.Lock()
 		if s.chNotifyPublishConfirmation != nil {
 			close(s.chNotifyPublishConfirmation)
+			s.chNotifyPublishConfirmation = nil
 		}
 		if s.chSuperStreamPartitionClose != nil {
 			close(s.chSuperStreamPartitionClose)
+			s.chSuperStreamPartitionClose = nil
 		}
 		s.mutex.Unlock()
 	}()

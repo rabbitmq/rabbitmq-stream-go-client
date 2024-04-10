@@ -38,9 +38,9 @@ func Send(env *Environment, superStream string) {
 		msg.ApplicationProperties = map[string]interface{}{"routingKey": fmt.Sprintf("hello%d", i)}
 		Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 	}
-	Expect(superProducer.Close()).NotTo(HaveOccurred())
 	<-signal
 	close(signal)
+	Expect(superProducer.Close()).NotTo(HaveOccurred())
 
 }
 

@@ -34,7 +34,7 @@ func main() {
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions())
 	CheckErr(err)
-	superStreamName := "MySuperStream"
+	superStreamName := "invoices"
 
 	// Create a super stream
 	err = env.DeclareSuperStream(superStreamName,
