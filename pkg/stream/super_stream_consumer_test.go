@@ -217,6 +217,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 			Expect(consumer.Close()).NotTo(HaveOccurred())
 			Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+			time.Sleep(1 * time.Second)
 			Expect(env.Close()).NotTo(HaveOccurred())
 		},
 
