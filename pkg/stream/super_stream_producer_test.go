@@ -133,7 +133,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(err).NotTo(HaveOccurred())
 		// we do this test to be sure that the producer is able to Send messages to all the partitions
 		// the same was done in .NET client and python client
-		const superStream = "invoices"
+		const superStream = "super-stream-send-messages-to-all-partitions"
 
 		msgReceived := make(map[string]int)
 		mutex := sync.Mutex{}
@@ -169,25 +169,24 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 
-		time.Sleep(3 * time.Second)
 		// these values are the same for .NET,Python,Java stream clients
 		// The aim for this test is to validate the correct routing with the
 		// MurmurStrategy.
 		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
-			return msgReceived["invoices-0"]
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(Equal(9))
+			return msgReceived[fmt.Sprintf("%s-%s", superStream, "0")]
+		}).WithPolling(300 * time.Millisecond).WithTimeout(2 * time.Second).Should(Equal(9))
 		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
-			return msgReceived["invoices-1"]
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(Equal(7))
+			return msgReceived[fmt.Sprintf("%s-%s", superStream, "1")]
+		}).WithPolling(300 * time.Millisecond).WithTimeout(2 * time.Second).Should(Equal(7))
 		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
-			return msgReceived["invoices-2"]
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).Should(Equal(4))
+			return msgReceived[fmt.Sprintf("%s-%s", superStream, "2")]
+		}).WithPolling(300 * time.Millisecond).WithTimeout(2 * time.Second).Should(Equal(4))
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())

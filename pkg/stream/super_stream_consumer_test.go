@@ -210,7 +210,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 			Send(env, superStream)
 
 			time.Sleep(2 * time.Second)
-			Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }, 300*time.Millisecond).
+			Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }).WithPolling(300 * time.Millisecond).
 				WithTimeout(5 * time.Second).Should(Equal(int32(totalMessagesReceived)))
 
 			Expect(receivedMap).To(HaveLen(3))
@@ -263,22 +263,19 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 		}(superConsumer.NotifyPartitionClose(1))
 
-		time.Sleep(3 * time.Second)
 		Eventually(func() error {
 			return test_helper.DropConnectionClientProvidedName("reconnect-super-stream-consumer", "15672")
-		}, 300*time.Millisecond).WithTimeout(8 * time.Second).ShouldNot(HaveOccurred())
+		}).WithPolling(300 * time.Millisecond).WithTimeout(8 * time.Second).ShouldNot(HaveOccurred())
 
 		Eventually(func() bool {
 			return len(superConsumer.getConsumers()) == 2
-		}).WithTimeout(5 * time.Second).Should(BeTrue())
+		}).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
 
-		time.Sleep(1 * time.Second)
-		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return len(reconnectedMap) == 1 },
-			300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return len(reconnectedMap) == 1 }).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
 
 		Eventually(func() bool {
 			return len(superConsumer.getConsumers()) == 3
-		}).WithTimeout(5 * time.Second).Should(BeTrue())
+		}).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
 
 		Expect(superConsumer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
