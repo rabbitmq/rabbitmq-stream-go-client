@@ -38,7 +38,8 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
         * [Single Active Consumer](#single-active-consumer)
     * [Handle Close](#handle-close)
 	* [Reliable Producer and Reliable Consumer](#reliable-producer-and-reliable-consumer)
-- [Performance test tool](#performance-test-tool)
+    * [Super Stream](#super-stream)
+  [Performance test tool](#performance-test-tool)
     * [Performance test tool Docker](#performance-test-tool-docker)
 - [Build form source](#build-form-source)
 - [Project status](#project-status)
@@ -390,21 +391,6 @@ See the [Filtering](./examples/filtering/filtering.go) example in the [examples]
 
 
 
-### Reliable Producer and Reliable Consumer
-
-The `ReliableProducer` and `ReliableConsumer` are built up the standard producer/consumer. </br>
-Both use the standard events to handle the close. So you can write your own code to handle the fail-over. </br>
-
-Features:
- - [`Both`] auto-reconnect in case of disconnection.
- - [`Both`] check if stream exists, if not they close the `ReliableProducer` and `ReliableConsumer`.
- - [`Both`] check if the stream has a valid leader and replicas, if not they retry until the stream is ready.
- - [`ReliableProducer`] handle the unconfirmed messages automatically in case of fail.
- - [`ReliableConsumer`] restart from the last offset in case of restart.
-
-You can find a "Reliable" example in the [examples](./examples/) directory. </br>
-
-
 ### Consume messages
 
 In order to consume messages from a stream you need to use the `NewConsumer` interface, ex:
@@ -558,6 +544,29 @@ func consumerClose(channelClose stream.ChannelClose) {
 }
 ```
 In this way it is possible to handle fail-over
+
+
+### Reliable Producer and Reliable Consumer
+
+The `ReliableProducer` and `ReliableConsumer` are built up the standard producer/consumer. </br>
+Both use the standard events to handle the close. So you can write your own code to handle the fail-over. </br>
+
+Features:
+- [`Both`] auto-reconnect in case of disconnection.
+- [`Both`] check if stream exists, if not they close the `ReliableProducer` and `ReliableConsumer`.
+- [`Both`] check if the stream has a valid leader and replicas, if not they retry until the stream is ready.
+- [`ReliableProducer`] handle the unconfirmed messages automatically in case of fail.
+- [`ReliableConsumer`] restart from the last offset in case of restart.
+
+You can find a "Reliable" example in the [examples](./examples/) directory. </br>
+
+### Super Stream
+
+The Super Stream feature is a new feature in RabbitMQ 3.11. It allows to create a stream with multiple partitions. </br>
+Each partition is a separate stream, but the client sees the Super Stream as a single stream. </br>
+
+You can find a "Super Stream" example in the [examples](./examples/super_stream) directory. </br>
+
 
 ### Performance test tool
 

@@ -341,8 +341,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		// - 10 from the first consumer  ( partition 1)
 		// - 10 from the second consumer ( partition 2)
 		// - 10 from the second consumer ( partition 1) after the first consumer is closed
-		Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) },
-			300*time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(30)))
+		Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(30)))
 
 		Expect(receivedMap).To(HaveLen(2))
 
