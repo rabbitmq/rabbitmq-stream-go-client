@@ -50,7 +50,8 @@ type CPartitionClose struct {
 }
 
 // CPartitionContext is an interface that is used to expose partition information and methods
-// to the user. The user can use the PPartitionContext to reconnect a partition to the SuperStreamConsumer
+// to the user. The user can use the CPartitionContext to reconnect a partition to the SuperStreamConsumer
+// Specifying the offset to start from
 type CPartitionContext interface {
 	ConnectPartition(partition string, offset OffsetSpecification) error
 }

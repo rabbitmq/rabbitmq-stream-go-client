@@ -39,8 +39,8 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
     * [Handle Close](#handle-close)
 	* [Reliable Producer and Reliable Consumer](#reliable-producer-and-reliable-consumer)
     * [Super Stream](#super-stream)
-  [Performance test tool](#performance-test-tool)
-    * [Performance test tool Docker](#performance-test-tool-docker)
+- [Performance test tool](#performance-test-tool)
+  * [Performance test tool Docker](#performance-test-tool-docker)
 - [Build form source](#build-form-source)
 - [Project status](#project-status)
 
