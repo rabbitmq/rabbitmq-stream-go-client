@@ -885,7 +885,9 @@ func (c *Client) DeclareSubscriber(streamName string,
 
 	if options.IsSingleActiveConsumerEnabled() {
 		consumerProperties["single-active-consumer"] = "true"
-
+		if options.SingleActiveConsumer.superStream != "" {
+			consumerProperties["super-stream"] = options.SingleActiveConsumer.superStream
+		}
 	}
 
 	if options.Filter != nil {
@@ -935,7 +937,7 @@ func (c *Client) DeclareSubscriber(streamName string,
 
 	canDispatch := func(offsetMessage *offsetMessage) bool {
 		if !consumer.isActive() {
-			logs.LogDebug("The consumer is not active anymore the message will be skipped")
+			logs.LogDebug("The consumer is not active anymore the message will be skipped, partition %s", streamName)
 			return false
 		}
 

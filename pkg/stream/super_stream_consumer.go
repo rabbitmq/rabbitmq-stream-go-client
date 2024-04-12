@@ -153,14 +153,32 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 		options = options.SetClientProvidedName(s.SuperStreamConsumerOptions.ClientProvidedName)
 	}
 
+	if s.SuperStreamConsumerOptions.SingleActiveConsumer != nil {
+		// mandatory to enable the super stream consumer
+		// we need to create a new SAC for each consumer since we need to store: `offsetSpecification OffsetSpecification`
+		// differently. We can leave the ConsumerUpdate pointer to be the same for all the consumers.
+		// ConsumerUpdate contains all the info to work alone
+		sacForConsumer :=
+			newSingleActiveConsumerWithAllParameters(
+				s.SuperStreamConsumerOptions.SingleActiveConsumer.ConsumerUpdate,
+				s.SuperStreamConsumerOptions.SingleActiveConsumer.Enabled,
+				s.SuperStream)
+		options = options.SetSingleActiveConsumer(sacForConsumer)
+	}
+
+	// set the same handler for all the partitions
+	// with consumerContext.Consumer.GetStreamName() it is possible to know the partition
+	// and to handle the message in a different way
+	// s.MessagesHandler is not mandatory even if it is a good practice to set it
 	messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
 		if s.MessagesHandler != nil {
 			s.MessagesHandler(consumerContext, message)
+		} else {
+			logs.LogWarn("[SuperStreamConsumer] No handler set for partition: %s", consumerContext.Consumer.GetStreamName())
 		}
 	}
 	consumer, err := s.env.NewConsumer(partition, messagesHandler,
-		options.SetConsumerName(s.SuperStreamConsumerOptions.ConsumerName).
-			SetSingleActiveConsumer(s.SuperStreamConsumerOptions.SingleActiveConsumer))
+		options.SetConsumerName(s.SuperStreamConsumerOptions.ConsumerName))
 	if err != nil {
 		return err
 	}
@@ -171,8 +189,8 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 
 	go func(gpartion string, _closedEvent <-chan Event) {
 		logs.LogDebug("[SuperStreamConsumer] chSuperStreamPartitionClose started for partition: %s", gpartion)
+		// one shot event
 		event := <-_closedEvent
-
 		s.mutex.Lock()
 		for i := range s.activeConsumers {
 			if s.activeConsumers[i].GetStreamName() == gpartion {

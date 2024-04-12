@@ -13,7 +13,7 @@ The producer will start sending messages to the stream. It is voluntary slow to 
 You should see the following output:
 
 ```bash
-go run producer.go
+go run producer/producer.go
 Producer for Single Active Consumer example
 Connecting to RabbitMQ streaming ...
 [08:16:20] sending message hello_world_0 ...

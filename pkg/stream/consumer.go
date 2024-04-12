@@ -183,6 +183,10 @@ type SingleActiveConsumer struct {
 	// is not used because the consumer will be promoted and the offset will be set by the ConsumerUpdate
 	// This is needed to filter the messages during the promotion where needed
 	offsetSpecification OffsetSpecification
+
+	// SingleActiveConsumer can be used with the super stream consumer
+	// in this case we need to pass the super stream name
+	superStream string
 }
 
 func NewSingleActiveConsumer(ConsumerUpdate ConsumerUpdate) *SingleActiveConsumer {
@@ -190,6 +194,20 @@ func NewSingleActiveConsumer(ConsumerUpdate ConsumerUpdate) *SingleActiveConsume
 		Enabled:        true,
 		ConsumerUpdate: ConsumerUpdate,
 	}
+}
+
+func newSingleActiveConsumerWithAllParameters(
+	ConsumerUpdate ConsumerUpdate, isEnabled bool, superStream string) *SingleActiveConsumer {
+	return &SingleActiveConsumer{
+		Enabled:        isEnabled,
+		ConsumerUpdate: ConsumerUpdate,
+		superStream:    superStream,
+	}
+}
+
+func (s *SingleActiveConsumer) SetEnabled(enabled bool) *SingleActiveConsumer {
+	s.Enabled = enabled
+	return s
 }
 
 type ConsumerOptions struct {

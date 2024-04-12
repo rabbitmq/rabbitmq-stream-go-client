@@ -411,11 +411,11 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 		}
 	}
-
 	chunk.offsetMessages = batchConsumingMessages
 	if consumer.getStatus() == open {
 		consumer.response.chunkForConsumer <- chunk
-
+	} else {
+		logs.LogWarn("Consumer %s is closed", consumer.GetStreamName())
 	}
 
 }
