@@ -222,6 +222,7 @@ type ConsumerOptions struct {
 	ClientProvidedName   string
 	Filter               *ConsumerFilter
 	SingleActiveConsumer *SingleActiveConsumer
+	ChMessage            chan []*amqp.Message
 }
 
 func NewConsumerOptions() *ConsumerOptions {
@@ -238,6 +239,11 @@ func NewConsumerOptions() *ConsumerOptions {
 
 func (c *ConsumerOptions) SetConsumerName(consumerName string) *ConsumerOptions {
 	c.ConsumerName = consumerName
+	return c
+}
+
+func (c *ConsumerOptions) SetChMessage(ch chan []*amqp.Message) *ConsumerOptions {
+	c.ChMessage = ch
 	return c
 }
 

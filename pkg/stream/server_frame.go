@@ -3,9 +3,9 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
-	"hash/crc32"
 	"io"
 	"time"
 )
@@ -316,8 +316,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_ = readInt64(r)       // timestamp
 	_ = readInt64(r)       // epoch, unsigned long
 	offset := readInt64(r) // offset position
-	crc, _ := readUInt(r)  /// crc and dataLength are needed to calculate the CRC
-	dataLength, _ := readUInt(r)
+	_, _ = readUInt(r)     /// crc and dataLength are needed to calculate the CRC
+	_, _ = readUInt(r)
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
 
@@ -348,24 +348,25 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	filter := offsetLimit != -1
 
 	//messages
-	var batchConsumingMessages offsetMessages
+	var batchConsumingMessages []*amqp.Message
 	var chunk chunkInfo
 	chunk.numEntries = numEntries
-	var bytesBuffer = make([]byte, int(dataLength))
-	_, err = io.ReadFull(r, bytesBuffer)
+	//var bytesBuffer = make([]byte, int(dataLength))
+	//_, err = io.ReadFull(r, bytesBuffer)
+
 	logErrorCommand(err, "handleDeliver")
 
 	/// headers ---> payload -> messages
 
-	if consumer.options.CRCCheck {
-		checkSum := crc32.ChecksumIEEE(bytesBuffer)
-		if crc != checkSum {
-			logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
-			panic("Error during CRC")
-		} /// ???
-	}
-
-	bufferReader := bytes.NewReader(bytesBuffer)
+	//if consumer.options.CRCCheck {
+	//	checkSum := crc32.ChecksumIEEE(bytesBuffer)
+	//	if crc != checkSum {
+	//		logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
+	//		panic("Error during CRC")
+	//	} /// ???
+	//}
+	bufferReader := r
+	//bufferReader := bytes.NewReader(bytesBuffer)
 	dataReader := bufio.NewReader(bufferReader)
 
 	for numRecords != 0 {
@@ -380,11 +381,16 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			}
 		}
 		if (entryType & 0x80) == 0 {
-			batchConsumingMessages = c.decodeMessage(dataReader,
+			m := c.decodeMessage(dataReader,
 				filter,
 				offset,
 				offsetLimit,
-				batchConsumingMessages)
+			)
+			batchConsumingMessages = append(batchConsumingMessages, m)
+			//if m != nil {
+			//	consumer.options.ChMessage <- m
+			//}
+
 			numRecords--
 			offset++
 		} else {
@@ -400,39 +406,49 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				uncompressedDataSize)
 
 			for numRecordsInBatch != 0 {
-				batchConsumingMessages = c.decodeMessage(uncompressedReader,
+				m := c.decodeMessage(uncompressedReader,
 					filter,
 					offset,
 					offsetLimit,
-					batchConsumingMessages)
+				)
+				batchConsumingMessages = append(batchConsumingMessages, m)
+
 				numRecordsInBatch--
 				offset++
 			}
 
 		}
 	}
-	chunk.offsetMessages = batchConsumingMessages
-	if consumer.getStatus() == open {
-		consumer.response.chunkForConsumer <- chunk
-	} else {
-		logs.LogWarn("Consumer %s is closed", consumer.GetStreamName())
-	}
+
+	consumer.options.ChMessage <- batchConsumingMessages
+
+	//chunk.offsetMessages = batchConsumingMessages
+	//if consumer.getStatus() == open {
+	//	consumer.response.chunkForConsumer <- chunk
+	//} else {
+	//	logs.LogWarn("Consumer %s is closed", consumer.GetStreamName())
+	//}
 
 }
 
-func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offsetLimit int64, batchConsumingMessages offsetMessages) offsetMessages {
+func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offsetLimit int64) *amqp.Message {
 	sizeMessage, _ := readUInt(r)
-	arrayMessage := readUint8Array(r, sizeMessage)
+	//arrayMessage := readUint8Array(r, sizeMessage)
+	arrayMessage := make([]byte, sizeMessage)
+	_, err := io.ReadFull(r, arrayMessage)
+	logErrorCommand(err, "decodeMessage")
 	if filter && (offset < offsetLimit) {
 		/// TODO set recordset as filtered
 	} else {
 		msg := &amqp.Message{}
 		err := msg.UnmarshalBinary(arrayMessage)
 		logErrorCommand(err, "error unmarshal messages")
-		batchConsumingMessages = append(batchConsumingMessages,
-			&offsetMessage{offset: offset, message: msg})
+		if len(arrayMessage) > 11110 {
+			fmt.Printf("message %s \n", string(arrayMessage))
+		}
+		return msg
 	}
-	return batchConsumingMessages
+	return nil
 }
 
 func (c *Client) creditNotificationFrameHandler(readProtocol *ReaderProtocol,

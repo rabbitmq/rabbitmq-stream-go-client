@@ -483,6 +483,7 @@ func readBinary(r *buffer) ([]byte, error) {
 	if !ok {
 		return nil, errorNew("invalid length")
 	}
+
 	return append([]byte(nil), buf...), nil
 }
 

@@ -3,11 +3,10 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
-	"strconv"
+	"sync/atomic"
 	"time"
 )
 
@@ -50,64 +49,49 @@ func main() {
 	// Connect to the broker ( or brokers )
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
+			SetWriteBuffer(1024 * 1024).
+			SetReadBuffer(1024 * 1024).
 			SetHost("localhost").
 			SetPort(5552).
 			SetUser("guest").
 			SetPassword("guest"))
 	CheckErr(err)
-	// Create a stream, you can create streams without any option like:
-	// err = env.DeclareStream(streamName, nil)
-	// it is a best practise to define a size,  1GB for example:
 
-	streamName := uuid.New().String()
-	err = env.DeclareStream(streamName,
-		&stream.StreamOptions{
-			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
-		},
-	)
-
-	CheckErr(err)
-
-	// Get a new producer for a stream
-	producer, err := env.NewProducer(streamName, nil)
-	CheckErr(err)
-
-	//optional publish confirmation channel
-	chPublishConfirm := producer.NotifyPublishConfirmation()
-	handlePublishConfirm(chPublishConfirm)
-
-	// the send method automatically aggregates the messages
-	// based on batch size
-	for i := 0; i < 10000; i++ {
-		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
-		CheckErr(err)
-	}
-
-	// this sleep is not mandatory, just to show the confirmed messages
-	time.Sleep(1 * time.Second)
-	err = producer.Close()
-	CheckErr(err)
-
-	// Define a consumer per stream, there are different offset options to define a consumer, default is
-	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.message) {
+	var recv int32
+	//handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	//	if atomic.AddInt32(&recv, 1)%5000000 == 0 {
+	//		fmt.Printf("Time elapsed: %d %s\n", recv, time.Since(start))
+	//	}
 	//
-	//}, nil)
-	// if you need to track the offset you need a consumer name like:
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	//}
 
-		fmt.Printf("consumer name: %s, data: %s, message offset %d, chunk entities count: %d   \n ",
-			consumerContext.Consumer.GetName(), message.Data, consumerContext.Consumer.GetOffset(), consumerContext.GetEntriesCount())
-	}
+	chMessage := make(chan []*amqp.Message, 10)
+
+	start := time.Now()
+	go func() {
+		for msg := range chMessage {
+			for _, _ = range msg {
+				if atomic.AddInt32(&recv, 1)%5000000 == 0 {
+					fmt.Printf("Time elapsed: %d %s\n", recv, time.Since(start))
+					start = time.Now()
+				}
+			}
+		}
+
+	}()
 
 	consumer, err := env.NewConsumer(
-		streamName,
-		handleMessages,
+		"stream",
+		nil,
 		stream.NewConsumerOptions().
+			SetInitialCredits(100).
+			SetChMessage(chMessage).
 			SetClientProvidedName("my_consumer").            // connection name
 			SetConsumerName("my_consumer").                  // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First()). // start consuming from the beginning
 			SetCRCCheck(false))                              // Disable crc control, increase the performances
 	CheckErr(err)
+
 	channelClose := consumer.NotifyClose()
 	// channelClose receives all the closing events, here you can handle the
 	// client reconnection or just log
@@ -118,7 +102,6 @@ func main() {
 	err = consumer.Close()
 	time.Sleep(200 * time.Millisecond)
 	CheckErr(err)
-	err = env.DeleteStream(streamName)
 	CheckErr(err)
 	err = env.Close()
 	CheckErr(err)
