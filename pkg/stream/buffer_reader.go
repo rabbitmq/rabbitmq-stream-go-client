@@ -59,6 +59,6 @@ func readString(readerStream io.Reader) string {
 
 func readUint8Array(readerStream io.Reader, size uint32) []uint8 {
 	var res = make([]uint8, size)
-	_ = binary.Read(readerStream, binary.BigEndian, res)
+	_, _ = io.ReadFull(readerStream, res)
 	return res
 }
