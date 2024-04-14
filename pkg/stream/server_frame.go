@@ -348,7 +348,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	filter := offsetLimit != -1
 
 	//messages
-	var batchConsumingMessages offsetMessages
+	batchConsumingMessages := make(offsetMessages, 0, numRecords)
 	var chunk chunkInfo
 	chunk.numEntries = numEntries
 	var bytesBuffer = make([]byte, int(dataLength))
