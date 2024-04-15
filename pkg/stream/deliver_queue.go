@@ -19,7 +19,7 @@ type deliverQueue struct {
 
 func newDeliverQueue() *deliverQueue {
 	return &deliverQueue{
-		chSignal: make(chan struct{}, 1),
+		chSignal: make(chan struct{}, 2),
 		mutex:    &sync.Mutex{}}
 }
 
