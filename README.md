@@ -567,6 +567,12 @@ Each partition is a separate stream, but the client sees the Super Stream as a s
 
 You can find a "Super Stream" example in the [examples](./examples/super_stream) directory. </br>
 
+In this blog post you can find more details: https://www.rabbitmq.com/blog/2022/07/13/rabbitmq-3-11-feature-preview-super-streams
+
+You can read also the java stream-client blog post: https://rabbitmq.github.io/rabbitmq-stream-java-client/stable/htmlsingle/#super-streams
+- The code is written in Java but the same concepts are valid for the Go client.
+- The Go client has the same features as the Java client.
+
 
 ### Performance test tool
 
