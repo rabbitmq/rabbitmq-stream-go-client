@@ -69,6 +69,8 @@ type Client struct {
 	socketCallTimeout time.Duration
 	availableFeatures *availableFeatures
 	serverProperties  map[string]string
+	deliverQueue      *deliverQueue
+	autoIncrement     int64
 }
 
 func newClient(connectionName string, broker *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
@@ -102,6 +104,7 @@ func newClient(connectionName string, broker *Broker, tcpParameters *TCPParamete
 		},
 		socketCallTimeout: defaultSocketCallTimeout,
 		availableFeatures: newAvailableFeatures(),
+		deliverQueue:      newDeliverQueue(),
 	}
 	c.setConnectionName(connectionName)
 	return c

@@ -607,25 +607,25 @@ var bufPool = sync.Pool{
 
 // UnmarshalBinary decodes the message from binary form.
 func (m *Message) UnmarshalBinary(data []byte) error {
-	//b := bufPool.Get().(*buffer)
-	//defer bufPool.Put(b)
-	//b.i = 0
-	//b.b = data
-	return nil
-	//return m.unmarshal(b)
+	b := bufPool.Get().(*buffer)
+	defer bufPool.Put(b)
+	b.i = 0
+	b.b = data
+	//return nil
+	return m.unmarshal(b)
 }
 
 func (m *Message) unmarshal(r *buffer) error {
 	// loop, decoding sections until bytes have been consumed
 	for r.len() > 0 {
 
-		// determine type
-		//type_, err := peekMessageType(r.bytes())
-		//if err != nil {
-		//	return err
-		//}
+		//determine type
+		type_, err := peekMessageType(r.bytes())
+		if err != nil {
+			return err
+		}
 
-		type_ := typeCodeApplicationData
+		//type_ := typeCodeApplicationData
 		var (
 			section interface{}
 			// section header is read from r before
@@ -681,7 +681,7 @@ func (m *Message) unmarshal(r *buffer) error {
 			r.skip(3)
 		}
 
-		err := unmarshal(r, section)
+		err = unmarshal(r, section)
 		if err != nil {
 			return err
 		}

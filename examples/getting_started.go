@@ -6,6 +6,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
@@ -57,35 +58,62 @@ func main() {
 			SetPassword("guest"))
 	CheckErr(err)
 
-	var recv int32
-	//handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-	//	if atomic.AddInt32(&recv, 1)%5000000 == 0 {
-	//		fmt.Printf("Time elapsed: %d %s\n", recv, time.Since(start))
-	//	}
-	//
+	//producer, err := env.NewProducer("inc", stream.NewProducerOptions())
+	//if err != nil {
+	//	return
 	//}
 
-	chMessage := make(chan []*amqp.Message, 10)
+	//for i := 0; i < 200_000_000; i++ {
+	//	err = producer.Send(amqp.NewMessage([]byte(fmt.Sprintf("%d", i))))
+	//	CheckErr(err)
+	//
+	//	if i%500000 == 0 {
+	//		fmt.Printf("Sent %d messages\n", i)
+	//	}
+	//}
 
 	start := time.Now()
-	go func() {
-		for msg := range chMessage {
-			for _, _ = range msg {
-				if atomic.AddInt32(&recv, 1)%5000000 == 0 {
-					fmt.Printf("Time elapsed: %d %s\n", recv, time.Since(start))
-					start = time.Now()
-				}
-			}
+	startBeginning := time.Now()
+	var recv int32
+	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+
+		id := fmt.Sprintf("%s", message.GetData())
+		i, err := strconv.Atoi(id)
+		if err != nil {
+			fmt.Println(err)
+		}
+		if recv != int32(i) {
+			fmt.Printf("Expected %d, got %d\n", recv, i)
 		}
 
-	}()
+		if atomic.AddInt32(&recv, 1)%5000000 == 0 {
+			fmt.Printf("[ %d  messages] - time elapsed: %s - from the begninning: %s\n", recv,
+				time.Since(start), time.Since(startBeginning))
+			start = time.Now()
+		}
+
+	}
+
+	//chMessage := make(chan []*amqp.Message, 10)
+	//
+	//go func() {
+	//	for msg := range chMessage {
+	//		for _, _ = range msg {
+	//			if atomic.AddInt32(&recv, 1)%5000000 == 0 {
+	//				fmt.Printf("Time elapsed: %d %s\n", recv, time.Since(start))
+	//				start = time.Now()
+	//			}
+	//		}
+	//	}
+	//
+	//}()
 
 	consumer, err := env.NewConsumer(
-		"stream",
-		nil,
+		"inc",
+		handleMessages,
 		stream.NewConsumerOptions().
 			SetInitialCredits(100).
-			SetChMessage(chMessage).
+			//SetChMessage(chMessage).
 			SetClientProvidedName("my_consumer").            // connection name
 			SetConsumerName("my_consumer").                  // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First()). // start consuming from the beginning
