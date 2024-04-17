@@ -110,5 +110,8 @@ rabbitmq-server-tls:
 		--pull always \
 		docker.io/rabbitmq:3-management
 
+local-release:
+	goreleaser release --skip-publish --rm-dist --skip=validate
+
 
 
