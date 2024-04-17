@@ -47,7 +47,7 @@ jobs:
           docker exec rabbitmq-stream-client-test /bin/bash -c 'rabbitmqctl status'
           docker exec rabbitmq-stream-client-test /bin/bash -c 'rabbitmqctl wait --pid 1 --timeout 70'
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         id: setup_go
         with:
           go-version: ${{ matrix.go }}
@@ -68,7 +68,7 @@ jobs:
           go-version: ${{ matrix.go }}
           check-latest: true
       - name: Cache installers
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           # Note: the cache path is relative to the workspace directory
           # https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#using-the-cache-action
