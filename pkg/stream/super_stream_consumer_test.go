@@ -162,12 +162,12 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 	DescribeTable("Single active consumer in action", Label("super-stream-consumer"),
 		// test the SAC in different scenarios
-		func(isSac bool, totalMessagesReceived int, applicationName1 string, applicationName2 string) {
+		func(isSac bool, totalMessagesReceived int, applicationName1 string, applicationName2 string, id string) {
 
 			env, err := NewEnvironment(nil)
 			Expect(err).NotTo(HaveOccurred())
 
-			superStream := "sac-super-stream-the-second-consumer-in-action"
+			superStream := fmt.Sprintf("sac-super-stream-the-second-consumer-in-action-%s", id)
 			Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 			var receivedMessages int32
@@ -221,9 +221,9 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 			Expect(env.Close()).NotTo(HaveOccurred())
 		},
 
-		Entry("SAC not enabled. Consumers should consume independently", false, 40, "application_1", "application_1"),
-		Entry("SAC enabled. Both should receive the messages the total messages", true, 20, "application_1", "application_1"),
-		Entry("SAC enabled but the Names are different. Consumers should consume independently", true, 40, "application_1", "application_2"),
+		Entry("SAC not enabled. Consumers should consume independently", false, 40, "application_1", "application_1", "1"),
+		Entry("SAC enabled. Both should receive the messages the total messages", true, 20, "application_1", "application_1", "2"),
+		Entry("SAC enabled but the Names are different. Consumers should consume independently", true, 40, "application_1", "application_2", "3"),
 	)
 
 	It("should handle reconnect the consumer for the partition ", func() {
