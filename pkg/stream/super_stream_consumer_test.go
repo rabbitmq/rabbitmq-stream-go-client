@@ -351,8 +351,11 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 	})
 
 	//
-	It("Super Stream Filtering should consume only", func() {
+	It("Super Stream Filtering should consume only Italy", func() {
 
+		// test the filtering with super stream
+		// the filter is covered in the filter_test.go
+		// here is just to be sure the filter is applied in the super stream
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -360,7 +363,6 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		Expect(env.DeclareSuperStream(superStream,
 			NewPartitionsOptions(2))).NotTo(HaveOccurred())
 
-		//mutex := sync.Mutex{}
 		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
 			NewHashRoutingStrategy(func(message message.StreamMessage) string {
 				return message.GetMessageProperties().GroupID
@@ -377,8 +379,9 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 			}
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
-		// to be sure the messages are stored in a chunk
-		// so the filter will be applied
+
+		// the sleep is to be sure the messages are stored in a chunk
+		// so the filter will be applied, so the first chunk will contain only Italy
 		time.Sleep(1 * time.Second)
 
 		for i := 0; i < 25; i++ {
@@ -392,6 +395,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 		time.Sleep(500 * time.Millisecond)
 
+		// we don't need to apply any post filter here
+		// the server side filter is enough
 		var consumerItaly int32
 		filter := NewConsumerFilter([]string{"italy"}, false, func(message *amqp.Message) bool {
 			return true
@@ -412,7 +417,6 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
-
 	})
 
 })
