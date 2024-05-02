@@ -116,6 +116,7 @@ func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []s
 type SuperStreamProducerOptions struct {
 	RoutingStrategy    RoutingStrategy
 	ClientProvidedName string
+	Filter             *ProducerFilter // Enable the filter feature, by default is disabled. Pointer nil
 }
 
 // NewSuperStreamProducerOptions creates a new SuperStreamProducerOptions
@@ -128,6 +129,11 @@ func NewSuperStreamProducerOptions(routingStrategy RoutingStrategy) *SuperStream
 
 func (o SuperStreamProducerOptions) SetClientProvidedName(clientProvidedName string) *SuperStreamProducerOptions {
 	o.ClientProvidedName = clientProvidedName
+	return &o
+}
+
+func (o SuperStreamProducerOptions) SetFilter(filter *ProducerFilter) *SuperStreamProducerOptions {
+	o.Filter = filter
 	return &o
 }
 
@@ -251,6 +257,7 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 	if s.SuperStreamProducerOptions.ClientProvidedName != "" {
 		options.ClientProvidedName = s.SuperStreamProducerOptions.ClientProvidedName
 	}
+	options = options.SetFilter(s.SuperStreamProducerOptions.Filter)
 
 	producer, err := s.env.NewProducer(partition, options)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 type SuperStreamConsumerOptions struct {
 	ClientProvidedName   string
 	Offset               OffsetSpecification
+	Filter               *ConsumerFilter
 	SingleActiveConsumer *SingleActiveConsumer
 	ConsumerName         string
 }
@@ -33,6 +34,11 @@ func (s *SuperStreamConsumerOptions) SetOffset(offset OffsetSpecification) *Supe
 
 func (s *SuperStreamConsumerOptions) SetSingleActiveConsumer(singleActiveConsumer *SingleActiveConsumer) *SuperStreamConsumerOptions {
 	s.SingleActiveConsumer = singleActiveConsumer
+	return s
+}
+
+func (s *SuperStreamConsumerOptions) SetFilter(filter *ConsumerFilter) *SuperStreamConsumerOptions {
+	s.Filter = filter
 	return s
 }
 
@@ -153,6 +159,8 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 	if s.SuperStreamConsumerOptions.ClientProvidedName != "" {
 		options = options.SetClientProvidedName(s.SuperStreamConsumerOptions.ClientProvidedName)
 	}
+
+	options = options.SetFilter(s.SuperStreamConsumerOptions.Filter)
 
 	if s.SuperStreamConsumerOptions.SingleActiveConsumer != nil {
 		// mandatory to enable the super stream consumer
