@@ -350,4 +350,69 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
+	//
+	It("Super Stream Filtering should consume only", func() {
+
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		superStream := "filtering-super-stream-should-consume-only-one-country"
+		Expect(env.DeclareSuperStream(superStream,
+			NewPartitionsOptions(2))).NotTo(HaveOccurred())
+
+		//mutex := sync.Mutex{}
+		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
+			NewHashRoutingStrategy(func(message message.StreamMessage) string {
+				return message.GetMessageProperties().GroupID
+			})).SetFilter(NewProducerFilter(func(m message.StreamMessage) string {
+			return fmt.Sprintf("%s", m.GetApplicationProperties()["county"])
+		})))
+		Expect(err).NotTo(HaveOccurred())
+
+		for i := 0; i < 25; i++ {
+			msg := amqp.NewMessage(make([]byte, 0))
+			msg.ApplicationProperties = map[string]interface{}{"county": "italy"}
+			msg.Properties = &amqp.MessageProperties{
+				GroupID: "group_first",
+			}
+			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
+		}
+		// to be sure the messages are stored in a chunk
+		// so the filter will be applied
+		time.Sleep(1 * time.Second)
+
+		for i := 0; i < 25; i++ {
+			msg := amqp.NewMessage(make([]byte, 0))
+			msg.ApplicationProperties = map[string]interface{}{"county": "spain"}
+			msg.Properties = &amqp.MessageProperties{
+				GroupID: "group_first",
+			}
+			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		time.Sleep(500 * time.Millisecond)
+
+		var consumerItaly int32
+		filter := NewConsumerFilter([]string{"italy"}, false, func(message *amqp.Message) bool {
+			return true
+		})
+
+		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+			atomic.AddInt32(&consumerItaly, 1)
+		}
+
+		superStreamConsumer, err := env.NewSuperStreamConsumer(superStream, handleMessages,
+			NewSuperStreamConsumerOptions().SetFilter(filter).SetOffset(OffsetSpecification{}.First()))
+		Expect(err).NotTo(HaveOccurred())
+
+		time.Sleep(500 * time.Millisecond)
+		Eventually(func() int32 { return atomic.LoadInt32(&consumerItaly) }).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(25)))
+
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
+	})
+
 })
