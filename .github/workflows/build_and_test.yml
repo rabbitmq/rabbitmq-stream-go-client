@@ -53,8 +53,16 @@ jobs:
           go-version: ${{ matrix.go }}
           check-latest: true
       - run: make test GO_VERSION=${{ steps.setup_go.outputs.go-version }}
-      - name: Upload code coverage to Codecov
-        run: bash <(curl -s https://codecov.io/bash)
+      - uses: actions/checkout@main
+      - uses: codecov/codecov-action@v4
+        with:
+          fail_ci_if_error: false # optional (default = false)
+          files: ./coverage.txt
+          flags: unittests
+          name: codecov-umbrella # optional
+          verbose: true # optional (default = false)
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   test-win32:
     runs-on: windows-latest
     strategy:
