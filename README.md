@@ -573,6 +573,8 @@ You can read also the java stream-client blog post: https://rabbitmq.github.io/r
 - The code is written in Java but the same concepts are valid for the Go client.
 - The Go client has the same features as the Java client.
 
+Super Stream supports [publish-filtering](#publish-filtering) and [consume-filtering](#consume-filtering) features. 
+
 
 ### Performance test tool
 
