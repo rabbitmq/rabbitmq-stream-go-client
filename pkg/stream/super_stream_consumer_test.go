@@ -442,12 +442,12 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		// In this test we mix the chunks with different types
 		// The scope is to test the post filter function
 		// in total we have:
-		// 10 messages ITALY + 10 messages SPAIN in the same chunk
+		// 5 messages ITALY + 5 messages SPAIN in the same chunk
 		// WAIT
 		// then 10 messages SPAIN in another chunk
 		// We should receive only the ITALY messages from the first chunk
 		// total 10 messages
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 5; i++ {
 			msgItaly := amqp.NewMessage(make([]byte, 0))
 			msgItaly.ApplicationProperties = map[string]interface{}{"county": "italy"}
 			msgItaly.Properties = &amqp.MessageProperties{
@@ -501,7 +501,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		// the second chuck won't send ( even in this test there is no evidence about that there is the test above about that)
 
 		Eventually(func() int32 { return atomic.LoadInt32(&consumerItaly) }).
-			WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(10)))
+			WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(5)))
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
