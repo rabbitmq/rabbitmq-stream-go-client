@@ -22,9 +22,8 @@ func (s *StreamStats) FirstOffset() (int64, error) {
 	return s.stats["first_chunk_id"], nil
 }
 
-// LastOffset - The last offset in the stream.
-// return last offset in the stream
-// error if there is no first offset yet
+// Deprecated: The method name may be misleading.
+// It does not indicate the last offset of the stream. It indicates the last uncommited chunk id. This information is not necessary. The user should use CommittedChunkId().
 func (s *StreamStats) LastOffset() (int64, error) {
 	if s.stats["last_chunk_id"] == -1 {
 		return -1, fmt.Errorf("LastOffset not found for %s", s.streamName)
