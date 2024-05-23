@@ -221,7 +221,7 @@ Use `StreamExists` to check if a stream exists.
 
 ### Streams Statistics
 
-To get stream statistics you need to use the the `environment.StreamStats` method.
+To get stream statistics you need to use the `environment.StreamStats` method.
 
 ```golang
 stats, err := environment.StreamStats(testStreamName)
