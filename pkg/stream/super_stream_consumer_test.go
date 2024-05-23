@@ -7,6 +7,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -502,6 +503,67 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 		Eventually(func() int32 { return atomic.LoadInt32(&consumerItaly) }).
 			WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(5)))
+
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
+	It("Super Stream Consumer AutoCommit", func() {
+
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		superStream := "super-stream-consumer-with-autocommit"
+		Expect(env.DeclareSuperStream(superStream,
+			NewPartitionsOptions(2))).NotTo(HaveOccurred())
+
+		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
+			NewHashRoutingStrategy(func(message message.StreamMessage) string {
+				return message.GetMessageProperties().GroupID
+			})))
+		Expect(err).NotTo(HaveOccurred())
+
+		for i := 0; i < 20; i++ {
+			msg := amqp.NewMessage(make([]byte, 0))
+			msg.Properties = &amqp.MessageProperties{
+				GroupID: strconv.Itoa(i % 2),
+			}
+			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		var receivedMessages int32
+		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+			atomic.AddInt32(&receivedMessages, 1)
+		}
+
+		superStreamConsumer, err := env.NewSuperStreamConsumer(superStream, handleMessages,
+			NewSuperStreamConsumerOptions().
+				SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("auto-commit-consumer").
+				SetAutoCommit(&AutoCommitStrategy{
+					messageCountBeforeStorage: 9,
+					flushInterval:             50 * time.Second,
+				}))
+		Expect(err).NotTo(HaveOccurred())
+
+		time.Sleep(1 * time.Second)
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&receivedMessages)
+		}).
+			WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(20)))
+
+		offset0, err := env.QueryOffset("auto-commit-consumer", fmt.Sprintf("%s-0", superStream))
+		Expect(err).NotTo(HaveOccurred())
+		offset1, err := env.QueryOffset("auto-commit-consumer", fmt.Sprintf("%s-1", superStream))
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(offset0).NotTo(BeNil())
+		Expect(offset0).To(Equal(int64(8)))
+
+		Expect(offset1).NotTo(BeNil())
+		Expect(offset1).To(Equal(int64(8)))
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
