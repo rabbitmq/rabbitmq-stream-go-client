@@ -232,11 +232,6 @@ stats, err := environment.StreamStats(testStreamName)
 
 firstOffset, err := stats.FirstOffset() // first offset of the stream
 
-// LastOffset - The last offset in the stream.
-// return last offset in the stream
-// error if there is no first offset yet
-lastOffset, err := stats.LastOffset() // last offset of the stream
-
 // CommittedChunkId - The ID (offset) of the committed chunk (block of messages) in the stream.
 //
 //	It is the offset of the first message in the last chunk confirmed by a quorum of the stream
