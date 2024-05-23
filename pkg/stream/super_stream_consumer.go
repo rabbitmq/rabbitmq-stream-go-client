@@ -14,6 +14,7 @@ type SuperStreamConsumerOptions struct {
 	Filter               *ConsumerFilter
 	SingleActiveConsumer *SingleActiveConsumer
 	ConsumerName         string
+	AutoCommitStrategy   *AutoCommitStrategy
 }
 
 func NewSuperStreamConsumerOptions() *SuperStreamConsumerOptions {
@@ -44,6 +45,11 @@ func (s *SuperStreamConsumerOptions) SetFilter(filter *ConsumerFilter) *SuperStr
 
 func (s *SuperStreamConsumerOptions) SetConsumerName(consumerName string) *SuperStreamConsumerOptions {
 	s.ConsumerName = consumerName
+	return s
+}
+
+func (s *SuperStreamConsumerOptions) SetAutoCommit(autoCommitStrategy *AutoCommitStrategy) *SuperStreamConsumerOptions {
+	s.AutoCommitStrategy = autoCommitStrategy
 	return s
 }
 
@@ -161,6 +167,9 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 	}
 
 	options = options.SetFilter(s.SuperStreamConsumerOptions.Filter)
+	if s.SuperStreamConsumerOptions.AutoCommitStrategy != nil {
+		options = options.SetAutoCommit(s.SuperStreamConsumerOptions.AutoCommitStrategy)
+	}
 
 	if s.SuperStreamConsumerOptions.SingleActiveConsumer != nil {
 		// mandatory to enable the super stream consumer

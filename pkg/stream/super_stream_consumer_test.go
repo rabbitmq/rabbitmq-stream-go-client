@@ -7,6 +7,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -502,6 +503,74 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 		Eventually(func() int32 { return atomic.LoadInt32(&consumerItaly) }).
 			WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(5)))
+
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
+	It("Super Stream Consumer AutoCommit", func() {
+		// test the auto commit
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		superStream := "super-stream-consumer-with-autocommit"
+		Expect(env.DeclareSuperStream(superStream,
+			NewPartitionsOptions(2))).NotTo(HaveOccurred())
+
+		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
+			NewHashRoutingStrategy(func(message message.StreamMessage) string {
+				return message.GetMessageProperties().GroupID
+			})))
+		Expect(err).NotTo(HaveOccurred())
+
+		for i := 0; i < 20; i++ {
+			msg := amqp.NewMessage(make([]byte, 0))
+			msg.Properties = &amqp.MessageProperties{
+				GroupID: strconv.Itoa(i % 2),
+			}
+			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
+		}
+
+		var receivedMessages int32
+		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+			atomic.AddInt32(&receivedMessages, 1)
+		}
+
+		superStreamConsumer, err := env.NewSuperStreamConsumer(superStream, handleMessages,
+			NewSuperStreamConsumerOptions().
+				SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("auto-commit-consumer").
+				// the setting is to trigger the auto commit based on the message count
+				// the consumer will commit the offset after 9 messages
+				SetAutoCommit(&AutoCommitStrategy{
+					messageCountBeforeStorage: 9,
+					// flushInterval is set to 50 seconds. So it will be ignored
+					// messageCountBeforeStorage will be triggered first
+					flushInterval: 50 * time.Second,
+				}))
+		Expect(err).NotTo(HaveOccurred())
+
+		time.Sleep(1 * time.Second)
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&receivedMessages)
+		}).
+			WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(20)))
+
+		// Given the partition routing strategy, the consumer will receive 10 messages from each partition
+		// the consumer triggers the auto-commit after 9 messages.
+		// So the query offset should return 8 for each partition
+		offset0, err := env.QueryOffset("auto-commit-consumer", fmt.Sprintf("%s-0", superStream))
+		Expect(err).NotTo(HaveOccurred())
+		offset1, err := env.QueryOffset("auto-commit-consumer", fmt.Sprintf("%s-1", superStream))
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(offset0).NotTo(BeNil())
+		Expect(offset0).To(Equal(int64(8)))
+
+		Expect(offset1).NotTo(BeNil())
+		Expect(offset1).To(Equal(int64(8)))
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
