@@ -202,6 +202,7 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 		status:             open,
 		mutex:              &sync.Mutex{},
 		MessagesHandler:    messagesHandler,
+		lastStoredOffset:   -1, // because 0 is a valid value for the offset
 		isPromotedAsActive: true,
 	}
 
