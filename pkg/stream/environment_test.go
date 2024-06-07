@@ -335,6 +335,58 @@ var _ = Describe("Environment test", func() {
 		Expect(errWrong).To(HaveOccurred())
 	})
 
+	It("Multi Uris/Multi with some not reachable end-points ", func() {
+		// To connect the client is enough to have one valid endpoint
+		// even the other endpoints are not reachable
+		// https://github.com/rabbitmq/rabbitmq-stream-go-client/issues/309
+
+		env, err := NewEnvironment(NewEnvironmentOptions().
+			SetUris([]string{
+				"rabbitmq-stream://guest:guest@localhost:5552/%2f",
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+			}))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
+		env, err = NewEnvironment(NewEnvironmentOptions().
+			SetUris([]string{
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+				"rabbitmq-stream://guest:guest@localhost:5552/%2f",
+			}))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
+		env, err = NewEnvironment(NewEnvironmentOptions().
+			SetUris([]string{
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+				"rabbitmq-stream://guest:guest@localhost:5552/%2f",
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+			}))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
+		env, err = NewEnvironment(NewEnvironmentOptions().
+			SetUris([]string{
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+				"rabbitmq-stream://guest:guest@localhost:5552/%2f",
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+				"rabbitmq-stream://guest:guest@localhost:5552/%2f",
+			}))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
+		env, err = NewEnvironment(NewEnvironmentOptions().
+			SetUris([]string{
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
+			}))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
+	})
+
 	It("Fail TLS connection", func() {
 		_, err := NewEnvironment(NewEnvironmentOptions().
 			SetTLSConfig(&tls.Config{InsecureSkipVerify: true}).

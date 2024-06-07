@@ -47,8 +47,8 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if len(options.ConnectionParameters) == 0 {
 		options.ConnectionParameters = []*Broker{newBrokerDefault()}
 	}
-
-	for _, parameter := range options.ConnectionParameters {
+	var connectionError error
+	for idx, parameter := range options.ConnectionParameters {
 
 		if parameter.Uri != "" {
 			u, err := url.Parse(parameter.Uri)
@@ -72,13 +72,27 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		parameter.mergeWithDefault()
 
 		client.broker = parameter
+
+		connectionError = client.connect()
+		if connectionError == nil {
+			break
+		} else {
+			nextIfThereIs := ""
+			if idx < len(options.ConnectionParameters)-1 {
+				nextIfThereIs = "Trying the next broker..."
+			}
+			logs.LogError("New environment creation. Can't connect to the broker: %s port: %s. %s",
+				parameter.Host, parameter.Port, nextIfThereIs)
+
+		}
 	}
+
 	return &Environment{
 		options:   options,
 		producers: newProducers(options.MaxProducersPerClient),
 		consumers: newConsumerEnvironment(options.MaxConsumersPerClient),
 		closed:    false,
-	}, client.connect()
+	}, connectionError
 }
 func (env *Environment) newReconnectClient() (*Client, error) {
 	broker := env.options.ConnectionParameters[0]
