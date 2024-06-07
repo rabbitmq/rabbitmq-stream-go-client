@@ -377,7 +377,7 @@ var _ = Describe("Environment test", func() {
 
 		// in this case all the endpoints are not reachable
 		// so it will fail
-		env, err = NewEnvironment(NewEnvironmentOptions().
+		_, err = NewEnvironment(NewEnvironmentOptions().
 			SetUris([]string{
 				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
 				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
