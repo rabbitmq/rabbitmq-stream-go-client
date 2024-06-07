@@ -183,7 +183,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.queryOffset won't hang if timeout happens", func() {
-		cli := newClient("connName", nil, nil, nil)
+		cli := newClient("connName", nil, nil, nil, defaultSocketCallTimeout)
 		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
 		cli.socketCallTimeout = time.Millisecond
 
@@ -193,7 +193,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.queryPublisherSequence won't hang if timeout happens", func() {
-		cli := newClient("connName", nil, nil, nil)
+		cli := newClient("connName", nil, nil, nil, defaultSocketCallTimeout)
 		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
 		cli.socketCallTimeout = time.Millisecond
 
@@ -203,7 +203,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.StreamStats won't hang if timeout happens", func() {
-		cli := newClient("connName", nil, nil, nil)
+		cli := newClient("connName", nil, nil, nil, defaultSocketCallTimeout)
 		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
 		cli.socketCallTimeout = time.Millisecond
 
