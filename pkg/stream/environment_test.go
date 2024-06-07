@@ -375,6 +375,8 @@ var _ = Describe("Environment test", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 
+		// in this case all the endpoints are not reachable
+		// so it will fail
 		env, err = NewEnvironment(NewEnvironmentOptions().
 			SetUris([]string{
 				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
@@ -382,8 +384,7 @@ var _ = Describe("Environment test", func() {
 				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
 				"rabbitmq-stream://guest:guest@wrong:5552/%2f",
 			}))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(env.Close()).NotTo(HaveOccurred())
+		Expect(err).To(HaveOccurred())
 
 	})
 
