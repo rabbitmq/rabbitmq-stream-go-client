@@ -14,7 +14,7 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client", nil, nil, nil)
+			client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
 
 		})
 		AfterEach(func() {
@@ -131,7 +131,7 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client", nil, nil, nil)
+			client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
 
 		})
 		AfterEach(func() {
@@ -185,7 +185,7 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client", nil, nil, nil)
+			client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
 
 		})
 		AfterEach(func() {

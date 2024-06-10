@@ -71,7 +71,8 @@ type Client struct {
 	serverProperties  map[string]string
 }
 
-func newClient(connectionName string, broker *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
+func newClient(connectionName string, broker *Broker,
+	tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, rpcTimeOut time.Duration) *Client {
 	var clientBroker = broker
 	if broker == nil {
 		clientBroker = newBrokerDefault()
@@ -100,7 +101,7 @@ func newClient(connectionName string, broker *Broker, tcpParameters *TCPParamete
 			mutex:      &sync.Mutex{},
 			destructor: &sync.Once{},
 		},
-		socketCallTimeout: defaultSocketCallTimeout,
+		socketCallTimeout: rpcTimeOut,
 		availableFeatures: newAvailableFeatures(),
 	}
 	c.setConnectionName(connectionName)
