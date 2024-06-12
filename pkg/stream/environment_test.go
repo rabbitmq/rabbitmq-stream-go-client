@@ -217,6 +217,7 @@ var _ = Describe("Environment test", func() {
 			MaxProducersPerClient: 1,
 			MaxConsumersPerClient: 1,
 			AddressResolver:       nil,
+			RPCTimeout:            defaultSocketCallTimeout,
 		})
 
 		Expect(err).NotTo(HaveOccurred())

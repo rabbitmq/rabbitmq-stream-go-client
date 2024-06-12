@@ -25,7 +25,13 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if options == nil {
 		options = NewEnvironmentOptions()
 	}
-	client := newClient("go-stream-locator", nil, options.TCPParameters, options.SaslConfiguration)
+
+	if options.RPCTimeout <= 0 {
+		options.RPCTimeout = defaultSocketCallTimeout
+	}
+
+	client := newClient("go-stream-locator", nil,
+		options.TCPParameters, options.SaslConfiguration, options.RPCTimeout)
 	defer func(client *Client) {
 		err := client.Close()
 		if err != nil {
@@ -96,7 +102,8 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 }
 func (env *Environment) newReconnectClient() (*Client, error) {
 	broker := env.options.ConnectionParameters[0]
-	client := newClient("go-stream-locator", broker, env.options.TCPParameters, env.options.SaslConfiguration)
+	client := newClient("go-stream-locator", broker, env.options.TCPParameters,
+		env.options.SaslConfiguration, env.options.RPCTimeout)
 
 	err := client.connect()
 	tentatives := 1
@@ -110,7 +117,7 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 		rand.Seed(time.Now().UnixNano())
 		n := rand.Intn(len(env.options.ConnectionParameters))
 		client = newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
-			env.options.SaslConfiguration)
+			env.options.SaslConfiguration, env.options.RPCTimeout)
 		tentatives = tentatives + 1
 		err = client.connect()
 
@@ -153,7 +160,7 @@ func (env *Environment) NewProducer(streamName string, producerOptions *Producer
 		return nil, err
 	}
 
-	return env.producers.newProducer(client, streamName, producerOptions, env.options.AddressResolver)
+	return env.producers.newProducer(client, streamName, producerOptions, env.options.AddressResolver, env.options.RPCTimeout)
 }
 
 func (env *Environment) StreamExists(streamName string) (bool, error) {
@@ -243,7 +250,7 @@ func (env *Environment) NewConsumer(streamName string,
 		return nil, err
 	}
 
-	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options, env.options.AddressResolver)
+	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options, env.options.AddressResolver, env.options.RPCTimeout)
 }
 
 func (env *Environment) NewSuperStreamProducer(superStream string, superStreamProducerOptions *SuperStreamProducerOptions) (*SuperStreamProducer, error) {
@@ -272,6 +279,7 @@ type EnvironmentOptions struct {
 	MaxProducersPerClient int
 	MaxConsumersPerClient int
 	AddressResolver       *AddressResolver
+	RPCTimeout            time.Duration
 }
 
 func NewEnvironmentOptions() *EnvironmentOptions {
@@ -281,6 +289,7 @@ func NewEnvironmentOptions() *EnvironmentOptions {
 		ConnectionParameters:  []*Broker{},
 		TCPParameters:         newTCPParameterDefault(),
 		SaslConfiguration:     newSaslConfigurationDefault(),
+		RPCTimeout:            defaultSocketCallTimeout,
 	}
 }
 
@@ -443,6 +452,11 @@ func (envOptions *EnvironmentOptions) SetNoDelay(noDelay bool) *EnvironmentOptio
 	return envOptions
 }
 
+func (envOptions *EnvironmentOptions) SetRPCTimeout(timeout time.Duration) *EnvironmentOptions {
+	envOptions.RPCTimeout = timeout
+	return envOptions
+}
+
 type environmentCoordinator struct {
 	mutex             *sync.Mutex
 	mutexContext      *sync.RWMutex
@@ -524,7 +538,7 @@ func (c *Client) maybeCleanConsumers(streamName string) {
 }
 
 func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string,
-	options *ProducerOptions) (*Producer, error) {
+	options *ProducerOptions, rpcTimeout time.Duration) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
 	cc.mutexContext.Lock()
@@ -542,7 +556,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 	}
 
 	if clientResult == nil {
-		clientResult = cc.newClientForProducer(clientProvidedName, leader, tcpParameters, saslConfiguration)
+		clientResult = cc.newClientForProducer(clientProvidedName, leader, tcpParameters, saslConfiguration, rpcTimeout)
 	}
 
 	err := clientResult.connect()
@@ -559,7 +573,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 		if err != nil {
 			return nil, err
 		}
-		clientResult = cc.newClientForProducer(options.ClientProvidedName, leader, tcpParameters, saslConfiguration)
+		clientResult = cc.newClientForProducer(options.ClientProvidedName, leader, tcpParameters, saslConfiguration, rpcTimeout)
 		err = clientResult.connect()
 		if err != nil {
 			return nil, err
@@ -576,8 +590,8 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 	return producer, nil
 }
 
-func (cc *environmentCoordinator) newClientForProducer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration) *Client {
-	clientResult := newClient(connectionName, leader, tcpParameters, saslConfiguration)
+func (cc *environmentCoordinator) newClientForProducer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, rpcTimeOut time.Duration) *Client {
+	clientResult := newClient(connectionName, leader, tcpParameters, saslConfiguration, rpcTimeOut)
 	chMeta := make(chan metaDataUpdateEvent, 1)
 	clientResult.metadataListener = chMeta
 	go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -598,7 +612,7 @@ func (cc *environmentCoordinator) newClientForProducer(connectionName string, le
 
 func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration,
 	streamName string, messagesHandler MessagesHandler,
-	options *ConsumerOptions) (*Consumer, error) {
+	options *ConsumerOptions, rpcTimeout time.Duration) (*Consumer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
 	cc.mutexContext.Lock()
@@ -612,7 +626,7 @@ func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Bro
 	}
 
 	if clientResult == nil {
-		clientResult = newClient(connectionName, leader, tcpParameters, saslConfiguration)
+		clientResult = newClient(connectionName, leader, tcpParameters, saslConfiguration, rpcTimeout)
 		chMeta := make(chan metaDataUpdateEvent)
 		clientResult.metadataListener = chMeta
 		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
@@ -677,7 +691,7 @@ func newProducers(maxItemsForClient int) *producersEnvironment {
 }
 
 func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName string,
-	options *ProducerOptions, resolver *AddressResolver) (*Producer, error) {
+	options *ProducerOptions, resolver *AddressResolver, rpcTimeOut time.Duration) (*Producer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 	leader, err := clientLocator.BrokerLeader(streamName)
@@ -697,7 +711,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 	leader.cloneFrom(clientLocator.broker, resolver)
 
 	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.tcpParameters,
-		clientLocator.saslConfiguration, streamName, options)
+		clientLocator.saslConfiguration, streamName, options, rpcTimeOut)
 	if err != nil {
 		return nil, err
 	}
@@ -742,7 +756,7 @@ func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {
 
 func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName string,
 	messagesHandler MessagesHandler,
-	consumerOptions *ConsumerOptions, resolver *AddressResolver) (*Consumer, error) {
+	consumerOptions *ConsumerOptions, resolver *AddressResolver, rpcTimeout time.Duration) (*Consumer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 	consumerBroker, err := clientLocator.BrokerForConsumer(streamName)
@@ -767,7 +781,7 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 	consumer, err := ps.consumersCoordinator[coordinatorKey].
 		newConsumer(clientProvidedName, consumerBroker, clientLocator.tcpParameters,
 			clientLocator.saslConfiguration,
-			streamName, messagesHandler, consumerOptions)
+			streamName, messagesHandler, consumerOptions, rpcTimeout)
 	if err != nil {
 		return nil, err
 	}
