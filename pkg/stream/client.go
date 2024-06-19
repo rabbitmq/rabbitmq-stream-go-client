@@ -686,18 +686,20 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 	if streamMetadata.Leader == nil {
 		return nil, LeaderNotReady
 	}
+
 	streamMetadata.Leader.advPort = streamMetadata.Leader.Port
 	streamMetadata.Leader.advHost = streamMetadata.Leader.Host
 
+	// see: https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/317
 	_, err := net.LookupIP(streamMetadata.Leader.Host)
 	if err != nil {
 		var dnsError *net.DNSError
 		if errors.As(err, &dnsError) {
 			if strings.EqualFold(c.broker.Host, "localhost") {
-				logs.LogWarn("DNS error: %s, trying to use localhost", dnsError)
+				logs.LogWarn("Can't lookup the DNS for %s, error: %s. Trying localhost..", streamMetadata.Leader.Host, err)
 				streamMetadata.Leader.Host = "localhost"
 			} else {
-				logs.LogWarn("DNS error: %s")
+				logs.LogWarn("Can't lookup the DNS for %s, error: %s", streamMetadata.Leader.Host, err)
 			}
 		}
 	}
