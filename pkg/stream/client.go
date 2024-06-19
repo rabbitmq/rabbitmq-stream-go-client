@@ -673,6 +673,7 @@ func (c *Client) queryPublisherSequence(publisherReference string, stream string
 }
 
 func (c *Client) BrokerLeader(stream string) (*Broker, error) {
+
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
 		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
@@ -688,6 +689,21 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 
 	streamMetadata.Leader.advPort = streamMetadata.Leader.Port
 	streamMetadata.Leader.advHost = streamMetadata.Leader.Host
+
+	// see: https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/317
+	_, err := net.LookupIP(streamMetadata.Leader.Host)
+	if err != nil {
+		var dnsError *net.DNSError
+		if errors.As(err, &dnsError) {
+			if strings.EqualFold(c.broker.Host, "localhost") {
+				logs.LogWarn("Can't lookup the DNS for %s, error: %s. Trying localhost..", streamMetadata.Leader.Host, err)
+				streamMetadata.Leader.Host = "localhost"
+			} else {
+				logs.LogWarn("Can't lookup the DNS for %s, error: %s", streamMetadata.Leader.Host, err)
+			}
+		}
+	}
+
 	return streamMetadata.Leader, nil
 }
 
