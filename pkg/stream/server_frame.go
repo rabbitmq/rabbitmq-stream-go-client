@@ -415,7 +415,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	if consumer.getStatus() == open {
 		consumer.response.chunkForConsumer <- chunk
 	} else {
-		logs.LogWarn("Consumer %s is closed", consumer.GetStreamName())
+		logs.LogDebug("Consumer %s is closed", consumer.GetStreamName())
 	}
 
 }
