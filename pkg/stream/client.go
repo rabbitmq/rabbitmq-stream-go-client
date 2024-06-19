@@ -673,6 +673,7 @@ func (c *Client) queryPublisherSequence(publisherReference string, stream string
 }
 
 func (c *Client) BrokerLeader(stream string) (*Broker, error) {
+
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
 		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
@@ -685,9 +686,22 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 	if streamMetadata.Leader == nil {
 		return nil, LeaderNotReady
 	}
-
 	streamMetadata.Leader.advPort = streamMetadata.Leader.Port
 	streamMetadata.Leader.advHost = streamMetadata.Leader.Host
+
+	_, err := net.LookupIP(streamMetadata.Leader.Host)
+	if err != nil {
+		var dnsError *net.DNSError
+		if errors.As(err, &dnsError) {
+			if strings.EqualFold(c.broker.Host, "localhost") {
+				logs.LogWarn("DNS error: %s, trying to use localhost", dnsError)
+				streamMetadata.Leader.Host = "localhost"
+			} else {
+				logs.LogWarn("DNS error: %s")
+			}
+		}
+	}
+
 	return streamMetadata.Leader, nil
 }
 
