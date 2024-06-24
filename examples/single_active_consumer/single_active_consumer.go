@@ -50,6 +50,7 @@ func main() {
 		// This is only for the example, in a real application you should not store the offset
 		// for each message, it is better to store the offset for a batch of messages
 		err := consumerContext.Consumer.StoreOffset()
+
 		CheckErrConsumer(err)
 	}
 

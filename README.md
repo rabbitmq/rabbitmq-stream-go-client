@@ -570,6 +570,25 @@ You can read also the java stream-client blog post: https://rabbitmq.github.io/r
 
 Super Stream supports [publish-filtering](#publish-filtering) and [consume-filtering](#consume-filtering) features. 
 
+Offset tracking is supported for the Super Stream consumer. </br>
+In the same way as the standard stream, you can use the `SetAutoCommit` or `SetManualCommit` option to enable/disable the automatic offset tracking. </br>
+
+On the super stream consumer message handler is possible to identify the partition, the consumer and the offset. </br>:
+```golang
+	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		....
+		consumerContext.Consumer.GetName()
+        consumerContext.Consumer.GetOffset()
+        consumerContext.Consumer.GetStreamName()
+        ....
+	}
+```
+
+Manual tracking API:
+ - `consumerContext.Consumer.StoreOffset()`: stores the current offset.
+ -  `consumerContext.Consumer.StoreCustomOffset(xxx)` stores a custom offset.
+
+
 
 ### Performance test tool
 
