@@ -71,6 +71,7 @@ func main() {
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
+			SetManualCommit().                               // disable auto commit
 			SetConsumerName("my_consumer").                  // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)

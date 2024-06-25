@@ -15,11 +15,13 @@ type SuperStreamConsumerOptions struct {
 	SingleActiveConsumer *SingleActiveConsumer
 	ConsumerName         string
 	AutoCommitStrategy   *AutoCommitStrategy
+	Autocommit           bool
 }
 
 func NewSuperStreamConsumerOptions() *SuperStreamConsumerOptions {
 	return &SuperStreamConsumerOptions{
-		Offset: OffsetSpecification{}.Next(),
+		Offset:     OffsetSpecification{}.Next(),
+		Autocommit: false,
 	}
 }
 
@@ -49,7 +51,13 @@ func (s *SuperStreamConsumerOptions) SetConsumerName(consumerName string) *Super
 }
 
 func (s *SuperStreamConsumerOptions) SetAutoCommit(autoCommitStrategy *AutoCommitStrategy) *SuperStreamConsumerOptions {
+	s.Autocommit = true
 	s.AutoCommitStrategy = autoCommitStrategy
+	return s
+}
+
+func (s *SuperStreamConsumerOptions) SetManualCommit() *SuperStreamConsumerOptions {
+	s.Autocommit = false
 	return s
 }
 
@@ -167,8 +175,11 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 	}
 
 	options = options.SetFilter(s.SuperStreamConsumerOptions.Filter)
-	if s.SuperStreamConsumerOptions.AutoCommitStrategy != nil {
+
+	if s.SuperStreamConsumerOptions.Autocommit {
 		options = options.SetAutoCommit(s.SuperStreamConsumerOptions.AutoCommitStrategy)
+	} else {
+		options = options.SetManualCommit()
 	}
 
 	if s.SuperStreamConsumerOptions.SingleActiveConsumer != nil {
