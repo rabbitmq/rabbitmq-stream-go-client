@@ -20,7 +20,8 @@ type SuperStreamConsumerOptions struct {
 
 func NewSuperStreamConsumerOptions() *SuperStreamConsumerOptions {
 	return &SuperStreamConsumerOptions{
-		Offset: OffsetSpecification{}.Next(),
+		Offset:     OffsetSpecification{}.Next(),
+		Autocommit: false,
 	}
 }
 
