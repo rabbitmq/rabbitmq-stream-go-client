@@ -432,11 +432,12 @@ func (consumer *Consumer) QueryOffset() (int64, error) {
 SetOffset constants
 */
 const (
-	typeFirst        = int16(1)
-	typeLast         = int16(2)
-	typeNext         = int16(3)
-	typeOffset       = int16(4)
-	typeTimestamp    = int16(5)
+	typeFirst     = int16(1)
+	typeLast      = int16(2)
+	typeNext      = int16(3)
+	typeOffset    = int16(4)
+	typeTimestamp = int16(5)
+	// Deprecated: see LastConsumed()
 	typeLastConsumed = int16(6)
 )
 
@@ -476,6 +477,7 @@ func (o OffsetSpecification) isOffset() bool {
 	return o.typeOfs == typeOffset || o.typeOfs == typeLastConsumed
 }
 
+// Deprecated: see LastConsumed()
 func (o OffsetSpecification) isLastConsumed() bool {
 	return o.typeOfs == typeLastConsumed
 }
@@ -483,6 +485,17 @@ func (o OffsetSpecification) isTimestamp() bool {
 	return o.typeOfs == typeTimestamp
 }
 
+// Deprecated: The method name may be misleading.
+// The method does not indicate the last message consumed of the stream but the last stored offset.
+// The method was added to help the user, but it created confusion.
+// Use `QueryOffset` instead.:
+//
+//		offset, err := env.QueryOffset(consumerName, streamName)
+//	 // check the error
+//	 ....
+//	 SetOffset(stream.OffsetSpecification{}.Offset(offset)).
+//
+// So in this way it possible to start from the last offset stored and customize the behavior
 func (o OffsetSpecification) LastConsumed() OffsetSpecification {
 	o.typeOfs = typeLastConsumed
 	o.offset = -1
