@@ -104,7 +104,7 @@ const (
 	minSubEntrySize = 1
 	maxSubEntrySize = 65535
 
-	minBatchPublishingDelay = 50
+	minBatchPublishingDelay = 1
 	maxBatchPublishingDelay = 500
 
 	defaultBatchSize            = 100
