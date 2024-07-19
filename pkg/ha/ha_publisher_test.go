@@ -123,6 +123,68 @@ var _ = Describe("Reliable Producer", func() {
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
+	It("unblock all Reliable Producer sends while restarting with concurrent writes", func() {
+		signal := make(chan struct{})
+		var confirmed int32
+		clientProvidedName := uuid.New().String()
+		producer, err := NewReliableProducer(envForRProducer,
+			streamForRProducer,
+			NewProducerOptions().
+				SetClientProvidedName(clientProvidedName),
+			func(messageConfirm []*ConfirmationStatus) {
+				for _, confirm := range messageConfirm {
+					Expect(confirm.IsConfirmed()).To(BeTrue())
+				}
+				if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == 2 {
+					signal <- struct{}{}
+				}
+			})
+		Expect(err).NotTo(HaveOccurred())
+
+		time.Sleep(1 * time.Second)
+		connectionToDrop := ""
+		Eventually(func() bool {
+			connections, err := test_helper.Connections("15672")
+			if err != nil {
+				return false
+			}
+			for _, connection := range connections {
+				if connection.ClientProperties.Connection_name == clientProvidedName {
+					connectionToDrop = connection.Name
+					return true
+				}
+			}
+			return false
+		}, time.Second*5).
+			Should(BeTrue())
+
+		Expect(connectionToDrop).NotTo(BeEmpty())
+
+		// concurret writes while reconnecting
+		sendMsg := func() {
+			msg := amqp.NewMessage([]byte("ha"))
+			batch := []message.StreamMessage{msg}
+			err := producer.BatchSend(batch)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// kill the connection
+		errDrop := test_helper.DropConnection(connectionToDrop, "15672")
+		Expect(errDrop).NotTo(HaveOccurred())
+
+		// wait for the producer to be in reconnecting state
+		Eventually(func() bool {
+			return producer.GetStatus() == StatusReconnecting
+		}, time.Second*5, time.Millisecond).
+			Should(BeTrue())
+
+		go sendMsg()
+		go sendMsg()
+
+		<-signal
+		Expect(producer.Close()).NotTo(HaveOccurred())
+	})
+
 	It("Delete the stream should close the producer", func() {
 		producer, err := NewReliableProducer(envForRProducer,
 			streamForRProducer, NewProducerOptions(), func(messageConfirm []*ConfirmationStatus) {
