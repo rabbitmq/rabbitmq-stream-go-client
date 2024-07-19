@@ -1,14 +1,16 @@
 package ha
 
 import (
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	. "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
-	"sync/atomic"
-	"time"
+	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 )
 
 var _ = Describe("Reliable Producer", func() {
@@ -44,6 +46,7 @@ var _ = Describe("Reliable Producer", func() {
 	})
 
 	It("Create/Confirm and close a Reliable Producer", func() {
+		const expectedMessages = 20
 		signal := make(chan struct{})
 		var confirmed int32
 		producer, err := NewReliableProducer(envForRProducer,
@@ -51,7 +54,7 @@ var _ = Describe("Reliable Producer", func() {
 				for _, confirm := range messageConfirm {
 					Expect(confirm.IsConfirmed()).To(BeTrue())
 				}
-				if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == 10 {
+				if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == expectedMessages {
 					signal <- struct{}{}
 				}
 			})
@@ -59,6 +62,14 @@ var _ = Describe("Reliable Producer", func() {
 		for i := 0; i < 10; i++ {
 			msg := amqp.NewMessage([]byte("ha"))
 			err := producer.Send(msg)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		for i := 0; i < 5; i++ {
+			msg1 := amqp.NewMessage([]byte("ha_batch_1"))
+			msg2 := amqp.NewMessage([]byte("ha_batch_2"))
+			batch := []message.StreamMessage{msg1, msg2}
+			err := producer.BatchSend(batch)
 			Expect(err).NotTo(HaveOccurred())
 		}
 		<-signal

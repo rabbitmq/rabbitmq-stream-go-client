@@ -3,13 +3,14 @@ package ha
 import (
 	"errors"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
@@ -109,12 +110,13 @@ func (p *ReliableProducer) newProducer() error {
 	return err
 }
 
-func (p *ReliableProducer) Send(message message.StreamMessage) error {
+func (p *ReliableProducer) isReadyToSend() error {
 	if p.GetStatus() == StatusStreamDoesNotExist {
 		return stream.StreamDoesNotExist
 	}
+
 	if p.GetStatus() == StatusClosed {
-		return errors.New(fmt.Sprintf("%s is closed", p.getInfo()))
+		return fmt.Errorf("%s is closed", p.getInfo())
 	}
 
 	if p.GetStatus() == StatusReconnecting {
@@ -123,11 +125,10 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 		logs.LogDebug("[Reliable] %s reconnected. The send is unlocked", p.getInfo())
 	}
 
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	return nil
+}
 
-	errW := p.producer.Send(message)
-
+func (p *ReliableProducer) checkWriteError(errW error) error {
 	if errW != nil {
 		switch {
 		case errors.Is(errW, stream.FrameTooLarge):
@@ -138,10 +139,32 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 			time.Sleep(500 * time.Millisecond)
 			logs.LogError("[Reliable] %s - error during send %s", p.getInfo(), errW.Error())
 		}
+	}
+	return nil
+}
 
+func (p *ReliableProducer) Send(message message.StreamMessage) error {
+	if err := p.isReadyToSend(); err != nil {
+		return err
 	}
 
-	return nil
+	p.mutex.Lock()
+	errW := p.producer.Send(message)
+	p.mutex.Unlock()
+
+	return p.checkWriteError(errW)
+}
+
+func (p *ReliableProducer) BatchSend(batchMessages []message.StreamMessage) error {
+	if err := p.isReadyToSend(); err != nil {
+		return err
+	}
+
+	p.mutex.Lock()
+	errW := p.producer.BatchSend(batchMessages)
+	p.mutex.Unlock()
+
+	return p.checkWriteError(errW)
 }
 
 func (p *ReliableProducer) IsOpen() bool {
