@@ -124,6 +124,7 @@ var _ = Describe("Reliable Producer", func() {
 	})
 
 	It("unblock all Reliable Producer sends while restarting with concurrent writes", func() {
+		const expectedMessages = 2
 		signal := make(chan struct{})
 		var confirmed int32
 		clientProvidedName := uuid.New().String()
@@ -135,7 +136,7 @@ var _ = Describe("Reliable Producer", func() {
 				for _, confirm := range messageConfirm {
 					Expect(confirm.IsConfirmed()).To(BeTrue())
 				}
-				if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == 2 {
+				if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == expectedMessages {
 					signal <- struct{}{}
 				}
 			})
