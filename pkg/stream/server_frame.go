@@ -607,7 +607,7 @@ func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Rea
 	consumer.options.SingleActiveConsumer.offsetSpecification = responseOff
 
 	if isActive == 1 {
-		consumer.currentOffset = responseOff.offset
+		consumer.setCurrentOffset(responseOff.offset)
 	}
 
 	err = consumer.writeConsumeUpdateOffsetToSocket(readProtocol.CorrelationId, responseOff)
