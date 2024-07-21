@@ -192,7 +192,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		var messagesReceived int32 = 0
-		consumer, err := testEnvironment.NewConsumer(streamName,
+		consumerA, err := testEnvironment.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
 			}, NewConsumerOptions().
@@ -207,8 +207,8 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		}, 5*time.Second).Should(Equal(int32(10)),
 			"consumer should receive only 10 messages")
 
-		Expect(consumer.Close()).NotTo(HaveOccurred())
-		Expect(consumer.GetLastStoredOffset()).To(Equal(int64(9)))
+		Expect(consumerA.Close()).NotTo(HaveOccurred())
+		Expect(consumerA.GetLastStoredOffset()).To(Equal(int64(9)))
 
 		offset, err := testEnvironment.QueryOffset("my_consumer", streamName)
 		Expect(err).NotTo(HaveOccurred())
@@ -224,7 +224,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		}
 
 		messagesReceived = 0
-		consumer, err = testEnvironment.NewConsumer(streamName,
+		consumerB, err := testEnvironment.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
 			}, NewConsumerOptions().
@@ -233,16 +233,16 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 				SetAutoCommit(nil))
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(consumer.Close()).NotTo(HaveOccurred())
+		Expect(consumerB.Close()).NotTo(HaveOccurred())
 		time.Sleep(100 * time.Millisecond)
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(0)),
 			"consumer should have received no messages")
 
-		offset, err = testEnvironment.QueryOffset("my_consumer", streamName)
+		offsetAfter, err := testEnvironment.QueryOffset("my_consumer", streamName)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(offset).To(Equal(int64(9)))
+		Expect(offsetAfter).To(Equal(int64(9)))
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
