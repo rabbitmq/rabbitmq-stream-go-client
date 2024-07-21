@@ -228,7 +228,6 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
 			}, NewConsumerOptions().
-				SetOffset(OffsetSpecification{}.Offset(offset)).
 				SetConsumerName("my_consumer").
 				SetSingleActiveConsumer(NewSingleActiveConsumer(consumerUpdate)).
 				SetAutoCommit(nil))
