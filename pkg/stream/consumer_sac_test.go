@@ -191,12 +191,21 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		producer, err := testEnvironment.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
+		consumerUpdate := func(streamName string, isActive bool) OffsetSpecification {
+			offset, err := testEnvironment.QueryOffset("my_consumer", streamName)
+			if err != nil {
+				return OffsetSpecification{}.First()
+			}
+
+			return OffsetSpecification{}.Offset(offset + 1)
+		}
+
 		var messagesReceived int32 = 0
 		consumerA, err := testEnvironment.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
 			}, NewConsumerOptions().
-				SetOffset(OffsetSpecification{}.First()).
+				SetSingleActiveConsumer(NewSingleActiveConsumer(consumerUpdate)).
 				SetConsumerName("my_consumer").
 				SetAutoCommit(nil))
 		Expect(err).NotTo(HaveOccurred())
@@ -213,15 +222,6 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		offset, err := testEnvironment.QueryOffset("my_consumer", streamName)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(offset).To(Equal(int64(9)))
-
-		consumerUpdate := func(streamName string, isActive bool) OffsetSpecification {
-			offset, err := testEnvironment.QueryOffset("my_consumer", streamName)
-			if err != nil {
-				return OffsetSpecification{}.First()
-			}
-
-			return OffsetSpecification{}.Offset(offset + 1)
-		}
 
 		messagesReceived = 0
 		consumerB, err := testEnvironment.NewConsumer(streamName,
