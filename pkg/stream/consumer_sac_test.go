@@ -234,6 +234,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(consumer.Close()).NotTo(HaveOccurred())
+		time.Sleep(100 * time.Millisecond)
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
 		}, 5*time.Second).Should(Equal(int32(0)),
