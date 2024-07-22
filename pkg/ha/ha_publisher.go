@@ -42,10 +42,9 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 				p.setStatus(StatusClosed)
 			}
 
-			select {
-			case p.reconnectionSignal <- struct{}{}:
-			case <-time.After(2 * time.Second):
-			}
+			p.reconnectionSignal.L.Lock()
+			p.reconnectionSignal.Broadcast()
+			p.reconnectionSignal.L.Unlock()
 		}
 	}()
 }
@@ -53,7 +52,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 // ReliableProducer is a producer that can reconnect in case of connection problems
 // the function handlePublishConfirm is mandatory
 // in case of problems the messages have the message.Confirmed == false
-// The function `send` is blocked during the reconnection
+// The functions `Send` and `SendBatch` are blocked during the reconnection
 type ReliableProducer struct {
 	env                   *stream.Environment
 	producer              *stream.Producer
@@ -64,7 +63,7 @@ type ReliableProducer struct {
 	mutex                 *sync.Mutex
 	mutexStatus           *sync.Mutex
 	status                int
-	reconnectionSignal    chan struct{}
+	reconnectionSignal    *sync.Cond
 }
 
 type ConfirmMessageHandler func(messageConfirm []*stream.ConfirmationStatus)
@@ -81,7 +80,7 @@ func NewReliableProducer(env *stream.Environment, streamName string,
 		mutex:                 &sync.Mutex{},
 		mutexStatus:           &sync.Mutex{},
 		confirmMessageHandler: confirmMessageHandler,
-		reconnectionSignal:    make(chan struct{}),
+		reconnectionSignal:    sync.NewCond(&sync.Mutex{}),
 	}
 	if confirmMessageHandler == nil {
 		return nil, fmt.Errorf("the confirmation message handler is mandatory")
@@ -121,7 +120,9 @@ func (p *ReliableProducer) isReadyToSend() error {
 
 	if p.GetStatus() == StatusReconnecting {
 		logs.LogDebug("[Reliable] %s is reconnecting. The send is blocked", p.getInfo())
-		<-p.reconnectionSignal
+		p.reconnectionSignal.L.Lock()
+		p.reconnectionSignal.Wait()
+		p.reconnectionSignal.L.Unlock()
 		logs.LogDebug("[Reliable] %s reconnected. The send is unlocked", p.getInfo())
 	}
 
