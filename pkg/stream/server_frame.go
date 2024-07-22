@@ -600,8 +600,6 @@ func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Rea
 		return
 	}
 	consumer.setPromotedAsActive(isActive == 1)
-
-	// shouldn't this only be run if the consumer is active?
 	responseOff := consumer.options.SingleActiveConsumer.ConsumerUpdate(consumer.GetStreamName(),
 		isActive == 1)
 	consumer.options.SingleActiveConsumer.offsetSpecification = responseOff
