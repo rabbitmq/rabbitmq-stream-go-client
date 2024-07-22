@@ -983,7 +983,7 @@ func (c *Client) DeclareSubscriber(streamName string,
 					if consumer.options.autocommit {
 						consumer.messageCountBeforeStorage += 1
 						if consumer.messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage ||
-							time.Now().Sub(consumer.lastAutoCommitStored) >= consumer.options.autoCommitStrategy.flushInterval {
+							time.Since(consumer.lastAutoCommitStored) >= consumer.options.autoCommitStrategy.flushInterval {
 							consumer.cacheStoreOffset()
 							consumer.messageCountBeforeStorage = 0
 						}
