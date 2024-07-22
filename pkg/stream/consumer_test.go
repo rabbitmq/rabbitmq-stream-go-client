@@ -306,7 +306,7 @@ var _ = Describe("Streaming Consumers", func() {
 			}
 		}
 
-		Expect(messagesReceived > 5 && messagesReceived < 15).To(BeTrue())
+		Expect(messagesReceived > 5 && messagesReceived < 15).To(BeTrueBecause("%d messages received", messagesReceived))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
