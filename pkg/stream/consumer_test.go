@@ -282,6 +282,35 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
+	It("commit at flush interval with constant stream of incoming messages", func() {
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		var messagesReceived int32 = 0
+		consumer, err := env.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				atomic.AddInt32(&messagesReceived, 1)
+			}, NewConsumerOptions().
+				SetAutoCommit(NewAutoCommitStrategy().
+					SetCountBeforeStorage(10000000).
+					SetFlushInterval(time.Second)))
+		Expect(err).NotTo(HaveOccurred())
+
+		for i := 0; i < 20; i++ {
+			Expect(producer.Send(CreateMessageForTesting("", i))).NotTo(HaveOccurred())
+			// emit message before the flush interval has elapsed
+			time.Sleep(time.Millisecond * 100)
+
+			if consumer.GetLastStoredOffset() > 0 {
+				break
+			}
+		}
+
+		Expect(messagesReceived < 15).To(BeTrue())
+		Expect(producer.Close()).NotTo(HaveOccurred())
+		Expect(consumer.Close()).NotTo(HaveOccurred())
+	})
+
 	It("Deduplication", func() {
 		producerName := "producer-ded"
 		producer, err := env.NewProducer(streamName, NewProducerOptions().SetProducerName(producerName))
