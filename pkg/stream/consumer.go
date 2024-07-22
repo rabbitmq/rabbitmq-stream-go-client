@@ -362,12 +362,21 @@ func (consumer *Consumer) Close() error {
 
 func (consumer *Consumer) cacheStoreOffset() {
 	if consumer.options.autocommit {
+		consumer.mutex.Lock()
 		consumer.lastAutoCommitStored = time.Now()
+		consumer.mutex.Unlock() // updateLastStoredOffset() in internalStoreOffset() also locks mutex, so not using defer for unlock
+
 		err := consumer.internalStoreOffset()
 		if err != nil {
 			logs.LogError("cache Store Offset error : %s", err)
 		}
 	}
+}
+
+func (consumer *Consumer) getLastAutoCommitStored() time.Time {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	return consumer.lastAutoCommitStored
 }
 
 func (consumer *Consumer) StoreOffset() error {
