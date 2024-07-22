@@ -603,6 +603,11 @@ func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Rea
 	responseOff := consumer.options.SingleActiveConsumer.ConsumerUpdate(consumer.GetStreamName(),
 		isActive == 1)
 	consumer.options.SingleActiveConsumer.offsetSpecification = responseOff
+
+	if isActive == 1 {
+		consumer.setCurrentOffset(responseOff.offset)
+	}
+
 	err = consumer.writeConsumeUpdateOffsetToSocket(readProtocol.CorrelationId, responseOff)
 	logErrorCommand(err, "handleConsumerUpdate writeConsumeUpdateOffsetToSocket")
 }
