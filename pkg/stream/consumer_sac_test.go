@@ -187,4 +187,64 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		Expect(c2.Close()).NotTo(HaveOccurred())
 	})
 
+	It("offset should not be overwritten by autocommit on consumer close when no messages have been consumed", func() {
+		producer, err := testEnvironment.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		consumerUpdate := func(streamName string, isActive bool) OffsetSpecification {
+			offset, err := testEnvironment.QueryOffset("my_consumer", streamName)
+			if err != nil {
+				return OffsetSpecification{}.First()
+			}
+
+			return OffsetSpecification{}.Offset(offset + 1)
+		}
+
+		var messagesReceived int32 = 0
+		consumerA, err := testEnvironment.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				atomic.AddInt32(&messagesReceived, 1)
+			}, NewConsumerOptions().
+				SetSingleActiveConsumer(NewSingleActiveConsumer(consumerUpdate)).
+				SetConsumerName("my_consumer").
+				SetAutoCommit(nil))
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(producer.BatchSend(CreateArrayMessagesForTesting(10))).NotTo(HaveOccurred())
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesReceived)
+		}, 5*time.Second).Should(Equal(int32(10)),
+			"consumer should receive only 10 messages")
+
+		Expect(consumerA.Close()).NotTo(HaveOccurred())
+		Expect(consumerA.GetLastStoredOffset()).To(Equal(int64(9)))
+
+		offset, err := testEnvironment.QueryOffset("my_consumer", streamName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(int64(9)))
+
+		messagesReceived = 0
+		consumerB, err := testEnvironment.NewConsumer(streamName,
+			func(consumerContext ConsumerContext, message *amqp.Message) {
+				atomic.AddInt32(&messagesReceived, 1)
+			}, NewConsumerOptions().
+				SetConsumerName("my_consumer").
+				SetSingleActiveConsumer(NewSingleActiveConsumer(consumerUpdate)).
+				SetAutoCommit(nil))
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(consumerB.Close()).NotTo(HaveOccurred())
+		time.Sleep(100 * time.Millisecond)
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesReceived)
+		}, 5*time.Second).Should(Equal(int32(0)),
+			"consumer should have received no messages")
+
+		offsetAfter, err := testEnvironment.QueryOffset("my_consumer", streamName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offsetAfter).To(Equal(int64(9)))
+
+		Expect(producer.Close()).NotTo(HaveOccurred())
+	})
+
 })

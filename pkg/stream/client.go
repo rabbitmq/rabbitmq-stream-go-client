@@ -891,7 +891,9 @@ func (c *Client) DeclareSubscriber(streamName string,
 	// copy the option offset to the consumer offset
 	// the option.offset won't change ( in case we need to retrive the original configuration)
 	// consumer.current offset will be moved when reading
-	consumer.setCurrentOffset(options.Offset.offset)
+	if !options.IsSingleActiveConsumerEnabled() {
+		consumer.setCurrentOffset(options.Offset.offset)
+	}
 
 	/// define the consumerOptions
 	consumerProperties := make(map[string]string)
