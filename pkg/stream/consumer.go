@@ -36,6 +36,9 @@ type Consumer struct {
 	// is in waiting mode or not.
 	// in normal mode, the consumer is always isPromotedAsActive==true
 	isPromotedAsActive bool
+
+	// lastAutoCommitStored tracks when the offset was last flushed
+	lastAutoCommitStored time.Time
 }
 
 func (consumer *Consumer) setStatus(status int) {
@@ -359,6 +362,7 @@ func (consumer *Consumer) Close() error {
 
 func (consumer *Consumer) cacheStoreOffset() {
 	if consumer.options.autocommit {
+		consumer.lastAutoCommitStored = time.Now()
 		err := consumer.internalStoreOffset()
 		if err != nil {
 			logs.LogError("cache Store Offset error : %s", err)

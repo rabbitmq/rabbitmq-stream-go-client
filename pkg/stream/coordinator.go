@@ -198,13 +198,14 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextConsumerItem()
 	var item = &Consumer{ID: lastId, options: parameters,
-		response:           newResponse(lookUpCommand(commandSubscribe)),
-		status:             open,
-		mutex:              &sync.Mutex{},
-		MessagesHandler:    messagesHandler,
-		currentOffset:      -1, // currentOffset has to equal lastStoredOffset as the currentOffset 0 may otherwise be flushed to the server when the consumer is closed and auto commit is enabled
-		lastStoredOffset:   -1, // because 0 is a valid value for the offset
-		isPromotedAsActive: true,
+		response:             newResponse(lookUpCommand(commandSubscribe)),
+		status:               open,
+		mutex:                &sync.Mutex{},
+		MessagesHandler:      messagesHandler,
+		currentOffset:        -1, // currentOffset has to equal lastStoredOffset as the currentOffset 0 may otherwise be flushed to the server when the consumer is closed and auto commit is enabled
+		lastStoredOffset:     -1, // because 0 is a valid value for the offset
+		isPromotedAsActive:   true,
+		lastAutoCommitStored: time.Now(),
 	}
 
 	coordinator.consumers[lastId] = item
