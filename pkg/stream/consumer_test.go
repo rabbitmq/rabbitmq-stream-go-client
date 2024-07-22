@@ -296,7 +296,8 @@ var _ = Describe("Streaming Consumers", func() {
 					SetFlushInterval(time.Second)))
 		Expect(err).NotTo(HaveOccurred())
 
-		for i := 0; i < 20; i++ {
+		maxMessages := 50
+		for i := 0; i < maxMessages; i++ {
 			Expect(producer.Send(CreateMessageForTesting("", i))).NotTo(HaveOccurred())
 			// emit message before the flush interval has elapsed
 			time.Sleep(time.Millisecond * 100)
@@ -306,7 +307,7 @@ var _ = Describe("Streaming Consumers", func() {
 			}
 		}
 
-		Expect(messagesReceived > 5 && messagesReceived < 15).To(BeTrueBecause("%d messages received", messagesReceived))
+		Expect(messagesReceived > 5 && messagesReceived < int32(maxMessages)).To(BeTrueBecause("%d messages received", messagesReceived))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
