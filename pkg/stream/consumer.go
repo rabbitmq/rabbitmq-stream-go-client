@@ -374,6 +374,18 @@ func (consumer *Consumer) cacheStoreOffset() {
 	}
 }
 
+func (consumer *Consumer) getMessageCountBeforeStorage() int {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	return consumer.messageCountBeforeStorage
+}
+
+func (consumer *Consumer) increaseMessageCountBeforeStorage() {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	consumer.messageCountBeforeStorage += 1
+}
+
 func (consumer *Consumer) getLastAutoCommitStored() time.Time {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
