@@ -4,21 +4,19 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 // The ha producer and consumer provide a way to auto-reconnect in case of connection problems
-
-import (
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
-)
 
 func CheckErr(err error) {
 	if err != nil {
@@ -37,6 +35,7 @@ func main() {
 	// Tune the parameters to test the reliability
 	const messagesToSend = 5_000_000
 	const numberOfProducers = 2
+	const concurrentProducers = 2
 	const numberOfConsumers = 2
 	const sendDelay = 1 * time.Millisecond
 	const delayEachMessages = 200
@@ -81,8 +80,9 @@ func main() {
 	go func() {
 		for isRunning {
 			totalConfirmed := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
-			fmt.Printf("%s - ToSend: %d - nProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC822),
-				messagesToSend*numberOfProducers, numberOfProducers, numberOfConsumers)
+			expectedMessages := messagesToSend * numberOfProducers * concurrentProducers
+			fmt.Printf("%s - ToSend: %d - nProducers: %d - concurrentProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC822),
+				expectedMessages, numberOfProducers, concurrentProducers, numberOfConsumers)
 			fmt.Printf("Sent:%d - ReSent %d - Confirmed:%d  - Not confirmed:%d - Fail+Confirmed  :%d \n",
 				sent, atomic.LoadInt32(&reSent), atomic.LoadInt32(&confirmed), atomic.LoadInt32(&fail), totalConfirmed)
 			fmt.Printf("Total Consumed: %d - Per consumer: %d  \n", atomic.LoadInt32(&consumed),
@@ -120,22 +120,27 @@ func main() {
 		CheckErr(err)
 		producers = append(producers, rProducer)
 		go func() {
-			for i := 0; i < messagesToSend; i++ {
-				msg := amqp.NewMessage([]byte("ha"))
-				mutex.Lock()
-				for _, confirmedMessage := range unConfirmedMessages {
-					err := rProducer.Send(confirmedMessage)
-					atomic.AddInt32(&reSent, 1)
-					CheckErr(err)
-				}
-				unConfirmedMessages = []message.StreamMessage{}
-				mutex.Unlock()
-				err := rProducer.Send(msg)
-				if i%delayEachMessages == 0 {
-					time.Sleep(sendDelay)
-				}
-				atomic.AddInt32(&sent, 1)
-				CheckErr(err)
+			for i := 0; i < concurrentProducers; i++ {
+				go func() {
+					for i := 0; i < messagesToSend; i++ {
+						msg := amqp.NewMessage([]byte("ha"))
+						mutex.Lock()
+						for _, confirmedMessage := range unConfirmedMessages {
+							err := rProducer.Send(confirmedMessage)
+							atomic.AddInt32(&reSent, 1)
+							CheckErr(err)
+						}
+						unConfirmedMessages = []message.StreamMessage{}
+						mutex.Unlock()
+						err := rProducer.Send(msg)
+						if i%delayEachMessages == 0 {
+							time.Sleep(sendDelay)
+						}
+						atomic.AddInt32(&sent, 1)
+						CheckErr(err)
+
+					}
+				}()
 			}
 		}()
 	}
