@@ -981,17 +981,16 @@ func (c *Client) DeclareSubscriber(streamName string,
 						consumer.MessagesHandler(ConsumerContext{Consumer: consumer, chunkInfo: &chunk}, offMessage.message)
 					}
 					if consumer.options.autocommit {
-						consumer.messageCountBeforeStorage += 1
-						if consumer.messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage {
+						messageCountBeforeStorage := consumer.increaseMessageCountBeforeStorage()
+						if messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage ||
+							time.Since(consumer.getLastAutoCommitStored()) >= consumer.options.autoCommitStrategy.flushInterval {
 							consumer.cacheStoreOffset()
-							consumer.messageCountBeforeStorage = 0
 						}
 					}
 				}
 
 			case <-time.After(consumer.options.autoCommitStrategy.flushInterval):
 				consumer.cacheStoreOffset()
-
 			}
 		}
 	}()

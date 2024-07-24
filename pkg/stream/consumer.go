@@ -36,6 +36,9 @@ type Consumer struct {
 	// is in waiting mode or not.
 	// in normal mode, the consumer is always isPromotedAsActive==true
 	isPromotedAsActive bool
+
+	// lastAutoCommitStored tracks when the offset was last flushed
+	lastAutoCommitStored time.Time
 }
 
 func (consumer *Consumer) setStatus(status int) {
@@ -359,11 +362,29 @@ func (consumer *Consumer) Close() error {
 
 func (consumer *Consumer) cacheStoreOffset() {
 	if consumer.options.autocommit {
+		consumer.mutex.Lock()
+		consumer.lastAutoCommitStored = time.Now()
+		consumer.messageCountBeforeStorage = 0
+		consumer.mutex.Unlock() // updateLastStoredOffset() in internalStoreOffset() also locks mutex, so not using defer for unlock
+
 		err := consumer.internalStoreOffset()
 		if err != nil {
 			logs.LogError("cache Store Offset error : %s", err)
 		}
 	}
+}
+
+func (consumer *Consumer) increaseMessageCountBeforeStorage() int {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	consumer.messageCountBeforeStorage += 1
+	return consumer.messageCountBeforeStorage
+}
+
+func (consumer *Consumer) getLastAutoCommitStored() time.Time {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	return consumer.lastAutoCommitStored
 }
 
 func (consumer *Consumer) StoreOffset() error {
