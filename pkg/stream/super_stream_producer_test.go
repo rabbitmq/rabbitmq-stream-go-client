@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 	"math/rand"
@@ -158,6 +159,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 				}
 				mutex.Lock()
 				msgReceived[superStreamPublishConfirm.Partition] = len(superStreamPublishConfirm.ConfirmationStatus)
+				logs.LogInfo("Partition %s confirmed %d messages, total %d",
+					superStreamPublishConfirm.Partition, len(superStreamPublishConfirm.ConfirmationStatus), msgReceived[superStreamPublishConfirm.Partition])
 				mutex.Unlock()
 			}
 
@@ -168,23 +171,26 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			msg.ApplicationProperties = map[string]interface{}{"routingKey": fmt.Sprintf("hello%d", i)}
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
-
+		time.Sleep(1 * time.Second)
 		// these values are the same for .NET,Python,Java stream clients
 		// The aim for this test is to validate the correct routing with the
 		// MurmurStrategy.
 		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
+			logs.LogInfo("Partition 0 confirmed %d messages", msgReceived[fmt.Sprintf("%s-%s", superStream, "0")])
 			return msgReceived[fmt.Sprintf("%s-%s", superStream, "0")]
 		}).WithPolling(300 * time.Millisecond).WithTimeout(2 * time.Second).Should(Equal(9))
 		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
+			logs.LogInfo("Partition 1 confirmed %d messages", msgReceived[fmt.Sprintf("%s-%s", superStream, "1")])
 			return msgReceived[fmt.Sprintf("%s-%s", superStream, "1")]
 		}).WithPolling(300 * time.Millisecond).WithTimeout(2 * time.Second).Should(Equal(7))
 		Eventually(func() int {
 			mutex.Lock()
 			defer mutex.Unlock()
+			logs.LogInfo("Partition 2 confirmed %d messages", msgReceived[fmt.Sprintf("%s-%s", superStream, "2")])
 			return msgReceived[fmt.Sprintf("%s-%s", superStream, "2")]
 		}).WithPolling(300 * time.Millisecond).WithTimeout(2 * time.Second).Should(Equal(4))
 
