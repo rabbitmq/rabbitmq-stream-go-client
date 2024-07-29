@@ -45,7 +45,7 @@ func (a *availableFeatures) BrokerFilterEnabled() bool {
 func (a *availableFeatures) IsBrokerSingleActiveConsumerEnabled() bool {
 	lock.Lock()
 	defer lock.Unlock()
-	return a.brokerSingleActiveConsumerEnabled == a.is311OrMore
+	return a.brokerSingleActiveConsumerEnabled
 }
 
 func (a *availableFeatures) SetVersion(version string) error {
