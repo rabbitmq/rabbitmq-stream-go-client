@@ -3,6 +3,8 @@ package stream
 import (
 	"fmt"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -56,4 +58,71 @@ func SetLevelInfo(value int8) {
 
 func containsOnlySpaces(input string) bool {
 	return len(input) > 0 && len(strings.TrimSpace(input)) == 0
+}
+
+//private static string ExtractVersion(string fullVersion)
+//{
+//const string Pattern = @"(\d+\.\d+\.\d+)";
+//var match = Regex.Match(fullVersion, Pattern);
+//
+//return match.Success
+//? match.Groups[1].Value
+//: string.Empty;
+//}
+
+func ExtractVersion(fullVersion string) string {
+	const pattern = `(\d+\.\d+\.\d+)`
+	re := regexp.MustCompile(pattern)
+	match := re.FindStringSubmatch(fullVersion)
+	if len(match) > 0 {
+		return match[1]
+	}
+	return ""
+}
+
+func Is311OrMore(version string) (bool, error) {
+	v := ExtractVersion(version)
+	compare, err := CompareSemver(v, "3.11.0")
+	if err != nil {
+		return false, err
+	}
+	return compare >= 0, nil
+}
+
+// CompareSemver compares two semantic version strings.
+// Returns -1 if v1 < v2, 1 if v1 > v2, and 0 if they are equal.
+func CompareSemver(v1, v2 string) (int, error) {
+	parseVersion := func(v string) ([]int, error) {
+		parts := strings.Split(v, ".")
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("invalid semantic version: %s", v)
+		}
+		version := make([]int, 3)
+		for i, part := range parts {
+			num, err := strconv.Atoi(part)
+			if err != nil {
+				return nil, fmt.Errorf("invalid number in version: %s", part)
+			}
+			version[i] = num
+		}
+		return version, nil
+	}
+
+	v1Parts, err := parseVersion(v1)
+	if err != nil {
+		return 0, err
+	}
+	v2Parts, err := parseVersion(v2)
+	if err != nil {
+		return 0, err
+	}
+
+	for i := 0; i < 3; i++ {
+		if v1Parts[i] < v2Parts[i] {
+			return -1, nil
+		} else if v1Parts[i] > v2Parts[i] {
+			return 1, nil
+		}
+	}
+	return 0, nil
 }

@@ -213,7 +213,12 @@ func (c *Client) connect() error {
 		}
 
 		logs.LogDebug("Server properties: %s", c.serverProperties)
-		if serverProperties["version"] == "" {
+		more, err := Is311OrMore(c.serverProperties["version"])
+		if err != nil {
+			logs.LogWarn("Error checking server version: %s", err)
+		}
+
+		if serverProperties["version"] == "" || !more {
 			logs.LogInfo(
 				"Server version is less than 3.11.0, skipping command version exchange")
 		} else {
