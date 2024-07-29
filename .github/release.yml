@@ -1,0 +1,25 @@
+# .github/release.yml
+
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: Breaking Changes
+      labels:
+        - Semver-Major
+        - breaking-change
+    - title: Enhancements 
+      labels:
+        - Semver-Minor
+        - enhancement
+    - title: Bug Fixes
+      labels:
+        - Semver-Patch
+        - bug
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Dependency Updates
+      labels:
+        - dependencies
