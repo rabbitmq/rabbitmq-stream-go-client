@@ -218,7 +218,7 @@ func (c *Client) connect() error {
 		}
 
 		if serverProperties["version"] == "" || !c.availableFeatures.Is311OrMore() {
-			logs.LogInfo(
+			logs.LogDebug(
 				"Server version is less than 3.11.0, skipping command version exchange")
 		} else {
 			err := c.exchangeVersion(c.serverProperties["version"])
