@@ -19,7 +19,7 @@ const (
 const initBufferPublishSize = 2 + 2 + 1 + 4
 
 const (
-	ClientVersion = "1.4.7"
+	ClientVersion = "1.4.8"
 
 	commandDeclarePublisher       = 1
 	commandPublish                = 2
