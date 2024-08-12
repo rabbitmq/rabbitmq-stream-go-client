@@ -566,7 +566,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 
 	for clientResult.connectionProperties.host != leader.advHost ||
 		clientResult.connectionProperties.port != leader.advPort {
-		logs.LogDebug("connectionProperties host %s doesn't mach with the advertised_host %s, advertised_port %d .. retry",
+		logs.LogDebug("connectionProperties host %s doesn't match with the advertised_host %s, advertised_port %s .. retry",
 			clientResult.connectionProperties.host,
 			leader.advHost, leader.advPort)
 		err := clientResult.Close()
