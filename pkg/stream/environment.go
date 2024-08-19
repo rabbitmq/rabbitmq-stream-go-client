@@ -110,8 +110,8 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 	for err != nil {
 		sleepTime := rand.Intn(5000) + (tentatives * 1000)
 
-		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: ", err, sleepTime,
-			client.broker)
+		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", client.broker.Scheme, client.broker.User, client.broker.Host, client.broker.Port, client.broker.Vhost)
+		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: ", err, sleepTime, brokerUri)
 
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 		rand.Seed(time.Now().UnixNano())
