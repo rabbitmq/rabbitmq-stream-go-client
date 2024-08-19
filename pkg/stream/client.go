@@ -840,7 +840,7 @@ func (c *Client) DeclareSubscriber(streamName string,
 		return nil, fmt.Errorf("filter enabled but post filter is nil. Post filter must be set")
 	}
 
-	if options.IsFilterEnabled() && (options.Filter.Values == nil || len(options.Filter.Values) == 0) {
+	if options.IsFilterEnabled() && (len(options.Filter.Values) == 0) {
 		return nil, fmt.Errorf("filter enabled but no values. At least one value must be set")
 	}
 
