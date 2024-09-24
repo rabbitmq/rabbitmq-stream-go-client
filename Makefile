@@ -95,8 +95,8 @@ rabbitmq-ha-proxy:
 	mv compose/ha_tls/tls-gen/basic/result/server_*_certificate.pem compose/ha_tls/tls-gen/basic/result/server_certificate.pem
 	mv compose/ha_tls/tls-gen/basic/result/server_*key.pem compose/ha_tls/tls-gen/basic/result/server_key.pem
 	cd compose/ha_tls; docker build -t haproxy-rabbitmq-cluster  .
-	cd compose/ha_tls; docker-compose down
-	cd compose/ha_tls; docker-compose up
+	cd compose/ha_tls; docker compose down
+	cd compose/ha_tls; docker compose up
 
 rabbitmq-server-tls:
 	cd compose/tls; rm -rf tls-gen;
