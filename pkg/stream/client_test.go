@@ -198,7 +198,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 		cli.socketCallTimeout = time.Millisecond
 
 		res, err := cli.queryPublisherSequence("ref", "stream")
-		Expect(err.Error()).To(ContainSubstring("timeout 1 ms - waiting Code, operation: Command not handled 5"))
+		Expect(err.Error()).To(ContainSubstring("timeout 1 ms - waiting Code, operation: CommandQueryPublisherSequence"))
 		Expect(res).To(BeZero())
 	})
 
@@ -208,7 +208,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 		cli.socketCallTimeout = time.Millisecond
 
 		res, err := cli.StreamStats("stream")
-		Expect(err.Error()).To(ContainSubstring("timeout 1 ms - waiting Code, operation: Command not handled 28"))
+		Expect(err.Error()).To(ContainSubstring("timeout 1 ms - waiting Code, operation: CommandStreamStatus"))
 		Expect(res).To(BeNil())
 	})
 

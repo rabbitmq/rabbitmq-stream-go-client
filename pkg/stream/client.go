@@ -595,11 +595,24 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 }
 
 func (c *Client) internalDeclarePublisher(streamName string, producer *Producer) responseError {
+
 	publisherReferenceSize := 0
 	if producer.options != nil {
 		if producer.options.Name != "" {
 			publisherReferenceSize = len(producer.options.Name)
 		}
+	}
+
+	if publisherReferenceSize > 0 {
+		v, err := c.queryPublisherSequence(producer.options.Name, streamName)
+		if err != nil {
+			// if the client can't get the sequence, the function will return an error
+			// because is not able to set the sequence
+			// in most of the case the error timeout is during the re-connection
+			// in this case the producer can't be created and the client will return an error
+			return responseError{Err: err}
+		}
+		producer.sequence = v
 	}
 
 	length := 2 + 2 + 4 + 1 + 2 + publisherReferenceSize + 2 + len(streamName)
@@ -617,11 +630,6 @@ func (c *Client) internalDeclarePublisher(streamName string, producer *Producer)
 
 	writeString(b, streamName)
 	res := c.handleWrite(b.Bytes(), resp)
-
-	if publisherReferenceSize > 0 {
-		v, _ := c.queryPublisherSequence(producer.options.Name, streamName)
-		producer.sequence = v
-	}
 
 	return res
 }
