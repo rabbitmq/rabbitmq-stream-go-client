@@ -1037,6 +1037,10 @@ func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
 
 func (c *Client) DeclareSuperStream(superStream string, options SuperStreamOptions) error {
 
+	if !c.availableFeatures.is313OrMore {
+		return fmt.Errorf("declaring super stream via client API not supported, server version is less than 3.13.0")
+	}
+
 	if superStream == "" || containsOnlySpaces(superStream) {
 		return fmt.Errorf("super Stream Name can't be empty")
 	}
@@ -1084,6 +1088,11 @@ func (c *Client) DeclareSuperStream(superStream string, options SuperStreamOptio
 }
 
 func (c *Client) DeleteSuperStream(superStream string) error {
+
+	if !c.availableFeatures.is313OrMore {
+		return fmt.Errorf("deleting super stream not supported via client API, server version is less than 3.13.0")
+	}
+
 	length := 2 + 2 + 4 + 2 + len(superStream)
 	resp := c.coordinator.NewResponse(commandDeleteSuperStream, superStream)
 	correlationId := resp.correlationid
