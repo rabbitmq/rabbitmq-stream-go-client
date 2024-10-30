@@ -300,6 +300,8 @@ The `BatchSend` is the primitive to send the messages, `Send` introduces a smart
 
 The `Send` interface works in most of the cases, In some condition is about 15/20 slower than `BatchSend`. See also this [thread](https://groups.google.com/g/rabbitmq-users/c/IO_9-BbCzgQ).
 
+See also "Client performances" example in the [examples](./examples/performances/) directory
+
 ### Publish Confirmation
 
 For each publish the server sends back to the client the confirmation or an error.

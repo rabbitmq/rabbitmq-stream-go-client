@@ -8,6 +8,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
@@ -34,9 +35,17 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 }
 
 func main() {
-	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Println("RabbitMQ Sub Entry Batch example")
+	useSyncBatch := os.Args[1] == "sync"
+	useAsyncSend := os.Args[1] == "async"
+
+	messagesToSend, err := strconv.Atoi(os.Args[2])
+	CheckErr(err)
+	batchSize, err := strconv.Atoi(os.Args[3])
+	messagesToSend = messagesToSend / batchSize
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("RabbitMQ performance example")
 
 	// Connect to the broker ( or brokers )
 	env, err := stream.NewEnvironment(
@@ -46,7 +55,6 @@ func main() {
 			SetUser("guest").
 			SetPassword("guest"))
 	CheckErr(err)
-	fmt.Printf("------------------------------------------\n\n")
 	fmt.Println("Connected to the RabbitMQ server")
 
 	streamName := uuid.New().String()
@@ -56,38 +64,66 @@ func main() {
 		},
 	)
 	CheckErr(err)
-	fmt.Printf("------------------------------------------\n\n")
 	fmt.Printf("Created Stream: %s \n", streamName)
 
-	producer, err := env.NewProducer(streamName, stream.NewProducerOptions().
-		SetSubEntrySize(500).
-		SetCompression(stream.Compression{}.None()))
+	producer, err := env.NewProducer(streamName,
+		stream.NewProducerOptions().
+			SetBatchSize(batchSize).
+			SetBatchPublishingDelay(100))
 	CheckErr(err)
 
-	//optional publish confirmation channel
 	chPublishConfirm := producer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
-	messagesToSend := 20_000
 	fmt.Printf("------------------------------------------\n\n")
-	fmt.Printf("Start sending %d messages, data size: %d bytes\n", messagesToSend, len("hello_world"))
-	batchSize := 100
-	var arr []message.StreamMessage
-	for i := 0; i < batchSize; i++ {
-		arr = append(arr, amqp.NewMessage([]byte("hello_world")))
+	fmt.Printf("Start sending %d messages, data size: %d bytes\n", messagesToSend*batchSize, len("hello_world"))
+	var averageLatency time.Duration
+	var messagesConsumed int32
+	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		atomic.AddInt32(&messagesConsumed, 1)
+		var latency time.Time
+		err := latency.UnmarshalBinary(message.Data[0])
+		CheckErr(err)
+		averageLatency += time.Since(latency)
 	}
+	_, err = env.NewConsumer(streamName, handleMessages, stream.NewConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()))
+	CheckErr(err)
 
 	start := time.Now()
-	for i := 0; i < messagesToSend; i++ {
-		err := producer.BatchSend(arr)
-		CheckErr(err)
+
+	// here the client sends the messages in batch and it is up to the user to aggregate the messages
+	if useSyncBatch {
+		var arr []message.StreamMessage
+		for i := 0; i < messagesToSend; i++ {
+			for i := 0; i < batchSize; i++ {
+				latency, err := time.Now().MarshalBinary()
+				CheckErr(err)
+				arr = append(arr, amqp.NewMessage(latency))
+			}
+			err := producer.BatchSend(arr)
+			CheckErr(err)
+			arr = arr[:0]
+		}
 	}
+
+	// here the client aggregates the messages based on the batch size and batch publishing delay
+	if useAsyncSend {
+		for i := 0; i < messagesToSend; i++ {
+			for i := 0; i < batchSize; i++ {
+				latency, err := time.Now().MarshalBinary()
+				CheckErr(err)
+				err = producer.Send(amqp.NewMessage(latency))
+				CheckErr(err)
+			}
+		}
+	}
+
 	duration := time.Since(start)
+	fmt.Println("Press any key to report and stop ")
+	_, _ = reader.ReadString('\n')
 	fmt.Printf("------------------------------------------\n\n")
-	fmt.Printf("Sent %d messages in %s \n", messagesToSend*100, duration)
+	fmt.Printf("Sent %d messages in %s. Confirmed: %d avarage latency: %s \n", messagesToSend*batchSize, duration, messagesConfirmed, averageLatency/time.Duration(messagesConsumed))
 	fmt.Printf("------------------------------------------\n\n")
 
-	fmt.Println("Press any key to stop ")
-	_, _ = reader.ReadString('\n')
 	time.Sleep(200 * time.Millisecond)
 	CheckErr(err)
 	err = env.DeleteStream(streamName)
