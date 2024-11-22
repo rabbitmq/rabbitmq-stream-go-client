@@ -44,8 +44,8 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		}
 	}(client)
 
-	//// we put a limit to the heartbeat.
-	//// it doesn't make sense to have a heartbeat less than 3 seconds
+	// we put a limit to the heartbeat.
+	// it doesn't make sense to have a heartbeat less than 3 seconds
 	if options.TCPParameters.RequestedHeartbeat < (3 * time.Second) {
 		return nil, errors.New("RequestedHeartbeat must be greater than 3 seconds")
 	}
