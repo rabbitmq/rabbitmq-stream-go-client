@@ -208,7 +208,7 @@ var _ = Describe("Environment test", func() {
 			},
 			TCPParameters: &TCPParameters{
 				tlsConfig:             nil,
-				RequestedHeartbeat:    60,
+				RequestedHeartbeat:    defaultHeartbeat,
 				RequestedMaxFrameSize: 1048574,
 				WriteBuffer:           100,
 				ReadBuffer:            200,
@@ -261,6 +261,11 @@ var _ = Describe("Environment test", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(env.options.TCPParameters.RequestedHeartbeat).NotTo(BeZero())
 			Expect(env.options.TCPParameters.RequestedMaxFrameSize).NotTo(BeZero())
+		})
+
+		It("RequestedHeartbeat should be greater then 3 seconds", func() {
+			_, err := NewEnvironment(NewEnvironmentOptions().SetRequestedHeartbeat(2 * time.Second))
+			Expect(err).To(HaveOccurred())
 		})
 
 	})

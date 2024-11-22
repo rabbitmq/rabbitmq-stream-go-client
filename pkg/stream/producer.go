@@ -94,10 +94,10 @@ func NewProducerFilter(filterValue FilterValue) *ProducerFilter {
 type ProducerOptions struct {
 	client               *Client
 	streamName           string
-	Name                 string          // Producer name, it is useful to handle deduplication messages
+	Name                 string          // Producer name, valid for deduplication
 	QueueSize            int             // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
-	BatchSize            int             // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput
-	BatchPublishingDelay int             // Period to Send a batch of messages.
+	BatchSize            int             // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput. Valid only for the method Send()
+	BatchPublishingDelay int             // Timout within the aggregation sent a batch of messages. Valid only for the method Send()
 	SubEntrySize         int             // Size of sub Entry, to aggregate more subEntry using one publishing id
 	Compression          Compression     // Compression type, it is valid only if SubEntrySize > 1
 	ConfirmationTimeOut  time.Duration   // Time to wait for the confirmation
@@ -115,6 +115,8 @@ func (po *ProducerOptions) SetQueueSize(size int) *ProducerOptions {
 	return po
 }
 
+// SetBatchSize sets the batch size for the producer
+// Valid only for the method Send()
 func (po *ProducerOptions) SetBatchSize(size int) *ProducerOptions {
 	po.BatchSize = size
 	return po
@@ -355,6 +357,9 @@ func (producer *Producer) sendBytes(streamMessage message.StreamMessage, message
 	return nil
 }
 
+// Send sends a message to the stream and returns an error if the message could not be sent.
+// Send is asynchronous. The aggregation of the messages is based on the BatchSize and BatchPublishingDelay
+// options. The message is sent when the aggregation is reached or the BatchPublishingDelay is reached.
 func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	messageBytes, err := streamMessage.MarshalBinary()
 	if err != nil {
@@ -372,6 +377,12 @@ func (producer *Producer) assignPublishingID(message message.StreamMessage) int6
 	return sequence
 }
 
+// BatchSend sends a batch of messages to the stream and returns an error if the messages could not be sent.
+// BatchSend is synchronous. The aggregation is up to the user. The user has to aggregate the messages
+// and send them in a batch.
+// BatchSend is not affected by the BatchSize and BatchPublishingDelay options.
+// BatchSend is the primitive method to send messages to the stream, the method Send prepares the messages and
+// calls BatchSend internally.
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
 	var messagesSequence = make([]messageSequence, len(batchMessages))
 	totalBufferToSend := 0

@@ -49,7 +49,7 @@ func newBrokerDefault() *Broker {
 
 func newTCPParameterDefault() *TCPParameters {
 	return &TCPParameters{
-		RequestedHeartbeat:    60 * time.Second,
+		RequestedHeartbeat:    defaultHeartbeat,
 		RequestedMaxFrameSize: 1048576,
 		WriteBuffer:           8192,
 		ReadBuffer:            65536,
