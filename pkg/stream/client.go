@@ -421,7 +421,7 @@ func (c *Client) heartBeat() {
 
 	go func() {
 		for c.socket.isOpen() {
-			<-tickerHeatBeat.C
+			<-tickerHeartbeat.C
 			if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
 				v := atomic.AddInt32(&heartBeatMissed, 1)
 				logs.LogWarn("Missing heart beat: %d", v)
@@ -434,7 +434,7 @@ func (c *Client) heartBeat() {
 			}
 
 		}
-		tickerHeatBeat.Stop()
+		tickerHeartbeat.Stop()
 	}()
 
 	go func() {
