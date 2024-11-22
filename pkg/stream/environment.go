@@ -30,6 +30,11 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		options.RPCTimeout = defaultSocketCallTimeout
 	}
 
+	if options.TCPParameters == nil {
+		options.TCPParameters = newTCPParameterDefault()
+
+	}
+
 	client := newClient("go-stream-locator", nil,
 		options.TCPParameters, options.SaslConfiguration, options.RPCTimeout)
 	defer func(client *Client) {
@@ -38,6 +43,12 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 			return
 		}
 	}(client)
+
+	// we put a limit to the heartbeat.
+	// it doesn't make sense to have a heartbeat less than 3 seconds
+	if options.TCPParameters.RequestedHeartbeat < (3 * time.Second) {
+		return nil, errors.New("RequestedHeartbeat must be greater than 3 seconds")
+	}
 
 	if options.MaxConsumersPerClient <= 0 || options.MaxProducersPerClient <= 0 ||
 		options.MaxConsumersPerClient > 254 || options.MaxProducersPerClient > 254 {

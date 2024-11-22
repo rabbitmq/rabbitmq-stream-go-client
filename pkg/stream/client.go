@@ -413,13 +413,15 @@ func (c *Client) DeleteStream(streamName string) error {
 }
 
 func (c *Client) heartBeat() {
-	ticker := time.NewTicker(60 * time.Second)
-	tickerHeatBeat := time.NewTicker(20 * time.Second)
+	ticker := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat) * time.Second)
+	tickerHeartbeat := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat-2) * time.Second)
+
 	resp := c.coordinator.NewResponseWitName("heartbeat")
 	var heartBeatMissed int32
+
 	go func() {
 		for c.socket.isOpen() {
-			<-tickerHeatBeat.C
+			<-tickerHeartbeat.C
 			if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
 				v := atomic.AddInt32(&heartBeatMissed, 1)
 				logs.LogWarn("Missing heart beat: %d", v)
@@ -432,7 +434,7 @@ func (c *Client) heartBeat() {
 			}
 
 		}
-		tickerHeatBeat.Stop()
+		tickerHeartbeat.Stop()
 	}()
 
 	go func() {
