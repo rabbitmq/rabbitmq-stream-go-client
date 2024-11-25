@@ -36,8 +36,10 @@ func newSilent() *cobra.Command {
 }
 
 var (
-	publisherMessageCount    int32
-	consumerMessageCount     int32
+	publisherMessageCount int32
+	consumerMessageCount  int32
+	//consumerMessageCountPerLatency int32
+	totalLatency             int64
 	confirmedMessageCount    int32
 	notConfirmedMessageCount int32
 	consumersCloseCount      int32
@@ -77,9 +79,15 @@ func printStats() {
 
 					PMessagesPerSecond := float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
 					CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
+					//latency := float64(totalLatency) / float64(atomic.LoadInt32(&consumerMessageCount))
+					averageLatency := int64(0)
+					if atomic.LoadInt32(&consumerMessageCount) > 0 {
+						averageLatency = totalLatency / int64(atomic.LoadInt32(&consumerMessageCount))
+					}
+
 					ConfirmedMessagesPerSecond := float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
-					logInfo("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent))
+					logInfo("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |   latency: %d ms",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent), averageLatency)
 				}
 			}
 
@@ -273,28 +281,9 @@ func startPublisher(streamName string) error {
 		return err
 	}
 
-	var arr []message.StreamMessage
-	var body []byte
-	for z := 0; z < batchSize; z++ {
-
-		if fixedBody > 0 {
-			body = make([]byte, fixedBody)
-		} else {
-			if variableBody > 0 {
-				rand.Seed(time.Now().UnixNano())
-				body = make([]byte, rand.Intn(variableBody))
-			}
-		}
-		n := time.Now().UnixNano()
-		var buff = make([]byte, 8)
-		binary.BigEndian.PutUint64(buff, uint64(n))
-		/// added to calculate the latency
-		msg := amqp.NewMessage(append(buff, body...))
-		arr = append(arr, msg)
-	}
-
-	go func(prod *ha.ReliableProducer, messages []message.StreamMessage) {
+	go func(prod *ha.ReliableProducer) {
 		for {
+
 			if rate > 0 {
 				rateWithBatchSize := float64(rate) / float64(batchSize)
 				sleepAfterMessage := float64(time.Second) / rateWithBatchSize
@@ -313,19 +302,48 @@ func startPublisher(streamName string) error {
 				}
 				time.Sleep(time.Duration(sleep) * time.Millisecond)
 			}
+			messages := buildMessages()
 
-			atomic.AddInt64(&messagesSent, int64(len(arr)))
-			for _, streamMessage := range arr {
-				err = prod.Send(streamMessage)
+			atomic.AddInt64(&messagesSent, int64(len(messages)))
+			if isBatchSend {
+				err = prod.BatchSend(messages)
 				checkErr(err)
+			} else {
+				for _, streamMessage := range messages {
+					err = prod.Send(streamMessage)
+					checkErr(err)
+				}
 			}
-			atomic.AddInt32(&publisherMessageCount, int32(len(arr)))
+
+			atomic.AddInt32(&publisherMessageCount, int32(len(messages)))
 
 		}
-	}(rPublisher, arr)
+	}(rPublisher)
 
 	return nil
 
+}
+
+func buildMessages() []message.StreamMessage {
+	var arr []message.StreamMessage
+	for z := 0; z < batchSize; z++ {
+		//var body []byte
+		if fixedBody > 0 {
+			//	body = make([]byte, fixedBody)
+		} else {
+			if variableBody > 0 {
+				rand.Seed(time.Now().UnixNano())
+				//		body = make([]byte, rand.Intn(variableBody))
+			}
+		}
+		var buff = make([]byte, 8)
+		sentTime := time.Now().UnixMilli()
+		binary.BigEndian.PutUint64(buff, uint64(sentTime))
+		/// added to calculate the latency
+		msg := amqp.NewMessage(buff)
+		arr = append(arr, msg)
+	}
+	return arr
 }
 
 func startPublishers() error {
@@ -362,8 +380,12 @@ func handleConsumerClose(channelClose stream.ChannelClose) {
 func startConsumer(consumerName string, streamName string) error {
 
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		atomic.AddInt32(&consumerMessageCount, 1)
 
+		sentTime := binary.BigEndian.Uint64(message.GetData()[:8]) // Decode the timestamp
+		startTimeFromMessage := time.UnixMilli(int64(sentTime))
+		latency := time.Now().Sub(startTimeFromMessage).Milliseconds()
+		totalLatency += latency
+		atomic.AddInt32(&consumerMessageCount, 1)
 	}
 	offsetSpec := stream.OffsetSpecification{}.Last()
 	switch consumerOffset {
