@@ -94,12 +94,12 @@ func printStats() {
 			for {
 				select {
 				case _ = <-tickerReset.C:
-					logInfo("Resetting counters...")
-					atomic.SwapInt32(&publisherMessageCount, 0)
+					logInfo("***********Resetting counters***********")
 					atomic.SwapInt32(&consumerMessageCount, 0)
-					atomic.SwapInt64(&totalLatency, 0)
-					atomic.SwapInt32(&confirmedMessageCount, 0)
 					atomic.SwapInt32(&notConfirmedMessageCount, 0)
+					atomic.SwapInt32(&confirmedMessageCount, 0)
+					atomic.SwapInt32(&publisherMessageCount, 0)
+					atomic.SwapInt64(&totalLatency, 0)
 					start = time.Now()
 				}
 			}
