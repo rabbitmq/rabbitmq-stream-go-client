@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
@@ -47,18 +48,13 @@ func main() {
 	fmt.Println("Getting started with Streaming TLS client for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
-	addressResolver := stream.AddressResolver{
-		Host: "35.234.132.231",
-		Port: 5551,
-	}
 	// Connect to the broker ( or brokers )
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
-			SetAddressResolver(addressResolver).
-			SetPort(addressResolver.Port). // standard TLS port
-			SetHost(addressResolver.Host).
-			SetUser("remote").
-			SetPassword("remote").
+			SetHost("localhost").
+			SetPort(5551). // standard TLS port
+			SetUser("guest").
+			SetPassword("guest").
 			IsTLS(true).
 			// use tls.Config  to customize the TLS configuration
 			// for tests you may need InsecureSkipVerify: true
@@ -77,12 +73,12 @@ func main() {
 	// err = env.DeclareStream(streamName, nil)
 	// it is the best practise to define a size,  1GB for example:
 
-	streamName := "perf-test-go"
-	//err = env.DeclareStream(streamName,
-	//	&stream.StreamOptions{
-	//		MaxLengthBytes: stream.ByteCapacity{}.GB(2),
-	//	},
-	//)
+	streamName := uuid.New().String()
+	err = env.DeclareStream(streamName,
+		&stream.StreamOptions{
+			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
+		},
+	)
 
 	CheckErr(err)
 
@@ -96,7 +92,7 @@ func main() {
 
 	// the send method automatically aggregates the messages
 	// based on batch size
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1000; i++ {
 		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 		CheckErr(err)
 	}
@@ -111,24 +107,15 @@ func main() {
 	//
 	//}, nil)
 	// if you need to track the offset you need a consumer name like:
-	consumed := 0
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-
-		consumed++
-		if consumed%1000 == 0 {
-
-			fmt.Printf("name: %s, offset %d, chunk entities count: %d, total: %d   \n ",
-				consumerContext.Consumer.GetName(), consumerContext.Consumer.GetOffset(), consumerContext.GetEntriesCount(), consumed)
-
-		}
-
+		fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
 	}
 
 	consumer, err := env.NewConsumer(
 		streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
-			SetConsumerName("my_consumer").                  // set a consumer name
+			SetConsumerName("my_consumer"). // set a consumer name
 			SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 	CheckErr(err)
 	channelClose := consumer.NotifyClose()
@@ -141,7 +128,7 @@ func main() {
 	err = consumer.Close()
 	time.Sleep(200 * time.Millisecond)
 	CheckErr(err)
-	//err = env.DeleteStream(streamName)
+	err = env.DeleteStream(streamName)
 	CheckErr(err)
 	err = env.Close()
 	CheckErr(err)
