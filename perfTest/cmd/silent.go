@@ -76,15 +76,21 @@ func printStats() {
 				select {
 				case _ = <-ticker.C:
 					v := time.Now().Sub(start).Milliseconds()
-					averageLatency := int64(0)
-					if atomic.LoadInt32(&consumerMessageCount) > 0 {
-						PMessagesPerSecond := float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
-						CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
-						averageLatency = totalLatency / int64(atomic.LoadInt32(&consumerMessageCount))
-						ConfirmedMessagesPerSecond := float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
-						logInfo("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |   latency: %d ms",
-							PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent), averageLatency)
+					PMessagesPerSecond := float64(0)
+					if publisherMessageCount > 0 {
+						PMessagesPerSecond = float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
 					}
+
+					averageLatency := int64(0)
+					CMessagesPerSecond := float64(0)
+					ConfirmedMessagesPerSecond := float64(0)
+					if atomic.LoadInt32(&consumerMessageCount) > 0 {
+						CMessagesPerSecond = float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
+						averageLatency = totalLatency / int64(atomic.LoadInt32(&consumerMessageCount))
+						ConfirmedMessagesPerSecond = float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
+					}
+					logInfo("+Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |   latency: %d ms",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent), averageLatency)
 				}
 			}
 
