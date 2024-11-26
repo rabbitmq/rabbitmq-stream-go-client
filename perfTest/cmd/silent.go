@@ -271,12 +271,11 @@ func startPublisher(streamName string) error {
 		if compression == "zstd" {
 			cp = stream.Compression{}.Zstd()
 		}
-
 		producerOptions.SetSubEntrySize(subEntrySize).SetCompression(cp)
-
 		logInfo("Enable SubEntrySize: %d, compression: %s", subEntrySize, cp)
 	}
 
+	producerOptions.SetClientProvidedName(clientProvidedName)
 	rPublisher, err := ha.NewReliableProducer(simulEnvironment,
 		streamName,
 		producerOptions,
@@ -420,6 +419,7 @@ func startConsumer(consumerName string, streamName string) error {
 		handleMessages,
 		stream.NewConsumerOptions().
 			SetConsumerName(consumerName).
+			SetClientProvidedName(clientProvidedName).
 			SetOffset(offsetSpec).
 			SetCRCCheck(crcCheck).
 			SetInitialCredits(int16(initialCredits)))

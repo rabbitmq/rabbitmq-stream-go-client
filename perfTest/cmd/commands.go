@@ -47,6 +47,7 @@ var (
 	runDuration         int
 	initialCredits      int
 	isBatchSend         bool
+	clientProvidedName  string
 )
 
 func init() {
@@ -78,6 +79,7 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.PersistentFlags().StringVarP(&consumerOffset, "consumer-offset", "", "first", "Staring consuming, ex: first,last,next or random")
 	baseCmd.PersistentFlags().IntVarP(&initialCredits, "initial-credits", "", 10, "Consumer initial credits")
 	baseCmd.PersistentFlags().BoolVarP(&isBatchSend, "batch-send", "", false, "Enable batch send")
+	baseCmd.PersistentFlags().StringVarP(&clientProvidedName, "client-provided-name", "", "", "Client provided name")
 	baseCmd.AddCommand(versionCmd)
 	baseCmd.AddCommand(newSilent())
 }
