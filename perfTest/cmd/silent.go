@@ -9,6 +9,8 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/spf13/cobra"
+	"golang.org/x/text/language"
+	gomsg "golang.org/x/text/message"
 	"math/rand"
 	"os"
 	"sync"
@@ -89,8 +91,9 @@ func printStats() {
 						averageLatency = totalLatency / int64(atomic.LoadInt32(&consumerMessageCount))
 						ConfirmedMessagesPerSecond = float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
 					}
-					logInfo("+Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |   latency: %d ms",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent), averageLatency)
+					p := gomsg.NewPrinter(language.English)
+					logInfo(p.Sprintf("+Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |   latency: %d ms",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent), averageLatency))
 				}
 			}
 
