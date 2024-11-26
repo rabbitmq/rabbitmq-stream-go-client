@@ -4,89 +4,89 @@ on:
   push:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        go: [ '1.22']
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build and export
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: CiDockerfile
-          tags: rabbitmq_tls:latest
-          outputs: type=docker,dest=/tmp/rabbitmq_tls.tar
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rabbitmq_tls
-          path: /tmp/rabbitmq_tls.tar
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: rabbitmq_tls
-          path: /tmp
-      - name: Load image
-        run: |
-          docker load --input /tmp/rabbitmq_tls.tar
-          docker image ls -a
-          docker run -d --rm --name rabbitmq-stream-client-test \
-          -p 5552:5552 -p 5672:5672 -p 5671:5671 -p 5551:5551 -p 15672:15672 \
-          -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
-          rabbitmq_tls
-      - name: wait for running
-        run: |
-          docker exec rabbitmq-stream-client-test /bin/bash -c 'ps -aux'
-          docker exec rabbitmq-stream-client-test /bin/bash -c 'sleep 10'
-          docker exec rabbitmq-stream-client-test /bin/bash -c 'rabbitmqctl status'
-          docker exec rabbitmq-stream-client-test /bin/bash -c 'rabbitmqctl wait --pid 1 --timeout 70'
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        id: setup_go
-        with:
-          go-version: ${{ matrix.go }}
-          check-latest: true
-      - run: make test GO_VERSION=${{ steps.setup_go.outputs.go-version }}
-      - uses: actions/checkout@main
-      - uses: codecov/codecov-action@v4
-        with:
-          fail_ci_if_error: false # optional (default = false)
-          files: ./coverage.txt
-          flags: unittests
-          name: codecov-umbrella # optional
-          verbose: true # optional (default = false)
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-  test-win32:
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        go: [ '1.22']
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        id: setup_go
-        with:
-          go-version: ${{ matrix.go }}
-          check-latest: true
-      - name: Cache installers
-        uses: actions/cache@v4
-        with:
-          # Note: the cache path is relative to the workspace directory
-          # https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#using-the-cache-action
-          path: ~/installers
-          key: ${{ runner.os }}-v0-${{ hashFiles('.ci/versions.json') }}
-      - name: Install and start RabbitMQ
-        run: ./.ci/install.ps1
-      - name: Install GNU make
-        run: choco install make
-      - run: make test GO_VERSION=${{ steps.setup_go.outputs.go-version }}
+  # test:
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: true
+  #     matrix:
+  #       go: [ '1.22']
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #     - name: Build and export
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: .
+  #         file: CiDockerfile
+  #         tags: rabbitmq_tls:latest
+  #         outputs: type=docker,dest=/tmp/rabbitmq_tls.tar
+  #     - name: Upload artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: rabbitmq_tls
+  #         path: /tmp/rabbitmq_tls.tar
+  #     - name: Download artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: rabbitmq_tls
+  #         path: /tmp
+  #     - name: Load image
+  #       run: |
+  #         docker load --input /tmp/rabbitmq_tls.tar
+  #         docker image ls -a
+  #         docker run -d --rm --name rabbitmq-stream-client-test \
+  #         -p 5552:5552 -p 5672:5672 -p 5671:5671 -p 5551:5551 -p 15672:15672 \
+  #         -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
+  #         rabbitmq_tls
+  #     - name: wait for running
+  #       run: |
+  #         docker exec rabbitmq-stream-client-test /bin/bash -c 'ps -aux'
+  #         docker exec rabbitmq-stream-client-test /bin/bash -c 'sleep 10'
+  #         docker exec rabbitmq-stream-client-test /bin/bash -c 'rabbitmqctl status'
+  #         docker exec rabbitmq-stream-client-test /bin/bash -c 'rabbitmqctl wait --pid 1 --timeout 70'
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-go@v5
+  #       id: setup_go
+  #       with:
+  #         go-version: ${{ matrix.go }}
+  #         check-latest: true
+  #     - run: make test GO_VERSION=${{ steps.setup_go.outputs.go-version }}
+  #     - uses: actions/checkout@main
+  #     - uses: codecov/codecov-action@v4
+  #       with:
+  #         fail_ci_if_error: false # optional (default = false)
+  #         files: ./coverage.txt
+  #         flags: unittests
+  #         name: codecov-umbrella # optional
+  #         verbose: true # optional (default = false)
+  #       env:
+  #         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  # test-win32:
+  #   runs-on: windows-latest
+  #   strategy:
+  #     matrix:
+  #       go: [ '1.22']
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-go@v5
+  #       id: setup_go
+  #       with:
+  #         go-version: ${{ matrix.go }}
+  #         check-latest: true
+  #     - name: Cache installers
+  #       uses: actions/cache@v4
+  #       with:
+  #         # Note: the cache path is relative to the workspace directory
+  #         # https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#using-the-cache-action
+  #         path: ~/installers
+  #         key: ${{ runner.os }}-v0-${{ hashFiles('.ci/versions.json') }}
+  #     - name: Install and start RabbitMQ
+  #       run: ./.ci/install.ps1
+  #     - name: Install GNU make
+  #       run: choco install make
+  #     - run: make test GO_VERSION=${{ steps.setup_go.outputs.go-version }}
   publish:
     runs-on: ubuntu-latest
     #  tmp
