@@ -73,10 +73,10 @@ perf-test-build:
 
 BUILDKIT ?= docker
 perf-test-docker-build: perf-test-build
-	$(BUILDKIT) build -t pivotalrabbitmq/go-stream-perf-test:v1 .
+	$(BUILDKIT) build -t pivotalrabbitmq/go-stream-perf-test:v2 .
 
 perf-test-docker-push: perf-test-docker-build
-	$(BUILDKIT) push pivotalrabbitmq/go-stream-perf-test:v1
+	$(BUILDKIT) push pivotalrabbitmq/go-stream-perf-test:v2
 
 RABBITMQ_OCI ?= rabbitmq:3-management
 BUILDKIT_RUN_ARGS ?= --pull always
