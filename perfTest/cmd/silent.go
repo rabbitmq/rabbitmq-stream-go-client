@@ -92,7 +92,7 @@ func printStats() {
 						ConfirmedMessagesPerSecond = float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
 					}
 					p := gomsg.NewPrinter(language.English)
-					logInfo(p.Sprintf("+Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |   latency: %d ms",
+					logInfo(p.Sprintf("++Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |   latency: %d ms",
 						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent), averageLatency))
 				}
 			}
