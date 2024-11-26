@@ -51,10 +51,10 @@ func newTCPParameterDefault() *TCPParameters {
 	return &TCPParameters{
 		RequestedHeartbeat:    defaultHeartbeat,
 		RequestedMaxFrameSize: 1048576,
-		WriteBuffer:           2097152,
+		WriteBuffer:           65536,
 		//ReadBuffer:            65536,
-		ReadBuffer: 2097152,
-		NoDelay:    false,
+		ReadBuffer: 65536,
+		NoDelay:    true,
 		tlsConfig:  nil,
 	}
 }

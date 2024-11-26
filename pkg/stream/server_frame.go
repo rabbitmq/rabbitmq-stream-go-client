@@ -321,8 +321,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
 
-	c.credit(subscriptionId, 1)
-
 	var offsetLimit int64 = -1
 
 	// we can have two cases
@@ -414,6 +412,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	chunk.offsetMessages = batchConsumingMessages
 	if consumer.getStatus() == open {
 		consumer.response.chunkForConsumer <- chunk
+		c.credit(subscriptionId, 1)
 	} else {
 		logs.LogDebug("The consumer %s for the stream %s is closed during the chunk dispatching. "+
 			"Messages won't dispatched", consumer.GetName(), consumer.GetStreamName())
