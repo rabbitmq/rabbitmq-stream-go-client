@@ -9,6 +9,8 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"github.com/spf13/cobra"
+	"golang.org/x/text/language"
+	gomsg "golang.org/x/text/message"
 	"math/rand"
 	"os"
 	"sync"
@@ -36,12 +38,13 @@ func newSilent() *cobra.Command {
 }
 
 var (
-	publisherMessageCount    int32
-	consumerMessageCount     int32
+	publisherMessageCount int32
+	consumerMessageCount  int32
+	//consumerMessageCountPerLatency int32
+	totalLatency             int64
 	confirmedMessageCount    int32
 	notConfirmedMessageCount int32
 	consumersCloseCount      int32
-	messagesSent             int64
 	//connections           []*stream.Client
 	simulEnvironment *stream.Environment
 )
@@ -74,12 +77,22 @@ func printStats() {
 				select {
 				case _ = <-ticker.C:
 					v := time.Now().Sub(start).Milliseconds()
+					PMessagesPerSecond := float64(0)
+					if publisherMessageCount > 0 {
+						PMessagesPerSecond = float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
+					}
 
-					PMessagesPerSecond := float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
-					CMessagesPerSecond := float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
-					ConfirmedMessagesPerSecond := float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
-					logInfo("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent))
+					averageLatency := int64(0)
+					CMessagesPerSecond := float64(0)
+					ConfirmedMessagesPerSecond := float64(0)
+					if atomic.LoadInt32(&consumerMessageCount) > 0 {
+						CMessagesPerSecond = float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
+						averageLatency = totalLatency / int64(atomic.LoadInt32(&consumerMessageCount))
+						ConfirmedMessagesPerSecond = float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
+					}
+					p := gomsg.NewPrinter(language.English)
+					logInfo(p.Sprintf("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %2v | %2v | latency: %d ms",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), averageLatency))
 				}
 			}
 
@@ -89,11 +102,12 @@ func printStats() {
 			for {
 				select {
 				case _ = <-tickerReset.C:
-
-					atomic.SwapInt32(&publisherMessageCount, 0)
+					logInfo("***********Resetting counters***********")
 					atomic.SwapInt32(&consumerMessageCount, 0)
-					atomic.SwapInt32(&confirmedMessageCount, 0)
 					atomic.SwapInt32(&notConfirmedMessageCount, 0)
+					atomic.SwapInt32(&confirmedMessageCount, 0)
+					atomic.SwapInt32(&publisherMessageCount, 0)
+					atomic.SwapInt64(&totalLatency, 0)
 					start = time.Now()
 				}
 			}
@@ -106,12 +120,12 @@ func decodeBody() string {
 	if publishers > 0 {
 
 		if fixedBody > 0 {
-			return fmt.Sprintf("Fixed Body: %d", fixedBody+8)
+			return fmt.Sprintf("Body sz: %d", fixedBody+8)
 		}
 		if variableBody > 0 {
-			return fmt.Sprintf("Variable Body: %d", variableBody)
+			return fmt.Sprintf("Body vsz: %d", variableBody)
 		}
-		return fmt.Sprintf("Fixed Body: %d", len("simul_message")+8)
+		return fmt.Sprintf("Body sz: %d", 8)
 	} else {
 		return "ND"
 	}
@@ -120,12 +134,12 @@ func decodeBody() string {
 func decodeRate() string {
 	if publishers > 0 {
 		if rate > 0 {
-			return fmt.Sprintf("Fixed Rate: %d", rate)
+			return fmt.Sprintf("Rate Fx: %d", rate)
 		}
 		if variableRate > 0 {
-			return fmt.Sprintf("Variable Rate: %d", variableRate)
+			return fmt.Sprintf("Rate Vr: %d", variableRate)
 		}
-		return "Full rate"
+		return "Full"
 	} else {
 		return "ND"
 	}
@@ -151,8 +165,9 @@ func startSimulation() error {
 	err := initStreams()
 	checkErr(err)
 
+	//
 	simulEnvironment, err = stream.NewEnvironment(stream.NewEnvironmentOptions().
-		SetUris(rabbitmqBrokerUrl).
+		SetUri(rabbitmqBrokerUrl[0]).
 		SetMaxProducersPerClient(publishersPerClient).
 		SetMaxConsumersPerClient(consumersPerClient))
 	checkErr(err)
@@ -258,12 +273,11 @@ func startPublisher(streamName string) error {
 		if compression == "zstd" {
 			cp = stream.Compression{}.Zstd()
 		}
-
 		producerOptions.SetSubEntrySize(subEntrySize).SetCompression(cp)
-
 		logInfo("Enable SubEntrySize: %d, compression: %s", subEntrySize, cp)
 	}
 
+	producerOptions.SetClientProvidedName(clientProvidedName)
 	rPublisher, err := ha.NewReliableProducer(simulEnvironment,
 		streamName,
 		producerOptions,
@@ -273,28 +287,9 @@ func startPublisher(streamName string) error {
 		return err
 	}
 
-	var arr []message.StreamMessage
-	var body []byte
-	for z := 0; z < batchSize; z++ {
-
-		if fixedBody > 0 {
-			body = make([]byte, fixedBody)
-		} else {
-			if variableBody > 0 {
-				rand.Seed(time.Now().UnixNano())
-				body = make([]byte, rand.Intn(variableBody))
-			}
-		}
-		n := time.Now().UnixNano()
-		var buff = make([]byte, 8)
-		binary.BigEndian.PutUint64(buff, uint64(n))
-		/// added to calculate the latency
-		msg := amqp.NewMessage(append(buff, body...))
-		arr = append(arr, msg)
-	}
-
-	go func(prod *ha.ReliableProducer, messages []message.StreamMessage) {
+	go func(prod *ha.ReliableProducer) {
 		for {
+
 			if rate > 0 {
 				rateWithBatchSize := float64(rate) / float64(batchSize)
 				sleepAfterMessage := float64(time.Second) / rateWithBatchSize
@@ -313,19 +308,47 @@ func startPublisher(streamName string) error {
 				}
 				time.Sleep(time.Duration(sleep) * time.Millisecond)
 			}
+			messages := buildMessages()
 
-			atomic.AddInt64(&messagesSent, int64(len(arr)))
-			for _, streamMessage := range arr {
-				err = prod.Send(streamMessage)
+			if isAsyncSend {
+				for _, streamMessage := range messages {
+					err = prod.Send(streamMessage)
+					checkErr(err)
+				}
+			} else {
+				err = prod.BatchSend(messages)
 				checkErr(err)
 			}
-			atomic.AddInt32(&publisherMessageCount, int32(len(arr)))
+
+			atomic.AddInt32(&publisherMessageCount, int32(len(messages)))
 
 		}
-	}(rPublisher, arr)
+	}(rPublisher)
 
 	return nil
 
+}
+
+func buildMessages() []message.StreamMessage {
+	var arr []message.StreamMessage
+	for z := 0; z < batchSize; z++ {
+		var body []byte
+		if fixedBody > 0 {
+			body = make([]byte, fixedBody)
+		} else {
+			if variableBody > 0 {
+				rand.Seed(time.Now().UnixNano())
+				body = make([]byte, rand.Intn(variableBody))
+			}
+		}
+		var buff = make([]byte, 8)
+		sentTime := time.Now().UnixMilli()
+		binary.BigEndian.PutUint64(buff, uint64(sentTime))
+		/// added to calculate the latency
+		msg := amqp.NewMessage(append(buff, body...))
+		arr = append(arr, msg)
+	}
+	return arr
 }
 
 func startPublishers() error {
@@ -362,8 +385,12 @@ func handleConsumerClose(channelClose stream.ChannelClose) {
 func startConsumer(consumerName string, streamName string) error {
 
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		atomic.AddInt32(&consumerMessageCount, 1)
 
+		sentTime := binary.BigEndian.Uint64(message.GetData()[:8]) // Decode the timestamp
+		startTimeFromMessage := time.UnixMilli(int64(sentTime))
+		latency := time.Now().Sub(startTimeFromMessage).Milliseconds()
+		totalLatency += latency
+		atomic.AddInt32(&consumerMessageCount, 1)
 	}
 	offsetSpec := stream.OffsetSpecification{}.Last()
 	switch consumerOffset {
@@ -393,6 +420,7 @@ func startConsumer(consumerName string, streamName string) error {
 		handleMessages,
 		stream.NewConsumerOptions().
 			SetConsumerName(consumerName).
+			SetClientProvidedName(clientProvidedName).
 			SetOffset(offsetSpec).
 			SetCRCCheck(crcCheck).
 			SetInitialCredits(int16(initialCredits)))

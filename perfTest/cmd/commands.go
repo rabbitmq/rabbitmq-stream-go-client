@@ -46,6 +46,8 @@ var (
 	crcCheck            bool
 	runDuration         int
 	initialCredits      int
+	isAsyncSend         bool
+	clientProvidedName  string
 )
 
 func init() {
@@ -76,6 +78,8 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.PersistentFlags().StringVarP(&maxSegmentSizeBytes, "stream-max-segment-size-bytes", "", "500MB", "Stream segment size bytes, e.g. 10MB, 1GB, etc.")
 	baseCmd.PersistentFlags().StringVarP(&consumerOffset, "consumer-offset", "", "first", "Staring consuming, ex: first,last,next or random")
 	baseCmd.PersistentFlags().IntVarP(&initialCredits, "initial-credits", "", 10, "Consumer initial credits")
+	baseCmd.PersistentFlags().BoolVarP(&isAsyncSend, "async-send", "", false, "Enable the async send. By default it uses batchSend in this case is faster")
+	baseCmd.PersistentFlags().StringVarP(&clientProvidedName, "client-provided-name", "", "", "Client provided name")
 	baseCmd.AddCommand(versionCmd)
 	baseCmd.AddCommand(newSilent())
 }

@@ -321,8 +321,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_, _ = readUInt(r)
 	_, _ = readUInt(r)
 
-	c.credit(subscriptionId, 1)
-
 	var offsetLimit int64 = -1
 
 	// we can have two cases
@@ -411,6 +409,10 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 		}
 	}
+	// request a credit for the next chunk
+	c.credit(subscriptionId, 1)
+
+	// dispatch the messages with offset to the consumer
 	chunk.offsetMessages = batchConsumingMessages
 	if consumer.getStatus() == open {
 		consumer.response.chunkForConsumer <- chunk
