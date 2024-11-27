@@ -312,14 +312,14 @@ func startPublisher(streamName string) error {
 			messages := buildMessages()
 
 			atomic.AddInt64(&messagesSent, int64(len(messages)))
-			if isBatchSend {
-				err = prod.BatchSend(messages)
-				checkErr(err)
-			} else {
+			if isAsyncSend {
 				for _, streamMessage := range messages {
 					err = prod.Send(streamMessage)
 					checkErr(err)
 				}
+			} else {
+				err = prod.BatchSend(messages)
+				checkErr(err)
 			}
 
 			atomic.AddInt32(&publisherMessageCount, int32(len(messages)))
