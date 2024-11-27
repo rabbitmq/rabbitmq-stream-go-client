@@ -45,7 +45,6 @@ var (
 	confirmedMessageCount    int32
 	notConfirmedMessageCount int32
 	consumersCloseCount      int32
-	messagesSent             int64
 	//connections           []*stream.Client
 	simulEnvironment *stream.Environment
 )
@@ -92,8 +91,8 @@ func printStats() {
 						ConfirmedMessagesPerSecond = float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
 					}
 					p := gomsg.NewPrinter(language.English)
-					logInfo(p.Sprintf("1-Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %3v  |  %3v  |  msg sent: %3v  |   latency: %d ms",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), atomic.LoadInt64(&messagesSent), averageLatency))
+					logInfo(p.Sprintf("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %2v | %2v | latency: %d ms",
+						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), averageLatency))
 				}
 			}
 
@@ -121,12 +120,12 @@ func decodeBody() string {
 	if publishers > 0 {
 
 		if fixedBody > 0 {
-			return fmt.Sprintf("Fixed Body: %d", fixedBody+8)
+			return fmt.Sprintf("Body sz: %d", fixedBody+8)
 		}
 		if variableBody > 0 {
-			return fmt.Sprintf("Variable Body: %d", variableBody)
+			return fmt.Sprintf("Body vsz: %d", variableBody)
 		}
-		return fmt.Sprintf("Fixed Body: %d", len("simul_message")+8)
+		return fmt.Sprintf("Body sz: %d", 8)
 	} else {
 		return "ND"
 	}
@@ -135,12 +134,12 @@ func decodeBody() string {
 func decodeRate() string {
 	if publishers > 0 {
 		if rate > 0 {
-			return fmt.Sprintf("Fixed Rate: %d", rate)
+			return fmt.Sprintf("Rate Fx: %d", rate)
 		}
 		if variableRate > 0 {
-			return fmt.Sprintf("Variable Rate: %d", variableRate)
+			return fmt.Sprintf("Rate Vr: %d", variableRate)
 		}
-		return "Full rate"
+		return "Full"
 	} else {
 		return "ND"
 	}
@@ -311,7 +310,6 @@ func startPublisher(streamName string) error {
 			}
 			messages := buildMessages()
 
-			atomic.AddInt64(&messagesSent, int64(len(messages)))
 			if isAsyncSend {
 				for _, streamMessage := range messages {
 					err = prod.Send(streamMessage)
