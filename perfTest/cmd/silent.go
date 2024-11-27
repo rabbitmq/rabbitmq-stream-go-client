@@ -334,20 +334,20 @@ func startPublisher(streamName string) error {
 func buildMessages() []message.StreamMessage {
 	var arr []message.StreamMessage
 	for z := 0; z < batchSize; z++ {
-		//var body []byte
+		var body []byte
 		if fixedBody > 0 {
-			//	body = make([]byte, fixedBody)
+			body = make([]byte, fixedBody)
 		} else {
 			if variableBody > 0 {
 				rand.Seed(time.Now().UnixNano())
-				//		body = make([]byte, rand.Intn(variableBody))
+				body = make([]byte, rand.Intn(variableBody))
 			}
 		}
 		var buff = make([]byte, 8)
 		sentTime := time.Now().UnixMilli()
 		binary.BigEndian.PutUint64(buff, uint64(sentTime))
 		/// added to calculate the latency
-		msg := amqp.NewMessage(buff)
+		msg := amqp.NewMessage(append(buff, body...))
 		arr = append(arr, msg)
 	}
 	return arr

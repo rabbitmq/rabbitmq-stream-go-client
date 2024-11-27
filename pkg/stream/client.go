@@ -163,18 +163,6 @@ func (c *Client) connect() error {
 			return errorConnection
 		}
 
-		//err = connection.SetKeepAlive(true)
-		//if err != nil {
-		//	logs.LogError("Failed to SetKeepAlive due to %v", err)
-		//	return err
-		//}
-		//err = connection.SetDeadline(time.Now().Add(5 * time.Second))
-		//if err != nil {
-		//	logs.LogError("Failed to SetDeadline due to %v", err)
-		//	return err
-		//}
-		//connection.SetDeadline(time.Now().Add(c.socketCallTimeout))
-
 		if err = connection.SetWriteBuffer(c.tcpParameters.WriteBuffer); err != nil {
 			logs.LogError("Failed to SetWriteBuffer to %d due to %v", c.tcpParameters.WriteBuffer, err)
 			return err
