@@ -74,8 +74,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		superStream := "first-super-stream-consumer"
-
+		superStream := fmt.Sprintf("first-super-stream-consumer-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 		messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {}
@@ -104,7 +103,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 	It("validate super stream consumer ", func() {
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
-		superStream := "validate-super-stream-consumer"
+		superStream := fmt.Sprintf("validate-super-stream-consumer-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 		messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {}
@@ -131,7 +130,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		superStream := "consume-20messages-super-stream-consumer"
+		superStream := fmt.Sprintf("consume-20messages-super-stream-consumer-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 		var receivedMessages int32
@@ -233,7 +232,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
-		const superStream = "reconnect-super-stream-consumer"
+		var superStream = fmt.Sprintf("reconnect-super-stream-consumer-%d", time.Now().Unix())
 
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3).
 			SetBalancedLeaderLocator())).NotTo(HaveOccurred())
@@ -288,7 +287,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		superStream := "sac-super-stream-the-second-should-restart-consume"
+		superStream := fmt.Sprintf("sac-super-stream-the-second-should-restart-consume-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(2))).NotTo(HaveOccurred())
 
 		const appName = "MyApplication"
@@ -360,7 +359,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		superStream := "filtering-super-stream-should-consume-only-one-country"
+		superStream := fmt.Sprintf("filtering-super-stream-should-consume-only-one-country-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream,
 			NewPartitionsOptions(2))).NotTo(HaveOccurred())
 
@@ -428,7 +427,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		superStream := "filtering-super-stream-should-consume-only-one-country"
+		superStream := fmt.Sprintf("filtering-super-stream-should-consume-only-one-country-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream,
 			NewPartitionsOptions(2))).NotTo(HaveOccurred())
 
@@ -515,7 +514,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		superStream := "super-stream-consumer-with-autocommit"
+		superStream := fmt.Sprintf("super-stream-consumer-with-autocommit-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream,
 			NewPartitionsOptions(2))).NotTo(HaveOccurred())
 

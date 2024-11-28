@@ -103,7 +103,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
-		const superStream = "first-super-stream-producer"
+		var superStream = fmt.Sprintf("first-super-stream-producer-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream,
 			NewPartitionsOptions(3).
 				SetBalancedLeaderLocator().
@@ -134,7 +134,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(err).NotTo(HaveOccurred())
 		// we do this test to be sure that the producer is able to Send messages to all the partitions
 		// the same was done in .NET client and python client
-		const superStream = "super-stream-send-messages-to-all-partitions"
+		var superStream = fmt.Sprintf("super-stream-send-messages-to-all-partitions-%d", time.Now().Unix())
 
 		msgReceived := make(map[string]int)
 		mutex := sync.Mutex{}
@@ -202,7 +202,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 	It("should handle three close ( one for partition )", func() {
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
-		const superStream = "close-super-stream-producer"
+		var superStream = fmt.Sprintf("close-super-stream-producer-%d", time.Now().Unix())
 		var closedMap = make(map[string]bool)
 		mutex := sync.Mutex{}
 		Expect(env.DeclareSuperStream(superStream,
@@ -244,7 +244,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
-		const superStream = "reconnect-super-stream-producer"
+		var superStream = fmt.Sprintf("reconnect-super-stream-producer-%d", time.Now().Unix())
 
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3).
 			SetBalancedLeaderLocator())).NotTo(HaveOccurred())
@@ -309,7 +309,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
-		const superStream = "key-super-stream-producer"
+		var superStream = fmt.Sprintf("key-super-stream-producer-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream, options.
 			SetMaxSegmentSizeBytes(ByteCapacity{}.GB(1)).
 			SetMaxAge(3*time.Hour).
@@ -323,19 +323,19 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(route).NotTo(BeNil())
 		Expect(route).To(HaveLen(1))
-		Expect(route[0]).To(Equal("key-super-stream-producer-italy"))
+		Expect(route[0]).To(Equal(fmt.Sprintf("%s-italy", superStream)))
 
 		route, err = client.queryRoute(superStream, "spain")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(route).NotTo(BeNil())
 		Expect(route).To(HaveLen(1))
-		Expect(route[0]).To(Equal("key-super-stream-producer-spain"))
+		Expect(route[0]).To(Equal(fmt.Sprintf("%s-spain", superStream)))
 
 		route, err = client.queryRoute(superStream, "france")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(route).NotTo(BeNil())
 		Expect(route).To(HaveLen(1))
-		Expect(route[0]).To(Equal("key-super-stream-producer-france"))
+		Expect(route[0]).To(Equal(fmt.Sprintf("%s-france", superStream)))
 
 		// here we test the case where the key is not found
 		// the client should return an empty list
@@ -368,7 +368,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
-		const superStream = "key-super-stream-producer-with-3-keys"
+		var superStream = fmt.Sprintf("key-super-stream-producer-with-3-keys-%d", time.Now().Unix())
 		countries := []string{"italy", "france", "spain"}
 		Expect(env.DeclareSuperStream(superStream,
 			NewBindingsOptions(countries))).NotTo(HaveOccurred())
@@ -430,7 +430,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
-		const superStream = "custom-routing-strategy"
+		var superStream = fmt.Sprintf("custom-routing-strategy-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
@@ -455,7 +455,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		// Test is to validate the error when the producer is already connected
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
-		const superStream = "already-connected-super-stream-producer"
+		var superStream = fmt.Sprintf("already-connected-super-stream-producer-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
