@@ -71,7 +71,7 @@ func (coordinator *Coordinator) NewProducer(
 		status:              open,
 		messageSequenceCh:   make(chan messageSequence, size),
 		pendingMessages: pendingMessagesSequence{
-			messages: make([]messageSequence, 0),
+			messages: make([]*messageSequence, 0),
 			size:     initBufferPublishSize,
 		}}
 	coordinator.producers[lastId] = producer

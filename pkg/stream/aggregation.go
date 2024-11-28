@@ -52,7 +52,7 @@ func (compression Compression) Lz4() Compression {
 }
 
 type subEntry struct {
-	messages     []messageSequence
+	messages     []*messageSequence
 	publishingId int64 // need to store the publishingId useful in case of aggregation
 
 	unCompressedSize int

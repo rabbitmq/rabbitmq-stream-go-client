@@ -51,7 +51,7 @@ func (cs *ConfirmationStatus) GetErrorCode() uint16 {
 }
 
 type pendingMessagesSequence struct {
-	messages []messageSequence
+	messages []*messageSequence
 	size     int
 }
 
@@ -176,7 +176,7 @@ func (producer *Producer) GetUnConfirmed() map[int64]*ConfirmationStatus {
 	return producer.unConfirmedMessages
 }
 
-func (producer *Producer) addUnConfirmedSequences(message []messageSequence, producerID uint8) {
+func (producer *Producer) addUnConfirmedSequences(message []*messageSequence, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
 
@@ -348,7 +348,7 @@ func (producer *Producer) startPublishTask() {
 					}
 
 					producer.pendingMessages.size += msg.unCompressedSize
-					producer.pendingMessages.messages = append(producer.pendingMessages.messages, msg)
+					producer.pendingMessages.messages = append(producer.pendingMessages.messages, &msg)
 					if len(producer.pendingMessages.messages) >= (producer.options.BatchSize) {
 						producer.sendBufferedMessages()
 					}
@@ -420,7 +420,7 @@ func (producer *Producer) assignPublishingID(message message.StreamMessage) int6
 // BatchSend is the primitive method to send messages to the stream, the method Send prepares the messages and
 // calls BatchSend internally.
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
-	var messagesSequence = make([]messageSequence, len(batchMessages))
+	var messagesSequence = make([]*messageSequence, len(batchMessages))
 	totalBufferToSend := 0
 	for i, batchMessage := range batchMessages {
 		messageBytes, err := batchMessage.MarshalBinary()
@@ -434,7 +434,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 
 		sequence := producer.assignPublishingID(batchMessage)
 		totalBufferToSend += len(messageBytes)
-		messagesSequence[i] = messageSequence{
+		messagesSequence[i] = &messageSequence{
 			messageBytes:     messageBytes,
 			unCompressedSize: len(messageBytes),
 			publishingId:     sequence,
@@ -469,11 +469,11 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 func (producer *Producer) GetID() uint8 {
 	return producer.id
 }
-func (producer *Producer) internalBatchSend(messagesSequence []messageSequence) error {
+func (producer *Producer) internalBatchSend(messagesSequence []*messageSequence) error {
 	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
 }
 
-func (producer *Producer) simpleAggregation(messagesSequence []messageSequence, b *bufio.Writer) {
+func (producer *Producer) simpleAggregation(messagesSequence []*messageSequence, b *bufio.Writer) {
 	for _, msg := range messagesSequence {
 		r := msg.messageBytes
 		writeBLong(b, msg.publishingId) // publishingId
@@ -496,13 +496,15 @@ func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bufio.W
 	}
 }
 
-func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, compression Compression) (subEntries, error) {
+func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, compression Compression) (subEntries, error) {
 	subEntries := subEntries{}
 
 	var entry *subEntry
 	for _, msg := range msgs {
 		if len(subEntries.items) == 0 || len(entry.messages) >= size {
-			entry = &subEntry{}
+			entry = &subEntry{
+				messages: make([]*messageSequence, 0),
+			}
 			entry.publishingId = -1
 			subEntries.items = append(subEntries.items, entry)
 		}
@@ -543,7 +545,7 @@ func (producer *Producer) aggregateEntities(msgs []messageSequence, size int, co
 /// the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error, see
 
-func (producer *Producer) internalBatchSendProdId(messagesSequence []messageSequence, producerID uint8) error {
+func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSequence, producerID uint8) error {
 	producer.options.client.socket.mutex.Lock()
 	defer producer.options.client.socket.mutex.Unlock()
 	if producer.getStatus() == closed {
@@ -693,7 +695,7 @@ func (producer *Producer) GetName() string {
 	return producer.options.Name
 }
 
-func (producer *Producer) sendWithFilter(messagesSequence []messageSequence, producerID uint8) error {
+func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, producerID uint8) error {
 	frameHeaderLength := initBufferPublishSize
 	var msgLen int
 	for _, msg := range messagesSequence {

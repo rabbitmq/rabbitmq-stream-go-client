@@ -150,8 +150,8 @@ func startSimulation() error {
 		stream.SetLevelInfo(logs.DEBUG)
 	}
 
-	if batchSize < 1 || batchSize > 200 {
-		logError("Invalid batchSize, must be from 1 to 200, value:%d", batchSize)
+	if batchSize < 1 || batchSize > 300 {
+		logError("Invalid batchSize, must be from 1 to 300, value:%d", batchSize)
 		os.Exit(1)
 	}
 

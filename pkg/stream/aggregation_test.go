@@ -17,7 +17,7 @@ var _ = Describe("Compression algorithms", func() {
 			messagePayload[i] = 99
 		}
 
-		message := messageSequence{
+		message := &messageSequence{
 			messageBytes:     messagePayload,
 			unCompressedSize: len(messagePayload),
 			publishingId:     0,
@@ -25,7 +25,7 @@ var _ = Describe("Compression algorithms", func() {
 
 		entries = &subEntries{
 			items: []*subEntry{{
-				messages:         []messageSequence{message},
+				messages:         []*messageSequence{message},
 				publishingId:     0,
 				unCompressedSize: len(messagePayload) + 4,
 				sizeInBytes:      0,
