@@ -45,6 +45,10 @@ func NewHashRoutingStrategy(routingKeyExtractor func(message message.StreamMessa
 
 func (h *HashRoutingStrategy) Route(message message.StreamMessage, partitions []string) ([]string, error) {
 
+	if message == nil {
+		return nil, fmt.Errorf("message is nil")
+	}
+
 	key := h.RoutingKeyExtractor(message)
 	murmurHash := murmur3.New32WithSeed(SEED)
 	_, _ = murmurHash.Write([]byte(key))
@@ -213,6 +217,7 @@ func (s *SuperStreamProducer) init() error {
 
 	partitions, err := s.env.QueryPartitions(s.SuperStream)
 	s.partitions = partitions
+
 	if err != nil {
 		return err
 	}

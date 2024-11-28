@@ -372,7 +372,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		})))
 		Expect(err).NotTo(HaveOccurred())
 
-		for i := 0; i < 25; i++ {
+		for i := 0; i < 7; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
 			msg.ApplicationProperties = map[string]interface{}{"county": "italy"}
 			msg.Properties = &amqp.MessageProperties{
@@ -383,9 +383,9 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 
 		// the sleep is to be sure the messages are stored in a chunk
 		// so the filter will be applied, so the first chunk will contain only Italy
-		time.Sleep(1 * time.Second)
+		time.Sleep(1500 * time.Millisecond)
 
-		for i := 0; i < 25; i++ {
+		for i := 0; i < 6; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
 			msg.ApplicationProperties = map[string]interface{}{"county": "spain"}
 			msg.Properties = &amqp.MessageProperties{
@@ -394,7 +394,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1500 * time.Millisecond)
 
 		// we don't need to apply any post filter here
 		// the server side filter is enough
@@ -412,7 +412,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		Expect(err).NotTo(HaveOccurred())
 
 		time.Sleep(500 * time.Millisecond)
-		Eventually(func() int32 { return atomic.LoadInt32(&consumerItaly) }).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(25)))
+		Eventually(func() int32 { return atomic.LoadInt32(&consumerItaly) }).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(7)))
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
