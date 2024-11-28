@@ -11,7 +11,6 @@ import (
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
@@ -33,10 +32,10 @@ var reSent int32
 
 func main() {
 	// Tune the parameters to test the reliability
-	const messagesToSend = 5_000_000
-	const numberOfProducers = 2
+	const messagesToSend = 10_000_000
+	const numberOfProducers = 4
 	const concurrentProducers = 2
-	const numberOfConsumers = 2
+	const numberOfConsumers = 4
 	const sendDelay = 1 * time.Millisecond
 	const delayEachMessages = 200
 	const maxProducersPerClient = 4
@@ -44,7 +43,7 @@ func main() {
 	//
 
 	reader := bufio.NewReader(os.Stdin)
-	stream.SetLevelInfo(logs.DEBUG)
+	//stream.SetLevelInfo(logs.DEBUG)
 	fmt.Println("Reliable Producer/Consumer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 

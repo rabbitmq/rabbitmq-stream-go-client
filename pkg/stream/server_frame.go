@@ -259,7 +259,6 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		if m != nil {
 			m.confirmed = true
 			unConfirmed = append(unConfirmed, m)
-			producer.removeUnConfirmed(m.publishingId)
 
 			// in case of sub-batch entry the client receives only
 			// one publishingId (or sequence)
@@ -267,20 +266,18 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 			for _, message := range m.linkedTo {
 				message.confirmed = true
 				unConfirmed = append(unConfirmed, message)
-				producer.removeUnConfirmed(message.publishingId)
 			}
 		}
-		//} else {
-		//logs.LogWarn("message %d not found in confirmation", seq)
-		//}
 		publishingIdCount--
 	}
 
-	producer.mutex.Lock()
+	producer.removeFromConfirmationStatus(unConfirmed)
+
+	//producer.mutex.Lock()
 	if producer.publishConfirm != nil {
 		producer.publishConfirm <- unConfirmed
 	}
-	producer.mutex.Unlock()
+	//producer.mutex.Unlock()
 
 	return 0
 }

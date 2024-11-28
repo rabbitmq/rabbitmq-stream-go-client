@@ -65,7 +65,7 @@ func (coordinator *Coordinator) NewProducer(
 	}
 	var producer = &Producer{id: lastId,
 		options:             parameters,
-		mutex:               &sync.Mutex{},
+		mutex:               &sync.RWMutex{},
 		mutexPending:        &sync.Mutex{},
 		unConfirmedMessages: map[int64]*ConfirmationStatus{},
 		status:              open,

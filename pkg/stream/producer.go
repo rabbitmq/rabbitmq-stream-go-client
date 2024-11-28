@@ -60,6 +60,7 @@ type messageSequence struct {
 	unCompressedSize int
 	publishingId     int64
 	filterValue      string
+	refMessage       *message.StreamMessage
 }
 
 type Producer struct {
@@ -68,7 +69,7 @@ type Producer struct {
 	onClose             onInternalClose
 	unConfirmedMessages map[int64]*ConfirmationStatus
 	sequence            int64
-	mutex               *sync.Mutex
+	mutex               *sync.RWMutex
 	mutexPending        *sync.Mutex
 	publishConfirm      chan []*ConfirmationStatus
 	closeHandler        chan Event
@@ -170,11 +171,27 @@ func NewProducerOptions() *ProducerOptions {
 }
 
 func (producer *Producer) GetUnConfirmed() map[int64]*ConfirmationStatus {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
+	producer.mutex.RLock()
+	defer producer.mutex.RUnlock()
 	return producer.unConfirmedMessages
 }
 
+func (producer *Producer) addUnConfirmedSequences(message []messageSequence, producerID uint8) {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+
+	for _, msg := range message {
+		producer.unConfirmedMessages[msg.publishingId] =
+			&ConfirmationStatus{
+				inserted:     time.Now(),
+				message:      *msg.refMessage,
+				producerID:   producerID,
+				publishingId: msg.publishingId,
+				confirmed:    false,
+			}
+	}
+
+}
 func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamMessage, producerID uint8) {
 	producer.mutex.Lock()
 	defer producer.mutex.Unlock()
@@ -189,6 +206,18 @@ func (producer *Producer) addUnConfirmed(sequence int64, message message.StreamM
 
 func (po *ProducerOptions) isSubEntriesBatching() bool {
 	return po.SubEntrySize > 1
+}
+
+func (producer *Producer) removeFromConfirmationStatus(status []*ConfirmationStatus) {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+
+	for _, msg := range status {
+		delete(producer.unConfirmedMessages, msg.publishingId)
+		for _, linked := range msg.linkedTo {
+			delete(producer.unConfirmedMessages, linked.publishingId)
+		}
+	}
 }
 
 func (producer *Producer) removeUnConfirmed(sequence int64) {
@@ -210,13 +239,13 @@ func (producer *Producer) lenPendingMessages() int {
 }
 
 func (producer *Producer) getUnConfirmed(sequence int64) *ConfirmationStatus {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
+	producer.mutex.RLock()
+	defer producer.mutex.RUnlock()
 	return producer.unConfirmedMessages[sequence]
 }
 
 func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
-	ch := make(chan []*ConfirmationStatus)
+	ch := make(chan []*ConfirmationStatus, 1)
 	producer.publishConfirm = ch
 	return ch
 }
@@ -263,19 +292,26 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 	go func() {
 		for producer.getStatus() == open {
 			time.Sleep(2 * time.Second)
-			producer.mutex.Lock()
+			toRemove := make([]*ConfirmationStatus, 0)
+			// check the unconfirmed messages and remove the one that are expired
+			// use the RLock to avoid blocking the producer
+			producer.mutex.RLock()
 			for _, msg := range producer.unConfirmedMessages {
 				if time.Since(msg.inserted) > producer.options.ConfirmationTimeOut {
 					msg.err = ConfirmationTimoutError
 					msg.errorCode = timeoutError
 					msg.confirmed = false
-					if producer.publishConfirm != nil {
-						producer.publishConfirm <- []*ConfirmationStatus{msg}
-					}
-					delete(producer.unConfirmedMessages, msg.publishingId)
+					toRemove = append(toRemove, msg)
 				}
 			}
-			producer.mutex.Unlock()
+			producer.mutex.RUnlock()
+
+			if len(toRemove) > 0 {
+				producer.removeFromConfirmationStatus(toRemove)
+				if producer.publishConfirm != nil {
+					producer.publishConfirm <- toRemove
+				}
+			}
 		}
 		time.Sleep(5 * time.Second)
 		producer.flushUnConfirmedMessages(timeoutError, ConfirmationTimoutError)
@@ -403,10 +439,11 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 			unCompressedSize: len(messageBytes),
 			publishingId:     sequence,
 			filterValue:      filterValue,
+			refMessage:       &batchMessage,
 		}
-
-		producer.addUnConfirmed(sequence, batchMessage, producer.id)
 	}
+
+	producer.addUnConfirmedSequences(messagesSequence, producer.GetID())
 
 	if totalBufferToSend+initBufferPublishSize > producer.options.client.tuneState.requestedMaxFrameSize {
 		for _, msg := range messagesSequence {
