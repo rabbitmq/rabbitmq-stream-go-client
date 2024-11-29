@@ -325,8 +325,8 @@ func (producer *Producer) processMessages() {
 	chSignal := make(chan struct{}, 200)
 	mutex := sync.Mutex{}
 	batchMessages := make([]message.StreamMessage, 0)
-	avarageMessages := 0
-	numebrOfSend := 0
+	sent := 0
+	iterations := 0
 
 	/// accumulate the messages in a buffer
 	go func(sign chan struct{}) {
@@ -352,15 +352,15 @@ func (producer *Producer) processMessages() {
 				if len(batchMessages) > 0 {
 					mutex.Lock()
 					producer.BatchSend(batchMessages)
-					avarageMessages += len(batchMessages)
-					numebrOfSend++
-					if numebrOfSend > 0 && numebrOfSend%100000 == 0 {
-						logs.LogInfo("Producer %d, avarage messages: %d", producer.GetID(), avarageMessages/numebrOfSend)
+					sent += len(batchMessages)
+					iterations++
+					if iterations > 0 && iterations%100000 == 0 {
+						logs.LogInfo("Producer %d, average messages: %d, sent:%d",
+							producer.GetID(), sent/iterations, sent)
 					}
 					batchMessages = batchMessages[:0]
 					mutex.Unlock()
 				}
-
 			}
 		}
 	}(chSignal)
