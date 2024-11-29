@@ -65,13 +65,13 @@ func (coordinator *Coordinator) NewProducer(
 	}
 	var producer = &Producer{id: lastId,
 		options:             parameters,
-		mutex:               &sync.Mutex{},
+		mutex:               &sync.RWMutex{},
 		mutexPending:        &sync.Mutex{},
 		unConfirmedMessages: map[int64]*ConfirmationStatus{},
 		status:              open,
 		messageSequenceCh:   make(chan messageSequence, size),
 		pendingMessages: pendingMessagesSequence{
-			messages: make([]messageSequence, 0),
+			messages: make([]*messageSequence, 0),
 			size:     initBufferPublishSize,
 		}}
 	coordinator.producers[lastId] = producer

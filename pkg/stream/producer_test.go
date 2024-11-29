@@ -555,11 +555,20 @@ var _ = Describe("Streaming Producers", func() {
 			}
 		}(chPublishError)
 
-		var messagesSequence = make([]messageSequence, 1)
+		var messagesSequence = make([]*messageSequence, 1)
+
+		for i := 0; i < 1; i++ {
+			s := make([]byte, 50)
+			messagesSequence[i] = &messageSequence{
+				messageBytes:     s,
+				unCompressedSize: len(s),
+			}
+		}
+
 		msg := amqp.NewMessage([]byte("test"))
 		msg.SetPublishingId(1)
 		messageBytes, _ := msg.MarshalBinary()
-		messagesSequence[0] = messageSequence{
+		messagesSequence[0] = &messageSequence{
 			messageBytes:     messageBytes,
 			unCompressedSize: len(messageBytes),
 		}
@@ -638,35 +647,81 @@ var _ = Describe("Streaming Producers", func() {
 			NewProducerOptions().SetBatchPublishingDelay(100).
 				SetSubEntrySize(77))
 		Expect(err).NotTo(HaveOccurred())
-		messagesSequence := make([]messageSequence, 201)
+		messagesSequence := make([]*messageSequence, 201)
+
+		for i := 0; i < 201; i++ {
+			s := make([]byte, 50)
+			messagesSequence[i] = &messageSequence{
+				messageBytes:     s,
+				unCompressedSize: len(s),
+			}
+		}
+
 		entries, err := producer.aggregateEntities(messagesSequence,
 			producer.options.SubEntrySize,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(entries.items)).To(Equal(3))
 
-		messagesSequence = make([]messageSequence, 100)
+		messagesSequence = make([]*messageSequence, 100)
+
+		for i := 0; i < 100; i++ {
+
+			s := make([]byte, 50)
+			messagesSequence[i] = &messageSequence{
+				messageBytes:     s,
+				unCompressedSize: len(s),
+			}
+		}
+
 		entries, err = producer.aggregateEntities(messagesSequence,
 			producer.options.SubEntrySize,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(entries.items)).To(Equal(2))
 
-		messagesSequence = make([]messageSequence, 1)
+		messagesSequence = make([]*messageSequence, 1)
+
+		for i := 0; i < 1; i++ {
+			s := make([]byte, 50)
+			messagesSequence[i] = &messageSequence{
+				messageBytes:     s,
+				unCompressedSize: len(s),
+			}
+		}
+
 		entries, err = producer.aggregateEntities(messagesSequence,
 			producer.options.SubEntrySize,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(entries.items)).To(Equal(1))
 
-		messagesSequence = make([]messageSequence, 1000)
+		messagesSequence = make([]*messageSequence, 1000)
+
+		for i := 0; i < 1000; i++ {
+			s := make([]byte, 50)
+			messagesSequence[i] = &messageSequence{
+				messageBytes:     s,
+				unCompressedSize: len(s),
+			}
+		}
+
 		entries, err = producer.aggregateEntities(messagesSequence,
 			producer.options.SubEntrySize,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(entries.items)).To(Equal(13))
 
-		messagesSequence = make([]messageSequence, 14)
+		messagesSequence = make([]*messageSequence, 14)
+
+		for i := 0; i < 14; i++ {
+			s := make([]byte, 50)
+			messagesSequence[i] = &messageSequence{
+				messageBytes:     s,
+				unCompressedSize: len(s),
+			}
+		}
+
 		entries, err = producer.aggregateEntities(messagesSequence, 13,
 			producer.options.Compression)
 		Expect(err).NotTo(HaveOccurred())
