@@ -78,6 +78,8 @@ type Producer struct {
 	/// needed for the async publish
 	messageSequenceCh chan messageSequence
 	pendingMessages   pendingMessagesSequence
+
+	adaptiveChannel chan message.StreamMessage
 }
 
 type FilterValue func(message message.StreamMessage) string
@@ -318,6 +320,52 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 	}()
 
 }
+func (producer *Producer) processMessages() {
+
+	chSignal := make(chan struct{}, 200)
+	mutex := sync.Mutex{}
+	batchMessages := make([]message.StreamMessage, 0)
+	avarageMessages := 0
+	numebrOfSend := 0
+
+	/// accumulate the messages in a buffer
+	go func(sign chan struct{}) {
+		for {
+			select {
+			case msg, running := <-producer.adaptiveChannel:
+				if !running {
+					return
+				}
+				mutex.Lock()
+				batchMessages = append(batchMessages, msg)
+				mutex.Unlock()
+				sign <- struct{}{}
+			}
+		}
+	}(chSignal)
+
+	/// send the messages in a batch
+	go func(sign chan struct{}) {
+		for {
+			select {
+			case <-sign:
+				if len(batchMessages) > 0 {
+					mutex.Lock()
+					producer.BatchSend(batchMessages)
+					avarageMessages += len(batchMessages)
+					numebrOfSend++
+					if numebrOfSend > 0 && numebrOfSend%100000 == 0 {
+						logs.LogInfo("Producer %d, avarage messages: %d", producer.GetID(), avarageMessages/numebrOfSend)
+					}
+					batchMessages = batchMessages[:0]
+					mutex.Unlock()
+				}
+
+			}
+		}
+	}(chSignal)
+
+}
 
 func (producer *Producer) startPublishTask() {
 	go func(ch chan messageSequence) {
@@ -396,12 +444,17 @@ func (producer *Producer) sendBytes(streamMessage message.StreamMessage, message
 // Send sends a message to the stream and returns an error if the message could not be sent.
 // Send is asynchronous. The aggregation of the messages is based on the BatchSize and BatchPublishingDelay
 // options. The message is sent when the aggregation is reached or the BatchPublishingDelay is reached.
-func (producer *Producer) Send(streamMessage message.StreamMessage) error {
+func (producer *Producer) SendOld(streamMessage message.StreamMessage) error {
 	messageBytes, err := streamMessage.MarshalBinary()
 	if err != nil {
 		return err
 	}
 	return producer.sendBytes(streamMessage, messageBytes)
+}
+
+func (producer *Producer) Send(streamMessage message.StreamMessage) error {
+	producer.adaptiveChannel <- streamMessage
+	return nil
 }
 
 func (producer *Producer) assignPublishingID(message message.StreamMessage) int64 {
@@ -657,6 +710,7 @@ func (producer *Producer) Close() error {
 	}
 
 	close(producer.messageSequenceCh)
+	close(producer.adaptiveChannel)
 	return nil
 }
 
