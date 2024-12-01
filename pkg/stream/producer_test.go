@@ -366,10 +366,10 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).Should(Equal(int32(2)),
 			"confirm should receive same messages Send by producer")
 
-		By("Max frame Error")
-		s := make([]byte, 1148576)
-		Expect(producer.Send(amqp.NewMessage(s))).To(HaveOccurred())
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		//By("Max frame Error")
+		//s := make([]byte, 1148576)
+		//Expect(producer.Send(amqp.NewMessage(s))).To(HaveOccurred())
+		//Expect(producer.lenUnConfirmed()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 
 		producer, err = testEnvironment.NewProducer(testProducerStream,

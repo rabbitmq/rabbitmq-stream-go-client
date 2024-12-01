@@ -678,12 +678,12 @@ var _ = Describe("Streaming Consumers", func() {
 		}
 		totalMessages := 200
 		for i := 0; i < totalMessages; i++ {
-			msg := amqp.NewMessage(make([]byte, 50))
-			Expect(producer1.Send(msg)).NotTo(HaveOccurred())
-			Expect(producer2.Send(msg)).NotTo(HaveOccurred())
-			Expect(producer3.Send(msg)).NotTo(HaveOccurred())
-			Expect(producer4.Send(msg)).NotTo(HaveOccurred())
-			Expect(producer5.Send(msg)).NotTo(HaveOccurred())
+
+			Expect(producer1.Send(amqp.NewMessage(make([]byte, 50)))).NotTo(HaveOccurred())
+			Expect(producer2.Send(amqp.NewMessage(make([]byte, 50)))).NotTo(HaveOccurred())
+			Expect(producer3.Send(amqp.NewMessage(make([]byte, 50)))).NotTo(HaveOccurred())
+			Expect(producer4.Send(amqp.NewMessage(make([]byte, 50)))).NotTo(HaveOccurred())
+			Expect(producer5.Send(amqp.NewMessage(make([]byte, 50)))).NotTo(HaveOccurred())
 		}
 
 		for i := 0; i < 50; i++ {

@@ -277,18 +277,6 @@ func (producer *Producer) getStatus() int {
 	return producer.status
 }
 
-func (producer *Producer) sendBufferedMessages() {
-
-	if len(producer.pendingMessages.messages) > 0 {
-		err := producer.internalBatchSend(producer.pendingMessages.messages)
-		if err != nil {
-			return
-		}
-		producer.pendingMessages.messages = producer.pendingMessages.messages[:0]
-		producer.pendingMessages.size = initBufferPublishSize
-	}
-}
-
 func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 
 	go func() {
@@ -328,88 +316,40 @@ func (producer *Producer) processMessages() {
 	sent := 0
 	iterations := 0
 
-	/// accumulate the messages in a buffer
-	go func(sign chan struct{}) {
-		for {
-			select {
-			case msg, running := <-producer.adaptiveChannel:
-				if !running {
-					return
-				}
-				mutex.Lock()
-				batchMessages = append(batchMessages, msg)
-				mutex.Unlock()
-				sign <- struct{}{}
-			}
-		}
-	}(chSignal)
-
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(1)
 	/// send the messages in a batch
-	go func(sign chan struct{}) {
-		for {
-			select {
-			case <-sign:
-				if len(batchMessages) > 0 {
-					mutex.Lock()
-					producer.BatchSend(batchMessages)
-					sent += len(batchMessages)
-					iterations++
-					if iterations > 0 && iterations%100000 == 0 {
-						logs.LogInfo("Producer %d, average messages: %d, sent:%d",
-							producer.GetID(), sent/iterations, sent)
-					}
-					batchMessages = batchMessages[:0]
-					mutex.Unlock()
+	go func() {
+		waitGroup.Done()
+		for range chSignal {
+			mutex.Lock()
+			if len(batchMessages) > 0 {
+				producer.BatchSend(batchMessages)
+				sent += len(batchMessages)
+				batchMessages = batchMessages[:0]
+				iterations++
+				if iterations > 0 && iterations%100000 == 0 {
+					logs.LogInfo("Producer %d, average messages: %d, sent:%d",
+						producer.GetID(), sent/iterations, sent)
 				}
 			}
+			mutex.Unlock()
 		}
-	}(chSignal)
 
-}
+	}()
 
-func (producer *Producer) startPublishTask() {
-	go func(ch chan messageSequence) {
-		var ticker = time.NewTicker(time.Duration(producer.options.BatchPublishingDelay) * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
+	waitGroup.Wait()
 
-			case msg, running := <-ch:
-				{
-					if !running {
+	/// accumulate the messages in a buffer
+	go func() {
+		for msg := range producer.adaptiveChannel {
+			mutex.Lock()
+			batchMessages = append(batchMessages, msg)
+			mutex.Unlock()
+			chSignal <- struct{}{} // signal to send the messages
 
-						producer.flushUnConfirmedMessages(connectionCloseError, ConnectionClosed)
-						if producer.publishConfirm != nil {
-							close(producer.publishConfirm)
-							producer.publishConfirm = nil
-						}
-						if producer.closeHandler != nil {
-							close(producer.closeHandler)
-							producer.closeHandler = nil
-						}
-						return
-					}
-					producer.mutexPending.Lock()
-					if producer.pendingMessages.size+msg.unCompressedSize >= producer.options.client.getTuneState().
-						requestedMaxFrameSize {
-						producer.sendBufferedMessages()
-					}
-
-					producer.pendingMessages.size += msg.unCompressedSize
-					producer.pendingMessages.messages = append(producer.pendingMessages.messages, &msg)
-					if len(producer.pendingMessages.messages) >= (producer.options.BatchSize) {
-						producer.sendBufferedMessages()
-					}
-					producer.mutexPending.Unlock()
-				}
-
-			case <-ticker.C:
-				producer.mutexPending.Lock()
-				producer.sendBufferedMessages()
-				producer.mutexPending.Unlock()
-			}
 		}
-	}(producer.messageSequenceCh)
+	}()
 
 }
 
