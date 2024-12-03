@@ -90,7 +90,7 @@ type Producer struct {
 	messageSequenceCh chan messageSequence
 	pendingMessages   pendingMessagesSequence
 
-	dynamicChannel chan message.StreamMessage
+	dynamicSendCh chan message.StreamMessage
 }
 
 type FilterValue func(message message.StreamMessage) string
@@ -319,7 +319,7 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 	}()
 
 }
-func (producer *Producer) processMessages() {
+func (producer *Producer) processSendingMessages() {
 
 	// Define a channel to signal the batch of messages
 	// the channel doesn't have a buffer. It is needed to signal
@@ -369,14 +369,14 @@ func (producer *Producer) processMessages() {
 	/// accumulate the messages in a buffer
 	go func() {
 		waitGroup.Done()
-		for msg := range producer.dynamicChannel {
+		for msg := range producer.dynamicSendCh {
 			mutex.Lock()
 			batchMessages = append(batchMessages, msg)
 			mutex.Unlock()
 			chSignal <- struct{}{} // signal to send the messages
 		}
 		// close the local signal channel  as soon the dynamic channel is closed
-		// producer.dynamicChannel is closed by the Close() function
+		// producer.dynamicSendCh is closed by the Close() function
 		close(chSignal)
 	}()
 
@@ -427,7 +427,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	if producer.getStatus() == closed {
 		return fmt.Errorf("can't sent message. The Producer id: %d closed", producer.id)
 	}
-	producer.dynamicChannel <- streamMessage
+	producer.dynamicSendCh <- streamMessage
 	return nil
 }
 
@@ -452,8 +452,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) (*Bat
 	var messagesSequence = make([]*messageSequence, 0)
 	result := &BatchSendResult{}
 	totalBufferToSend := 0
-	var messagesToRemove = make([]*messageSequence, 0)
-	for i, batchMessage := range batchMessages {
+	for _, batchMessage := range batchMessages {
 		messageBytes, err := batchMessage.MarshalBinary()
 		if err != nil {
 			return result, err
@@ -468,7 +467,6 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) (*Bat
 		// When a single message is too large, the producer sends back a confirmation
 		// with the error FrameTooLarge
 		if len(messageBytes) > producer.options.client.tuneState.requestedMaxFrameSize {
-			messagesToRemove = append(messagesToRemove, messagesSequence[:i]...)
 			if producer.publishConfirm != nil {
 				unConfirmedMessage := &ConfirmationStatus{
 					inserted:     time.Now(),
@@ -481,6 +479,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) (*Bat
 				}
 				producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
 			}
+			continue
 		}
 
 		totalBufferToSend += len(messageBytes)
@@ -507,11 +506,8 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) (*Bat
 		})
 	}
 
-	// Here we remove the messages that are too large
-	// the messagesToRemove are sent back via ConfirmationStatus
-	//with confirmation status to false
-	for i := range messagesToRemove {
-		messagesSequence = append(messagesSequence[:i], messagesSequence[i+1:]...)
+	if messagesSequence == nil || len(messagesSequence) == 0 {
+		return result, nil
 	}
 
 	producer.addUnConfirmedSequences(messagesSequence, producer.GetID())
@@ -716,7 +712,7 @@ func (producer *Producer) Close() error {
 	}
 
 	close(producer.messageSequenceCh)
-	close(producer.dynamicChannel)
+	close(producer.dynamicSendCh)
 	return nil
 }
 

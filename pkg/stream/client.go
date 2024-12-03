@@ -590,7 +590,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	}
 	res := c.internalDeclarePublisher(streamName, producer)
 	if res.Err == nil {
-		producer.processMessages()
+		producer.processSendingMessages()
 		//producer.startPublishTask()
 		producer.startUnconfirmedMessagesTimeOutTask()
 	}
