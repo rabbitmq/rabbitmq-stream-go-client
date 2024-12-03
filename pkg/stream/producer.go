@@ -63,6 +63,17 @@ type messageSequence struct {
 	refMessage       *message.StreamMessage
 }
 
+// BatchSendResult is returned by the batch send
+// to give the number of messages sent and the number of splits
+type BatchSendResult struct {
+	// total messages sent
+	TotalSent int
+	// the number of the send frames
+	// It can happen when the total size of the messages is greater than the requestedMaxFrameSize
+	// so more frames are needed to send the messages
+	TotalFrames int
+}
+
 type Producer struct {
 	id                  uint8
 	options             *ProducerOptions
@@ -78,6 +89,8 @@ type Producer struct {
 	/// needed for the async publish
 	messageSequenceCh chan messageSequence
 	pendingMessages   pendingMessagesSequence
+
+	dynamicSendCh chan message.StreamMessage
 }
 
 type FilterValue func(message message.StreamMessage) string
@@ -275,18 +288,6 @@ func (producer *Producer) getStatus() int {
 	return producer.status
 }
 
-func (producer *Producer) sendBufferedMessages() {
-
-	if len(producer.pendingMessages.messages) > 0 {
-		err := producer.internalBatchSend(producer.pendingMessages.messages)
-		if err != nil {
-			return
-		}
-		producer.pendingMessages.messages = producer.pendingMessages.messages[:0]
-		producer.pendingMessages.size = initBufferPublishSize
-	}
-}
-
 func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 
 	go func() {
@@ -318,51 +319,69 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 	}()
 
 }
+func (producer *Producer) processSendingMessages() {
 
-func (producer *Producer) startPublishTask() {
-	go func(ch chan messageSequence) {
-		var ticker = time.NewTicker(time.Duration(producer.options.BatchPublishingDelay) * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
+	// Define a channel to signal the batch of messages
+	// the channel doesn't have a buffer. It is needed to signal
+	chSignal := make(chan struct{}, producer.options.BatchSize)
 
-			case msg, running := <-ch:
-				{
-					if !running {
+	// the batchMessages is the buffer to accumulate the messages
+	// the buffer is protected by a mutex
+	// batchMessages is shared between the two goroutines
+	mutex := sync.Mutex{}
+	batchMessages := make([]message.StreamMessage, 0)
 
-						producer.flushUnConfirmedMessages(connectionCloseError, ConnectionClosed)
-						if producer.publishConfirm != nil {
-							close(producer.publishConfirm)
-							producer.publishConfirm = nil
-						}
-						if producer.closeHandler != nil {
-							close(producer.closeHandler)
-							producer.closeHandler = nil
-						}
-						return
-					}
-					producer.mutexPending.Lock()
-					if producer.pendingMessages.size+msg.unCompressedSize >= producer.options.client.getTuneState().
-						requestedMaxFrameSize {
-						producer.sendBufferedMessages()
-					}
+	sent := 0
+	iterations := 0
 
-					producer.pendingMessages.size += msg.unCompressedSize
-					producer.pendingMessages.messages = append(producer.pendingMessages.messages, &msg)
-					if len(producer.pendingMessages.messages) >= (producer.options.BatchSize) {
-						producer.sendBufferedMessages()
-					}
-					producer.mutexPending.Unlock()
+	// the waitGroup is used to wait for the two goroutines
+	// the first goroutine is the one that sends the messages
+	// the second goroutine is the one that accumulates the messages
+	// the waitGroup is used to wait for the two goroutines
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(1)
+	/// send the messages in a batch
+	go func() {
+		waitGroup.Done()
+		for range chSignal {
+			mutex.Lock()
+			if len(batchMessages) > 0 {
+				_, err := producer.BatchSend(batchMessages)
+				if err != nil {
+					logs.LogError("Producer %d, error during batch send: %s", producer.GetID(), err)
 				}
+				sent += len(batchMessages)
+				batchMessages = batchMessages[:0]
 
-			case <-ticker.C:
-				producer.mutexPending.Lock()
-				producer.sendBufferedMessages()
-				producer.mutexPending.Unlock()
+				iterations++
+				if iterations > 0 && iterations%100000 == 0 {
+					logs.LogInfo("Producer %d, average messages: %d, sent:%d",
+						producer.GetID(), sent/iterations, sent)
+				}
 			}
+			mutex.Unlock()
 		}
-	}(producer.messageSequenceCh)
+	}()
 
+	waitGroup.Wait()
+
+	waitGroup.Add(1)
+	/// accumulate the messages in a buffer
+	go func() {
+		waitGroup.Done()
+		for msg := range producer.dynamicSendCh {
+			mutex.Lock()
+			batchMessages = append(batchMessages, msg)
+			mutex.Unlock()
+			chSignal <- struct{}{} // signal to send the messages
+		}
+		// close the local signal channel  as soon the dynamic channel is closed
+		// producer.dynamicSendCh is closed by the Close() function
+		close(chSignal)
+	}()
+
+	waitGroup.Wait()
+	// The two goroutines are ready
 }
 
 func (producer *Producer) sendBytes(streamMessage message.StreamMessage, messageBytes []byte) error {
@@ -396,12 +415,20 @@ func (producer *Producer) sendBytes(streamMessage message.StreamMessage, message
 // Send sends a message to the stream and returns an error if the message could not be sent.
 // Send is asynchronous. The aggregation of the messages is based on the BatchSize and BatchPublishingDelay
 // options. The message is sent when the aggregation is reached or the BatchPublishingDelay is reached.
-func (producer *Producer) Send(streamMessage message.StreamMessage) error {
+func (producer *Producer) SendOld(streamMessage message.StreamMessage) error {
 	messageBytes, err := streamMessage.MarshalBinary()
 	if err != nil {
 		return err
 	}
 	return producer.sendBytes(streamMessage, messageBytes)
+}
+
+func (producer *Producer) Send(streamMessage message.StreamMessage) error {
+	if producer.getStatus() == closed {
+		return fmt.Errorf("can't sent message. The Producer id: %d closed", producer.id)
+	}
+	producer.dynamicSendCh <- streamMessage
+	return nil
 }
 
 func (producer *Producer) assignPublishingID(message message.StreamMessage) int64 {
@@ -414,18 +441,21 @@ func (producer *Producer) assignPublishingID(message message.StreamMessage) int6
 }
 
 // BatchSend sends a batch of messages to the stream and returns an error if the messages could not be sent.
-// BatchSend is synchronous. The aggregation is up to the user. The user has to aggregate the messages
+// The method is synchronous. The aggregation is up to the user. The user has to aggregate the messages
 // and send them in a batch.
 // BatchSend is not affected by the BatchSize and BatchPublishingDelay options.
 // BatchSend is the primitive method to send messages to the stream, the method Send prepares the messages and
 // calls BatchSend internally.
-func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
-	var messagesSequence = make([]*messageSequence, len(batchMessages))
+// It automatically splits the messages in multiple frames if the total size of the messages is greater than the
+// requestedMaxFrameSize.
+func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) (*BatchSendResult, error) {
+	var messagesSequence = make([]*messageSequence, 0)
+	result := &BatchSendResult{}
 	totalBufferToSend := 0
-	for i, batchMessage := range batchMessages {
+	for _, batchMessage := range batchMessages {
 		messageBytes, err := batchMessage.MarshalBinary()
 		if err != nil {
-			return err
+			return result, err
 		}
 		filterValue := ""
 		if producer.options.IsFilterEnabled() {
@@ -433,37 +463,62 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		}
 
 		sequence := producer.assignPublishingID(batchMessage)
+
+		// When a single message is too large, the producer sends back a confirmation
+		// with the error FrameTooLarge
+		if len(messageBytes) > producer.options.client.tuneState.requestedMaxFrameSize {
+			if producer.publishConfirm != nil {
+				unConfirmedMessage := &ConfirmationStatus{
+					inserted:     time.Now(),
+					message:      batchMessage,
+					producerID:   producer.GetID(),
+					err:          FrameTooLarge,
+					errorCode:    responseCodeFrameTooLarge,
+					publishingId: sequence,
+					confirmed:    false,
+				}
+				producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
+			}
+			continue
+		}
+
 		totalBufferToSend += len(messageBytes)
-		messagesSequence[i] = &messageSequence{
+		// if the totalBufferToSend is greater than the requestedMaxFrameSize
+		// the producer sends the messages and reset the buffer
+		// it splits the messages in multiple frames
+		if totalBufferToSend+initBufferPublishSize > producer.options.client.tuneState.requestedMaxFrameSize {
+			err := producer.internalBatchSend(messagesSequence)
+			if err != nil {
+				return result, err
+			}
+			totalBufferToSend = 0
+			result.TotalFrames += 1
+			result.TotalSent += len(messagesSequence)
+			messagesSequence = make([]*messageSequence, 0)
+		}
+
+		messagesSequence = append(messagesSequence, &messageSequence{
 			messageBytes:     messageBytes,
 			unCompressedSize: len(messageBytes),
 			publishingId:     sequence,
 			filterValue:      filterValue,
 			refMessage:       &batchMessage,
-		}
+		})
+	}
+
+	if messagesSequence == nil || len(messagesSequence) == 0 {
+		return result, nil
 	}
 
 	producer.addUnConfirmedSequences(messagesSequence, producer.GetID())
 
-	if totalBufferToSend+initBufferPublishSize > producer.options.client.tuneState.requestedMaxFrameSize {
-		for _, msg := range messagesSequence {
-
-			unConfirmedMessage := producer.getUnConfirmed(msg.publishingId)
-
-			//producer.mutex.Lock()
-			if producer.publishConfirm != nil {
-				unConfirmedMessage.err = FrameTooLarge
-				unConfirmedMessage.errorCode = responseCodeFrameTooLarge
-				producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
-			}
-			//producer.mutex.Unlock()
-			producer.removeUnConfirmed(msg.publishingId)
-		}
-
-		return FrameTooLarge
+	err := producer.internalBatchSend(messagesSequence)
+	if err != nil {
+		return result, err
 	}
-
-	return producer.internalBatchSend(messagesSequence)
+	result.TotalSent += len(messagesSequence)
+	result.TotalFrames += 1
+	return result, nil
 }
 
 func (producer *Producer) GetID() uint8 {
@@ -657,6 +712,7 @@ func (producer *Producer) Close() error {
 	}
 
 	close(producer.messageSequenceCh)
+	close(producer.dynamicSendCh)
 	return nil
 }
 

@@ -590,7 +590,8 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	}
 	res := c.internalDeclarePublisher(streamName, producer)
 	if res.Err == nil {
-		producer.startPublishTask()
+		producer.processSendingMessages()
+		//producer.startPublishTask()
 		producer.startUnconfirmedMessagesTimeOutTask()
 	}
 	return producer, res.Err
@@ -755,8 +756,8 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 		brokers = append(brokers, replica)
 	}
 
-	rand.Seed(time.Now().UnixNano())
-	n := rand.Intn(len(brokers))
+	r := rand.New(rand.NewSource(SEED))
+	n := r.Intn(len(brokers))
 	return brokers[n], nil
 }
 

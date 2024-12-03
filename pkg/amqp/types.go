@@ -453,7 +453,15 @@ func (amqp *AMQP10) MarshalBinary() ([]byte, error) {
 }
 
 func (amqp *AMQP10) UnmarshalBinary(data []byte) error {
-	return amqp.message.UnmarshalBinary(data)
+
+	e := amqp.message.UnmarshalBinary(data)
+	if e != nil {
+		return e
+	}
+	amqp.Properties = amqp.message.Properties
+	amqp.Annotations = amqp.message.Annotations
+	amqp.ApplicationProperties = amqp.message.ApplicationProperties
+	return nil
 }
 
 func (amqp *AMQP10) GetData() [][]byte {
@@ -461,15 +469,15 @@ func (amqp *AMQP10) GetData() [][]byte {
 }
 
 func (amqp *AMQP10) GetMessageProperties() *MessageProperties {
-	return amqp.message.Properties
+	return amqp.Properties
 }
 
 func (amqp *AMQP10) GetMessageAnnotations() Annotations {
-	return amqp.message.Annotations
+	return amqp.Annotations
 }
 
 func (amqp *AMQP10) GetApplicationProperties() map[string]interface{} {
-	return amqp.message.ApplicationProperties
+	return amqp.ApplicationProperties
 }
 
 func (amqp *AMQP10) GetMessageHeader() *MessageHeader {
