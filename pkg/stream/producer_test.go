@@ -43,7 +43,10 @@ var _ = Describe("Streaming Producers", func() {
 	It("NewProducer/Send/Close Publisher", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).NotTo(HaveOccurred())
+		result, err := producer.BatchSend(CreateArrayMessagesForTesting(5))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.TotalSent).To(Equal(5))
+		Expect(result.TotalFrames).To(Equal(1))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
@@ -57,7 +60,11 @@ var _ = Describe("Streaming Producers", func() {
 				producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).NotTo(HaveOccurred())
+				result, err := producer.BatchSend(CreateArrayMessagesForTesting(5))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.TotalSent).To(Equal(5))
+				Expect(result.TotalFrames).To(Equal(1))
+
 				err = producer.Close()
 				Expect(err).NotTo(HaveOccurred())
 			}(&wg)
@@ -234,8 +241,10 @@ var _ = Describe("Streaming Producers", func() {
 			}
 		}(chConfirm, producer)
 
-		Expect(producer.BatchSend(CreateArrayMessagesForTesting(14))).
-			NotTo(HaveOccurred())
+		result, err := producer.BatchSend(CreateArrayMessagesForTesting(14))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.TotalSent).To(Equal(14))
+		Expect(result.TotalFrames).To(Equal(1))
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
@@ -273,8 +282,11 @@ var _ = Describe("Streaming Producers", func() {
 			atomic.StoreInt32(&commandIdRecv, int32(event.Command))
 		}(chClose)
 
-		Expect(producer.BatchSend(CreateArrayMessagesForTesting(2))).
-			NotTo(HaveOccurred())
+		result, err := producer.BatchSend(CreateArrayMessagesForTesting(2))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.TotalSent).To(Equal(2))
+		Expect(result.TotalFrames).To(Equal(1))
+
 		time.Sleep(100 * time.Millisecond)
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Eventually(func() int32 {
@@ -284,7 +296,7 @@ var _ = Describe("Streaming Producers", func() {
 
 	})
 
-	It("Pre Publisher errors / Frame too large ", func() {
+	It("publisher splits the send in multi-frames ", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		var messagesError int32
 
@@ -307,11 +319,14 @@ var _ = Describe("Streaming Producers", func() {
 			s := make([]byte, 15000)
 			arr = append(arr, amqp.NewMessage(s))
 		}
-		Expect(producer.BatchSend(arr)).To(Equal(FrameTooLarge))
+		result, err := producer.BatchSend(arr)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.TotalSent).To(Equal(101))
+		Expect(result.TotalFrames).To(Equal(2))
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesError)
-		}, 5*time.Second).Should(Equal(int32(101)),
+		}, 5*time.Second).Should(Equal(int32(0)),
 			"invalidate all the messages sent in the batch")
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
@@ -344,7 +359,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(producer.Close()).To(HaveOccurred())
 	})
 
-	It("Smart Send Split frame/BatchSize", func() {
+	It("Smart Send Split frame/BatchSize", Focus, func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchSize(50))
 		Expect(err).NotTo(HaveOccurred())
@@ -626,7 +641,10 @@ var _ = Describe("Streaming Producers", func() {
 		}
 		atomic.StoreInt32(&messagesConfirmed, 0)
 		for z := 0; z < 12; z++ {
-			Expect(producer.BatchSend(arr)).NotTo(HaveOccurred())
+			result, err := producer.BatchSend(arr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.TotalSent).To(Equal(len(arr)))
+			Expect(result.TotalFrames).To(Equal(1))
 		}
 
 		Eventually(func() int32 {
@@ -757,8 +775,10 @@ var _ = Describe("Streaming Producers", func() {
 		atomic.StoreInt32(&messagesConfirmed, 0)
 
 		for z := 0; z < 501; z++ {
-			Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).
-				NotTo(HaveOccurred())
+			result, err := producer.BatchSend(CreateArrayMessagesForTesting(5))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.TotalSent).To(Equal(5))
+			Expect(result.TotalFrames).To(Equal(1))
 		}
 
 		Eventually(func() int32 {
@@ -830,8 +850,11 @@ func testCompress(producer *Producer) {
 	atomic.StoreInt32(&messagesConfirmed, 0)
 
 	for z := 0; z < 457; z++ {
-		Expect(producer.BatchSend(CreateArrayMessagesForTesting(5))).
-			NotTo(HaveOccurred())
+		result, err := producer.BatchSend(CreateArrayMessagesForTesting(5))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.TotalSent).To(Equal(5))
+		Expect(result.TotalFrames).To(Equal(1))
+
 	}
 
 	Eventually(func() int32 {
@@ -874,7 +897,10 @@ func sendConcurrentlyAndSynchronously(producer *Producer, threadCount int, wg *s
 		totalBatchCount := totalMessageCountPerThread / batchSize
 		for batchIndex := 0; batchIndex < totalBatchCount; batchIndex++ {
 			messagePrefix := fmt.Sprintf("test_%d_%d_", goRoutingIndex, batchIndex)
-			Expect(producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))).NotTo(HaveOccurred())
+			result, err := producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.TotalSent).To(Equal(batchSize))
+			Expect(result.TotalFrames).To(Equal(1))
 		}
 	})
 }

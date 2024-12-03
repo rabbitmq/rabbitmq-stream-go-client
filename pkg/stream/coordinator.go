@@ -73,7 +73,7 @@ func (coordinator *Coordinator) NewProducer(
 		unConfirmedMessages: map[int64]*ConfirmationStatus{},
 		status:              open,
 		messageSequenceCh:   make(chan messageSequence, size),
-		adaptiveChannel:     make(chan message.StreamMessage, adativeSize),
+		dynamicChannel:      make(chan message.StreamMessage, adativeSize),
 		pendingMessages: pendingMessagesSequence{
 			messages: make([]*messageSequence, 0),
 			size:     initBufferPublishSize,
