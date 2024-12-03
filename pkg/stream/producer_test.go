@@ -359,7 +359,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(producer.Close()).To(HaveOccurred())
 	})
 
-	It("Smart Send Split frame/BatchSize", Focus, func() {
+	It("Smart Send Split frame/BatchSize", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchSize(50))
 		Expect(err).NotTo(HaveOccurred())
