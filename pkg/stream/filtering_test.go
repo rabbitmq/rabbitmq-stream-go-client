@@ -214,6 +214,7 @@ func send(producer *Producer, state string) {
 		msg.ApplicationProperties = map[string]interface{}{"state": state}
 		messages = append(messages, msg)
 	}
-	Expect(producer.BatchSend(messages)).NotTo(HaveOccurred())
+	err := producer.BatchSend(messages)
+	Expect(err).NotTo(HaveOccurred())
 
 }
