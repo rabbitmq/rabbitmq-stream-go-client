@@ -12,10 +12,8 @@ import (
 func SendMessages(testEnvironment *Environment, streamName string) {
 	producer, err := testEnvironment.NewProducer(streamName, nil)
 	Expect(err).NotTo(HaveOccurred())
-	result, err := producer.BatchSend(CreateArrayMessagesForTesting(30))
+	err = producer.BatchSend(CreateArrayMessagesForTesting(30))
 	Expect(err).NotTo(HaveOccurred())
-	Expect(result.TotalSent).To(Equal(30))
-	Expect(result.TotalFrames).To(Equal(1))
 
 	Expect(producer.Close()).NotTo(HaveOccurred())
 }
@@ -214,10 +212,8 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 				SetAutoCommit(nil))
 		Expect(err).NotTo(HaveOccurred())
 
-		result, err := producer.BatchSend(CreateArrayMessagesForTesting(10))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(10))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(10))
-		Expect(result.TotalFrames).To(Equal(1))
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)

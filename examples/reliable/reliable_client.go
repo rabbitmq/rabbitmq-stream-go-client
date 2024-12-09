@@ -30,12 +30,14 @@ var consumed int32 = 0
 var sent int32
 var reSent int32
 
+const enableResend = false
+
 func main() {
 	// Tune the parameters to test the reliability
 	const messagesToSend = 10_000_000
-	const numberOfProducers = 4
+	const numberOfProducers = 1
 	const concurrentProducers = 2
-	const numberOfConsumers = 4
+	const numberOfConsumers = 1
 	const sendDelay = 1 * time.Millisecond
 	const delayEachMessages = 200
 	const maxProducersPerClient = 4
@@ -79,8 +81,8 @@ func main() {
 	go func() {
 		for isRunning {
 			totalConfirmed := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
-			expectedMessages := messagesToSend * numberOfProducers * concurrentProducers
-			fmt.Printf("%s - ToSend: %d - nProducers: %d - concurrentProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC822),
+			expectedMessages := messagesToSend * numberOfProducers * concurrentProducers * 2
+			fmt.Printf("%s - ToSend: %d - nProducers: %d - concurrentProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC850),
 				expectedMessages, numberOfProducers, concurrentProducers, numberOfConsumers)
 			fmt.Printf("Sent:%d - ReSent %d - Confirmed:%d  - Not confirmed:%d - Fail+Confirmed  :%d \n",
 				sent, atomic.LoadInt32(&reSent), atomic.LoadInt32(&confirmed), atomic.LoadInt32(&fail), totalConfirmed)
@@ -100,7 +102,7 @@ func main() {
 		rProducer, err := ha.NewReliableProducer(env,
 			streamName,
 			stream.NewProducerOptions().
-				SetConfirmationTimeOut(5*time.Second).
+				SetConfirmationTimeOut(2*time.Second).
 				SetClientProvidedName(fmt.Sprintf("producer-%d", i)),
 			func(messageStatus []*stream.ConfirmationStatus) {
 				go func() {
@@ -109,9 +111,11 @@ func main() {
 							atomic.AddInt32(&confirmed, 1)
 						} else {
 							atomic.AddInt32(&fail, 1)
-							mutex.Lock()
-							unConfirmedMessages = append(unConfirmedMessages, msgStatus.GetMessage())
-							mutex.Unlock()
+							if enableResend {
+								mutex.Lock()
+								unConfirmedMessages = append(unConfirmedMessages, msgStatus.GetMessage())
+								mutex.Unlock()
+							}
 						}
 					}
 				}()
@@ -122,7 +126,6 @@ func main() {
 			for i := 0; i < concurrentProducers; i++ {
 				go func() {
 					for i := 0; i < messagesToSend; i++ {
-						msg := amqp.NewMessage([]byte("ha"))
 						mutex.Lock()
 						for _, confirmedMessage := range unConfirmedMessages {
 							err := rProducer.Send(confirmedMessage)
@@ -131,12 +134,17 @@ func main() {
 						}
 						unConfirmedMessages = []message.StreamMessage{}
 						mutex.Unlock()
+						msg := amqp.NewMessage([]byte("ha"))
 						err := rProducer.Send(msg)
 						if i%delayEachMessages == 0 {
 							time.Sleep(sendDelay)
 						}
 						atomic.AddInt32(&sent, 1)
 						CheckErr(err)
+
+						errBatch := rProducer.BatchSend([]message.StreamMessage{msg})
+						CheckErr(errBatch)
+						atomic.AddInt32(&sent, 1)
 
 					}
 				}()

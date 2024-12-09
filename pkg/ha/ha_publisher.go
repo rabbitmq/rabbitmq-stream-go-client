@@ -148,7 +148,6 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 	if err := p.isReadyToSend(); err != nil {
 		return err
 	}
-
 	p.mutex.Lock()
 	errW := p.producer.Send(message)
 	p.mutex.Unlock()
@@ -162,7 +161,7 @@ func (p *ReliableProducer) BatchSend(batchMessages []message.StreamMessage) erro
 	}
 
 	p.mutex.Lock()
-	_, errW := p.producer.BatchSend(batchMessages)
+	errW := p.producer.BatchSend(batchMessages)
 	p.mutex.Unlock()
 
 	return p.checkWriteError(errW)

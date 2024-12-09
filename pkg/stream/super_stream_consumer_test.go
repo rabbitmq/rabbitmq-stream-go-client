@@ -167,7 +167,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 			env, err := NewEnvironment(nil)
 			Expect(err).NotTo(HaveOccurred())
 
-			superStream := fmt.Sprintf("sac-super-stream-the-second-consumer-in-action-%s", id)
+			superStream := fmt.Sprintf("sac-super-stream-the-second-consumer-in-action-%s-%d", id, time.Now().Unix())
 			Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 			var receivedMessages int32

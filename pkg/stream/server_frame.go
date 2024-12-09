@@ -478,14 +478,11 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		} else {
 			unConfirmedMessage := producer.getUnConfirmed(publishingId)
 
-			producer.mutex.Lock()
-
 			if producer.publishConfirm != nil && unConfirmedMessage != nil {
 				unConfirmedMessage.errorCode = code
 				unConfirmedMessage.err = lookErrorCode(code)
 				producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
 			}
-			producer.mutex.Unlock()
 			producer.removeUnConfirmed(publishingId)
 		}
 		publishingErrorCount--

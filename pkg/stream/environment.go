@@ -125,7 +125,7 @@ func (env *Environment) newReconnectClient() (*Client, error) {
 		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: ", err, sleepTime, brokerUri)
 
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
-		r := rand.New(rand.NewSource(SEED))
+		r := rand.New(rand.NewSource(time.Now().Unix()))
 		n := r.Intn(len(env.options.ConnectionParameters))
 		client = newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
 			env.options.SaslConfiguration, env.options.RPCTimeout)

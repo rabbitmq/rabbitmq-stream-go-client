@@ -84,10 +84,13 @@ func printStats() {
 
 					averageLatency := int64(0)
 					CMessagesPerSecond := float64(0)
-					ConfirmedMessagesPerSecond := float64(0)
 					if atomic.LoadInt32(&consumerMessageCount) > 0 {
 						CMessagesPerSecond = float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
 						averageLatency = totalLatency / int64(atomic.LoadInt32(&consumerMessageCount))
+					}
+
+					ConfirmedMessagesPerSecond := float64(0)
+					if atomic.LoadInt32(&confirmedMessageCount) > 0 {
 						ConfirmedMessagesPerSecond = float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
 					}
 					p := gomsg.NewPrinter(language.English)
@@ -277,7 +280,7 @@ func startPublisher(streamName string) error {
 		logInfo("Enable SubEntrySize: %d, compression: %s", subEntrySize, cp)
 	}
 
-	producerOptions.SetClientProvidedName(clientProvidedName)
+	producerOptions.SetClientProvidedName(clientProvidedName).SetBatchSize(batchSize)
 	rPublisher, err := ha.NewReliableProducer(simulEnvironment,
 		streamName,
 		producerOptions,
@@ -319,7 +322,6 @@ func startPublisher(streamName string) error {
 				err = prod.BatchSend(messages)
 				checkErr(err)
 			}
-
 			atomic.AddInt32(&publisherMessageCount, int32(len(messages)))
 
 		}
@@ -337,8 +339,8 @@ func buildMessages() []message.StreamMessage {
 			body = make([]byte, fixedBody)
 		} else {
 			if variableBody > 0 {
-				rand.Seed(time.Now().UnixNano())
-				body = make([]byte, rand.Intn(variableBody))
+				r := rand.New(rand.NewSource(time.Now().Unix()))
+				body = make([]byte, r.Intn(variableBody))
 			}
 		}
 		var buff = make([]byte, 8)

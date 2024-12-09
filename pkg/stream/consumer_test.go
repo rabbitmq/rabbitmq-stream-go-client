@@ -155,10 +155,8 @@ var _ = Describe("Streaming Consumers", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		result, err := producer.BatchSend(CreateArrayMessagesForTesting(30)) // batch Send
+		err = producer.BatchSend(CreateArrayMessagesForTesting(30)) // batch Send
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(30))
-		Expect(result.TotalFrames).To(Equal(1))
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		var messagesReceived int32 = 0
@@ -190,10 +188,8 @@ var _ = Describe("Streaming Consumers", func() {
 			}, NewConsumerOptions().
 				SetOffset(OffsetSpecification{}.First()))
 		Expect(err).NotTo(HaveOccurred())
-		result, err := producer.BatchSend(CreateArrayMessagesForTesting(3)) // batch Send
+		err = producer.BatchSend(CreateArrayMessagesForTesting(3)) // batch Send
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(3))
-		Expect(result.TotalFrames).To(Equal(1))
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Eventually(func() int32 {
@@ -209,10 +205,8 @@ var _ = Describe("Streaming Consumers", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Given we have produced 105 messages ...
-			result, err := producer.BatchSend(CreateArrayMessagesForTesting(105)) // batch Send
+			err = producer.BatchSend(CreateArrayMessagesForTesting(105)) // batch Send
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.TotalSent).To(Equal(105))
-			Expect(result.TotalFrames).To(Equal(1))
 
 			Expect(producer.Close()).NotTo(HaveOccurred())
 
@@ -351,10 +345,8 @@ var _ = Describe("Streaming Consumers", func() {
 		// same SetPublishingId
 		// even we publish the same array more times
 		for i := 0; i < 10; i++ {
-			result, err := producer.BatchSend(arr)
+			err = producer.BatchSend(arr)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.TotalSent).To(Equal(len(arr)))
-			Expect(result.TotalFrames).To(Equal(1))
 
 		}
 
@@ -403,10 +395,8 @@ var _ = Describe("Streaming Consumers", func() {
 		_, err = env.QueryOffset("consumer_test", streamName)
 		Expect(err).To(HaveOccurred())
 
-		result, err := producer.BatchSend(CreateArrayMessagesForTesting(107))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(107))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(107))
-		Expect(result.TotalFrames).To(Equal(1))
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		var messagesReceived int32 = 0
@@ -464,10 +454,8 @@ var _ = Describe("Streaming Consumers", func() {
 	It("Check already closed", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		result, err := producer.BatchSend(CreateArrayMessagesForTesting(500))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(500))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(500))
-		Expect(result.TotalFrames).To(Equal(1))
 
 		defer func(producer *Producer) {
 			err := producer.Close()
@@ -706,10 +694,8 @@ var _ = Describe("Streaming Consumers", func() {
 		}
 
 		for i := 0; i < 50; i++ {
-			result, err2 := producer6Batch.BatchSend(batchMessages)
+			err2 := producer6Batch.BatchSend(batchMessages)
 			Expect(err2).NotTo(HaveOccurred())
-			Expect(result.TotalSent).To(Equal(len(batchMessages)))
-			Expect(result.TotalFrames).To(Equal(1))
 		}
 
 		var messagesReceived int32
@@ -753,10 +739,8 @@ var _ = Describe("Streaming Consumers", func() {
 		// so, even we set the SetPublishingId
 		// it will be ignored
 		for i := 0; i < 10; i++ {
-			result, err := producer.BatchSend(arr)
+			err := producer.BatchSend(arr)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.TotalSent).To(Equal(len(arr)))
-			Expect(result.TotalFrames).To(Equal(1))
 		}
 
 		var messagesReceived int32 = 0

@@ -214,9 +214,7 @@ func send(producer *Producer, state string) {
 		msg.ApplicationProperties = map[string]interface{}{"state": state}
 		messages = append(messages, msg)
 	}
-	result, err := producer.BatchSend(messages)
+	err := producer.BatchSend(messages)
 	Expect(err).NotTo(HaveOccurred())
-	Expect(result.TotalSent).To(Equal(25))
-	Expect(result.TotalFrames).To(Equal(1))
 
 }

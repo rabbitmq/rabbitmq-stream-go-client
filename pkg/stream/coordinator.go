@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"strconv"
 	"sync"
 	"time"
@@ -55,11 +54,9 @@ func (coordinator *Coordinator) NewProducer(
 	parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	size := 10000
-	adativeSize := 10000
+	dynSize := 10000
 	if parameters != nil {
-		size = parameters.QueueSize
-		adativeSize = parameters.BatchSize
+		dynSize = parameters.BatchSize
 	}
 
 	var lastId, err = coordinator.getNextProducerItem()
@@ -69,15 +66,11 @@ func (coordinator *Coordinator) NewProducer(
 	var producer = &Producer{id: lastId,
 		options:             parameters,
 		mutex:               &sync.RWMutex{},
-		mutexPending:        &sync.Mutex{},
+		mutexUnconfirmed:    &sync.Mutex{},
 		unConfirmedMessages: map[int64]*ConfirmationStatus{},
 		status:              open,
-		messageSequenceCh:   make(chan messageSequence, size),
-		dynamicSendCh:       make(chan message.StreamMessage, adativeSize),
-		pendingMessages: pendingMessagesSequence{
-			messages: make([]*messageSequence, 0),
-			size:     initBufferPublishSize,
-		}}
+		dynamicSendCh:       make(chan *messageSequence, dynSize),
+	}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }

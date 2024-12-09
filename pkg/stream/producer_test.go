@@ -43,10 +43,8 @@ var _ = Describe("Streaming Producers", func() {
 	It("NewProducer/Send/Close Publisher", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
-		result, err := producer.BatchSend(CreateArrayMessagesForTesting(5))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(5))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(5))
-		Expect(result.TotalFrames).To(Equal(1))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
@@ -60,10 +58,8 @@ var _ = Describe("Streaming Producers", func() {
 				producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				result, err := producer.BatchSend(CreateArrayMessagesForTesting(5))
+				err = producer.BatchSend(CreateArrayMessagesForTesting(5))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.TotalSent).To(Equal(5))
-				Expect(result.TotalFrames).To(Equal(1))
 
 				err = producer.Close()
 				Expect(err).NotTo(HaveOccurred())
@@ -241,10 +237,8 @@ var _ = Describe("Streaming Producers", func() {
 			}
 		}(chConfirm, producer)
 
-		result, err := producer.BatchSend(CreateArrayMessagesForTesting(14))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(14))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(14))
-		Expect(result.TotalFrames).To(Equal(1))
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
@@ -267,8 +261,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
-		Expect(producer.lenPendingMessages()).To(Equal(0))
-		Expect(len(producer.messageSequenceCh)).To(Equal(0))
+		Expect(len(producer.dynamicSendCh)).To(Equal(0))
 	})
 
 	It("Handle close", func() {
@@ -282,10 +275,8 @@ var _ = Describe("Streaming Producers", func() {
 			atomic.StoreInt32(&commandIdRecv, int32(event.Command))
 		}(chClose)
 
-		result, err := producer.BatchSend(CreateArrayMessagesForTesting(2))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(2))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(2))
-		Expect(result.TotalFrames).To(Equal(1))
 
 		time.Sleep(100 * time.Millisecond)
 		Expect(producer.Close()).NotTo(HaveOccurred())
@@ -294,42 +285,6 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).Should(Equal(int32(CommandDeletePublisher)),
 			"ChannelClose should receive CommandDeletePublisher command")
 
-	})
-
-	It("publisher splits the send in multi-frames ", func() {
-		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
-		var messagesError int32
-
-		chPublishConfirmation := producer.NotifyPublishConfirmation()
-		go func(ch ChannelPublishConfirm) {
-			defer GinkgoRecover()
-			for msgs := range ch {
-				for _, msg := range msgs {
-					if !msg.IsConfirmed() {
-						Expect(msg.GetError()).To(Equal(FrameTooLarge))
-						atomic.AddInt32(&messagesError, 1)
-					}
-				}
-			}
-		}(chPublishConfirmation)
-
-		Expect(err).NotTo(HaveOccurred())
-		var arr []message.StreamMessage
-		for z := 0; z < 101; z++ {
-			s := make([]byte, 15000)
-			arr = append(arr, amqp.NewMessage(s))
-		}
-		result, err := producer.BatchSend(arr)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(101))
-		Expect(result.TotalFrames).To(Equal(2))
-
-		Eventually(func() int32 {
-			return atomic.LoadInt32(&messagesError)
-		}, 5*time.Second).Should(Equal(int32(0)),
-			"invalidate all the messages sent in the batch")
-
-		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
 	It("Smart Send/Close", func() {
@@ -378,7 +333,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 5*time.Second).Should(Equal(int32(2)),
+		}, 5*time.Second).WithPolling(200*time.Millisecond).Should(Equal(int32(2)),
 			"confirm should receive same messages Send by producer")
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
@@ -442,7 +397,7 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
-	It("BatchSend should not a send a big message with sent to Zero", func() {
+	It("BatchSend should not a send a big message", func() {
 		// 1.5 Milestone
 		// the batch send should not send a big message
 		// The message should be sed back to the client with an error
@@ -461,17 +416,15 @@ var _ = Describe("Streaming Producers", func() {
 				}
 			}
 		}(chConfirm)
-		result, err := producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, 1148001))})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(0))
-		Expect(result.TotalFrames).To(Equal(0))
+		err = producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, MessageBufferTooBig))})
+		Expect(err).To(HaveOccurred())
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&notConfirmedTooLarge)
 		}).Should(Equal(int32(1)))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
-	It("Send should not a send a big message with sent to Zero", Focus, func() {
+	It("Send should not a send a big message", func() {
 		// 1.5 Milestone
 		// the Send() method should not send a big message
 		// The message should be sed back to the client with an error
@@ -481,6 +434,7 @@ var _ = Describe("Streaming Producers", func() {
 		var notConfirmedTooLarge int32
 		chConfirm := producer.NotifyPublishConfirmation()
 		go func(ch ChannelPublishConfirm) {
+			defer GinkgoRecover()
 			for ids := range ch {
 				for _, conf := range ids {
 					if !conf.IsConfirmed() {
@@ -491,124 +445,11 @@ var _ = Describe("Streaming Producers", func() {
 			}
 		}(chConfirm)
 		err = producer.Send(amqp.NewMessage(make([]byte, MessageBufferTooBig)))
-		Expect(err).NotTo(HaveOccurred())
+		Expect(err).To(HaveOccurred())
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&notConfirmedTooLarge)
 		}, 5*time.Second).Should(Equal(int32(1)))
 		Expect(producer.Close()).NotTo(HaveOccurred())
-		Expect(producer.Send(amqp.NewMessage(make([]byte, MessageBufferBigButLessTheFrame)))).To(HaveOccurred())
-	})
-
-	It("BatchSend should not send a big messages with inside other messages", func() {
-		// 1.5 Milestone
-		// the batch send should not send a big message
-		// The message should be sed back to the client with an error
-		// FrameTooLarge and not confirmed
-		// but the other messages should be sent
-		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
-		Expect(err).NotTo(HaveOccurred())
-		var notConfirmedTooLarge int32
-		var confirmed int32
-
-		chConfirm := producer.NotifyPublishConfirmation()
-		go func(ch ChannelPublishConfirm) {
-			defer GinkgoRecover()
-			for ids := range ch {
-				for _, conf := range ids {
-					if !conf.IsConfirmed() {
-						Expect(conf.GetError()).To(Equal(FrameTooLarge))
-						Expect(conf.message.GetMessageProperties().MessageID).To(Equal(fmt.Sprintf("to-big-%d", atomic.LoadInt32(&notConfirmedTooLarge))))
-						atomic.AddInt32(&notConfirmedTooLarge, 1)
-					} else {
-						Expect(conf.GetError()).NotTo(HaveOccurred())
-						Expect(conf.message.GetMessageProperties().MessageID).To(Equal(fmt.Sprintf("ok-%d", atomic.LoadInt32(&confirmed))))
-						atomic.AddInt32(&confirmed, 1)
-					}
-
-				}
-			}
-		}(chConfirm)
-		var messages []message.StreamMessage
-		for i := 0; i < 3; i++ {
-			m := amqp.NewMessage(make([]byte, 1))
-			m.Properties = &amqp.MessageProperties{
-				MessageID: fmt.Sprintf("ok-%d", i),
-			}
-			messages = append(messages, m)
-		}
-
-		for i := 0; i < 2; i++ {
-			m := amqp.NewMessage(make([]byte, MessageBufferTooBig))
-			m.Properties = &amqp.MessageProperties{
-				MessageID: fmt.Sprintf("to-big-%d", i),
-			}
-			messages = append(messages, m)
-		}
-
-		result, err := producer.BatchSend(messages)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(3))
-		Expect(result.TotalFrames).To(Equal(1))
-		Eventually(func() int32 {
-			return atomic.LoadInt32(&notConfirmedTooLarge)
-		}, 5*time.Second).Should(Equal(int32(2)))
-
-		Eventually(func() int32 {
-			return atomic.LoadInt32(&confirmed)
-		}, 5*time.Second).Should(Equal(int32(3)))
-		Expect(producer.Close()).NotTo(HaveOccurred())
-	})
-
-	It("BatchSend should not a send a big message and splits the send", func() {
-		// the batch send should not send a big message
-		// The message should be sed back to the client with an error
-		// FrameTooLarge and not confirmed
-		// but the other messages should be sent with two different frames
-		// because the messages are too big but the single can be sent
-		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
-		Expect(err).NotTo(HaveOccurred())
-		var notConfirmedTooLarge int32
-		var confirmed int32
-		chConfirm := producer.NotifyPublishConfirmation()
-		go func(ch ChannelPublishConfirm) {
-			defer GinkgoRecover()
-			for ids := range ch {
-				for _, conf := range ids {
-					if !conf.IsConfirmed() {
-						Expect(conf.GetError()).To(Equal(FrameTooLarge))
-						Expect(conf.message.GetMessageProperties().MessageID).To(Equal(fmt.Sprintf("too-big-4")))
-						atomic.AddInt32(&notConfirmedTooLarge, 1)
-					} else {
-						Expect(conf.GetError()).NotTo(HaveOccurred())
-						atomic.AddInt32(&confirmed, 1)
-
-					}
-				}
-			}
-		}(chConfirm)
-		var messages []message.StreamMessage
-		for i := 0; i < 3; i++ {
-			// the message is big but can be sent with a single frame
-			m := amqp.NewMessage(make([]byte, MessageBufferBigButLessTheFrame))
-			m.Properties = &amqp.MessageProperties{
-				MessageID: fmt.Sprintf("ok-%d", i),
-			}
-			messages = append(messages, m)
-		}
-
-		m := amqp.NewMessage(make([]byte, MessageBufferTooBig))
-		m.Properties = &amqp.MessageProperties{
-			MessageID: fmt.Sprintf("too-big-4"),
-		}
-		messages = append(messages, m)
-
-		result, err := producer.BatchSend(messages)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(3))
-		Expect(result.TotalFrames).To(Equal(2))
-		Eventually(func() int32 {
-			return atomic.LoadInt32(&notConfirmedTooLarge)
-		}).Should(Equal(int32(1)))
 	})
 
 	It("Already Closed/Limits", func() {
@@ -768,10 +609,8 @@ var _ = Describe("Streaming Producers", func() {
 		}
 		atomic.StoreInt32(&messagesConfirmed, 0)
 		for z := 0; z < 12; z++ {
-			result, err := producer.BatchSend(arr)
+			err := producer.BatchSend(arr)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.TotalSent).To(Equal(len(arr)))
-			Expect(result.TotalFrames).To(Equal(1))
 		}
 
 		Eventually(func() int32 {
@@ -902,10 +741,8 @@ var _ = Describe("Streaming Producers", func() {
 		atomic.StoreInt32(&messagesConfirmed, 0)
 
 		for z := 0; z < 501; z++ {
-			result, err := producer.BatchSend(CreateArrayMessagesForTesting(5))
+			err := producer.BatchSend(CreateArrayMessagesForTesting(5))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.TotalSent).To(Equal(5))
-			Expect(result.TotalFrames).To(Equal(1))
 		}
 
 		Eventually(func() int32 {
@@ -977,10 +814,8 @@ func testCompress(producer *Producer) {
 	atomic.StoreInt32(&messagesConfirmed, 0)
 
 	for z := 0; z < 457; z++ {
-		result, err := producer.BatchSend(CreateArrayMessagesForTesting(5))
+		err := producer.BatchSend(CreateArrayMessagesForTesting(5))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSent).To(Equal(5))
-		Expect(result.TotalFrames).To(Equal(1))
 
 	}
 
@@ -1024,10 +859,8 @@ func sendConcurrentlyAndSynchronously(producer *Producer, threadCount int, wg *s
 		totalBatchCount := totalMessageCountPerThread / batchSize
 		for batchIndex := 0; batchIndex < totalBatchCount; batchIndex++ {
 			messagePrefix := fmt.Sprintf("test_%d_%d_", goRoutingIndex, batchIndex)
-			result, err := producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))
+			err := producer.BatchSend(CreateArrayMessagesForTestingWithPrefix(messagePrefix, batchSize))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.TotalSent).To(Equal(batchSize))
-			Expect(result.TotalFrames).To(Equal(1))
 		}
 	})
 }
