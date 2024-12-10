@@ -251,31 +251,31 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		logs.LogWarn("can't find the producer during confirmation: %s", err)
 		return nil
 	}
-	var unConfirmed []*ConfirmationStatus
+	var unConfirmedRecv []*ConfirmationStatus
 	for publishingIdCount != 0 {
 		seq := readInt64(r)
 
 		m := producer.getUnConfirmed(seq)
 		if m != nil {
 			m.confirmed = true
-			unConfirmed = append(unConfirmed, m)
+			unConfirmedRecv = append(unConfirmedRecv, m)
 
 			// in case of sub-batch entry the client receives only
 			// one publishingId (or sequence)
 			// so the other messages are confirmed using the linkedTo
 			for _, message := range m.linkedTo {
 				message.confirmed = true
-				unConfirmed = append(unConfirmed, message)
+				unConfirmedRecv = append(unConfirmedRecv, message)
 			}
 		}
 		publishingIdCount--
 	}
 
-	producer.removeFromConfirmationStatus(unConfirmed)
+	producer.removeFromConfirmationStatus(unConfirmedRecv)
 
 	//producer.mutex.Lock()
 	if producer.publishConfirm != nil {
-		producer.publishConfirm <- unConfirmed
+		producer.publishConfirm <- unConfirmedRecv
 	}
 	//producer.mutex.Unlock()
 
@@ -474,7 +474,7 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		producer, err := c.coordinator.GetProducerById(publisherId)
 		if err != nil {
 			logs.LogWarn("producer id %d not found, publish error :%s", publisherId, lookErrorCode(code))
-			producer = &Producer{unConfirmed: newUnConfirmed(10)}
+			producer = &Producer{unConfirmed: newUnConfirmed()}
 		} else {
 			unConfirmedMessage := producer.getUnConfirmed(publishingId)
 

@@ -1,108 +1,97 @@
 package stream
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
-type unConfirmedPartition struct {
+// unConfirmed is a structure that holds unconfirmed messages
+// And unconfirmed message is a message that has been sent to the broker but not yet confirmed,
+// and it is added to the unConfirmed structure as soon is possible when
+//
+//	the Send() or BatchSend() method is called
+//
+// The confirmation status is updated when the confirmation is received from the broker (see server_frame.go)
+// or due of timeout. The Timeout is configurable, and it is calculated client side.
+type unConfirmed struct {
 	messages map[int64]*ConfirmationStatus
-	mutex    sync.Mutex
+	mutex    sync.RWMutex
 }
 
-func newUnConfirmedPartition() *unConfirmedPartition {
-	return &unConfirmedPartition{
-		messages: make(map[int64]*ConfirmationStatus),
+const DefaultUnconfirmedSize = 10000
+
+func newUnConfirmed() *unConfirmed {
+
+	r := &unConfirmed{
+		messages: make(map[int64]*ConfirmationStatus, DefaultUnconfirmedSize),
+		mutex:    sync.RWMutex{},
 	}
+
+	return r
 }
 
-func (u *unConfirmedPartition) add(id int64, cf *ConfirmationStatus) {
+func (u *unConfirmed) addBatch(messageSequences []*messageSequence, producerID uint8) {
+
 	u.mutex.Lock()
-	defer u.mutex.Unlock()
+	for _, ms := range messageSequences {
+		u.messages[ms.publishingId] = &ConfirmationStatus{
+			inserted:     time.Now(),
+			message:      *ms.refMessage,
+			producerID:   producerID,
+			publishingId: ms.publishingId,
+			confirmed:    false,
+		}
+	}
+	u.mutex.Unlock()
+
+}
+
+func (u *unConfirmed) add(id int64, cf *ConfirmationStatus) {
+	u.mutex.Lock()
 	u.messages[id] = cf
+	u.mutex.Unlock()
 }
 
-func (u *unConfirmedPartition) remove(id int64) {
+func (u *unConfirmed) removeBatch(confirmationStatus []*ConfirmationStatus) {
 	u.mutex.Lock()
-	defer u.mutex.Unlock()
+	for _, cs := range confirmationStatus {
+		delete(u.messages, cs.publishingId)
+	}
+	u.mutex.Unlock()
+
+}
+
+func (u *unConfirmed) remove(id int64) {
+	u.mutex.Lock()
 	delete(u.messages, id)
+	u.mutex.Unlock()
 }
 
-func (u *unConfirmedPartition) get(id int64) *ConfirmationStatus {
-	u.mutex.Lock()
-	defer u.mutex.Unlock()
+func (u *unConfirmed) get(id int64) *ConfirmationStatus {
+	u.mutex.RLock()
+	defer u.mutex.RUnlock()
 	return u.messages[id]
 }
 
-func (u *unConfirmedPartition) size() int {
+func (u *unConfirmed) size() int {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
 	return len(u.messages)
 }
-func (u *unConfirmedPartition) clear() {
-	u.mutex.Lock()
-	defer u.mutex.Unlock()
-	u.messages = make(map[int64]*ConfirmationStatus)
-}
-
-func (u *unConfirmedPartition) getAll() map[int64]*ConfirmationStatus {
-	u.mutex.Lock()
-	defer u.mutex.Unlock()
-	result := make(map[int64]*ConfirmationStatus)
-	for i, message := range u.messages {
-		result[i] = message
-	}
-	return result
-}
-
-type unConfirmed struct {
-	partitions      []*unConfirmedPartition
-	partitionNumber int
-}
-
-func newUnConfirmed(partitionNumber int) *unConfirmed {
-	var partitions []*unConfirmedPartition
-	for i := 0; i < partitionNumber; i++ {
-		partitions = append(partitions, newUnConfirmedPartition())
-	}
-	return &unConfirmed{
-		partitions:      partitions,
-		partitionNumber: partitionNumber,
-	}
-}
-
-func (u *unConfirmed) add(id int64, cf *ConfirmationStatus) {
-	partition := id % int64(u.partitionNumber)
-	u.partitions[partition].add(id, cf)
-}
-
-func (u *unConfirmed) remove(id int64) {
-	partition := id % int64(u.partitionNumber)
-	u.partitions[partition].remove(id)
-}
-
-func (u *unConfirmed) get(id int64) *ConfirmationStatus {
-	partition := id % int64(u.partitionNumber)
-	return u.partitions[partition].get(id)
-}
-
-func (u *unConfirmed) size() int {
-	size := 0
-	for _, partition := range u.partitions {
-		size += partition.size()
-	}
-	return size
-}
 
 func (u *unConfirmed) getAll() map[int64]*ConfirmationStatus {
-	result := make(map[int64]*ConfirmationStatus)
-	for _, partition := range u.partitions {
-		for _, status := range partition.getAll() {
-			result[status.publishingId] = status
-		}
+	cloned := make(map[int64]*ConfirmationStatus)
+	u.mutex.RLock()
+	defer u.mutex.RUnlock()
+	for k, v := range u.messages {
+		cloned[k] = v
 	}
-	return result
+	return cloned
+
 }
 
 func (u *unConfirmed) clear() {
-	for _, partition := range u.partitions {
-		partition.clear()
-	}
+	u.mutex.Lock()
+	u.messages = make(map[int64]*ConfirmationStatus, DefaultUnconfirmedSize)
+	u.mutex.Unlock()
 }

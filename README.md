@@ -255,9 +255,7 @@ With `ProducerOptions` is possible to customize the Producer behaviour:
 ```golang
 type ProducerOptions struct {
 	Name       string // Producer name, it is useful to handle deduplication messages
-	QueueSize  int // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
 	BatchSize  int // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
-	BatchPublishingDelay int    // Period to send a batch of messages.
 }
 ```
 
@@ -296,9 +294,32 @@ other producers
 
 ### `Send` vs `BatchSend`
 
-The `BatchSend` is the primitive to send the messages, `Send` introduces a smart layer to publish messages and internally uses `BatchSend`.
+The `BatchSend` is the primitive to send the messages. It is up to the user to manage the aggregation. 
+`Send` introduces a smart layer to publish messages and internally uses `BatchSend`.
 
-The `Send` interface works in most of the cases, In some condition is about 15/20 slower than `BatchSend`. See also this [thread](https://groups.google.com/g/rabbitmq-users/c/IO_9-BbCzgQ).
+Starting from the version 1.5.0 the `Send` uses a different approach to send messages: Dynamic send.</br>
+
+What should you use? </br>
+The `Send` method is the best choice for most of the cases:</br>
+- It is asynchronous
+- It is smart to aggregate the messages in a batch with a low-latency
+- It is smart to split the messages in case the size is bigger than `requestedMaxFrameSize`
+- You can play with `BatchSize` parameter to increase the throughput
+
+The `BatchSend` is useful in case you need to manage the aggregation by yourself. </br>
+It gives you more control over the aggregation process: </br>
+- It is synchronous
+- It is up to the user to manage the aggregation
+- It is up to the user to split the messages in case the size is bigger than `requestedMaxFrameSize`
+- It can be faster than `Send` in case the aggregation is managed by the user.
+
+#### Throughput vs Latency</br>
+With both methods you can have low-latency and/or high-throughput. </br>
+The `Send` is the best choice for low-latency without care about aggregation. 
+With `BatchSend` you have more control.</br>
+
+
+Performance test tool can help you to understand the differences between `Send` and `BatchSend` </br>
 
 See also "Client performances" example in the [examples](./examples/performances/) directory
 
@@ -354,6 +375,11 @@ See also "Getting started" example in the [examples](./examples/) directory
 
 ### Deduplication
 
+The deduplication is a feature that allows to avoid the duplication of messages. </br>
+It is enabled by the user by setting the producer name with the options: </br>
+```golang
+producer, err := env.NewProducer(streamName, stream.NewProducerOptions().SetName("my_producer"))
+```
 The stream plugin can handle deduplication data, see this blog post for more details:
 https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-message-deduplication/ </br>
 You can find a "Deduplication" example in the [examples](./examples/) directory. </br>
