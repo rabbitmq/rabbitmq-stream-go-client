@@ -474,7 +474,7 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		producer, err := c.coordinator.GetProducerById(publisherId)
 		if err != nil {
 			logs.LogWarn("producer id %d not found, publish error :%s", publisherId, lookErrorCode(code))
-			producer = &Producer{unConfirmedMessages: map[int64]*ConfirmationStatus{}}
+			producer = &Producer{unConfirmed: newUnConfirmed(10)}
 		} else {
 			unConfirmedMessage := producer.getUnConfirmed(publishingId)
 
