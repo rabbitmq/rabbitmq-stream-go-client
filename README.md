@@ -16,6 +16,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
 - [Run server with Docker](#run-server-with-docker)
 - [Getting started for impatient](#getting-started-for-impatient)
 - [Examples](#examples)
+- [Client best practices](#client-best-practices)
 - [Usage](#usage)
     * [Connect](#connect)
         * [Multi hosts](#multi-hosts)
@@ -67,7 +68,7 @@ You may need a server to test locally. Let's start the broker:
 ```shell
 docker run -it --rm --name rabbitmq -p 5552:5552 -p 15672:15672\
     -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS='-rabbitmq_stream advertised_host localhost -rabbit loopback_users "none"' \
-    rabbitmq:3-management
+    rabbitmq:4-management
 ```
 The broker should start in a few seconds. When it’s ready, enable the `stream` plugin and `stream_management`:
 ```shell
@@ -84,6 +85,11 @@ See [getting started](./examples/getting_started.go) example.
 ### Examples
 
 See [examples](./examples/) directory for more use cases.
+
+### Client best practices
+
+This client provides a set of best practices to use the client in the best way. </br>
+See [best practices](./best_practices/README.md) for more details.
 
 # Usage
 
@@ -252,12 +258,7 @@ producer, err :=  env.NewProducer("my-stream", nil)
 ```
 
 With `ProducerOptions` is possible to customize the Producer behaviour:
-```golang
-type ProducerOptions struct {
-	Name       string // Producer name, it is useful to handle deduplication messages
-	BatchSize  int // It is the batch-size aggregation, low value reduce the latency, high value increase the throughput
-}
-```
+
 
 The client provides two interfaces to send messages.
 `send`:
@@ -275,29 +276,13 @@ for z := 0; z < 10; z++ {
 err = producer.BatchSend(messages)
 ```
 
-
-`producer.Send`:
-- accepts one message as parameter
-- automatically aggregates the messages
-- automatically splits  the messages in case the size is bigger than `requestedMaxFrameSize`
-- automatically splits the messages based on batch-size
-- sends the messages in case nothing happens in `producer-send-timeout`
-- is asynchronous
-
-`producer.BatchSend`:
-- accepts an array messages as parameter
-- is synchronous
-
-Close the producer:
-`producer.Close()` the producer is removed from the server. TCP connection is closed if there aren't </b>
-other producers
-
 ### `Send` vs `BatchSend`
 
 The `BatchSend` is the primitive to send the messages. It is up to the user to manage the aggregation. 
 `Send` introduces a smart layer to publish messages and internally uses `BatchSend`.
 
-Starting from the version 1.5.0 the `Send` uses a different approach to send messages: Dynamic send.</br>
+Starting from version 1.5.0, the `Send` uses a dynamic send. 
+The client sends the message buffer regardless of any timeout.</br>
 
 What should you use? </br>
 The `Send` method is the best choice for most of the cases:</br>
@@ -318,10 +303,8 @@ With both methods you can have low-latency and/or high-throughput. </br>
 The `Send` is the best choice for low-latency without care about aggregation. 
 With `BatchSend` you have more control.</br>
 
-
-Performance test tool can help you to understand the differences between `Send` and `BatchSend` </br>
-
-See also "Client performances" example in the [examples](./examples/performances/) directory
+Performance test tool can help you to test `Send` and `BatchSend` </br>
+See also the [Performance test tool](#performance-test-tool) section.
 
 ### Publish Confirmation
 
@@ -370,8 +353,6 @@ the values `messageStatus.GetMessage().GetPublishingId()` and `messageStatus.Get
 
 
 See also "Getting started" example in the [examples](./examples/) directory
-
-
 
 ### Deduplication
 
@@ -622,54 +603,9 @@ Like the standard stream, you should avoid to store the offset for each single m
 ### Performance test tool
 
 Performance test tool it is useful to execute tests.
+The performance test tool is in the [perfTest](./perfTest) directory. </br>
 See also the [Java Performance](https://rabbitmq.github.io/rabbitmq-stream-java-client/stable/htmlsingle/#the-performance-tool) tool
 
-
-To install you can download the version from github:
-
-Mac:
-```
-https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/latest/download/stream-perf-test_darwin_amd64.tar.gz
-```
-
-Linux:
-```
-https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/latest/download/stream-perf-test_linux_amd64.tar.gz
-```
-
-Windows
-```
-https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/latest/download/stream-perf-test_windows_amd64.zip
-```
-
-execute `stream-perf-test --help` to see the parameters. By default it executes a test with one producer, one consumer.
-
-here an example:
-```shell
-stream-perf-test --publishers 3 --consumers 2 --streams my_stream --max-length-bytes 2GB --uris rabbitmq-stream://guest:guest@localhost:5552/  --fixed-body 400 --time 10
-```
-
-### Performance test tool Docker
-A docker image is available: `pivotalrabbitmq/go-stream-perf-test`, to test it:
-
-Run the server is host mode:
-```shell
- docker run -it --rm --name rabbitmq --network host \
-    rabbitmq:3-management
-```
-enable the plugin:
-```
- docker exec rabbitmq rabbitmq-plugins enable rabbitmq_stream
-```
-then run the docker image:
-```shell
-docker run -it --network host  pivotalrabbitmq/go-stream-perf-test
-```
-
-To see all the parameters:
-```shell
-docker run -it --network host  pivotalrabbitmq/go-stream-perf-test --help
-```
 
 ### Build form source
 

@@ -413,6 +413,12 @@ type Message struct {
 	doneSignal chan struct{}
 }
 
+// AMQP10 is an AMQP 1.0 message with the necessary fields to work with the
+// stream package.
+// This is a wrapper around the amqp.Message struct.
+// AMQP10 is not thread-safe.
+// You should avoid to share the same message between multiple go routines and between multi Send/BatchSend calls.
+// Each Send/BatchSend call should use a new message.
 type AMQP10 struct {
 	publishingId          int64
 	hasPublishingId       bool

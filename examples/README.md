@@ -16,5 +16,3 @@ Stream examples
  - [Single Active Consumer](./single_active_consumer) - Single Active Consumer example
  - [Reliable](./reliable) - Reliable Producer and Reliable Consumer example
  - [Super Stream](./super_stream) - Super Stream example with Single Active Consumer
- - [Client performances](./performances) - Client performances example
-
