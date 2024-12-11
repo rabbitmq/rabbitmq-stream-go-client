@@ -413,6 +413,12 @@ type Message struct {
 	doneSignal chan struct{}
 }
 
+// AMQP10 is an AMQP 1.0 message with the necessary fields to work with the
+// stream package.
+// This is a wrapper around the amqp.Message struct.
+// AMQP10 is not thread-safe.
+// You should avoid to share the same message between multiple go routines and between multi Send/BatchSend calls.
+// Each Send/BatchSend call should use a new message.
 type AMQP10 struct {
 	publishingId          int64
 	hasPublishingId       bool
@@ -453,7 +459,15 @@ func (amqp *AMQP10) MarshalBinary() ([]byte, error) {
 }
 
 func (amqp *AMQP10) UnmarshalBinary(data []byte) error {
-	return amqp.message.UnmarshalBinary(data)
+
+	e := amqp.message.UnmarshalBinary(data)
+	if e != nil {
+		return e
+	}
+	amqp.Properties = amqp.message.Properties
+	amqp.Annotations = amqp.message.Annotations
+	amqp.ApplicationProperties = amqp.message.ApplicationProperties
+	return nil
 }
 
 func (amqp *AMQP10) GetData() [][]byte {
@@ -461,15 +475,15 @@ func (amqp *AMQP10) GetData() [][]byte {
 }
 
 func (amqp *AMQP10) GetMessageProperties() *MessageProperties {
-	return amqp.message.Properties
+	return amqp.Properties
 }
 
 func (amqp *AMQP10) GetMessageAnnotations() Annotations {
-	return amqp.message.Annotations
+	return amqp.Annotations
 }
 
 func (amqp *AMQP10) GetApplicationProperties() map[string]interface{} {
-	return amqp.message.ApplicationProperties
+	return amqp.ApplicationProperties
 }
 
 func (amqp *AMQP10) GetMessageHeader() *MessageHeader {
