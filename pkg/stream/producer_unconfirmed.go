@@ -74,8 +74,8 @@ func (u *unConfirmed) get(id int64) *ConfirmationStatus {
 }
 
 func (u *unConfirmed) size() int {
-	u.mutex.Lock()
-	defer u.mutex.Unlock()
+	u.mutex.RLock()
+	defer u.mutex.RUnlock()
 	return len(u.messages)
 }
 
