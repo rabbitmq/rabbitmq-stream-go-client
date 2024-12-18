@@ -35,7 +35,10 @@ func main() {
 	}
 
 	producer, err := env.NewProducer(streamName,
-		stream.NewProducerOptions().SetProducerName("myProducer")) // producer name is mandatory to handle the deduplication
+		stream.NewProducerOptions().
+			// producer name is mandatory to handle the deduplication
+			// don't use the producer name if you don't need the deduplication
+			SetProducerName("myProducer"))
 
 	CheckErr(err)
 
