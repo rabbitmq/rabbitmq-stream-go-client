@@ -137,7 +137,7 @@ func (po *ProducerOptions) SetBatchSize(size int) *ProducerOptions {
 	return po
 }
 
-// Deprecated: starting from 1.5.0 the SetQueueSize is deprecated, and it will be removed in the next releases
+// Deprecated: starting from 1.5.0 the SetBatchPublishingDelay is deprecated, and it will be removed in the next releases
 // It is not used anymore given the dynamic batching
 func (po *ProducerOptions) SetBatchPublishingDelay(size int) *ProducerOptions {
 	po.BatchPublishingDelay = size
