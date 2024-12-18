@@ -80,7 +80,7 @@ func (u *unConfirmed) size() int {
 }
 
 func (u *unConfirmed) getAll() map[int64]*ConfirmationStatus {
-	cloned := make(map[int64]*ConfirmationStatus)
+	cloned := make(map[int64]*ConfirmationStatus, len(u.messages))
 	u.mutex.RLock()
 	defer u.mutex.RUnlock()
 	for k, v := range u.messages {
