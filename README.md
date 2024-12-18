@@ -257,7 +257,7 @@ To publish a message you need a `*stream.Producer` instance:
 producer, err :=  env.NewProducer("my-stream", nil)
 ```
 
-With `ProducerOptions` is possible to customize the Producer behaviour:
+With `ProducerOptions` is possible to customize the Producer behaviour.
 
 
 The client provides two interfaces to send messages.
