@@ -261,7 +261,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
-		Expect(len(producer.dynamicSendCh)).To(Equal(0))
+		Expect(producer.pendingMessagesQueue.IsEmpty()).To(Equal(true))
 	})
 
 	It("Handle close", func() {

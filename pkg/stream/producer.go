@@ -71,7 +71,7 @@ type Producer struct {
 	timeoutTicker     *time.Ticker
 	doneTimeoutTicker chan struct{}
 
-	dynamicSendCh chan *messageSequence
+	pendingMessagesQueue *BlockingQueue[*messageSequence]
 }
 
 type FilterValue func(message message.StreamMessage) string
@@ -302,82 +302,97 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 }
 func (producer *Producer) processSendingMessages() {
 
-	// the queueMessages is the buffer to accumulate the messages
-
-	// queueMessages is shared between the two goroutines.
-	// it contains the messages that are sent by the first goroutine
-	queueMessages := make([]*messageSequence, 0)
-	// the chSignal is used to signal the two goroutines.
-	// When chSignal is sent by the second goroutine, the first goroutine sends the messages
-	chSignal := make(chan struct{}, producer.options.BatchSize)
-
-	totalBufferToSend := 0
-	mutexQueue := sync.RWMutex{}
-
-	maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
-
-	// the waitGroup is used to wait for the two goroutines
-	// the first goroutine is the one that sends the messages
-	// the second goroutine is the one that accumulates the messages
-	// the waitGroup is used to wait for the two goroutines
-	waitGroup := sync.WaitGroup{}
-	waitGroup.Add(1)
-	/// send the messages in a batch
+	sequenceArray := make([]*messageSequence, 0)
 	go func() {
-		waitGroup.Done()
-		for range chSignal {
-			lenB := 0
-			mutexQueue.RLock()
-			lenB = len(queueMessages)
-			mutexQueue.RUnlock()
-
-			if lenB > 0 {
-				mutexQueue.Lock()
-				err := producer.internalBatchSend(queueMessages)
-				if err != nil {
-					logs.LogError("Producer %d, error during batch send: %s", producer.GetID(), err)
-				}
-				queueMessages = queueMessages[:0]
-				totalBufferToSend = initBufferPublishSize
-				mutexQueue.Unlock()
+		for {
+			ms := producer.pendingMessagesQueue.Dequeue(time.Millisecond * 100)
+			if ms != nil {
+				sequenceArray = append(sequenceArray, ms)
+			}
+			if len(sequenceArray) > producer.options.BatchSize || producer.pendingMessagesQueue.IsEmpty() {
+				producer.internalBatchSend(sequenceArray)
+				sequenceArray = sequenceArray[:0]
 			}
 		}
 	}()
-
-	waitGroup.Wait()
-
-	waitGroup.Add(1)
-	/// accumulate the messages in a buffer
-	// the batch messages are sent with the messages that are accumulated in the buffer.
-	// The buffer is reset when the messages are sent.
-	go func() {
-		waitGroup.Done()
-		// Receive the messages from the dynamicSendCh used by Send() function
-		for msg := range producer.dynamicSendCh {
-			toSend := false
-			mutexQueue.Lock()
-			totalBufferToSend += msg.unCompressedSize
-			if totalBufferToSend > maxFrame || len(queueMessages) > producer.options.BatchSize {
-				toSend = true
-			}
-			mutexQueue.Unlock()
-			if toSend {
-				chSignal <- struct{}{}
-			}
-
-			mutexQueue.Lock()
-			queueMessages = append(queueMessages, msg)
-			mutexQueue.Unlock()
-			chSignal <- struct{}{}
-		}
-
-		// the dynamicSendCh channel is closed, so we can close the signal channel
-		close(chSignal)
-	}()
-
-	waitGroup.Wait()
-	// The two goroutines are ready
 }
+
+// the queueMessages is the buffer to accumulate the messages
+
+// queueMessages is shared between the two goroutines.
+// it contains the messages that are sent by the first goroutine
+//queueMessages := make([]*messageSequence, 0)
+//// the chSignal is used to signal the two goroutines.
+//// When chSignal is sent by the second goroutine, the first goroutine sends the messages
+//chSignal := make(chan struct{}, producer.options.BatchSize)
+//
+//totalBufferToSend := 0
+//mutexQueue := sync.RWMutex{}
+//
+//maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
+//
+//// the waitGroup is used to wait for the two goroutines
+//// the first goroutine is the one that sends the messages
+//// the second goroutine is the one that accumulates the messages
+//// the waitGroup is used to wait for the two goroutines
+//waitGroup := sync.WaitGroup{}
+//waitGroup.Add(1)
+///// send the messages in a batch
+//go func() {
+//	waitGroup.Done()
+//	for range chSignal {
+//		lenB := 0
+//		mutexQueue.RLock()
+//		lenB = len(queueMessages)
+//		mutexQueue.RUnlock()
+//
+//		if lenB > 0 {
+//			mutexQueue.Lock()
+//			err := producer.internalBatchSend(queueMessages)
+//			if err != nil {
+//				logs.LogError("Producer %d, error during batch send: %s", producer.GetID(), err)
+//			}
+//			queueMessages = queueMessages[:0]
+//			totalBufferToSend = initBufferPublishSize
+//			mutexQueue.Unlock()
+//		}
+//	}
+//}()
+//
+//waitGroup.Wait()
+//
+//waitGroup.Add(1)
+///// accumulate the messages in a buffer
+//// the batch messages are sent with the messages that are accumulated in the buffer.
+//// The buffer is reset when the messages are sent.
+//go func() {
+//	waitGroup.Done()
+//	// Receive the messages from the dynamicSendCh used by Send() function
+//	for msg := range producer.dynamicSendCh {
+//		toSend := false
+//		mutexQueue.Lock()
+//		totalBufferToSend += msg.unCompressedSize
+//		if totalBufferToSend > maxFrame || len(queueMessages) > producer.options.BatchSize {
+//			toSend = true
+//		}
+//		mutexQueue.Unlock()
+//		if toSend {
+//			chSignal <- struct{}{}
+//		}
+//
+//		mutexQueue.Lock()
+//		queueMessages = append(queueMessages, msg)
+//		mutexQueue.Unlock()
+//		chSignal <- struct{}{}
+//	}
+//
+//	// the dynamicSendCh channel is closed, so we can close the signal channel
+//	close(chSignal)
+//}()
+//
+//waitGroup.Wait()
+//// The two goroutines are ready
+//}
 
 func (producer *Producer) assignPublishingID(message message.StreamMessage) int64 {
 	sequence := message.GetPublishingId()
@@ -437,7 +452,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	}
 	producer.addUnConfirmed(messageSeq.publishingId, streamMessage, producer.GetID())
 	// se the processSendingMessages function
-	producer.dynamicSendCh <- messageSeq
+	producer.pendingMessagesQueue.Enqueue(messageSeq)
 	return nil
 }
 
@@ -498,7 +513,8 @@ func (producer *Producer) internalBatchSend(messagesSequence []*messageSequence)
 	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
 }
 
-func (producer *Producer) simpleAggregation(messagesSequence []*messageSequence, b *bufio.Writer) {
+func (producer *Producer) simpleAggregation(messagesSequence []*messageSequence,
+	b *bufio.Writer) {
 	for _, msg := range messagesSequence {
 		r := msg.messageBytes
 		writeBLong(b, msg.publishingId) // publishingId
@@ -687,7 +703,6 @@ func (producer *Producer) Close() error {
 		close(ch)
 	}
 
-	close(producer.dynamicSendCh)
 	return nil
 }
 
@@ -697,7 +712,7 @@ func (producer *Producer) waitForInflightMessages() {
 	// to flush the last messages
 	// see issues/103
 
-	channelLength := len(producer.dynamicSendCh)
+	channelLength := producer.pendingMessagesQueue.Size()
 	tentatives := 0
 
 	for (channelLength > 0 || producer.lenUnConfirmed() > 0) && tentatives < 3 {
@@ -754,7 +769,6 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 	}
 
 	return producer.options.client.socket.writer.Flush()
-
 }
 
 func (c *Client) deletePublisher(publisherId byte) error {

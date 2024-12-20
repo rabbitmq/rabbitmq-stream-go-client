@@ -72,7 +72,8 @@ func (coordinator *Coordinator) NewProducer(
 		timeoutTicker:     time.NewTicker(tickerTime),
 		doneTimeoutTicker: make(chan struct{}),
 		status:            open,
-		dynamicSendCh:     make(chan *messageSequence, dynSize),
+		//dynamicSendCh:     make(chan *messageSequence, dynSize),
+		pendingMessagesQueue: NewBlockingQueue[*messageSequence](dynSize),
 	}
 	coordinator.producers[lastId] = producer
 	return producer, err
