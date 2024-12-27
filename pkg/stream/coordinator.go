@@ -66,14 +66,13 @@ func (coordinator *Coordinator) NewProducer(
 		return nil, err
 	}
 	var producer = &Producer{id: lastId,
-		options:           parameters,
-		mutex:             &sync.RWMutex{},
-		unConfirmed:       newUnConfirmed(),
-		timeoutTicker:     time.NewTicker(tickerTime),
-		doneTimeoutTicker: make(chan struct{}),
-		status:            open,
-		//dynamicSendCh:     make(chan *messageSequence, dynSize),
-		pendingMessagesQueue: NewBlockingQueue[*messageSequence](dynSize),
+		options:               parameters,
+		mutex:                 &sync.RWMutex{},
+		unConfirmed:           newUnConfirmed(),
+		timeoutTicker:         time.NewTicker(tickerTime),
+		doneTimeoutTicker:     make(chan struct{}, 1),
+		status:                open,
+		pendingSequencesQueue: NewBlockingQueue[*messageSequence](dynSize),
 	}
 	coordinator.producers[lastId] = producer
 	return producer, err
@@ -96,23 +95,19 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 }
 func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error {
 
-	producer, err := coordinator.GetProducerById(id)
+	producer, err := coordinator.ExtractProducerById(id)
 	if err != nil {
 		return err
 	}
 	reason.StreamName = producer.GetStreamName()
 	reason.Name = producer.GetName()
-	tentatives := 0
-	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
-		time.Sleep(200 * time.Millisecond)
-		tentatives++
-	}
-
 	if producer.closeHandler != nil {
 		producer.closeHandler <- reason
 	}
 
-	return coordinator.removeById(id, coordinator.producers)
+	producer.stopAndWaitPendingSequencesQueue()
+
+	return nil
 }
 
 func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {
@@ -239,6 +234,18 @@ func (coordinator *Coordinator) GetProducerById(id interface{}) (*Producer, erro
 		return nil, err
 	}
 	return v.(*Producer), err
+}
+
+func (coordinator *Coordinator) ExtractProducerById(id interface{}) (*Producer, error) {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	if coordinator.producers[id] == nil {
+		return nil, errors.New("item #{id} not found ")
+	}
+	producer := coordinator.producers[id].(*Producer)
+	coordinator.producers[id] = nil
+	delete(coordinator.producers, id)
+	return producer, nil
 }
 
 // general functions

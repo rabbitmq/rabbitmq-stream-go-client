@@ -255,23 +255,19 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	for publishingIdCount != 0 {
 		seq := readInt64(r)
 
-		m := producer.getUnConfirmed(seq)
+		m := producer.unConfirmed.extractWithConfirm(seq)
 		if m != nil {
-			m.confirmed = true
 			unConfirmedRecv = append(unConfirmedRecv, m)
 
 			// in case of sub-batch entry the client receives only
 			// one publishingId (or sequence)
 			// so the other messages are confirmed using the linkedTo
-			for _, message := range m.linkedTo {
-				message.confirmed = true
-				unConfirmedRecv = append(unConfirmedRecv, message)
-			}
+			unConfirmedRecv = append(unConfirmedRecv, m.linkedTo...)
 		}
 		publishingIdCount--
 	}
 
-	producer.removeFromConfirmationStatus(unConfirmedRecv)
+	//producer.removeFromConfirmationStatus(unConfirmedRecv)
 
 	//producer.mutex.Lock()
 	if producer.publishConfirm != nil {
@@ -476,14 +472,11 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 			logs.LogWarn("producer id %d not found, publish error :%s", publisherId, lookErrorCode(code))
 			producer = &Producer{unConfirmed: newUnConfirmed()}
 		} else {
-			unConfirmedMessage := producer.getUnConfirmed(publishingId)
+			unConfirmedMessage := producer.unConfirmed.extractWithError(publishingId, code)
 
 			if producer.publishConfirm != nil && unConfirmedMessage != nil {
-				unConfirmedMessage.errorCode = code
-				unConfirmedMessage.err = lookErrorCode(code)
 				producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
 			}
-			producer.removeUnConfirmed(publishingId)
 		}
 		publishingErrorCount--
 	}

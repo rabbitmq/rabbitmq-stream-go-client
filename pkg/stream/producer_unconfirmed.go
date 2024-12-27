@@ -30,68 +30,84 @@ func newUnConfirmed() *unConfirmed {
 	return r
 }
 
-func (u *unConfirmed) addBatch(messageSequences []*messageSequence, producerID uint8) {
+func (u *unConfirmed) addFromSequence(message *messageSequence, producerID uint8) {
 
 	u.mutex.Lock()
-	for _, ms := range messageSequences {
-		u.messages[ms.publishingId] = &ConfirmationStatus{
-			inserted:     time.Now(),
-			message:      *ms.refMessage,
-			producerID:   producerID,
-			publishingId: ms.publishingId,
-			confirmed:    false,
+	u.messages[message.publishingId] = &ConfirmationStatus{
+		inserted:     time.Now(),
+		message:      *message.refMessage,
+		producerID:   producerID,
+		publishingId: message.publishingId,
+		confirmed:    false,
+	}
+	u.mutex.Unlock()
+}
+
+func (u *unConfirmed) link(from int64, to int64) {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	r := u.messages[from]
+	if r != nil {
+		r.linkedTo = append(r.linkedTo, u.messages[to])
+	}
+}
+
+func (u *unConfirmed) extractWithConfirm(id int64) *ConfirmationStatus {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	return u.extract(id, 0, true)
+}
+
+func (u *unConfirmed) extractWithError(id int64, errorCode uint16) *ConfirmationStatus {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	return u.extract(id, errorCode, false)
+}
+
+func (u *unConfirmed) extract(id int64, errorCode uint16, confirmed bool) *ConfirmationStatus {
+	rootMessage := u.messages[id]
+	if rootMessage != nil {
+		u.updateStatus(rootMessage, errorCode, confirmed)
+
+		for _, linkedMessage := range rootMessage.linkedTo {
+			u.updateStatus(linkedMessage, errorCode, confirmed)
+			delete(u.messages, linkedMessage.publishingId)
+		}
+		delete(u.messages, id)
+	}
+	return rootMessage
+}
+
+func (u *unConfirmed) updateStatus(rootMessage *ConfirmationStatus, errorCode uint16, confirmed bool) {
+	rootMessage.confirmed = confirmed
+	if confirmed {
+		return
+	}
+	rootMessage.errorCode = errorCode
+	rootMessage.err = lookErrorCode(errorCode)
+}
+
+func (u *unConfirmed) extractWithTimeOut(timeout time.Duration) []*ConfirmationStatus {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	var res []*ConfirmationStatus
+	for _, v := range u.messages {
+		if time.Since(v.inserted) > timeout {
+			v := u.extract(v.publishingId, timeoutError, false)
+			res = append(res, v)
 		}
 	}
-	u.mutex.Unlock()
-
-}
-
-func (u *unConfirmed) add(id int64, cf *ConfirmationStatus) {
-	u.mutex.Lock()
-	u.messages[id] = cf
-	u.mutex.Unlock()
-}
-
-func (u *unConfirmed) removeBatch(confirmationStatus []*ConfirmationStatus) {
-	u.mutex.Lock()
-	for _, cs := range confirmationStatus {
-		delete(u.messages, cs.publishingId)
-	}
-	u.mutex.Unlock()
-
-}
-
-func (u *unConfirmed) remove(id int64) {
-	u.mutex.Lock()
-	delete(u.messages, id)
-	u.mutex.Unlock()
-}
-
-func (u *unConfirmed) get(id int64) *ConfirmationStatus {
-	u.mutex.RLock()
-	defer u.mutex.RUnlock()
-	return u.messages[id]
+	return res
 }
 
 func (u *unConfirmed) size() int {
-	u.mutex.RLock()
-	defer u.mutex.RUnlock()
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
 	return len(u.messages)
 }
 
 func (u *unConfirmed) getAll() map[int64]*ConfirmationStatus {
-	cloned := make(map[int64]*ConfirmationStatus, len(u.messages))
-	u.mutex.RLock()
-	defer u.mutex.RUnlock()
-	for k, v := range u.messages {
-		cloned[k] = v
-	}
-	return cloned
-
-}
-
-func (u *unConfirmed) clear() {
 	u.mutex.Lock()
-	u.messages = make(map[int64]*ConfirmationStatus, DefaultUnconfirmedSize)
-	u.mutex.Unlock()
+	defer u.mutex.Unlock()
+	return u.messages
 }

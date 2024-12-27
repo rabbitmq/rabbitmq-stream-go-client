@@ -189,6 +189,8 @@ func lookErrorCode(errorCode uint16) error {
 		return InternalError
 	case responseCodeAuthenticationFailureLoopback:
 		return AuthenticationFailureLoopbackError
+	case timeoutError:
+		return ConfirmationTimoutError
 	default:
 		{
 			logs.LogWarn("Error not handled %d", errorCode)

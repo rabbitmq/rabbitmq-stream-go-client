@@ -41,7 +41,6 @@ type IReliable interface {
 // In both cases it retries the reconnection
 
 func retry(backoff int, reliable IReliable) (error, bool) {
-	reliable.setStatus(StatusReconnecting)
 	sleepValue := rand.Intn(int((reliable.getTimeOut().Seconds()-2+1)+2)*1000) + backoff*1000
 	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), reliable.getStreamName(), sleepValue)
 	time.Sleep(time.Duration(sleepValue) * time.Millisecond)

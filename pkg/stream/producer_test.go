@@ -261,7 +261,7 @@ var _ = Describe("Streaming Producers", func() {
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
-		Expect(producer.pendingMessagesQueue.IsEmpty()).To(Equal(true))
+		Expect(producer.pendingSequencesQueue.IsEmpty()).To(Equal(true))
 	})
 
 	It("Handle close", func() {
@@ -512,9 +512,7 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	// this test is needed to test publish error.
-	// In order to simulate the producer id not found I need to
-	// change manually the producer id.
-	// It works, but would be better to introduce some mock function
+	// In order to simulate the producer id not found
 	It("Publish  Error", func() {
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -555,23 +553,19 @@ var _ = Describe("Streaming Producers", func() {
 			messageBytes:     messageBytes,
 			unCompressedSize: len(messageBytes),
 		}
-		for _, producerC := range producer.options.client.coordinator.producers {
-			producerC.(*Producer).id = uint8(200)
-		}
-		producer.options.client.coordinator.mutex.Lock()
-		producer.options.client.coordinator.producers[uint8(200)] = producer
-		producer.options.client.coordinator.mutex.Unlock()
+
 		// 200 producer ID doesn't exist
 		Expect(producer.internalBatchSendProdId(messagesSequence, 200)).
 			NotTo(HaveOccurred())
-
-		Expect(env.DeleteStream(prodErrorStream)).NotTo(HaveOccurred())
-		Expect(env.Close()).NotTo(HaveOccurred())
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesConfirmed)
 		}, 5*time.Second).ShouldNot(Equal(0),
 			"it should receive some message")
+
+		Expect(env.DeleteStream(prodErrorStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+
 	})
 
 	It("Publish Confirm/Send reuse the same message", func() {
