@@ -26,10 +26,11 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		for event := range channelClose {
 			if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
+				p.setStatus(StatusReconnecting)
 				logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting..", p.getInfo())
 				err, reconnected := retry(0, p)
 				if err != nil {
-					logs.LogInfo(""+
+					logs.LogInfo(
 						"[Reliable] - %s won't be reconnected. Error: %s", p.getInfo(), err)
 				}
 				if reconnected {
@@ -148,7 +149,6 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 	if err := p.isReadyToSend(); err != nil {
 		return err
 	}
-
 	p.mutex.Lock()
 	errW := p.producer.Send(message)
 	p.mutex.Unlock()

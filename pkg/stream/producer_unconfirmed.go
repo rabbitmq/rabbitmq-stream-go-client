@@ -1,0 +1,113 @@
+package stream
+
+import (
+	"sync"
+	"time"
+)
+
+// unConfirmed is a structure that holds unconfirmed messages
+// And unconfirmed message is a message that has been sent to the broker but not yet confirmed,
+// and it is added to the unConfirmed structure as soon is possible when
+//
+//	the Send() or BatchSend() method is called
+//
+// The confirmation status is updated when the confirmation is received from the broker (see server_frame.go)
+// or due of timeout. The Timeout is configurable, and it is calculated client side.
+type unConfirmed struct {
+	messages map[int64]*ConfirmationStatus
+	mutex    sync.RWMutex
+}
+
+const DefaultUnconfirmedSize = 10000
+
+func newUnConfirmed() *unConfirmed {
+
+	r := &unConfirmed{
+		messages: make(map[int64]*ConfirmationStatus, DefaultUnconfirmedSize),
+		mutex:    sync.RWMutex{},
+	}
+
+	return r
+}
+
+func (u *unConfirmed) addFromSequence(message *messageSequence, producerID uint8) {
+
+	u.mutex.Lock()
+	u.messages[message.publishingId] = &ConfirmationStatus{
+		inserted:     time.Now(),
+		message:      *message.refMessage,
+		producerID:   producerID,
+		publishingId: message.publishingId,
+		confirmed:    false,
+	}
+	u.mutex.Unlock()
+}
+
+func (u *unConfirmed) link(from int64, to int64) {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	r := u.messages[from]
+	if r != nil {
+		r.linkedTo = append(r.linkedTo, u.messages[to])
+	}
+}
+
+func (u *unConfirmed) extractWithConfirm(id int64) *ConfirmationStatus {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	return u.extract(id, 0, true)
+}
+
+func (u *unConfirmed) extractWithError(id int64, errorCode uint16) *ConfirmationStatus {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	return u.extract(id, errorCode, false)
+}
+
+func (u *unConfirmed) extract(id int64, errorCode uint16, confirmed bool) *ConfirmationStatus {
+	rootMessage := u.messages[id]
+	if rootMessage != nil {
+		u.updateStatus(rootMessage, errorCode, confirmed)
+
+		for _, linkedMessage := range rootMessage.linkedTo {
+			u.updateStatus(linkedMessage, errorCode, confirmed)
+			delete(u.messages, linkedMessage.publishingId)
+		}
+		delete(u.messages, id)
+	}
+	return rootMessage
+}
+
+func (u *unConfirmed) updateStatus(rootMessage *ConfirmationStatus, errorCode uint16, confirmed bool) {
+	rootMessage.confirmed = confirmed
+	if confirmed {
+		return
+	}
+	rootMessage.errorCode = errorCode
+	rootMessage.err = lookErrorCode(errorCode)
+}
+
+func (u *unConfirmed) extractWithTimeOut(timeout time.Duration) []*ConfirmationStatus {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	var res []*ConfirmationStatus
+	for _, v := range u.messages {
+		if time.Since(v.inserted) > timeout {
+			v := u.extract(v.publishingId, timeoutError, false)
+			res = append(res, v)
+		}
+	}
+	return res
+}
+
+func (u *unConfirmed) size() int {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	return len(u.messages)
+}
+
+func (u *unConfirmed) getAll() map[int64]*ConfirmationStatus {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+	return u.messages
+}

@@ -10,7 +10,6 @@ import (
 	"github.com/pierrec/lz4"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"io"
-	"io/ioutil"
 )
 
 const (
@@ -149,7 +148,7 @@ func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDa
 	/// headers ---> payload --> headers --> payload (compressed)
 
 	// Read in data.
-	uncompressedReader, err := ioutil.ReadAll(reader)
+	uncompressedReader, err := io.ReadAll(reader)
 	if err != nil {
 		logs.LogError("Error during reading buffer %s", err)
 	}
@@ -213,7 +212,7 @@ func (es compressSnappy) UnCompress(source *bufio.Reader, dataSize, uncompressed
 	/// headers ---> payload --> headers --> payload (compressed)
 
 	// Read in data.
-	uncompressedReader, err := ioutil.ReadAll(reader)
+	uncompressedReader, err := io.ReadAll(reader)
 	if err != nil {
 		logs.LogError("Error during reading buffer %s", err)
 	}
@@ -275,7 +274,7 @@ func (es compressLZ4) UnCompress(source *bufio.Reader, dataSize, uncompressedDat
 	/// headers ---> payload --> headers --> payload (compressed)
 
 	// Read in data.
-	uncompressedReader, err := ioutil.ReadAll(reader)
+	uncompressedReader, err := io.ReadAll(reader)
 	if err != nil {
 		logs.LogError("Error during reading buffer %s", err)
 	}
@@ -345,7 +344,7 @@ func (es compressZSTD) UnCompress(source *bufio.Reader, dataSize, uncompressedDa
 	/// headers ---> payload --> headers --> payload (compressed)
 
 	// Read in data.
-	uncompressedReader, err := ioutil.ReadAll(reader)
+	uncompressedReader, err := io.ReadAll(reader)
 	if err != nil {
 		logs.LogError("Error during reading buffer %s", err)
 	}
