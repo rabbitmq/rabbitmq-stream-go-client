@@ -59,17 +59,17 @@ type messageSequence struct {
 }
 
 type Producer struct {
-	id                uint8
-	options           *ProducerOptions
-	onClose           onInternalClose
-	unConfirmed       *unConfirmed
-	sequence          int64
-	mutex             *sync.RWMutex
-	publishConfirm    chan []*ConfirmationStatus
-	closeHandler      chan Event
-	status            int
-	timeoutTicker     *time.Ticker
-	doneTimeoutTicker chan struct{}
+	id                        uint8
+	options                   *ProducerOptions
+	onClose                   onInternalClose
+	unConfirmed               *unConfirmed
+	sequence                  int64
+	mutex                     *sync.RWMutex
+	publishConfirm            chan []*ConfirmationStatus
+	closeHandler              chan Event
+	status                    int
+	confirmationTimeoutTicker *time.Ticker
+	doneTimeoutTicker         chan struct{}
 
 	pendingSequencesQueue *BlockingQueue[*messageSequence]
 }
@@ -250,7 +250,7 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 			case <-producer.doneTimeoutTicker:
 				isActive = false
 				return
-			case <-producer.timeoutTicker.C:
+			case <-producer.confirmationTimeoutTicker.C:
 				// check the unconfirmed messages and remove the one that are expired
 				if producer.getStatus() == open {
 					toRemove := producer.unConfirmed.extractWithTimeOut(producer.options.ConfirmationTimeOut)
@@ -617,8 +617,8 @@ func (producer *Producer) stopAndWaitPendingSequencesQueue() {
 	// but the producer can still handle the inflight messages
 	producer.pendingSequencesQueue.Stop()
 
-	// Stop the timeoutTicker. It will flush the unconfirmed messages
-	producer.timeoutTicker.Stop()
+	// Stop the confirmationTimeoutTicker. It will flush the unconfirmed messages
+	producer.confirmationTimeoutTicker.Stop()
 	producer.doneTimeoutTicker <- struct{}{}
 	close(producer.doneTimeoutTicker)
 

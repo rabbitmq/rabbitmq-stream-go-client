@@ -66,20 +66,20 @@ func (coordinator *Coordinator) NewProducer(
 		return nil, err
 	}
 	var producer = &Producer{id: lastId,
-		options:               parameters,
-		mutex:                 &sync.RWMutex{},
-		unConfirmed:           newUnConfirmed(),
-		timeoutTicker:         time.NewTicker(tickerTime),
-		doneTimeoutTicker:     make(chan struct{}, 1),
-		status:                open,
-		pendingSequencesQueue: NewBlockingQueue[*messageSequence](dynSize),
+		options:                   parameters,
+		mutex:                     &sync.RWMutex{},
+		unConfirmed:               newUnConfirmed(),
+		confirmationTimeoutTicker: time.NewTicker(tickerTime),
+		doneTimeoutTicker:         make(chan struct{}, 1),
+		status:                    open,
+		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](dynSize),
 	}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }
 
 func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event) error {
-	consumer, err := coordinator.GetConsumerById(id)
+	consumer, err := coordinator.ExtractConsumerById(id)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 		close(closeHandler)
 	}
 
-	return coordinator.removeById(id, coordinator.consumers)
+	return nil
 }
 func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error {
 
@@ -214,6 +214,18 @@ func (coordinator *Coordinator) GetConsumerById(id interface{}) (*Consumer, erro
 		return nil, err
 	}
 	return v.(*Consumer), err
+}
+
+func (coordinator *Coordinator) ExtractConsumerById(id interface{}) (*Consumer, error) {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	if coordinator.consumers[id] == nil {
+		return nil, errors.New("item #{id} not found ")
+	}
+	consumer := coordinator.consumers[id].(*Consumer)
+	coordinator.consumers[id] = nil
+	delete(coordinator.consumers, id)
+	return consumer, nil
 }
 
 func (coordinator *Coordinator) GetResponseById(id uint32) (*Response, error) {

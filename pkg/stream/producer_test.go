@@ -783,6 +783,15 @@ var _ = Describe("Streaming Producers", func() {
 
 	})
 
+	It("Can't send message if the producer is closed", func() {
+
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
+		err = producer.Send(amqp.NewMessage(make([]byte, 50)))
+		Expect(err).To(HaveOccurred())
+	})
+
 })
 
 func testCompress(producer *Producer) {
