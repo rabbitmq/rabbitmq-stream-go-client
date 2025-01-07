@@ -201,7 +201,7 @@ var _ = Describe("Reliable Producer", func() {
 		Expect(envForRProducer.DeleteStream(streamForRProducer)).NotTo(HaveOccurred())
 		Eventually(func() int {
 			return producer.GetStatus()
-		}, "21s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
+		}).WithPolling(300 * time.Millisecond).WithTimeout(20 * time.Second).Should(Equal(StatusClosed))
 
 	})
 
