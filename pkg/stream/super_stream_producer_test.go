@@ -267,7 +267,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 			for chq := range ch {
 				if chq.Event.Reason == SocketClosed {
 					time.Sleep(2 * time.Second)
-					Expect(chq.Context.ConnectPartition(chq.Partition)).NotTo(HaveOccurred())
+					err := chq.Context.ConnectPartition(chq.Partition)
+					Expect(err).NotTo(HaveOccurred())
 					time.Sleep(1 * time.Second)
 					mutex.Lock()
 					reconnectedMap[chq.Partition] = true
@@ -289,7 +290,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 
 		time.Sleep(1 * time.Second)
 		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return len(reconnectedMap) == 1 },
-			300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+			300*time.Millisecond).WithTimeout(50 * time.Second).Should(BeTrue())
 
 		Eventually(func() bool {
 			return len(superProducer.getProducers()) == 3

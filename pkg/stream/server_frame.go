@@ -140,7 +140,6 @@ func (c *Client) handleResponse() {
 			}
 		}
 	}
-
 }
 
 func (c *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bufio.Reader) interface{} {
@@ -267,13 +266,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 		publishingIdCount--
 	}
 
-	//producer.removeFromConfirmationStatus(unConfirmedRecv)
-
-	//producer.mutex.Lock()
-	if producer.publishConfirm != nil {
-		producer.publishConfirm <- unConfirmedRecv
-	}
-	//producer.mutex.Unlock()
+	producer.sendConfirmationStatus(unConfirmedRecv)
 
 	return 0
 }
@@ -474,8 +467,8 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		} else {
 			unConfirmedMessage := producer.unConfirmed.extractWithError(publishingId, code)
 
-			if producer.publishConfirm != nil && unConfirmedMessage != nil {
-				producer.publishConfirm <- []*ConfirmationStatus{unConfirmedMessage}
+			if unConfirmedMessage != nil {
+				producer.sendConfirmationStatus([]*ConfirmationStatus{unConfirmedMessage})
 			}
 		}
 		publishingErrorCount--

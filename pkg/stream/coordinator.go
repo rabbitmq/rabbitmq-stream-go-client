@@ -73,6 +73,7 @@ func (coordinator *Coordinator) NewProducer(
 		doneTimeoutTicker:         make(chan struct{}, 1),
 		status:                    open,
 		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](dynSize),
+		confirmMutex:              &sync.Mutex{},
 	}
 	coordinator.producers[lastId] = producer
 	return producer, err
@@ -83,13 +84,18 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 	if err != nil {
 		return err
 	}
+	consumer.setStatus(closed)
 	reason.StreamName = consumer.GetStreamName()
 	reason.Name = consumer.GetName()
 
 	if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
 		closeHandler <- reason
 		close(closeHandler)
+		closeHandler = nil
 	}
+
+	close(consumer.response.chunkForConsumer)
+	close(consumer.response.code)
 
 	return nil
 }
@@ -99,15 +105,7 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 	if err != nil {
 		return err
 	}
-	reason.StreamName = producer.GetStreamName()
-	reason.Name = producer.GetName()
-	if producer.closeHandler != nil {
-		producer.closeHandler <- reason
-	}
-
-	producer.stopAndWaitPendingSequencesQueue()
-
-	return nil
+	return producer.close(reason)
 }
 
 func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {

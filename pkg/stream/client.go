@@ -69,6 +69,8 @@ type Client struct {
 	socketCallTimeout time.Duration
 	availableFeatures *availableFeatures
 	serverProperties  map[string]string
+
+	doneTimeoutTicker chan struct{}
 }
 
 func newClient(connectionName string, broker *Broker,
@@ -103,6 +105,7 @@ func newClient(connectionName string, broker *Broker,
 		},
 		socketCallTimeout: rpcTimeOut,
 		availableFeatures: newAvailableFeatures(),
+		doneTimeoutTicker: make(chan struct{}, 1),
 	}
 	c.setConnectionName(connectionName)
 	return c
@@ -416,42 +419,53 @@ func (c *Client) heartBeat() {
 	ticker := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat) * time.Second)
 	tickerHeartbeat := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat-2) * time.Second)
 
-	resp := c.coordinator.NewResponseWitName("heartbeat")
 	var heartBeatMissed int32
-
+	doneSendingTimeoutTicker := make(chan struct{}, 1)
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 	go func() {
-		for c.socket.isOpen() {
-			<-tickerHeartbeat.C
-			if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
-				v := atomic.AddInt32(&heartBeatMissed, 1)
-				logs.LogWarn("Missing heart beat: %d", v)
-				if v >= 2 {
-					logs.LogWarn("Too many heartbeat missing: %d", v)
-					c.Close()
+		wg.Done()
+		select {
+		case <-c.doneTimeoutTicker:
+			doneSendingTimeoutTicker <- struct{}{}
+			ticker.Stop()
+			tickerHeartbeat.Stop()
+			return
+		case <-tickerHeartbeat.C:
+			for c.socket.isOpen() {
+				if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
+					v := atomic.AddInt32(&heartBeatMissed, 1)
+					logs.LogWarn("Missing heart beat: %d", v)
+					if v >= 2 {
+						logs.LogWarn("Too many heartbeat missing: %d", v)
+						c.Close()
+					}
+				} else {
+					atomic.StoreInt32(&heartBeatMissed, 0)
 				}
-			} else {
-				atomic.StoreInt32(&heartBeatMissed, 0)
 			}
-
 		}
-		tickerHeartbeat.Stop()
+
 	}()
 
 	go func() {
+		wg.Done()
 		for {
 			select {
-			case code := <-resp.code:
-				if code.id == closeChannel {
-					_ = c.coordinator.RemoveResponseByName("heartbeat")
-				}
-				ticker.Stop()
+			case <-doneSendingTimeoutTicker:
+				logs.LogDebug("Stopping sending heartbeat")
 				return
-			case <-ticker.C:
+			case _, ok := <-ticker.C:
+				if !ok {
+					return
+				}
 				logs.LogDebug("Sending heart beat: %s", time.Now())
 				c.sendHeartbeat()
 			}
 		}
 	}()
+
+	wg.Wait()
 
 }
 
@@ -464,12 +478,8 @@ func (c *Client) sendHeartbeat() {
 
 func (c *Client) closeHartBeat() {
 	c.destructor.Do(func() {
-		r, err := c.coordinator.GetResponseByName("heartbeat")
-		if err != nil {
-			logs.LogDebug("error removing heartbeat: %s", err)
-		} else {
-			r.code <- Code{id: closeChannel}
-		}
+		c.doneTimeoutTicker <- struct{}{}
+		close(c.doneTimeoutTicker)
 	})
 
 }
@@ -506,10 +516,9 @@ func (c *Client) Close() error {
 		close(c.metadataListener)
 		c.metadataListener = nil
 	}
-
+	c.closeHartBeat()
 	if c.getSocket().isOpen() {
 
-		c.closeHartBeat()
 		res := c.coordinator.NewResponse(CommandClose)
 		length := 2 + 2 + 4 + 2 + 2 + len("OK")
 		var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -988,7 +997,10 @@ func (c *Client) DeclareSubscriber(streamName string,
 					return
 				}
 
-			case chunk := <-consumer.response.chunkForConsumer:
+			case chunk, ok := <-consumer.response.chunkForConsumer:
+				if !ok {
+					return
+				}
 				for _, offMessage := range chunk.offsetMessages {
 					consumer.setCurrentOffset(offMessage.offset)
 					if canDispatch(offMessage) {

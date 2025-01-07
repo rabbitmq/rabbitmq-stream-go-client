@@ -111,7 +111,9 @@ func main() {
 	channelClose := consumer.NotifyClose()
 	// channelClose receives all the closing events, here you can handle the
 	// client reconnection or just log
-	defer consumerClose(channelClose)
+	go func() {
+		consumerClose(channelClose)
+	}()
 
 	fmt.Println("Press any key to stop ")
 	_, _ = reader.ReadString('\n')

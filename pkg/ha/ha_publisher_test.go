@@ -179,6 +179,12 @@ var _ = Describe("Reliable Producer", func() {
 		}, time.Second*5, time.Millisecond).
 			Should(BeTrue())
 
+		// wait for the producer to be in reconnecting state
+		Eventually(func() bool {
+			return producer.GetStatusAsString() == "Reconnecting"
+		}, time.Second*5, time.Millisecond).
+			Should(BeTrue())
+
 		go sendMsg()
 		go sendMsg()
 
@@ -195,7 +201,7 @@ var _ = Describe("Reliable Producer", func() {
 		Expect(envForRProducer.DeleteStream(streamForRProducer)).NotTo(HaveOccurred())
 		Eventually(func() int {
 			return producer.GetStatus()
-		}, "15s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
+		}, "21s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
 
 	})
 

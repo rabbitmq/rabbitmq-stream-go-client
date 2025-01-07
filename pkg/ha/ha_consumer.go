@@ -28,28 +28,41 @@ type ReliableConsumer struct {
 	bootstrap bool
 }
 
+func (c *ReliableConsumer) GetStatusAsString() string {
+	switch c.GetStatus() {
+	case StatusOpen:
+		return "Open"
+	case StatusClosed:
+		return "Closed"
+	case StatusStreamDoesNotExist:
+		return "StreamDoesNotExist"
+	case StatusReconnecting:
+		return "Reconnecting"
+	default:
+		return "Unknown"
+	}
+}
+
 func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
-		for event := range channelClose {
-			if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
-				c.setStatus(StatusReconnecting)
-				logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting..", c.getInfo())
-				c.bootstrap = false
-				err, reconnected := retry(0, c)
-				if err != nil {
-					logs.LogInfo(""+
-						"[Reliable] - %s won't be reconnected. Error: %s", c.getInfo(), err)
-				}
-				if reconnected {
-					c.setStatus(StatusOpen)
-				} else {
-					c.setStatus(StatusClosed)
-				}
-
+		event := <-channelClose
+		if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
+			c.setStatus(StatusReconnecting)
+			logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting..", c.getInfo())
+			c.bootstrap = false
+			err, reconnected := retry(1, c)
+			if err != nil {
+				logs.LogInfo(""+
+					"[Reliable] - %s won't be reconnected. Error: %s", c.getInfo(), err)
+			}
+			if reconnected {
+				c.setStatus(StatusOpen)
 			} else {
-				logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", c.getInfo(), event.Reason)
 				c.setStatus(StatusClosed)
 			}
+		} else {
+			logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", c.getInfo(), event.Reason)
+			c.setStatus(StatusClosed)
 		}
 	}()
 }
@@ -72,11 +85,13 @@ func NewReliableConsumer(env *stream.Environment, streamName string,
 	if consumerOptions == nil {
 		return nil, fmt.Errorf("the consumer options is mandatory")
 	}
-
+	logs.LogDebug("[Reliable] - creating %s", res.getInfo())
 	err := res.newConsumer()
 	if err == nil {
+
 		res.setStatus(StatusOpen)
 	}
+	logs.LogDebug("[Reliable] - created %s", res.getInfo())
 	return res, err
 }
 
@@ -124,14 +139,15 @@ func (c *ReliableConsumer) newConsumer() error {
 		c.bootstrap, offset)
 	consumer, err := c.env.NewConsumer(c.streamName, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		c.mutexConnection.Lock()
-
 		c.currentPosition = consumerContext.Consumer.GetOffset()
 		c.mutexConnection.Unlock()
+
 		c.messagesHandler(consumerContext, message)
 	}, c.consumerOptions.SetOffset(offset))
 	if err != nil {
 		return err
 	}
+
 	channelNotifyClose := consumer.NotifyClose()
 	c.handleNotifyClose(channelNotifyClose)
 	c.consumer = consumer
@@ -145,4 +161,8 @@ func (c *ReliableConsumer) Close() error {
 		return err
 	}
 	return nil
+}
+
+func (c *ReliableConsumer) GetInfo() string {
+	return c.getInfo()
 }

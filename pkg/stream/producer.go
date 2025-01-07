@@ -59,17 +59,20 @@ type messageSequence struct {
 }
 
 type Producer struct {
-	id                        uint8
-	options                   *ProducerOptions
-	onClose                   onInternalClose
-	unConfirmed               *unConfirmed
-	sequence                  int64
-	mutex                     *sync.RWMutex
-	publishConfirm            chan []*ConfirmationStatus
+	id          uint8
+	options     *ProducerOptions
+	onClose     onInternalClose
+	unConfirmed *unConfirmed
+	sequence    int64
+	mutex       *sync.RWMutex
+
 	closeHandler              chan Event
 	status                    int
 	confirmationTimeoutTicker *time.Ticker
 	doneTimeoutTicker         chan struct{}
+
+	confirmMutex        *sync.Mutex
+	publishConfirmation chan []*ConfirmationStatus
 
 	pendingSequencesQueue *BlockingQueue[*messageSequence]
 }
@@ -207,17 +210,13 @@ func (producer *Producer) lenUnConfirmed() int {
 // NotifyPublishConfirmation returns a channel that receives the confirmation status of the messages sent by the producer.
 func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
 	ch := make(chan []*ConfirmationStatus, 1)
-	producer.publishConfirm = ch
+	producer.publishConfirmation = ch
 	return ch
 }
 
 // NotifyClose returns a channel that receives the close event of the producer.
 func (producer *Producer) NotifyClose() ChannelClose {
-	// starting from 1.5 the closeHandler is a channel with a buffer of 0
-	// because the handler is blocking and the user can handle in a better way the close event
-	// for example the HA producer can immediately set the status to reconnecting
-	//  and deal with the inflight messages
-	ch := make(chan Event)
+	ch := make(chan Event, 1)
 	producer.closeHandler = ch
 	return ch
 }
@@ -244,29 +243,43 @@ func (producer *Producer) getStatus() int {
 func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 
 	go func() {
-		isActive := true
-		for isActive {
+		for {
 			select {
 			case <-producer.doneTimeoutTicker:
-				isActive = false
+				logs.LogDebug("producer %d timeout thread closed", producer.id)
 				return
 			case <-producer.confirmationTimeoutTicker.C:
 				// check the unconfirmed messages and remove the one that are expired
 				if producer.getStatus() == open {
 					toRemove := producer.unConfirmed.extractWithTimeOut(producer.options.ConfirmationTimeOut)
 					if len(toRemove) > 0 {
-						if producer.publishConfirm != nil {
-							producer.publishConfirm <- toRemove
-						}
+						producer.sendConfirmationStatus(toRemove)
 					}
 				} else {
-					isActive = false
+					logs.LogInfo("producer %d confirmationTimeoutTicker closed", producer.id)
 					return
 				}
 			}
 		}
 	}()
 
+}
+
+func (producer *Producer) sendConfirmationStatus(status []*ConfirmationStatus) {
+	producer.confirmMutex.Lock()
+	defer producer.confirmMutex.Unlock()
+	if producer.publishConfirmation != nil {
+		producer.publishConfirmation <- status
+	}
+}
+
+func (producer *Producer) closeConfirmationStatus() {
+	producer.confirmMutex.Lock()
+	defer producer.confirmMutex.Unlock()
+	if producer.publishConfirmation != nil {
+		close(producer.publishConfirmation)
+		producer.publishConfirmation = nil
+	}
 }
 
 // processPendingSequencesQueue aggregates the messages sequence in the queue and sends them to the server
@@ -358,23 +371,14 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	if err != nil {
 		return err
 	}
+	producer.unConfirmed.addFromSequence(messageSeq, producer.GetID())
+
 	if len(messageSeq.messageBytes) > producer.options.client.getTuneState().requestedMaxFrameSize {
-		if producer.publishConfirm != nil {
-			producer.publishConfirm <- []*ConfirmationStatus{
-				{
-					inserted:     time.Now(),
-					message:      streamMessage,
-					producerID:   producer.GetID(),
-					publishingId: messageSeq.publishingId,
-					confirmed:    false,
-					err:          FrameTooLarge,
-					errorCode:    responseCodeFrameTooLarge,
-				},
-			}
-		}
+		tooLarge := producer.unConfirmed.extractWithError(messageSeq.publishingId, responseCodeFrameTooLarge)
+		producer.sendConfirmationStatus([]*ConfirmationStatus{tooLarge})
 		return FrameTooLarge
 	}
-	producer.unConfirmed.addFromSequence(messageSeq, producer.GetID())
+
 	// se the processPendingSequencesQueue function
 	err = producer.pendingSequencesQueue.Enqueue(messageSeq)
 	if err != nil {
@@ -410,14 +414,11 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 
 		for _, msg := range messagesSequence {
 			m := producer.unConfirmed.extractWithError(msg.publishingId, responseCodeFrameTooLarge)
-			if producer.publishConfirm != nil {
-				producer.publishConfirm <- []*ConfirmationStatus{m}
-			}
+			producer.sendConfirmationStatus([]*ConfirmationStatus{m})
 		}
 		return FrameTooLarge
 	}
 
-	//producer.unConfirmed.addFromSequences(messagesSequence, producer.GetID())
 	// all the messages are unconfirmed
 	return producer.internalBatchSend(messagesSequence)
 }
@@ -553,19 +554,15 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	err := producer.options.client.socket.writer.Flush() //writeAndFlush(b.Bytes())
 	if err != nil {
 		logs.LogError("Producer BatchSend error during flush: %s", err)
-		producer.setStatus(closed)
 		return err
 	}
 	return nil
 }
 
 func (producer *Producer) flushUnConfirmedMessages() {
-
 	timeOut := producer.unConfirmed.extractWithTimeOut(time.Duration(0))
-	if producer.publishConfirm != nil {
-		if len(timeOut) > 0 {
-			producer.publishConfirm <- timeOut
-		}
+	if len(timeOut) > 0 {
+		producer.sendConfirmationStatus(timeOut)
 	}
 
 }
@@ -579,20 +576,49 @@ func (producer *Producer) GetLastPublishingId() (int64, error) {
 
 // Close closes the producer and returns an error if the producer could not be closed.
 func (producer *Producer) Close() error {
+
+	return producer.close(Event{
+		Command:    CommandDeletePublisher,
+		StreamName: producer.GetStreamName(),
+		Name:       producer.GetName(),
+		Reason:     DeletePublisher,
+		Err:        nil,
+	})
+}
+func (producer *Producer) close(reason Event) error {
+
 	if producer.getStatus() == closed {
 		return AlreadyClosed
 	}
 
 	producer.setStatus(closed)
 
+	reason.StreamName = producer.GetStreamName()
+	reason.Name = producer.GetName()
+	if producer.closeHandler != nil {
+		producer.closeHandler <- reason
+		close(producer.closeHandler)
+		producer.closeHandler = nil
+	}
+
+	producer.stopAndWaitPendingSequencesQueue()
+
+	producer.closeConfirmationStatus()
+
+	if producer.options == nil {
+		return nil
+	}
+	_ = producer.options.client.coordinator.RemoveProducerById(producer.id, reason)
+
 	if !producer.options.client.socket.isOpen() {
 		return fmt.Errorf("tcp connection is closed")
 	}
 
-	err := producer.options.client.deletePublisher(producer.id)
-	if err != nil {
-		logs.LogError("error delete Publisher on closing: %s", err)
+	// remove from the server only if the producer exists
+	if reason.Reason == DeletePublisher {
+		_ = producer.options.client.deletePublisher(producer.id)
 	}
+
 	if producer.options.client.coordinator.ProducersCount() == 0 {
 		err := producer.options.client.Close()
 		if err != nil {
@@ -626,6 +652,7 @@ func (producer *Producer) stopAndWaitPendingSequencesQueue() {
 	producer.waitForInflightMessages()
 	// Close the pendingSequencesQueue. It closes the channel
 	producer.pendingSequencesQueue.Close()
+
 }
 
 func (producer *Producer) waitForInflightMessages() {
@@ -702,15 +729,6 @@ func (c *Client) deletePublisher(publisherId byte) error {
 
 	writeByte(b, publisherId)
 	errWrite := c.handleWrite(b.Bytes(), resp)
-
-	err := c.coordinator.RemoveProducerById(publisherId, Event{
-		Command: CommandDeletePublisher,
-		Reason:  "deletePublisher",
-		Err:     nil,
-	})
-	if err != nil {
-		logs.LogWarn("producer id: %d already removed", publisherId)
-	}
 
 	return errWrite.Err
 }

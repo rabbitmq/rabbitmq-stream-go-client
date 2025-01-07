@@ -118,6 +118,7 @@ const (
 	MetaDataUpdate           = "metadata Data update"
 	LeaderLocatorBalanced    = "balanced"
 	LeaderLocatorClientLocal = "client-local"
+	DeletePublisher          = "deletePublisher"
 
 	StreamTcpPort = "5552"
 
