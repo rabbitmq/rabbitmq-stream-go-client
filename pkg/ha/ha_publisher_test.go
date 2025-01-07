@@ -1,6 +1,7 @@
 package ha
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -82,7 +83,10 @@ var _ = Describe("Reliable Producer", func() {
 		clientProvidedName := uuid.New().String()
 		producer, err := NewReliableProducer(envForRProducer,
 			streamForRProducer, NewProducerOptions().SetClientProvidedName(clientProvidedName), func(messageConfirm []*ConfirmationStatus) {
+
+				defer GinkgoRecover()
 				for _, confirm := range messageConfirm {
+					fmt.Printf("message result: %v  \n  ", confirm.IsConfirmed())
 					Expect(confirm.IsConfirmed()).To(BeTrue())
 				}
 				if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == 10 {
