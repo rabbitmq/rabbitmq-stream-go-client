@@ -47,6 +47,37 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
+	It("Close Publishers before send is competed", func() {
+		// force a high batch size to test the close
+		// during the close the producer should send the messages in the buffer
+		//and flush as timeout the messages can't be sent
+		producer, err := testEnvironment.NewProducer(testProducerStream, NewProducerOptions().SetBatchSize(500))
+		ch := producer.NotifyPublishConfirmation()
+		var confirmedMessages int32
+		var failedMessages int32
+
+		go func(ch ChannelPublishConfirm) {
+			for confirmed := range ch {
+				for _, msg := range confirmed {
+					if msg.IsConfirmed() {
+						atomic.AddInt32(&confirmedMessages, 1)
+					} else {
+						atomic.AddInt32(&failedMessages, 1)
+					}
+				}
+
+			}
+		}(ch)
+		Expect(err).NotTo(HaveOccurred())
+		for i := 0; i < 1_000; i++ {
+			Expect(producer.Send(amqp.NewMessage([]byte("test")))).NotTo(HaveOccurred())
+		}
+		Expect(producer.Close()).NotTo(HaveOccurred())
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&confirmedMessages) + atomic.LoadInt32(&failedMessages)
+		}).WithPolling(200 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(1_000)))
+	})
+
 	It("Multi-thread newProducer/Send", func() {
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {

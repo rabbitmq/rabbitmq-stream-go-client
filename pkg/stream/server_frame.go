@@ -240,33 +240,39 @@ func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
 }
 
 func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
-
+	producerFound := false
 	readProtocol.PublishID = readByte(r)
-	//readProtocol.PublishingIdCount = ReadIntFromReader(testEnvironment.reader)
 	publishingIdCount, _ := readUInt(r)
-	//var _publishingId int64
 	producer, err := c.coordinator.GetProducerById(readProtocol.PublishID)
+	producerFound = err == nil
 	if err != nil {
-		logs.LogWarn("can't find the producer during confirmation: %s", err)
-		return nil
+		logs.LogWarn("can't find the producer during confirmation: %s. Id %d", err, readProtocol.PublishID)
 	}
+
+	// even the producer is not found we need to read the publishingId
+	// to empty the buffer.
+	// The producer here could not exist because the producer is closed before the confirmations are received
 	var unConfirmedRecv []*ConfirmationStatus
 	for publishingIdCount != 0 {
 		seq := readInt64(r)
+		if producerFound {
 
-		m := producer.unConfirmed.extractWithConfirm(seq)
-		if m != nil {
-			unConfirmedRecv = append(unConfirmedRecv, m)
+			m := producer.unConfirmed.extractWithConfirm(seq)
+			if m != nil {
+				unConfirmedRecv = append(unConfirmedRecv, m)
 
-			// in case of sub-batch entry the client receives only
-			// one publishingId (or sequence)
-			// so the other messages are confirmed using the linkedTo
-			unConfirmedRecv = append(unConfirmedRecv, m.linkedTo...)
+				// in case of sub-batch entry the client receives only
+				// one publishingId (or sequence)
+				// so the other messages are confirmed using the linkedTo
+				unConfirmedRecv = append(unConfirmedRecv, m.linkedTo...)
+			}
 		}
+
 		publishingIdCount--
 	}
-
-	producer.sendConfirmationStatus(unConfirmedRecv)
+	if producerFound {
+		producer.sendConfirmationStatus(unConfirmedRecv)
+	}
 
 	return 0
 }
