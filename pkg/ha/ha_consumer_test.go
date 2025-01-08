@@ -108,11 +108,13 @@ var _ = Describe("Reliable Consumer", func() {
 		// kill the connection
 		errDrop := test_helper.DropConnection(connectionToDrop, "15672")
 		Expect(errDrop).NotTo(HaveOccurred())
-
-		time.Sleep(2 * time.Second) // we give some time to the client to reconnect
-		Expect(consumer.GetStatus()).To(Equal(StatusOpen))
+		/// just give some time to raise the event
+		time.Sleep(1200 * time.Millisecond)
+		Eventually(func() int { return consumer.GetStatus() }, "15s").WithPolling(300 * time.Millisecond).Should(Equal(StatusOpen))
+		Expect(consumer.GetStatusAsString()).To(Equal("Open"))
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.GetStatus()).To(Equal(StatusClosed))
+		Expect(consumer.GetStatusAsString()).To(Equal("Closed"))
 	})
 
 	It("Delete the stream should close the consumer", func() {
@@ -123,10 +125,11 @@ var _ = Describe("Reliable Consumer", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumer).NotTo(BeNil())
 		Expect(consumer.GetStatus()).To(Equal(StatusOpen))
+		Expect(consumer.GetStatusAsString()).To(Equal("Open"))
 		Expect(envForRConsumer.DeleteStream(streamForRConsumer)).NotTo(HaveOccurred())
 		Eventually(func() int {
 			return consumer.GetStatus()
-		}, "15s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
+		}).WithPolling(300 * time.Millisecond).WithTimeout(20 * time.Second).Should(Equal(StatusClosed))
 
 	})
 })

@@ -94,8 +94,8 @@ const (
 	LocalhostUriConnection = "rabbitmq-stream://guest:guest@localhost:5552/%2f"
 
 	///
-	defaultWriteSocketBuffer  = 8092
-	defaultReadSocketBuffer   = 65536
+	defaultWriteSocketBuffer  = 8192
+	defaultReadSocketBuffer   = 8192
 	defaultQueuePublisherSize = 10000
 	minQueuePublisherSize     = 100
 	maxQueuePublisherSize     = 1_000_000
@@ -118,6 +118,7 @@ const (
 	MetaDataUpdate           = "metadata Data update"
 	LeaderLocatorBalanced    = "balanced"
 	LeaderLocatorClientLocal = "client-local"
+	DeletePublisher          = "deletePublisher"
 
 	StreamTcpPort = "5552"
 
@@ -189,6 +190,8 @@ func lookErrorCode(errorCode uint16) error {
 		return InternalError
 	case responseCodeAuthenticationFailureLoopback:
 		return AuthenticationFailureLoopbackError
+	case timeoutError:
+		return ConfirmationTimoutError
 	default:
 		{
 			logs.LogWarn("Error not handled %d", errorCode)

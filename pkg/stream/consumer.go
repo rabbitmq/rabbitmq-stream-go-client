@@ -332,7 +332,7 @@ func (consumer *Consumer) Close() error {
 	if err.Err != nil && err.isTimeout {
 		return err.Err
 	}
-	consumer.response.code <- Code{id: closeChannel}
+
 	errC := consumer.options.client.coordinator.RemoveConsumerById(consumer.ID, Event{
 		Command:    CommandUnsubscribe,
 		StreamName: consumer.GetStreamName(),

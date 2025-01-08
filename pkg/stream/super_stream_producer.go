@@ -357,11 +357,6 @@ func (s *SuperStreamProducer) getProducers() []*Producer {
 
 // Send sends a message to the partitions based on the routing strategy
 func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
-	b, err := message.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
 	ps, err := s.SuperStreamProducerOptions.RoutingStrategy.Route(message, s.GetPartitions())
 
 	// the routing strategy can return zero partitions
@@ -382,7 +377,7 @@ func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
 			return ErrProducerNotFound
 		}
 
-		err = producer.sendBytes(message, b)
+		err = producer.Send(message)
 		if err != nil {
 			return err
 		}

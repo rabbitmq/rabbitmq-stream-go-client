@@ -45,7 +45,7 @@ func Send(env *Environment, superStream string) {
 
 }
 
-var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func() {
+var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func() {
 
 	It("Validate the Super Stream Consumer", func() {
 		env, err := NewEnvironment(nil)
@@ -167,7 +167,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 			env, err := NewEnvironment(nil)
 			Expect(err).NotTo(HaveOccurred())
 
-			superStream := fmt.Sprintf("sac-super-stream-the-second-consumer-in-action-%s", id)
+			superStream := fmt.Sprintf("sac-super-stream-the-second-consumer-in-action-%s-%d", id, time.Now().Unix())
 			Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
 			var receivedMessages int32
@@ -484,6 +484,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-consumer"), func()
 		var consumerItaly int32
 		filter := NewConsumerFilter([]string{"italy"}, false,
 			func(message *amqp.Message) bool {
+
 				return message.ApplicationProperties["county"] == "italy"
 			})
 

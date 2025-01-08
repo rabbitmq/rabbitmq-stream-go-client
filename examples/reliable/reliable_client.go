@@ -4,7 +4,11 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"log"
+	"net/http"
 	"os"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,6 +17,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+	_ "net/http/pprof"
 )
 
 // The ha producer and consumer provide a way to auto-reconnect in case of connection problems
@@ -30,20 +35,27 @@ var consumed int32 = 0
 var sent int32
 var reSent int32
 
+const enableResend = false
+
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	// Your application code here
+
 	// Tune the parameters to test the reliability
-	const messagesToSend = 10_000_000
-	const numberOfProducers = 4
+	const messagesToSend = 50_000_000
+	const numberOfProducers = 5
 	const concurrentProducers = 2
-	const numberOfConsumers = 4
+	const numberOfConsumers = 1
 	const sendDelay = 1 * time.Millisecond
-	const delayEachMessages = 200
-	const maxProducersPerClient = 4
+	const delayEachMessages = 500
+	const maxProducersPerClient = 2
 	const maxConsumersPerClient = 2
 	//
 
 	reader := bufio.NewReader(os.Stdin)
-	//stream.SetLevelInfo(logs.DEBUG)
+	stream.SetLevelInfo(logs.DEBUG)
 	fmt.Println("Reliable Producer/Consumer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
@@ -70,27 +82,52 @@ func main() {
 	}
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
-			MaxLengthBytes: stream.ByteCapacity{}.GB(2),
+			MaxLengthBytes: stream.ByteCapacity{}.GB(1),
 		},
 	)
 	CheckErr(err)
 
+	var producers []*ha.ReliableProducer
+	var consumers []*ha.ReliableConsumer
 	isRunning := true
 	go func() {
 		for isRunning {
 			totalConfirmed := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
-			expectedMessages := messagesToSend * numberOfProducers * concurrentProducers
-			fmt.Printf("%s - ToSend: %d - nProducers: %d - concurrentProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC822),
+			expectedMessages := messagesToSend * numberOfProducers * concurrentProducers * 2
+			fmt.Printf("********************************************\n")
+			fmt.Printf("%s - ToSend: %d - nProducers: %d - concurrentProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC850),
 				expectedMessages, numberOfProducers, concurrentProducers, numberOfConsumers)
 			fmt.Printf("Sent:%d - ReSent %d - Confirmed:%d  - Not confirmed:%d - Fail+Confirmed  :%d \n",
 				sent, atomic.LoadInt32(&reSent), atomic.LoadInt32(&confirmed), atomic.LoadInt32(&fail), totalConfirmed)
 			fmt.Printf("Total Consumed: %d - Per consumer: %d  \n", atomic.LoadInt32(&consumed),
 				atomic.LoadInt32(&consumed)/numberOfConsumers)
+
+			for _, producer := range producers {
+				fmt.Printf("%s, status: %s \n",
+					producer.GetInfo(), producer.GetStatusAsString())
+
+			}
+			for _, consumer := range consumers {
+				fmt.Printf("%s, status: %s \n",
+					consumer.GetInfo(), consumer.GetStatusAsString())
+			}
+			fmt.Printf("go-routine: %d\n", runtime.NumGoroutine())
 			fmt.Printf("********************************************\n")
 			time.Sleep(5 * time.Second)
 		}
 	}()
-	var producers []*ha.ReliableProducer
+
+	for i := 0; i < numberOfConsumers; i++ {
+		consumer, err := ha.NewReliableConsumer(env,
+			streamName,
+			stream.NewConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()),
+			func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+				atomic.AddInt32(&consumed, 1)
+			})
+		CheckErr(err)
+		consumers = append(consumers, consumer)
+	}
+
 	for i := 0; i < numberOfProducers; i++ {
 		var mutex = sync.Mutex{}
 		// Here we store the messages that have not been confirmed
@@ -100,7 +137,7 @@ func main() {
 		rProducer, err := ha.NewReliableProducer(env,
 			streamName,
 			stream.NewProducerOptions().
-				SetConfirmationTimeOut(5*time.Second).
+				SetConfirmationTimeOut(2*time.Second).
 				SetClientProvidedName(fmt.Sprintf("producer-%d", i)),
 			func(messageStatus []*stream.ConfirmationStatus) {
 				go func() {
@@ -109,9 +146,11 @@ func main() {
 							atomic.AddInt32(&confirmed, 1)
 						} else {
 							atomic.AddInt32(&fail, 1)
-							mutex.Lock()
-							unConfirmedMessages = append(unConfirmedMessages, msgStatus.GetMessage())
-							mutex.Unlock()
+							if enableResend {
+								mutex.Lock()
+								unConfirmedMessages = append(unConfirmedMessages, msgStatus.GetMessage())
+								mutex.Unlock()
+							}
 						}
 					}
 				}()
@@ -122,7 +161,6 @@ func main() {
 			for i := 0; i < concurrentProducers; i++ {
 				go func() {
 					for i := 0; i < messagesToSend; i++ {
-						msg := amqp.NewMessage([]byte("ha"))
 						mutex.Lock()
 						for _, confirmedMessage := range unConfirmedMessages {
 							err := rProducer.Send(confirmedMessage)
@@ -131,6 +169,7 @@ func main() {
 						}
 						unConfirmedMessages = []message.StreamMessage{}
 						mutex.Unlock()
+						msg := amqp.NewMessage([]byte("ha"))
 						err := rProducer.Send(msg)
 						if i%delayEachMessages == 0 {
 							time.Sleep(sendDelay)
@@ -138,24 +177,14 @@ func main() {
 						atomic.AddInt32(&sent, 1)
 						CheckErr(err)
 
+						errBatch := rProducer.BatchSend([]message.StreamMessage{msg})
+						CheckErr(errBatch)
+						atomic.AddInt32(&sent, 1)
+
 					}
 				}()
 			}
 		}()
-	}
-	var consumers []*ha.ReliableConsumer
-
-	for i := 0; i < numberOfConsumers; i++ {
-		go func(name string) {
-			consumer, err := ha.NewReliableConsumer(env,
-				streamName,
-				stream.NewConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()),
-				func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-					atomic.AddInt32(&consumed, 1)
-				})
-			CheckErr(err)
-			consumers = append(consumers, consumer)
-		}(streamName)
 	}
 
 	fmt.Println("Press enter to close the connections.")

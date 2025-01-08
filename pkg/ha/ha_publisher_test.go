@@ -1,6 +1,7 @@
 package ha
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -82,7 +83,10 @@ var _ = Describe("Reliable Producer", func() {
 		clientProvidedName := uuid.New().String()
 		producer, err := NewReliableProducer(envForRProducer,
 			streamForRProducer, NewProducerOptions().SetClientProvidedName(clientProvidedName), func(messageConfirm []*ConfirmationStatus) {
+
+				defer GinkgoRecover()
 				for _, confirm := range messageConfirm {
+					fmt.Printf("message result: %v  \n  ", confirm.IsConfirmed())
 					Expect(confirm.IsConfirmed()).To(BeTrue())
 				}
 				if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == 10 {
@@ -173,9 +177,15 @@ var _ = Describe("Reliable Producer", func() {
 		errDrop := test_helper.DropConnection(connectionToDrop, "15672")
 		Expect(errDrop).NotTo(HaveOccurred())
 
+		time.Sleep(1 * time.Second)
 		// wait for the producer to be in reconnecting state
 		Eventually(func() bool {
 			return producer.GetStatus() == StatusReconnecting
+		}).WithPolling(300 * time.Millisecond).WithTimeout(20 * time.Second).Should(BeTrue())
+
+		// wait for the producer to be in reconnecting state
+		Eventually(func() bool {
+			return producer.GetStatusAsString() == "Reconnecting"
 		}, time.Second*5, time.Millisecond).
 			Should(BeTrue())
 
@@ -195,7 +205,7 @@ var _ = Describe("Reliable Producer", func() {
 		Expect(envForRProducer.DeleteStream(streamForRProducer)).NotTo(HaveOccurred())
 		Eventually(func() int {
 			return producer.GetStatus()
-		}, "15s").WithPolling(300 * time.Millisecond).Should(Equal(StatusClosed))
+		}).WithPolling(300 * time.Millisecond).WithTimeout(20 * time.Second).Should(Equal(StatusClosed))
 
 	})
 

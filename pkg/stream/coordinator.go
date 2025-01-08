@@ -54,9 +54,11 @@ func (coordinator *Coordinator) NewProducer(
 	parameters *ProducerOptions) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	size := 10000
+	dynSize := 10000
+	tickerTime := defaultConfirmationTimeOut
 	if parameters != nil {
-		size = parameters.QueueSize
+		dynSize = parameters.BatchSize
+		tickerTime = parameters.ConfirmationTimeOut
 	}
 
 	var lastId, err = coordinator.getNextProducerItem()
@@ -64,54 +66,46 @@ func (coordinator *Coordinator) NewProducer(
 		return nil, err
 	}
 	var producer = &Producer{id: lastId,
-		options:             parameters,
-		mutex:               &sync.RWMutex{},
-		mutexPending:        &sync.Mutex{},
-		unConfirmedMessages: map[int64]*ConfirmationStatus{},
-		status:              open,
-		messageSequenceCh:   make(chan messageSequence, size),
-		pendingMessages: pendingMessagesSequence{
-			messages: make([]*messageSequence, 0),
-			size:     initBufferPublishSize,
-		}}
+		options:                   parameters,
+		mutex:                     &sync.RWMutex{},
+		unConfirmed:               newUnConfirmed(),
+		confirmationTimeoutTicker: time.NewTicker(tickerTime),
+		doneTimeoutTicker:         make(chan struct{}, 1),
+		status:                    open,
+		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](dynSize),
+		confirmMutex:              &sync.Mutex{},
+	}
 	coordinator.producers[lastId] = producer
 	return producer, err
 }
 
 func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event) error {
-	consumer, err := coordinator.GetConsumerById(id)
+	consumer, err := coordinator.ExtractConsumerById(id)
 	if err != nil {
 		return err
 	}
+	consumer.setStatus(closed)
 	reason.StreamName = consumer.GetStreamName()
 	reason.Name = consumer.GetName()
 
 	if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
 		closeHandler <- reason
 		close(closeHandler)
+		closeHandler = nil
 	}
 
-	return coordinator.removeById(id, coordinator.consumers)
+	close(consumer.response.chunkForConsumer)
+	close(consumer.response.code)
+
+	return nil
 }
 func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error {
 
-	producer, err := coordinator.GetProducerById(id)
+	producer, err := coordinator.ExtractProducerById(id)
 	if err != nil {
 		return err
 	}
-	reason.StreamName = producer.GetStreamName()
-	reason.Name = producer.GetName()
-	tentatives := 0
-	for producer.lenUnConfirmed() > 0 && tentatives < 3 {
-		time.Sleep(200 * time.Millisecond)
-		tentatives++
-	}
-
-	if producer.closeHandler != nil {
-		producer.closeHandler <- reason
-	}
-
-	return coordinator.removeById(id, coordinator.producers)
+	return producer.close(reason)
 }
 
 func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {
@@ -220,6 +214,18 @@ func (coordinator *Coordinator) GetConsumerById(id interface{}) (*Consumer, erro
 	return v.(*Consumer), err
 }
 
+func (coordinator *Coordinator) ExtractConsumerById(id interface{}) (*Consumer, error) {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	if coordinator.consumers[id] == nil {
+		return nil, errors.New("item #{id} not found ")
+	}
+	consumer := coordinator.consumers[id].(*Consumer)
+	coordinator.consumers[id] = nil
+	delete(coordinator.consumers, id)
+	return consumer, nil
+}
+
 func (coordinator *Coordinator) GetResponseById(id uint32) (*Response, error) {
 	v, err := coordinator.getById(fmt.Sprintf("%d", id), coordinator.responses)
 	if err != nil {
@@ -238,6 +244,18 @@ func (coordinator *Coordinator) GetProducerById(id interface{}) (*Producer, erro
 		return nil, err
 	}
 	return v.(*Producer), err
+}
+
+func (coordinator *Coordinator) ExtractProducerById(id interface{}) (*Producer, error) {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	if coordinator.producers[id] == nil {
+		return nil, errors.New("item #{id} not found ")
+	}
+	producer := coordinator.producers[id].(*Producer)
+	coordinator.producers[id] = nil
+	delete(coordinator.producers, id)
+	return producer, nil
 }
 
 // general functions

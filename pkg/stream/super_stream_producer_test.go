@@ -29,7 +29,7 @@ func NewTestingRandomStrategy() *TestingRandomStrategy {
 	return &TestingRandomStrategy{}
 }
 
-var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
+var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func() {
 
 	DescribeTable("Partitioning using Murmur3",
 
@@ -150,7 +150,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 		Expect(superProducer.activeProducers).To(HaveLen(3))
 
 		go func(ch <-chan PartitionPublishConfirm) {
-			defer GinkgoRecover()
+			//defer GinkgoRecover()
 			for superStreamPublishConfirm := range ch {
 				Expect(superStreamPublishConfirm).NotTo(BeNil())
 				for _, status := range superStreamPublishConfirm.ConfirmationStatus {
@@ -158,13 +158,13 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 					Expect(status.IsConfirmed()).To(BeTrue())
 				}
 				mutex.Lock()
-				msgReceived[superStreamPublishConfirm.Partition] = len(superStreamPublishConfirm.ConfirmationStatus)
+				msgReceived[superStreamPublishConfirm.Partition] += len(superStreamPublishConfirm.ConfirmationStatus)
 				logs.LogInfo("Partition %s confirmed %d messages, total %d",
 					superStreamPublishConfirm.Partition, len(superStreamPublishConfirm.ConfirmationStatus), msgReceived[superStreamPublishConfirm.Partition])
 				mutex.Unlock()
 			}
 
-		}(superProducer.NotifyPublishConfirmation(1))
+		}(superProducer.NotifyPublishConfirmation(0))
 
 		for i := 0; i < 20; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
@@ -267,7 +267,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 			for chq := range ch {
 				if chq.Event.Reason == SocketClosed {
 					time.Sleep(2 * time.Second)
-					Expect(chq.Context.ConnectPartition(chq.Partition)).NotTo(HaveOccurred())
+					err := chq.Context.ConnectPartition(chq.Partition)
+					Expect(err).NotTo(HaveOccurred())
 					time.Sleep(1 * time.Second)
 					mutex.Lock()
 					reconnectedMap[chq.Partition] = true
@@ -289,7 +290,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream"), func() {
 
 		time.Sleep(1 * time.Second)
 		Eventually(func() bool { mutex.Lock(); defer mutex.Unlock(); return len(reconnectedMap) == 1 },
-			300*time.Millisecond).WithTimeout(5 * time.Second).Should(BeTrue())
+			300*time.Millisecond).WithTimeout(20 * time.Second).Should(BeTrue())
 
 		Eventually(func() bool {
 			return len(superProducer.getProducers()) == 3

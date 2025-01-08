@@ -6,6 +6,9 @@ import (
 	"strconv"
 )
 
+const MessageBufferTooBig = 1148001
+const MessageBufferBigButLessTheFrame = 1048400
+
 func CreateArrayMessagesForTesting(numberOfMessages int) []message.StreamMessage {
 	return CreateArrayMessagesForTestingWithPrefix("test_", numberOfMessages)
 

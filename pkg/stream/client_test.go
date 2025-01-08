@@ -142,7 +142,8 @@ var _ = Describe("Streaming testEnvironment", func() {
 
 		producer, err := testEnvironment.NewProducer(testStreamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(producer.BatchSend(CreateArrayMessagesForTesting(1_000))).NotTo(HaveOccurred())
+		err = producer.BatchSend(CreateArrayMessagesForTesting(1_000))
+		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(time.Millisecond * 800)
 		Expect(producer.Close()).NotTo(HaveOccurred())
 

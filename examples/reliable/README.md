@@ -12,6 +12,10 @@ Note:
 - The `unConfirmedMessages` are not persisted, so if the application is restarted, the `unConfirmedMessages` will be lost.
 - The `unConfirmedMessages` order is not guaranteed
 - The `unConfirmedMessages` can grow indefinitely if the broker is unavailable for a long time.
+- The `re-send` in an option that can be enabled by setting `enableResend` to `true`.
+
+The example enables golang `pprof` you can check the url: localhost:6060/debug/pprof/. </br> 
+The scope is to check the resources used by the application in case of reconnection.
 
 
 The `reliable_common.go/retry` function does different checks because during the restart broker can happen different events, please check:

@@ -25,6 +25,7 @@ type IReliable interface {
 	getNewInstance() newEntityInstance
 	getTimeOut() time.Duration
 	getStreamName() string
+	GetStatusAsString() string
 }
 
 // Retry is a function that retries the IReliable to the stream
@@ -41,12 +42,12 @@ type IReliable interface {
 // In both cases it retries the reconnection
 
 func retry(backoff int, reliable IReliable) (error, bool) {
-	reliable.setStatus(StatusReconnecting)
-	sleepValue := rand.Intn(int((reliable.getTimeOut().Seconds()-2+1)+2)*1000) + backoff*1000
-	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), reliable.getStreamName(), sleepValue)
-	time.Sleep(time.Duration(sleepValue) * time.Millisecond)
+	waitTime := randomWaitWithBackoff(backoff)
+	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), reliable.getStreamName(), waitTime)
+	time.Sleep(time.Duration(waitTime) * time.Millisecond)
 	streamMetaData, errS := reliable.getEnv().StreamMetaData(reliable.getStreamName())
 	if errors.Is(errS, stream.StreamDoesNotExist) {
+		logs.LogInfo("[Reliable] - The stream %s does not exist for %s. Stopping it", reliable.getStreamName(), reliable.getInfo())
 		return errS, false
 	}
 	if errors.Is(errS, stream.StreamNotAvailable) {
@@ -74,5 +75,21 @@ func retry(backoff int, reliable IReliable) (error, bool) {
 	}
 
 	return result, true
+
+}
+
+func randomWaitWithBackoff(attempt int) int {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+	baseWait := 3_000 + r.Intn(8_000)
+
+	// Calculate the wait time considering the number of attempts
+	waitTime := baseWait * (1 << (attempt - 1)) // Exponential back-off
+
+	// Cap the wait time at a maximum of 15 seconds
+	if waitTime > 15_000 {
+		waitTime = 15_000
+	}
+
+	return waitTime
 
 }

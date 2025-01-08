@@ -50,6 +50,9 @@ var _ = Describe("StreamIntegration", func() {
 				for {
 					select {
 					case confirmations := <-confirmationCh:
+						for i := range confirmations {
+							Expect(confirmations[i].IsConfirmed()).To(BeTrue())
+						}
 						for range confirmations {
 							count += 1
 							if count == totalExpected {
@@ -112,6 +115,8 @@ var _ = Describe("StreamIntegration", func() {
 				err = producer.Send(message)
 				Expect(err).ToNot(HaveOccurred())
 			}
+
+			// wait a bit. We don't have confirmation here
 
 			// We should receive only 100 messages because Next sends the next chunk
 			// in the stream. The previously 100 messages should be in a different chunk

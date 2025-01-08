@@ -24,28 +24,31 @@ func (p *ReliableProducer) handlePublishConfirm(confirms stream.ChannelPublishCo
 
 func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
-		for event := range channelClose {
-			if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
-				logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting..", p.getInfo())
-				err, reconnected := retry(0, p)
-				if err != nil {
-					logs.LogInfo(""+
-						"[Reliable] - %s won't be reconnected. Error: %s", p.getInfo(), err)
-				}
-				if reconnected {
-					p.setStatus(StatusOpen)
-				} else {
-					p.setStatus(StatusClosed)
-				}
+		event := <-channelClose
+		if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
+			p.setStatus(StatusReconnecting)
+			waitTime := randomWaitWithBackoff(1)
+			logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting in %d milliseconds waiting pending messages", p.getInfo(), waitTime)
+			time.Sleep(time.Duration(waitTime) * time.Millisecond)
+			err, reconnected := retry(1, p)
+			if err != nil {
+				logs.LogInfo(
+					"[Reliable] - %s won't be reconnected. Error: %s", p.getInfo(), err)
+			}
+			if reconnected {
+				p.setStatus(StatusOpen)
 			} else {
-				logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", p.getInfo(), event.Reason)
 				p.setStatus(StatusClosed)
 			}
-
-			p.reconnectionSignal.L.Lock()
-			p.reconnectionSignal.Broadcast()
-			p.reconnectionSignal.L.Unlock()
+		} else {
+			logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", p.getInfo(), event.Reason)
+			p.setStatus(StatusClosed)
 		}
+
+		p.reconnectionSignal.L.Lock()
+		p.reconnectionSignal.Broadcast()
+		p.reconnectionSignal.L.Unlock()
+		logs.LogInfo("[Reliable] - %s reconnection signal sent", p.getInfo())
 	}()
 }
 
@@ -60,6 +63,7 @@ type ReliableProducer struct {
 	producerOptions       *stream.ProducerOptions
 	count                 int32
 	confirmMessageHandler ConfirmMessageHandler
+	channelPublishConfirm stream.ChannelPublishConfirm
 	mutex                 *sync.Mutex
 	mutexStatus           *sync.Mutex
 	status                int
@@ -97,14 +101,17 @@ func NewReliableProducer(env *stream.Environment, streamName string,
 }
 
 func (p *ReliableProducer) newProducer() error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 	producer, err := p.env.NewProducer(p.streamName, p.producerOptions)
 	if err != nil {
+
 		return err
 	}
-	channelPublishConfirm := producer.NotifyPublishConfirmation()
+	p.channelPublishConfirm = producer.NotifyPublishConfirmation()
+	p.handlePublishConfirm(p.channelPublishConfirm)
 	channelNotifyClose := producer.NotifyClose()
 	p.handleNotifyClose(channelNotifyClose)
-	p.handlePublishConfirm(channelPublishConfirm)
 	p.producer = producer
 	return err
 }
@@ -148,7 +155,6 @@ func (p *ReliableProducer) Send(message message.StreamMessage) error {
 	if err := p.isReadyToSend(); err != nil {
 		return err
 	}
-
 	p.mutex.Lock()
 	errW := p.producer.Send(message)
 	p.mutex.Unlock()
@@ -178,6 +184,21 @@ func (p *ReliableProducer) GetStatus() int {
 	p.mutexStatus.Lock()
 	defer p.mutexStatus.Unlock()
 	return p.status
+}
+
+func (p *ReliableProducer) GetStatusAsString() string {
+	switch p.GetStatus() {
+	case StatusOpen:
+		return "Open"
+	case StatusClosed:
+		return "Closed"
+	case StatusStreamDoesNotExist:
+		return "StreamDoesNotExist"
+	case StatusReconnecting:
+		return "Reconnecting"
+	default:
+		return "Unknown"
+	}
 }
 
 // IReliable interface
@@ -223,4 +244,8 @@ func (p *ReliableProducer) Close() error {
 		return err
 	}
 	return nil
+}
+
+func (p *ReliableProducer) GetInfo() string {
+	return p.getInfo()
 }
