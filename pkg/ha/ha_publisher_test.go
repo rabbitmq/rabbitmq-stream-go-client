@@ -177,11 +177,11 @@ var _ = Describe("Reliable Producer", func() {
 		errDrop := test_helper.DropConnection(connectionToDrop, "15672")
 		Expect(errDrop).NotTo(HaveOccurred())
 
+		time.Sleep(1 * time.Second)
 		// wait for the producer to be in reconnecting state
 		Eventually(func() bool {
 			return producer.GetStatus() == StatusReconnecting
-		}, time.Second*5, time.Millisecond).
-			Should(BeTrue())
+		}).WithPolling(300 * time.Millisecond).WithTimeout(20 * time.Second).Should(BeTrue())
 
 		// wait for the producer to be in reconnecting state
 		Eventually(func() bool {
