@@ -55,6 +55,20 @@ func (bq *BlockingQueue[T]) Dequeue(timeout time.Duration) T {
 	}
 }
 
+func (bq *BlockingQueue[T]) Process(f func(T)) {
+	isActive := true
+	for isActive {
+		select {
+		case item, ok := <-bq.queue:
+			if !ok {
+				isActive = false
+				return
+			}
+			f(item)
+		}
+	}
+}
+
 func (bq *BlockingQueue[T]) Size() int {
 	return len(bq.queue)
 }
