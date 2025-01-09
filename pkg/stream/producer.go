@@ -287,7 +287,7 @@ func (producer *Producer) closeConfirmationStatus() {
 func (producer *Producer) processPendingSequencesQueue() {
 
 	maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
-	var avarage int32
+	var avarage = 0
 	iterations := 0
 
 	// the buffer is initialized with the size of the header
@@ -321,10 +321,10 @@ func (producer *Producer) processPendingSequencesQueue() {
 			// the messages during the checks of the buffer. In this case
 			if producer.pendingSequencesQueue.IsReadyToSend() || len(sequenceToSend) >= producer.options.BatchSize {
 				if len(sequenceToSend) > 0 {
-					avarage += avarage
+					avarage += len(sequenceToSend)
 					iterations++
 					if iterations > 10000 {
-						logs.LogInfo("producer %d avarage: %d", producer.id, avarage/int32(iterations))
+						logs.LogInfo("producer %d avarage: %d", producer.id, avarage/iterations)
 						avarage = 0
 						iterations = 0
 					}
