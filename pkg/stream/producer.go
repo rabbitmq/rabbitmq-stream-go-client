@@ -321,7 +321,7 @@ func (producer *Producer) processPendingSequencesQueue() {
 			// the messages during the checks of the buffer. In this case
 			if producer.pendingSequencesQueue.IsReadyToSend() || len(sequenceToSend) >= producer.options.BatchSize {
 				if len(sequenceToSend) > 0 {
-					avarage = atomic.AddInt32(&avarage, int32(len(sequenceToSend)))
+					avarage += avarage
 					iterations++
 					if iterations > 10000 {
 						logs.LogInfo("producer %d avarage: %d", producer.id, avarage/int32(iterations))
