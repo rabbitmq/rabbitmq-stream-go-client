@@ -287,6 +287,9 @@ func (producer *Producer) closeConfirmationStatus() {
 func (producer *Producer) processPendingSequencesQueue() {
 
 	maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
+	var avarage int32
+	iterations := 0
+
 	// the buffer is initialized with the size of the header
 	sequenceToSend := make([]*messageSequence, 0)
 	go func() {
@@ -316,8 +319,16 @@ func (producer *Producer) processPendingSequencesQueue() {
 
 			// if producer.pendingSequencesQueue.IsEmpty() means that the queue is empty so the producer is not sending
 			// the messages during the checks of the buffer. In this case
-			if producer.pendingSequencesQueue.IsEmpty() || len(sequenceToSend) >= producer.options.BatchSize {
+			if producer.pendingSequencesQueue.IsReadyToSend() || len(sequenceToSend) >= producer.options.BatchSize {
 				if len(sequenceToSend) > 0 {
+					avarage = atomic.AddInt32(&avarage, int32(len(sequenceToSend)))
+					iterations++
+					if iterations > 10000 {
+						logs.LogInfo("producer %d avarage: %d", producer.id, avarage/int32(iterations))
+						avarage = 0
+						iterations = 0
+					}
+
 					lastError = producer.internalBatchSend(sequenceToSend)
 					sequenceToSend = sequenceToSend[:0]
 					totalBufferToSend += initBufferPublishSize

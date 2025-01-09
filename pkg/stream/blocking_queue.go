@@ -10,15 +10,18 @@ import (
 var ErrBlockingQueueStopped = errors.New("blocking queue stopped")
 
 type BlockingQueue[T any] struct {
-	queue  chan T
-	status int32
+	queue      chan T
+	status     int32
+	capacity   int
+	lastUpdate time.Time
 }
 
 // NewBlockingQueue initializes a new BlockingQueue with the given capacity
 func NewBlockingQueue[T any](capacity int) *BlockingQueue[T] {
 	return &BlockingQueue[T]{
-		queue:  make(chan T, capacity),
-		status: 0,
+		queue:    make(chan T, capacity),
+		capacity: capacity,
+		status:   0,
 	}
 }
 
@@ -27,6 +30,7 @@ func (bq *BlockingQueue[T]) Enqueue(item T) error {
 	if bq.IsStopped() {
 		return ErrBlockingQueueStopped
 	}
+	bq.lastUpdate = time.Now()
 	bq.queue <- item
 
 	return nil
@@ -57,6 +61,13 @@ func (bq *BlockingQueue[T]) Size() int {
 
 func (bq *BlockingQueue[T]) IsEmpty() bool {
 	return len(bq.queue) == 0
+}
+
+func (bq *BlockingQueue[T]) IsReadyToSend() bool {
+	if bq.lastUpdate.IsZero() {
+		return true
+	}
+	return time.Since(bq.lastUpdate) > 10*time.Millisecond && len(bq.queue) == 0
 }
 
 // Stop stops the queue from accepting new items
