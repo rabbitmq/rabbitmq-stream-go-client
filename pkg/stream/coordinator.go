@@ -37,7 +37,6 @@ type chunkInfo struct {
 type Response struct {
 	code               chan Code
 	data               chan interface{}
-	chunkForConsumer   chan chunkInfo
 	commandDescription string
 	correlationid      int
 }
@@ -84,20 +83,8 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 	if err != nil {
 		return err
 	}
-	consumer.setStatus(closed)
-	reason.StreamName = consumer.GetStreamName()
-	reason.Name = consumer.GetName()
+	return consumer.close(reason)
 
-	if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
-		closeHandler <- reason
-		close(closeHandler)
-		closeHandler = nil
-	}
-
-	close(consumer.response.chunkForConsumer)
-	close(consumer.response.code)
-
-	return nil
 }
 func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error {
 
@@ -117,7 +104,6 @@ func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {
 	err = coordinator.removeById(fmt.Sprintf("%d", id), coordinator.responses)
 	close(resp.code)
 	close(resp.data)
-	close(resp.chunkForConsumer)
 	return err
 }
 
@@ -131,7 +117,6 @@ func newResponse(commandDescription string) *Response {
 	res.commandDescription = commandDescription
 	res.code = make(chan Code, 1)
 	res.data = make(chan interface{}, 1)
-	res.chunkForConsumer = make(chan chunkInfo, 100)
 	return res
 }
 
@@ -200,6 +185,7 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 		lastStoredOffset:     -1, // because 0 is a valid value for the offset
 		isPromotedAsActive:   true,
 		lastAutoCommitStored: time.Now(),
+		chunkForConsumer:     make(chan chunkInfo, 100),
 	}
 
 	coordinator.consumers[lastId] = item

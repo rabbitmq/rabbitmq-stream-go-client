@@ -515,12 +515,7 @@ func (c *Client) maybeCleanProducers(streamName string) {
 		}
 	}
 	c.mutex.Unlock()
-	if c.coordinator.ProducersCount() == 0 {
-		err := c.Close()
-		if err != nil {
-			return
-		}
-	}
+
 }
 
 func (c *Client) maybeCleanConsumers(streamName string) {
@@ -540,12 +535,6 @@ func (c *Client) maybeCleanConsumers(streamName string) {
 		}
 	}
 	c.mutex.Unlock()
-	if c.coordinator.ConsumersCount() == 0 {
-		err := c.Close()
-		if err != nil {
-			return
-		}
-	}
 }
 
 func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string,
@@ -603,18 +592,18 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 
 func (cc *environmentCoordinator) newClientForProducer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, rpcTimeOut time.Duration) *Client {
 	clientResult := newClient(connectionName, leader, tcpParameters, saslConfiguration, rpcTimeOut)
-	chMeta := make(chan metaDataUpdateEvent, 1)
-	clientResult.metadataListener = chMeta
-	go func(ch <-chan metaDataUpdateEvent, cl *Client) {
-		for metaDataUpdateEvent := range ch {
-			clientResult.maybeCleanProducers(metaDataUpdateEvent.StreamName)
-			cc.maybeCleanClients()
-			if !cl.socket.isOpen() {
-				return
-			}
-		}
-
-	}(chMeta, clientResult)
+	//chMeta := make(chan metaDataUpdateEvent, 1)
+	//clientResult.metadataListener = chMeta
+	//go func(ch <-chan metaDataUpdateEvent, cl *Client) {
+	//	for metaDataUpdateEvent := range ch {
+	//		clientResult.maybeCleanProducers(metaDataUpdateEvent.StreamName)
+	//		cc.maybeCleanClients()
+	//		if !cl.socket.isOpen() {
+	//			return
+	//		}
+	//	}
+	//
+	//}(chMeta, clientResult)
 
 	cc.nextId++
 	cc.clientsPerContext[cc.nextId] = clientResult
@@ -638,18 +627,18 @@ func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Bro
 
 	if clientResult == nil {
 		clientResult = newClient(connectionName, leader, tcpParameters, saslConfiguration, rpcTimeout)
-		chMeta := make(chan metaDataUpdateEvent)
-		clientResult.metadataListener = chMeta
-		go func(ch <-chan metaDataUpdateEvent, cl *Client) {
-			for metaDataUpdateEvent := range ch {
-				clientResult.maybeCleanConsumers(metaDataUpdateEvent.StreamName)
-				cc.maybeCleanClients()
-				if !cl.socket.isOpen() {
-					return
-				}
-			}
-
-		}(chMeta, clientResult)
+		//chMeta := make(chan metaDataUpdateEvent)
+		//clientResult.metadataListener = chMeta
+		//go func(ch <-chan metaDataUpdateEvent, cl *Client) {
+		//	for metaDataUpdateEvent := range ch {
+		//		clientResult.maybeCleanConsumers(metaDataUpdateEvent.StreamName)
+		//		cc.maybeCleanClients()
+		//		if !cl.socket.isOpen() {
+		//			return
+		//		}
+		//	}
+		//
+		//}(chMeta, clientResult)
 
 		cc.nextId++
 		cc.clientsPerContext[cc.nextId] = clientResult
@@ -672,9 +661,11 @@ func (cc *environmentCoordinator) Close() error {
 	cc.mutexContext.Lock()
 	defer cc.mutexContext.Unlock()
 	for _, client := range cc.clientsPerContext {
-		err := client.Close()
-		if err != nil {
-			logs.LogWarn("Error during close the client, %s", err)
+		for i := range client.coordinator.producers {
+			_ = client.coordinator.producers[i].(*Producer).Close()
+		}
+		for i := range client.coordinator.consumers {
+			_ = client.coordinator.consumers[i].(*Consumer).Close()
 		}
 	}
 	return nil

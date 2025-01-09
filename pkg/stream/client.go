@@ -63,8 +63,8 @@ type Client struct {
 	tcpParameters        *TCPParameters
 	saslConfiguration    *SaslConfiguration
 
-	mutex             *sync.Mutex
-	metadataListener  metadataListener
+	mutex *sync.Mutex
+	//metadataListener  metadataListener
 	lastHeartBeat     HeartBeat
 	socketCallTimeout time.Duration
 	availableFeatures *availableFeatures
@@ -512,10 +512,10 @@ func (c *Client) Close() error {
 		}
 	}
 
-	if c.metadataListener != nil {
-		close(c.metadataListener)
-		c.metadataListener = nil
-	}
+	//if c.metadataListener != nil {
+	//	close(c.metadataListener)
+	//	c.metadataListener = nil
+	//}
 	c.closeHartBeat()
 	if c.getSocket().isOpen() {
 
@@ -747,6 +747,7 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 
 	streamMetadata := streamsMetadata.Get(stream)
 	if streamMetadata.responseCode != responseCodeOk {
+
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 
@@ -992,12 +993,8 @@ func (c *Client) DeclareSubscriber(streamName string,
 	go func() {
 		for {
 			select {
-			case code := <-consumer.response.code:
-				if code.id == closeChannel {
-					return
-				}
 
-			case chunk, ok := <-consumer.response.chunkForConsumer:
+			case chunk, ok := <-consumer.chunkForConsumer:
 				if !ok {
 					return
 				}

@@ -10,12 +10,13 @@ import (
 )
 
 type Consumer struct {
-	ID              uint8
-	response        *Response
-	options         *ConsumerOptions
-	onClose         onInternalClose
-	mutex           *sync.Mutex
-	MessagesHandler MessagesHandler
+	ID               uint8
+	response         *Response
+	options          *ConsumerOptions
+	onClose          onInternalClose
+	mutex            *sync.Mutex
+	chunkForConsumer chan chunkInfo
+	MessagesHandler  MessagesHandler
 	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
 	// and won't change. currentOffset is the status of the offset
 	currentOffset int64
@@ -312,52 +313,64 @@ func (consumer *Consumer) Close() error {
 	if consumer.getStatus() == closed {
 		return AlreadyClosed
 	}
-	consumer.cacheStoreOffset()
-
-	consumer.setStatus(closed)
-	_, errGet := consumer.options.client.coordinator.GetConsumerById(consumer.ID)
-	if errGet != nil {
-		return nil
-	}
-
-	length := 2 + 2 + 4 + 1
-	resp := consumer.options.client.coordinator.NewResponse(CommandUnsubscribe)
-	correlationId := resp.correlationid
-	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, CommandUnsubscribe,
-		correlationId)
-
-	writeByte(b, consumer.ID)
-	err := consumer.options.client.handleWrite(b.Bytes(), resp)
-	if err.Err != nil && err.isTimeout {
-		return err.Err
-	}
-
-	errC := consumer.options.client.coordinator.RemoveConsumerById(consumer.ID, Event{
+	return consumer.close(Event{
 		Command:    CommandUnsubscribe,
 		StreamName: consumer.GetStreamName(),
 		Name:       consumer.GetName(),
-		Reason:     "unSubscribe",
+		Reason:     UnSubscribe,
 		Err:        nil,
 	})
+}
 
-	if errC != nil {
-		logs.LogWarn("Error during remove consumer id:%s", errC)
+func (consumer *Consumer) close(reason Event) error {
 
+	if consumer.options == nil {
+		logs.LogWarn("consumer options is nil, the close will be ignored")
+		return nil
+	}
+	consumer.cacheStoreOffset()
+	consumer.setStatus(closed)
+
+	if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
+		closeHandler <- reason
+		close(consumer.closeHandler)
+		consumer.closeHandler = nil
 	}
 
-	if consumer.options.client.coordinator.ConsumersCount() == 0 {
-		err := consumer.options.client.Close()
-		if err != nil {
-			return err
+	if consumer.chunkForConsumer != nil {
+		close(consumer.chunkForConsumer)
+		consumer.chunkForConsumer = nil
+	}
+
+	if consumer.response.data != nil {
+		close(consumer.response.data)
+		consumer.response.data = nil
+	}
+
+	if reason.Reason == UnSubscribe {
+		length := 2 + 2 + 4 + 1
+		resp := consumer.options.client.coordinator.NewResponse(CommandUnsubscribe)
+		correlationId := resp.correlationid
+		var b = bytes.NewBuffer(make([]byte, 0, length+4))
+		writeProtocolHeader(b, length, CommandUnsubscribe,
+			correlationId)
+
+		writeByte(b, consumer.ID)
+		err := consumer.options.client.handleWrite(b.Bytes(), resp)
+		if err.Err != nil && err.isTimeout {
+			logs.LogWarn("error during consumer unsubscribe:%s", err.Err)
 		}
+	}
+
+	if consumer.options != nil && consumer.options.client.coordinator.ConsumersCount() == 0 {
+		_ = consumer.options.client.Close()
 	}
 
 	ch := make(chan uint8, 1)
 	ch <- consumer.ID
 	consumer.onClose(ch)
 	close(ch)
-	return err.Err
+	return nil
 }
 
 func (consumer *Consumer) cacheStoreOffset() {

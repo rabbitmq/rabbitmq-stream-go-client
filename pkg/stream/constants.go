@@ -119,6 +119,7 @@ const (
 	LeaderLocatorBalanced    = "balanced"
 	LeaderLocatorClientLocal = "client-local"
 	DeletePublisher          = "deletePublisher"
+	UnSubscribe              = "unSubscribe"
 
 	StreamTcpPort = "5552"
 

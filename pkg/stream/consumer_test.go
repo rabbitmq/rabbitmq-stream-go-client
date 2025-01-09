@@ -123,7 +123,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&commandIdRecv)
 		}, 5*time.Second).Should(Equal(int32(CommandUnsubscribe)),
-			"command received should be CommandMetadataUpdate ")
+			"command received should be unSubscribe ")
 
 		Expect(err).NotTo(HaveOccurred())
 	})

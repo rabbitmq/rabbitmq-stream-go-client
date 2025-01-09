@@ -29,14 +29,17 @@ func logErrorCommand(error error, details string) {
 
 func (c *Client) handleResponse() {
 	buffer := bufio.NewReader(c.socket.connection)
+
 	for {
 		readerProtocol := &ReaderProtocol{}
+
 		frameLen, err := readUInt(buffer)
 		if err != nil {
 			logs.LogDebug("Read connection failed: %s", err)
 			_ = c.Close()
 			break
 		}
+
 		c.setLastHeartBeat(time.Now())
 		readerProtocol.FrameLen = frameLen
 		readerProtocol.CommandID = uShortExtractResponseCode(readUShort(buffer))
@@ -407,7 +410,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	// dispatch the messages with offset to the consumer
 	chunk.offsetMessages = batchConsumingMessages
 	if consumer.getStatus() == open {
-		consumer.response.chunkForConsumer <- chunk
+		consumer.chunkForConsumer <- chunk
 	} else {
 		logs.LogDebug("The consumer %s for the stream %s is closed during the chunk dispatching. "+
 			"Messages won't dispatched", consumer.GetName(), consumer.GetStreamName())
@@ -487,12 +490,8 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 	if code == responseCodeStreamNotAvailable {
 		stream := readString(buffer)
 		logs.LogDebug("stream %s is no longer available", stream)
-		c.mutex.Lock()
-		c.metadataListener <- metaDataUpdateEvent{
-			StreamName: stream,
-			code:       responseCodeStreamNotAvailable,
-		}
-		c.mutex.Unlock()
+		c.maybeCleanProducers(stream)
+		c.maybeCleanConsumers(stream)
 
 	} else {
 		//TODO handle the error, see the java code
