@@ -315,7 +315,7 @@ var _ = Describe("Streaming Producers", func() {
 
 	})
 
-	It("Smart Send/Close", func() {
+	It("Smart Send/Close", Focus, func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		var messagesReceived int32
@@ -331,9 +331,10 @@ var _ = Describe("Streaming Producers", func() {
 			Expect(producer.Send(amqp.NewMessage(s))).NotTo(HaveOccurred())
 		}
 
+		time.Sleep(1500 * time.Millisecond)
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 5*time.Second).Should(Equal(int32(101)),
+		}, 5*time.Second).WithPolling(300*time.Millisecond).Should(Equal(int32(101)),
 			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))

@@ -13,7 +13,7 @@ type BlockingQueue[T any] struct {
 	queue      chan T
 	status     int32
 	capacity   int
-	lastUpdate time.Time
+	lastUpdate int64
 }
 
 // NewBlockingQueue initializes a new BlockingQueue with the given capacity
@@ -30,9 +30,8 @@ func (bq *BlockingQueue[T]) Enqueue(item T) error {
 	if bq.IsStopped() {
 		return ErrBlockingQueueStopped
 	}
-	bq.lastUpdate = time.Now()
+	atomic.StoreInt64(&bq.lastUpdate, time.Now().UnixNano())
 	bq.queue <- item
-
 	return nil
 }
 
@@ -42,6 +41,7 @@ func (bq *BlockingQueue[T]) Dequeue(timeout time.Duration) T {
 		var zeroValue T // Zero value of type T
 		return zeroValue
 	}
+
 	select {
 	case item, ok := <-bq.queue:
 		if !ok {
@@ -61,6 +61,10 @@ func (bq *BlockingQueue[T]) Process(f func(T)) {
 	}
 }
 
+func (bq *BlockingQueue[T]) GetChannel() chan T {
+	return bq.queue
+}
+
 func (bq *BlockingQueue[T]) Size() int {
 	return len(bq.queue)
 }
@@ -70,10 +74,10 @@ func (bq *BlockingQueue[T]) IsEmpty() bool {
 }
 
 func (bq *BlockingQueue[T]) IsReadyToSend() bool {
-	if bq.lastUpdate.IsZero() {
-		return true
-	}
-	return time.Since(bq.lastUpdate) > 10*time.Millisecond && len(bq.queue) == 0
+
+	millis := time.Since(time.Unix(0, atomic.LoadInt64(&bq.lastUpdate))).Milliseconds()
+
+	return millis > 10 && len(bq.queue) == 0
 }
 
 // Stop stops the queue from accepting new items

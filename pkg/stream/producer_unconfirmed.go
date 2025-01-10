@@ -52,10 +52,21 @@ func (u *unConfirmed) link(from int64, to int64) {
 	}
 }
 
-func (u *unConfirmed) extractWithConfirm(id int64) *ConfirmationStatus {
+func (u *unConfirmed) extractWithConfirms(id []int64) []*ConfirmationStatus {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
-	return u.extract(id, 0, true)
+	var res []*ConfirmationStatus
+	for _, v := range id {
+		m := u.extract(v, 0, true)
+		if m != nil {
+			res = append(res, m)
+			if m.linkedTo != nil {
+				res = append(res, m.linkedTo...)
+			}
+		}
+	}
+	return res
+
 }
 
 func (u *unConfirmed) extractWithError(id int64, errorCode uint16) *ConfirmationStatus {

@@ -88,7 +88,8 @@ const (
 	///
 	defaultSocketCallTimeout = 10 * time.Second
 
-	defaultHeartbeat = 60 * time.Second
+	defaultHeartbeat    = 60 * time.Second
+	defaultMaxFrameSize = 1048574
 
 	//
 	LocalhostUriConnection = "rabbitmq-stream://guest:guest@localhost:5552/%2f"
