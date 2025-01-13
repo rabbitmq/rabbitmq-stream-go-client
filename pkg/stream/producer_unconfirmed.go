@@ -15,15 +15,19 @@ import (
 // or due of timeout. The Timeout is configurable, and it is calculated client side.
 type unConfirmed struct {
 	messages map[int64]*ConfirmationStatus
+	tmp      []*ConfirmationStatus
+	tmpMutex sync.Mutex
 	mutex    sync.RWMutex
 }
 
-const DefaultUnconfirmedSize = 10000
+const DefaultUnconfirmedSize = 10_000
 
 func newUnConfirmed() *unConfirmed {
 
 	r := &unConfirmed{
 		messages: make(map[int64]*ConfirmationStatus, DefaultUnconfirmedSize),
+		tmp:      []*ConfirmationStatus{},
+		tmpMutex: sync.Mutex{},
 		mutex:    sync.RWMutex{},
 	}
 
@@ -32,15 +36,16 @@ func newUnConfirmed() *unConfirmed {
 
 func (u *unConfirmed) addFromSequence(message *messageSequence, producerID uint8) {
 
-	u.mutex.Lock()
-	u.messages[message.publishingId] = &ConfirmationStatus{
+	u.tmpMutex.Lock()
+	u.tmp = append(u.tmp, &ConfirmationStatus{
+		//u.messages[message.publishingId] = &ConfirmationStatus{
 		inserted:     time.Now(),
 		message:      *message.refMessage,
 		producerID:   producerID,
 		publishingId: message.publishingId,
 		confirmed:    false,
-	}
-	u.mutex.Unlock()
+	})
+	u.tmpMutex.Unlock()
 }
 
 func (u *unConfirmed) link(from int64, to int64) {
@@ -52,11 +57,13 @@ func (u *unConfirmed) link(from int64, to int64) {
 	}
 }
 
-func (u *unConfirmed) extractWithConfirms(id []int64) []*ConfirmationStatus {
+func (u *unConfirmed) extractWithConfirms(ids []int64) []*ConfirmationStatus {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
 	var res []*ConfirmationStatus
-	for _, v := range id {
+	u.fromTmpToMap()
+
+	for _, v := range ids {
 		m := u.extract(v, 0, true)
 		if m != nil {
 			res = append(res, m)
@@ -69,9 +76,19 @@ func (u *unConfirmed) extractWithConfirms(id []int64) []*ConfirmationStatus {
 
 }
 
+func (u *unConfirmed) fromTmpToMap() {
+	u.tmpMutex.Lock()
+	defer u.tmpMutex.Unlock()
+	for i := range u.tmp {
+		u.messages[u.tmp[i].publishingId] = u.tmp[i]
+	}
+	u.tmp = u.tmp[:0]
+}
+
 func (u *unConfirmed) extractWithError(id int64, errorCode uint16) *ConfirmationStatus {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
+	u.fromTmpToMap()
 	return u.extract(id, errorCode, false)
 }
 
@@ -101,6 +118,7 @@ func (u *unConfirmed) updateStatus(rootMessage *ConfirmationStatus, errorCode ui
 func (u *unConfirmed) extractWithTimeOut(timeout time.Duration) []*ConfirmationStatus {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
+	u.fromTmpToMap()
 	var res []*ConfirmationStatus
 	for _, v := range u.messages {
 		if time.Since(v.inserted) > timeout {
@@ -114,11 +132,13 @@ func (u *unConfirmed) extractWithTimeOut(timeout time.Duration) []*ConfirmationS
 func (u *unConfirmed) size() int {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
+	u.fromTmpToMap()
 	return len(u.messages)
 }
 
 func (u *unConfirmed) getAll() map[int64]*ConfirmationStatus {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
+	u.fromTmpToMap()
 	return u.messages
 }
