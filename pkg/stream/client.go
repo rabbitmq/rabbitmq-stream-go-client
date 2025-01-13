@@ -432,7 +432,7 @@ func (c *Client) heartBeat() {
 			tickerHeartbeat.Stop()
 			return
 		case <-tickerHeartbeat.C:
-			for c.socket.isOpen() {
+			if c.socket.isOpen() {
 				if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
 					v := atomic.AddInt32(&heartBeatMissed, 1)
 					logs.LogWarn("Missing heart beat: %d", v)

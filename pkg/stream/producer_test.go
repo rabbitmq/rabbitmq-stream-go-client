@@ -315,7 +315,7 @@ var _ = Describe("Streaming Producers", func() {
 
 	})
 
-	It("Smart Send/Close", Focus, func() {
+	It("Smart Send/Close", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		var messagesReceived int32
@@ -570,8 +570,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 1; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -579,8 +578,7 @@ var _ = Describe("Streaming Producers", func() {
 		msg.SetPublishingId(1)
 		messageBytes, _ := msg.MarshalBinary()
 		messagesSequence[0] = &messageSequence{
-			messageBytes:     messageBytes,
-			unCompressedSize: len(messageBytes),
+			messageBytes: messageBytes,
 		}
 
 		// 200 producer ID doesn't exist
@@ -659,8 +657,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 201; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -676,8 +673,7 @@ var _ = Describe("Streaming Producers", func() {
 
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -692,8 +688,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 1; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -708,8 +703,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 1000; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -724,8 +718,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 14; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 

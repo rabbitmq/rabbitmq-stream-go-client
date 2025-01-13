@@ -18,9 +18,8 @@ var _ = Describe("Compression algorithms", func() {
 		}
 
 		message := &messageSequence{
-			messageBytes:     messagePayload,
-			unCompressedSize: len(messagePayload),
-			publishingId:     0,
+			messageBytes: messagePayload,
+			publishingId: 0,
 		}
 
 		entries = &subEntries{

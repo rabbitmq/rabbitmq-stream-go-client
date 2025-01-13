@@ -73,7 +73,6 @@ type Producer struct {
 	publishConfirmation chan []*ConfirmationStatus
 
 	pendingSequencesQueue *BlockingQueue[*messageSequence]
-	pool                  *sync.Pool
 }
 
 type FilterValue func(message message.StreamMessage) string
@@ -296,7 +295,6 @@ func (producer *Producer) processPendingSequencesQueue() {
 		var lastError error
 		for {
 			select {
-
 			case msg, ok := <-producer.pendingSequencesQueue.GetChannel():
 				{
 					if !ok {
@@ -379,12 +377,12 @@ func (producer *Producer) fromMessageToMessageSequence(streamMessage message.Str
 	if producer.options.IsFilterEnabled() {
 		filterValue = producer.options.Filter.FilterValue(streamMessage)
 	}
-	fromPool := producer.pool.Get().(*messageSequence)
-	fromPool.messageBytes = marshalBinary
-	fromPool.publishingId = seq
-	fromPool.filterValue = filterValue
+	msqSeq := &messageSequence{}
+	msqSeq.messageBytes = marshalBinary
+	msqSeq.publishingId = seq
+	msqSeq.filterValue = filterValue
 
-	return fromPool, nil
+	return msqSeq, nil
 
 }
 
@@ -403,7 +401,6 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	if len(messageSeq.messageBytes) > defaultMaxFrameSize {
 		tooLarge := producer.unConfirmed.extractWithError(messageSeq.publishingId, responseCodeFrameTooLarge)
 		producer.sendConfirmationStatus([]*ConfirmationStatus{tooLarge})
-		producer.pool.Put(messageSeq)
 		return FrameTooLarge
 	}
 
@@ -443,7 +440,6 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		for _, msg := range messagesSequence {
 			m := producer.unConfirmed.extractWithError(msg.publishingId, responseCodeFrameTooLarge)
 			producer.sendConfirmationStatus([]*ConfirmationStatus{m})
-			producer.pool.Put(msg)
 		}
 		return FrameTooLarge
 	}
@@ -457,13 +453,6 @@ func (producer *Producer) GetID() uint8 {
 }
 
 func (producer *Producer) internalBatchSend(messagesSequence []*messageSequence) error {
-	// remove form pool
-	defer func() {
-		for _, m := range messagesSequence {
-			producer.pool.Put(m)
-		}
-	}()
-
 	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
 }
 
@@ -535,8 +524,8 @@ func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, c
 // / the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error.
 func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSequence, producerID uint8) error {
-	//producer.options.client.socket.mutexMessageMap.Lock()
-	//defer producer.options.client.socket.mutexMessageMap.Unlock()
+	producer.options.client.socket.mutex.Lock()
+	defer producer.options.client.socket.mutex.Unlock()
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
