@@ -409,8 +409,6 @@ type Message struct {
 	//receiver   *Receiver // Receiver the message was received from
 	settled bool // whether transfer was settled by sender
 
-	// doneSignal is a channel that indicate when a message is considered acted upon by downstream handler
-	doneSignal chan struct{}
 }
 
 // AMQP10 is an AMQP 1.0 message with the necessary fields to work with the
@@ -501,16 +499,7 @@ func (amqp *AMQP10) GetAMQPValue() interface{} {
 // more complex usages.
 func newMessage(data []byte) *Message {
 	return &Message{
-		Data:       [][]byte{data},
-		doneSignal: make(chan struct{}),
-	}
-}
-
-// done closes the internal doneSignal channel to let the receiver know that this message has been acted upon
-func (m *Message) done() {
-	// TODO: move initialization in ctor and use ctor everywhere?
-	if m.doneSignal != nil {
-		close(m.doneSignal)
+		Data: [][]byte{data},
 	}
 }
 
@@ -521,15 +510,6 @@ func (m *Message) GetData() []byte {
 		return nil
 	}
 	return m.Data[0]
-}
-
-// Ignore notifies the amqp message pump that the message has been handled
-// without any disposition. It frees the amqp receiver to get the next message
-// this is implicitly done after calling message dispositions (Accept/Release/Reject/Modify)
-func (m *Message) Ignore() {
-	if m.shouldSendDisposition() {
-		m.done()
-	}
 }
 
 // MarshalBinary encodes the message into binary form.

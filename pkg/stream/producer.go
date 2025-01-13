@@ -51,11 +51,9 @@ func (cs *ConfirmationStatus) GetErrorCode() uint16 {
 }
 
 type messageSequence struct {
-	messageBytes     []byte
-	unCompressedSize int
-	publishingId     int64
-	filterValue      string
-	refMessage       *message.StreamMessage
+	messageBytes []byte
+	publishingId int64
+	filterValue  string
 }
 
 type Producer struct {
@@ -75,6 +73,7 @@ type Producer struct {
 	publishConfirmation chan []*ConfirmationStatus
 
 	pendingSequencesQueue *BlockingQueue[*messageSequence]
+	pool                  *sync.Pool
 }
 
 type FilterValue func(message message.StreamMessage) string
@@ -313,7 +312,7 @@ func (producer *Producer) processPendingSequencesQueue() {
 					}
 					if msg != nil {
 						// There is something in the queue.Checks the buffer is still less than the maxFrame
-						totalBufferToSend += msg.unCompressedSize
+						totalBufferToSend += len(msg.messageBytes)
 						if totalBufferToSend > maxFrame {
 							// if the totalBufferToSend is greater than the requestedMaxFrameSize
 							// the producer sends the messages and reset the buffer
@@ -380,14 +379,12 @@ func (producer *Producer) fromMessageToMessageSequence(streamMessage message.Str
 	if producer.options.IsFilterEnabled() {
 		filterValue = producer.options.Filter.FilterValue(streamMessage)
 	}
+	fromPool := producer.pool.Get().(*messageSequence)
+	fromPool.messageBytes = marshalBinary
+	fromPool.publishingId = seq
+	fromPool.filterValue = filterValue
 
-	return &messageSequence{
-		messageBytes:     marshalBinary,
-		unCompressedSize: len(marshalBinary),
-		publishingId:     seq,
-		filterValue:      filterValue,
-		refMessage:       &streamMessage,
-	}, nil
+	return fromPool, nil
 
 }
 
@@ -401,11 +398,12 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	if err != nil {
 		return err
 	}
-	producer.unConfirmed.addFromSequence(messageSeq, producer.GetID())
+	producer.unConfirmed.addFromSequence(messageSeq, &streamMessage, producer.GetID())
 
 	if len(messageSeq.messageBytes) > defaultMaxFrameSize {
 		tooLarge := producer.unConfirmed.extractWithError(messageSeq.publishingId, responseCodeFrameTooLarge)
 		producer.sendConfirmationStatus([]*ConfirmationStatus{tooLarge})
+		producer.pool.Put(messageSeq)
 		return FrameTooLarge
 	}
 
@@ -431,7 +429,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		if err != nil {
 			return err
 		}
-		producer.unConfirmed.addFromSequence(messageSeq, producer.GetID())
+		producer.unConfirmed.addFromSequence(messageSeq, &batchMessage, producer.GetID())
 
 		totalBufferToSend += len(messageSeq.messageBytes)
 		messagesSequence = append(messagesSequence, messageSeq)
@@ -445,6 +443,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		for _, msg := range messagesSequence {
 			m := producer.unConfirmed.extractWithError(msg.publishingId, responseCodeFrameTooLarge)
 			producer.sendConfirmationStatus([]*ConfirmationStatus{m})
+			producer.pool.Put(msg)
 		}
 		return FrameTooLarge
 	}
@@ -458,6 +457,13 @@ func (producer *Producer) GetID() uint8 {
 }
 
 func (producer *Producer) internalBatchSend(messagesSequence []*messageSequence) error {
+	// remove form pool
+	defer func() {
+		for _, m := range messagesSequence {
+			producer.pool.Put(m)
+		}
+	}()
+
 	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
 }
 
@@ -556,7 +562,7 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 
 	if !producer.options.isSubEntriesBatching() {
 		for _, msg := range messagesSequence {
-			msgLen += msg.unCompressedSize + 8 + 4
+			msgLen += len(msg.messageBytes) + 8 + 4
 		}
 	}
 
@@ -718,7 +724,7 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 	frameHeaderLength := initBufferPublishSize
 	var msgLen int
 	for _, msg := range messagesSequence {
-		msgLen += msg.unCompressedSize + 8 + 4
+		msgLen += len(msg.messageBytes) + 8 + 4
 		if msg.filterValue != "" {
 			msgLen += 2 + len(msg.filterValue)
 		}

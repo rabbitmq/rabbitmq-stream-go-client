@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"time"
 )
@@ -34,13 +35,13 @@ func newUnConfirmed() *unConfirmed {
 	return r
 }
 
-func (u *unConfirmed) addFromSequence(message *messageSequence, producerID uint8) {
+func (u *unConfirmed) addFromSequence(message *messageSequence, source *message.StreamMessage, producerID uint8) {
 
 	u.tmpMutex.Lock()
 	u.tmp = append(u.tmp, &ConfirmationStatus{
 		//u.messages[message.publishingId] = &ConfirmationStatus{
 		inserted:     time.Now(),
-		message:      *message.refMessage,
+		message:      *source,
 		producerID:   producerID,
 		publishingId: message.publishingId,
 		confirmed:    false,

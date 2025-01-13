@@ -73,6 +73,11 @@ func (coordinator *Coordinator) NewProducer(
 		status:                    open,
 		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](dynSize),
 		confirmMutex:              &sync.Mutex{},
+		pool: &sync.Pool{
+			New: func() any {
+				return &messageSequence{}
+			},
+		},
 	}
 	coordinator.producers[lastId] = producer
 	return producer, err
