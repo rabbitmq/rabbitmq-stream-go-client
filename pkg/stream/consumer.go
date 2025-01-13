@@ -330,6 +330,8 @@ func (consumer *Consumer) close(reason Event) error {
 		logs.LogDebug("consumer options is nil, the close will be ignored")
 		return nil
 	}
+
+	_, _ = consumer.options.client.coordinator.ExtractConsumerById(consumer.ID)
 	consumer.cacheStoreOffset()
 	consumer.setStatus(closed)
 

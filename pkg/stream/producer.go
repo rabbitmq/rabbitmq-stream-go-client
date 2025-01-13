@@ -298,7 +298,7 @@ func (producer *Producer) processPendingSequencesQueue() {
 			case msg, ok := <-producer.pendingSequencesQueue.GetChannel():
 				{
 					if !ok {
-						logs.LogInfo("producer %d processPendingSequencesQueue closed", producer.id)
+						logs.LogDebug("producer %d processPendingSequencesQueue closed by closed channel", producer.id)
 						return
 					}
 
@@ -631,7 +631,9 @@ func (producer *Producer) close(reason Event) error {
 	producer.closeConfirmationStatus()
 
 	if producer.options == nil {
-		logs.LogWarn("producer options is nil, the close will be ignored")
+		// the options are usually not nil. This is just for safety and for to make some
+		// test easier to write
+		logs.LogDebug("producer options is nil, the close will be ignored")
 		return nil
 	}
 	_, _ = producer.options.client.coordinator.ExtractProducerById(producer.id)
