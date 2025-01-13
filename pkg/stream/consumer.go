@@ -325,7 +325,9 @@ func (consumer *Consumer) Close() error {
 func (consumer *Consumer) close(reason Event) error {
 
 	if consumer.options == nil {
-		logs.LogWarn("consumer options is nil, the close will be ignored")
+		// the config is usually set. this check is just to avoid panic and to make some test
+		// easier to write
+		logs.LogDebug("consumer options is nil, the close will be ignored")
 		return nil
 	}
 	consumer.cacheStoreOffset()
