@@ -535,8 +535,8 @@ func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, c
 // / the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error.
 func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSequence, producerID uint8) error {
-	//producer.options.client.socket.mutex.Lock()
-	//defer producer.options.client.socket.mutex.Unlock()
+	//producer.options.client.socket.mutexMessageMap.Lock()
+	//defer producer.options.client.socket.mutexMessageMap.Unlock()
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}

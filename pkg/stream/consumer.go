@@ -378,7 +378,7 @@ func (consumer *Consumer) cacheStoreOffset() {
 		consumer.mutex.Lock()
 		consumer.lastAutoCommitStored = time.Now()
 		consumer.messageCountBeforeStorage = 0
-		consumer.mutex.Unlock() // updateLastStoredOffset() in internalStoreOffset() also locks mutex, so not using defer for unlock
+		consumer.mutex.Unlock() // updateLastStoredOffset() in internalStoreOffset() also locks mutexMessageMap, so not using defer for unlock
 
 		err := consumer.internalStoreOffset()
 		if err != nil {
