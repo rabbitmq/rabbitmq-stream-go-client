@@ -54,7 +54,7 @@ jobs:
           check-latest: true
       - run: make test GO_VERSION=${{ steps.setup_go.outputs.go-version }}
       - uses: actions/checkout@main
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v5
         with:
           fail_ci_if_error: false # optional (default = false)
           files: ./coverage.txt

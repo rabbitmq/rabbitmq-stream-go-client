@@ -284,12 +284,7 @@ func (producer *Producer) closeConfirmationStatus() {
 func (producer *Producer) processPendingSequencesQueue() {
 
 	maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
-	var avarage = 0
-	iterations := 0
 	go func() {
-		var ticker = time.NewTicker(time.Duration(producer.options.BatchPublishingDelay) * time.Millisecond)
-		defer ticker.Stop()
-
 		sequenceToSend := make([]*messageSequence, 0)
 		totalBufferToSend := initBufferPublishSize
 		var lastError error
@@ -322,33 +317,18 @@ func (producer *Producer) processPendingSequencesQueue() {
 						sequenceToSend = append(sequenceToSend, msg)
 					}
 
-					canSend := producer.pendingSequencesQueue.IsEmpty() && producer.options.BatchPublishingDelay == 0
+					canSend := producer.pendingSequencesQueue.IsEmpty()
 					// if producer.pendingSequencesQueue.IsEmpty() means that the queue is empty so the producer is not sending
 					// the messages during the checks of the buffer. In this case
 					if canSend || len(sequenceToSend) >= producer.options.BatchSize {
 						if len(sequenceToSend) > 0 {
-							avarage += len(sequenceToSend)
-							iterations++
-							if iterations > 100000 {
-								logs.LogInfo("producer %d average: %d", producer.id, avarage/iterations)
-								avarage = 0
-								iterations = 0
-							}
-
 							lastError = producer.internalBatchSend(sequenceToSend)
 							sequenceToSend = sequenceToSend[:0]
 							totalBufferToSend += initBufferPublishSize
 						}
 					}
 				}
-			case <-ticker.C:
-				if len(sequenceToSend) > 0 {
-					lastError = producer.internalBatchSend(sequenceToSend)
-					sequenceToSend = sequenceToSend[:0]
-					totalBufferToSend += initBufferPublishSize
-				}
 			}
-
 			if lastError != nil {
 				logs.LogError("error during sending messages: %s", lastError)
 			}
