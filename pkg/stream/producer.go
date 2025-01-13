@@ -287,51 +287,48 @@ func (producer *Producer) processPendingSequencesQueue() {
 	go func() {
 		sequenceToSend := make([]*messageSequence, 0)
 		totalBufferToSend := initBufferPublishSize
-		var lastError error
-		for {
-			select {
-			case msg, ok := <-producer.pendingSequencesQueue.GetChannel():
-				{
-					if !ok {
-						logs.LogDebug("producer %d processPendingSequencesQueue closed by closed channel", producer.id)
-						return
-					}
+		for msg := range producer.pendingSequencesQueue.GetChannel() {
+			var lastError error
 
-					// the dequeue is blocking with a timeout of 500ms
-					// as soon as a message is available the Dequeue will be unblocked
-					//msg := producer.pendingSequencesQueue.Dequeue(time.Millisecond * 500)
-					if producer.pendingSequencesQueue.IsStopped() {
-						break
-					}
-					if msg != nil {
-						// There is something in the queue.Checks the buffer is still less than the maxFrame
-						totalBufferToSend += len(msg.messageBytes)
-						if totalBufferToSend > maxFrame {
-							// if the totalBufferToSend is greater than the requestedMaxFrameSize
-							// the producer sends the messages and reset the buffer
-							lastError = producer.internalBatchSend(sequenceToSend)
-							sequenceToSend = sequenceToSend[:0]
-							totalBufferToSend = initBufferPublishSize
-						}
+			// the dequeue is blocking with a timeout of 500ms
+			// as soon as a message is available the Dequeue will be unblocked
+			//msg := producer.pendingSequencesQueue.Dequeue(time.Millisecond * 500)
+			if producer.pendingSequencesQueue.IsStopped() {
+				break
+			}
+			if msg != nil {
+				// There is something in the queue.Checks the buffer is still less than the maxFrame
+				totalBufferToSend += len(msg.messageBytes)
+				if totalBufferToSend > maxFrame {
+					// if the totalBufferToSend is greater than the requestedMaxFrameSize
+					// the producer sends the messages and reset the buffer
+					lastError = producer.internalBatchSend(sequenceToSend)
+					sequenceToSend = sequenceToSend[:0]
+					totalBufferToSend = initBufferPublishSize
+				}
 
-						sequenceToSend = append(sequenceToSend, msg)
-					}
+				sequenceToSend = append(sequenceToSend, msg)
+			}
 
-					canSend := producer.pendingSequencesQueue.IsEmpty()
-					// if producer.pendingSequencesQueue.IsEmpty() means that the queue is empty so the producer is not sending
-					// the messages during the checks of the buffer. In this case
-					if canSend || len(sequenceToSend) >= producer.options.BatchSize {
-						if len(sequenceToSend) > 0 {
-							lastError = producer.internalBatchSend(sequenceToSend)
-							sequenceToSend = sequenceToSend[:0]
-							totalBufferToSend += initBufferPublishSize
-						}
-					}
+			canSend := producer.pendingSequencesQueue.IsEmpty()
+			// if producer.pendingSequencesQueue.IsEmpty() means that the queue is empty so the producer is not sending
+			// the messages during the checks of the buffer. In this case
+			if canSend || len(sequenceToSend) >= producer.options.BatchSize {
+				if len(sequenceToSend) > 0 {
+					lastError = producer.internalBatchSend(sequenceToSend)
+					sequenceToSend = sequenceToSend[:0]
+					totalBufferToSend += initBufferPublishSize
 				}
 			}
 			if lastError != nil {
 				logs.LogError("error during sending messages: %s", lastError)
 			}
+		}
+
+		// just in case there are messages in the buffer
+		// not matter is sent or not the messages will be timed out
+		if len(sequenceToSend) > 0 {
+			_ = producer.internalBatchSend(sequenceToSend)
 		}
 
 	}()

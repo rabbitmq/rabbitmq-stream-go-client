@@ -296,9 +296,9 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	subscriptionId := readByte(r)
 	consumer, err := c.coordinator.GetConsumerById(subscriptionId)
+	consumerFound := err == nil
 	if err != nil {
 		logs.LogError("Handle Deliver consumer not found %s", err)
-		return
 
 	}
 
@@ -319,6 +319,16 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	_, _ = readUInt(r)
 
 	var offsetLimit int64 = -1
+
+	var bytesBuffer = make([]byte, int(dataLength))
+	_, err = io.ReadFull(r, bytesBuffer)
+	logErrorCommand(err, "handleDeliver")
+
+	if !consumerFound {
+		// even if the consumer is not found we need to read the buffer
+		logs.LogWarn("the consumer was not found %d. cleaning the buffer", subscriptionId)
+		return
+	}
 
 	// we can have two cases
 	// 1. single active consumer is enabled
@@ -346,9 +356,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	batchConsumingMessages := make(offsetMessages, 0, numRecords)
 	var chunk chunkInfo
 	chunk.numEntries = numEntries
-	var bytesBuffer = make([]byte, int(dataLength))
-	_, err = io.ReadFull(r, bytesBuffer)
-	logErrorCommand(err, "handleDeliver")
 
 	/// headers ---> payload -> messages
 

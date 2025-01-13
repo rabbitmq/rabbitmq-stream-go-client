@@ -35,32 +35,6 @@ func (bq *BlockingQueue[T]) Enqueue(item T) error {
 	return nil
 }
 
-// Dequeue removes an item from the queue with a timeout
-func (bq *BlockingQueue[T]) Dequeue(timeout time.Duration) T {
-	if bq.IsStopped() {
-		var zeroValue T // Zero value of type T
-		return zeroValue
-	}
-
-	select {
-	case item, ok := <-bq.queue:
-		if !ok {
-			var zeroValue T // Zero value of type T
-			return zeroValue
-		}
-		return item
-	case <-time.After(timeout):
-		var zeroValue T // Zero value of type T
-		return zeroValue
-	}
-}
-
-func (bq *BlockingQueue[T]) Process(f func(T)) {
-	for item := range bq.queue {
-		f(item)
-	}
-}
-
 func (bq *BlockingQueue[T]) GetChannel() chan T {
 	return bq.queue
 }
@@ -71,13 +45,6 @@ func (bq *BlockingQueue[T]) Size() int {
 
 func (bq *BlockingQueue[T]) IsEmpty() bool {
 	return len(bq.queue) == 0
-}
-
-func (bq *BlockingQueue[T]) IsReadyToSend() bool {
-
-	millis := time.Since(time.Unix(0, atomic.LoadInt64(&bq.lastUpdate))).Milliseconds()
-
-	return millis > 10 && len(bq.queue) == 0
 }
 
 // Stop stops the queue from accepting new items
