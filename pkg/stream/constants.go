@@ -88,7 +88,8 @@ const (
 	///
 	defaultSocketCallTimeout = 10 * time.Second
 
-	defaultHeartbeat = 60 * time.Second
+	defaultHeartbeat    = 60 * time.Second
+	defaultMaxFrameSize = 1048574
 
 	//
 	LocalhostUriConnection = "rabbitmq-stream://guest:guest@localhost:5552/%2f"
@@ -119,6 +120,7 @@ const (
 	LeaderLocatorBalanced    = "balanced"
 	LeaderLocatorClientLocal = "client-local"
 	DeletePublisher          = "deletePublisher"
+	UnSubscribe              = "unSubscribe"
 
 	StreamTcpPort = "5552"
 

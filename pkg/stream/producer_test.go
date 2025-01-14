@@ -331,9 +331,10 @@ var _ = Describe("Streaming Producers", func() {
 			Expect(producer.Send(amqp.NewMessage(s))).NotTo(HaveOccurred())
 		}
 
+		time.Sleep(1500 * time.Millisecond)
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 5*time.Second).Should(Equal(int32(101)),
+		}, 5*time.Second).WithPolling(300*time.Millisecond).Should(Equal(int32(101)),
 			"confirm should receive same messages Send by producer")
 
 		Expect(producer.lenUnConfirmed()).To(Equal(0))
@@ -569,8 +570,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 1; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -578,8 +578,7 @@ var _ = Describe("Streaming Producers", func() {
 		msg.SetPublishingId(1)
 		messageBytes, _ := msg.MarshalBinary()
 		messagesSequence[0] = &messageSequence{
-			messageBytes:     messageBytes,
-			unCompressedSize: len(messageBytes),
+			messageBytes: messageBytes,
 		}
 
 		// 200 producer ID doesn't exist
@@ -658,8 +657,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 201; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -675,8 +673,7 @@ var _ = Describe("Streaming Producers", func() {
 
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -691,8 +688,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 1; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -707,8 +703,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 1000; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 
@@ -723,8 +718,7 @@ var _ = Describe("Streaming Producers", func() {
 		for i := 0; i < 14; i++ {
 			s := make([]byte, 50)
 			messagesSequence[i] = &messageSequence{
-				messageBytes:     s,
-				unCompressedSize: len(s),
+				messageBytes: s,
 			}
 		}
 

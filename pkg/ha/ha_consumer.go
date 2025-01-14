@@ -88,7 +88,6 @@ func NewReliableConsumer(env *stream.Environment, streamName string,
 	logs.LogDebug("[Reliable] - creating %s", res.getInfo())
 	err := res.newConsumer()
 	if err == nil {
-
 		res.setStatus(StatusOpen)
 	}
 	logs.LogDebug("[Reliable] - created %s", res.getInfo())

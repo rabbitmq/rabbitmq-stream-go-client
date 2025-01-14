@@ -172,6 +172,7 @@ var _ = Describe("Coordinator", func() {
 					Command:    0,
 					StreamName: "UNIT_TESTS",
 					Name:       "",
+					Reason:     "UNIT_TEST",
 					Err:        nil,
 				})
 				Expect(err).NotTo(HaveOccurred())

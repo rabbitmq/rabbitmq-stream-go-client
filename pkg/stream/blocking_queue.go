@@ -10,8 +10,9 @@ import (
 var ErrBlockingQueueStopped = errors.New("blocking queue stopped")
 
 type BlockingQueue[T any] struct {
-	queue  chan T
-	status int32
+	queue      chan T
+	status     int32
+	lastUpdate int64
 }
 
 // NewBlockingQueue initializes a new BlockingQueue with the given capacity
@@ -27,28 +28,13 @@ func (bq *BlockingQueue[T]) Enqueue(item T) error {
 	if bq.IsStopped() {
 		return ErrBlockingQueueStopped
 	}
+	atomic.StoreInt64(&bq.lastUpdate, time.Now().UnixNano())
 	bq.queue <- item
-
 	return nil
 }
 
-// Dequeue removes an item from the queue with a timeout
-func (bq *BlockingQueue[T]) Dequeue(timeout time.Duration) T {
-	if bq.IsStopped() {
-		var zeroValue T // Zero value of type T
-		return zeroValue
-	}
-	select {
-	case item, ok := <-bq.queue:
-		if !ok {
-			var zeroValue T // Zero value of type T
-			return zeroValue
-		}
-		return item
-	case <-time.After(timeout):
-		var zeroValue T // Zero value of type T
-		return zeroValue
-	}
+func (bq *BlockingQueue[T]) GetChannel() chan T {
+	return bq.queue
 }
 
 func (bq *BlockingQueue[T]) Size() int {

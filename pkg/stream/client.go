@@ -64,7 +64,6 @@ type Client struct {
 	saslConfiguration    *SaslConfiguration
 
 	mutex             *sync.Mutex
-	metadataListener  metadataListener
 	lastHeartBeat     HeartBeat
 	socketCallTimeout time.Duration
 	availableFeatures *availableFeatures
@@ -112,14 +111,10 @@ func newClient(connectionName string, broker *Broker,
 }
 
 func (c *Client) getSocket() *socket {
-	//c.mutex.Lock()
-	//defer c.mutex.Unlock()
 	return &c.socket
 }
 
 func (c *Client) setSocketConnection(connection net.Conn) {
-	//c.mutex.Lock()
-	//defer c.mutex.Unlock()
 	c.socket.connection = connection
 	c.socket.writer = bufio.NewWriter(connection)
 }
@@ -432,7 +427,7 @@ func (c *Client) heartBeat() {
 			tickerHeartbeat.Stop()
 			return
 		case <-tickerHeartbeat.C:
-			for c.socket.isOpen() {
+			if c.socket.isOpen() {
 				if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
 					v := atomic.AddInt32(&heartBeatMissed, 1)
 					logs.LogWarn("Missing heart beat: %d", v)
@@ -512,10 +507,6 @@ func (c *Client) Close() error {
 		}
 	}
 
-	if c.metadataListener != nil {
-		close(c.metadataListener)
-		c.metadataListener = nil
-	}
 	c.closeHartBeat()
 	if c.getSocket().isOpen() {
 
@@ -747,6 +738,7 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 
 	streamMetadata := streamsMetadata.Get(stream)
 	if streamMetadata.responseCode != responseCodeOk {
+
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 
@@ -883,6 +875,10 @@ func (c *Client) DeclareSubscriber(streamName string,
 		return nil, fmt.Errorf("message count before storage must be bigger than one")
 	}
 
+	if messagesHandler == nil {
+		return nil, fmt.Errorf("messages Handler must be set")
+	}
+
 	if options.Offset.isLastConsumed() {
 		lastOffset, err := c.queryOffset(options.ConsumerName, streamName)
 		switch {
@@ -992,12 +988,8 @@ func (c *Client) DeclareSubscriber(streamName string,
 	go func() {
 		for {
 			select {
-			case code := <-consumer.response.code:
-				if code.id == closeChannel {
-					return
-				}
 
-			case chunk, ok := <-consumer.response.chunkForConsumer:
+			case chunk, ok := <-consumer.chunkForConsumer:
 				if !ok {
 					return
 				}

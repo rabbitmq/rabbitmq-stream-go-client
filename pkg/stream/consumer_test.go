@@ -123,7 +123,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&commandIdRecv)
 		}, 5*time.Second).Should(Equal(int32(CommandUnsubscribe)),
-			"command received should be CommandMetadataUpdate ")
+			"command received should be unSubscribe ")
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -639,6 +639,13 @@ var _ = Describe("Streaming Consumers", func() {
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 			}, NewConsumerOptions().SetAutoCommit(
 				NewAutoCommitStrategy().SetFlushInterval(10*time.Millisecond)))
+		Expect(err).To(HaveOccurred())
+
+		// message handler must be set
+		_, err = env.NewConsumer(streamName,
+			nil, &ConsumerOptions{
+				Offset: OffsetSpecification{},
+			})
 		Expect(err).To(HaveOccurred())
 
 	})

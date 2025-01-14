@@ -51,11 +51,9 @@ func (cs *ConfirmationStatus) GetErrorCode() uint16 {
 }
 
 type messageSequence struct {
-	messageBytes     []byte
-	unCompressedSize int
-	publishingId     int64
-	filterValue      string
-	refMessage       *message.StreamMessage
+	messageBytes []byte
+	publishingId int64
+	filterValue  string
 }
 
 type Producer struct {
@@ -101,7 +99,7 @@ type ProducerOptions struct {
 	// It is not used anymore given the dynamic batching
 	QueueSize int // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
 	BatchSize int // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput. Valid only for the method Send()
-	// Deprecated: starting from 1.5.0 the BatchPublishingDelay is deprecated, and it will be removed in the next releases
+	// Deprecated: starting from 1.5.0 the SetBatchPublishingDelay is deprecated, and it will be removed in the next releases
 	// It is not used anymore given the dynamic batching
 	BatchPublishingDelay int // Timout within the aggregation sent a batch of messages. Valid only for the method Send()
 	// Size of sub Entry, to aggregate more subEntry using one publishing id
@@ -287,32 +285,26 @@ func (producer *Producer) closeConfirmationStatus() {
 func (producer *Producer) processPendingSequencesQueue() {
 
 	maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
-	// the buffer is initialized with the size of the header
-	sequenceToSend := make([]*messageSequence, 0)
 	go func() {
+		sequenceToSend := make([]*messageSequence, 0)
 		totalBufferToSend := initBufferPublishSize
-		for {
+		for msg := range producer.pendingSequencesQueue.GetChannel() {
 			var lastError error
-			// the dequeue is blocking with a timeout of 500ms
-			// as soon as a message is available the Dequeue will be unblocked
-			msg := producer.pendingSequencesQueue.Dequeue(time.Millisecond * 500)
+
 			if producer.pendingSequencesQueue.IsStopped() {
 				break
 			}
-
-			if msg != nil {
-				// There is something in the queue.Checks the buffer is still less than the maxFrame
-				totalBufferToSend += msg.unCompressedSize
-				if totalBufferToSend > maxFrame {
-					// if the totalBufferToSend is greater than the requestedMaxFrameSize
-					// the producer sends the messages and reset the buffer
-					lastError = producer.internalBatchSend(sequenceToSend)
-					sequenceToSend = sequenceToSend[:0]
-					totalBufferToSend = initBufferPublishSize
-				}
-
-				sequenceToSend = append(sequenceToSend, msg)
+			// There is something in the queue. Checks the buffer is still less than the maxFrame
+			totalBufferToSend += len(msg.messageBytes)
+			if totalBufferToSend > maxFrame {
+				// if the totalBufferToSend is greater than the requestedMaxFrameSize
+				// the producer sends the messages and reset the buffer
+				lastError = producer.internalBatchSend(sequenceToSend)
+				sequenceToSend = sequenceToSend[:0]
+				totalBufferToSend = initBufferPublishSize
 			}
+
+			sequenceToSend = append(sequenceToSend, msg)
 
 			// if producer.pendingSequencesQueue.IsEmpty() means that the queue is empty so the producer is not sending
 			// the messages during the checks of the buffer. In this case
@@ -327,8 +319,15 @@ func (producer *Producer) processPendingSequencesQueue() {
 				logs.LogError("error during sending messages: %s", lastError)
 			}
 		}
-		logs.LogDebug("producer %d processPendingSequencesQueue closed", producer.id)
+
+		// just in case there are messages in the buffer
+		// not matter is sent or not the messages will be timed out
+		if len(sequenceToSend) > 0 {
+			_ = producer.internalBatchSend(sequenceToSend)
+		}
+
 	}()
+	logs.LogDebug("producer %d processPendingSequencesQueue closed", producer.id)
 }
 
 func (producer *Producer) assignPublishingID(message message.StreamMessage) int64 {
@@ -350,30 +349,26 @@ func (producer *Producer) fromMessageToMessageSequence(streamMessage message.Str
 	if producer.options.IsFilterEnabled() {
 		filterValue = producer.options.Filter.FilterValue(streamMessage)
 	}
-
-	return &messageSequence{
-		messageBytes:     marshalBinary,
-		unCompressedSize: len(marshalBinary),
-		publishingId:     seq,
-		filterValue:      filterValue,
-		refMessage:       &streamMessage,
-	}, nil
-
+	msqSeq := &messageSequence{}
+	msqSeq.messageBytes = marshalBinary
+	msqSeq.publishingId = seq
+	msqSeq.filterValue = filterValue
+	return msqSeq, nil
 }
 
 // Send sends a message to the stream and returns an error if the message could not be sent.
 // The Send is asynchronous. The message is sent to a channel ant then other goroutines aggregate and sent the messages
 // The Send is dynamic so the number of messages sent decided internally based on the BatchSize
-// and the messages contained in the buffer. The aggregation is up to the client.
+// and the messages in the buffer. The aggregation is up to the client.
 // returns an error if the message could not be sent for marshal problems or if the buffer is too large
 func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	messageSeq, err := producer.fromMessageToMessageSequence(streamMessage)
 	if err != nil {
 		return err
 	}
-	producer.unConfirmed.addFromSequence(messageSeq, producer.GetID())
+	producer.unConfirmed.addFromSequence(messageSeq, &streamMessage, producer.GetID())
 
-	if len(messageSeq.messageBytes) > producer.options.client.getTuneState().requestedMaxFrameSize {
+	if len(messageSeq.messageBytes) > defaultMaxFrameSize {
 		tooLarge := producer.unConfirmed.extractWithError(messageSeq.publishingId, responseCodeFrameTooLarge)
 		producer.sendConfirmationStatus([]*ConfirmationStatus{tooLarge})
 		return FrameTooLarge
@@ -393,7 +388,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 // BatchSend is not affected by the BatchSize and BatchPublishingDelay options.
 // returns an error if the message could not be sent for marshal problems or if the buffer is too large
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
-	maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
+	maxFrame := defaultMaxFrameSize
 	var messagesSequence = make([]*messageSequence, 0)
 	totalBufferToSend := 0
 	for _, batchMessage := range batchMessages {
@@ -401,7 +396,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		if err != nil {
 			return err
 		}
-		producer.unConfirmed.addFromSequence(messageSeq, producer.GetID())
+		producer.unConfirmed.addFromSequence(messageSeq, &batchMessage, producer.GetID())
 
 		totalBufferToSend += len(messageSeq.messageBytes)
 		messagesSequence = append(messagesSequence, messageSeq)
@@ -419,7 +414,6 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		return FrameTooLarge
 	}
 
-	// all the messages are unconfirmed
 	return producer.internalBatchSend(messagesSequence)
 }
 
@@ -526,7 +520,7 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 
 	if !producer.options.isSubEntriesBatching() {
 		for _, msg := range messagesSequence {
-			msgLen += msg.unCompressedSize + 8 + 4
+			msgLen += len(msg.messageBytes) + 8 + 4
 		}
 	}
 
@@ -606,9 +600,12 @@ func (producer *Producer) close(reason Event) error {
 	producer.closeConfirmationStatus()
 
 	if producer.options == nil {
+		// the options are usually not nil. This is just for safety and for to make some
+		// test easier to write
+		logs.LogDebug("producer options is nil, the close will be ignored")
 		return nil
 	}
-	_ = producer.options.client.coordinator.RemoveProducerById(producer.id, reason)
+	_, _ = producer.options.client.coordinator.ExtractProducerById(producer.id)
 
 	if !producer.options.client.socket.isOpen() {
 		return fmt.Errorf("tcp connection is closed")
@@ -620,10 +617,7 @@ func (producer *Producer) close(reason Event) error {
 	}
 
 	if producer.options.client.coordinator.ProducersCount() == 0 {
-		err := producer.options.client.Close()
-		if err != nil {
-			logs.LogError("error during closing client: %s", err)
-		}
+		_ = producer.options.client.Close()
 	}
 
 	if producer.onClose != nil {
@@ -690,7 +684,7 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 	frameHeaderLength := initBufferPublishSize
 	var msgLen int
 	for _, msg := range messagesSequence {
-		msgLen += msg.unCompressedSize + 8 + 4
+		msgLen += len(msg.messageBytes) + 8 + 4
 		if msg.filterValue != "" {
 			msgLen += 2 + len(msg.filterValue)
 		}
