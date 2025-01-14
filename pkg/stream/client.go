@@ -63,8 +63,7 @@ type Client struct {
 	tcpParameters        *TCPParameters
 	saslConfiguration    *SaslConfiguration
 
-	mutex *sync.Mutex
-	//metadataListener  metadataListener
+	mutex             *sync.Mutex
 	lastHeartBeat     HeartBeat
 	socketCallTimeout time.Duration
 	availableFeatures *availableFeatures
@@ -112,14 +111,10 @@ func newClient(connectionName string, broker *Broker,
 }
 
 func (c *Client) getSocket() *socket {
-	//c.mutexMessageMap.Lock()
-	//defer c.mutexMessageMap.Unlock()
 	return &c.socket
 }
 
 func (c *Client) setSocketConnection(connection net.Conn) {
-	//c.mutexMessageMap.Lock()
-	//defer c.mutexMessageMap.Unlock()
 	c.socket.connection = connection
 	c.socket.writer = bufio.NewWriter(connection)
 }
@@ -512,10 +507,6 @@ func (c *Client) Close() error {
 		}
 	}
 
-	//if c.metadataListener != nil {
-	//	close(c.metadataListener)
-	//	c.metadataListener = nil
-	//}
 	c.closeHartBeat()
 	if c.getSocket().isOpen() {
 

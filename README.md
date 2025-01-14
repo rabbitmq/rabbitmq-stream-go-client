@@ -48,6 +48,15 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
 ### Overview
 
 Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
+The client contains all features to interact with the RabbitMQ Stream Queues. </br>
+
+The main structure is the `Environment` that contains the `Producer` and `Consumer` interfaces. </br>
+
+`Producer` and `Consumer` are the main interfaces to interact with the RabbitMQ Stream Queues. </br>
+They don't support the auto-reconnect in case of disconnection but have the events to detect it.</br>
+
+The client provides the `ReliableProducer` and `ReliableConsumer` that support the auto-reconnect in case of disconnection.</br>
+See also the [Reliable Producer and Reliable Consumer](#reliable-producer-and-reliable-consumer) section.
 
 ### Installing
 

@@ -12,16 +12,14 @@ var ErrBlockingQueueStopped = errors.New("blocking queue stopped")
 type BlockingQueue[T any] struct {
 	queue      chan T
 	status     int32
-	capacity   int
 	lastUpdate int64
 }
 
 // NewBlockingQueue initializes a new BlockingQueue with the given capacity
 func NewBlockingQueue[T any](capacity int) *BlockingQueue[T] {
 	return &BlockingQueue[T]{
-		queue:    make(chan T, capacity),
-		capacity: capacity,
-		status:   0,
+		queue:  make(chan T, capacity),
+		status: 0,
 	}
 }
 

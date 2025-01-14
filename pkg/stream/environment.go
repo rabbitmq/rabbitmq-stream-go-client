@@ -592,19 +592,6 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 
 func (cc *environmentCoordinator) newClientForProducer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, rpcTimeOut time.Duration) *Client {
 	clientResult := newClient(connectionName, leader, tcpParameters, saslConfiguration, rpcTimeOut)
-	//chMeta := make(chan metaDataUpdateEvent, 1)
-	//clientResult.metadataListener = chMeta
-	//go func(ch <-chan metaDataUpdateEvent, cl *Client) {
-	//	for metaDataUpdateEvent := range ch {
-	//		clientResult.maybeCleanProducers(metaDataUpdateEvent.StreamName)
-	//		cc.maybeCleanClients()
-	//		if !cl.socket.isOpen() {
-	//			return
-	//		}
-	//	}
-	//
-	//}(chMeta, clientResult)
-
 	cc.nextId++
 	cc.clientsPerContext[cc.nextId] = clientResult
 	return clientResult
