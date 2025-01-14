@@ -884,6 +884,10 @@ func (c *Client) DeclareSubscriber(streamName string,
 		return nil, fmt.Errorf("message count before storage must be bigger than one")
 	}
 
+	if messagesHandler == nil {
+		return nil, fmt.Errorf("messages Handler must be set")
+	}
+
 	if options.Offset.isLastConsumed() {
 		lastOffset, err := c.queryOffset(options.ConsumerName, streamName)
 		switch {

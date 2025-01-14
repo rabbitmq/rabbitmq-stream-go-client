@@ -99,7 +99,8 @@ type ProducerOptions struct {
 	// It is not used anymore given the dynamic batching
 	QueueSize int // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
 	BatchSize int // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput. Valid only for the method Send()
-
+	// Deprecated: starting from 1.5.0 the SetBatchPublishingDelay is deprecated, and it will be removed in the next releases
+	// It is not used anymore given the dynamic batching
 	BatchPublishingDelay int // Timout within the aggregation sent a batch of messages. Valid only for the method Send()
 	// Size of sub Entry, to aggregate more subEntry using one publishing id
 	SubEntrySize int
@@ -290,30 +291,24 @@ func (producer *Producer) processPendingSequencesQueue() {
 		for msg := range producer.pendingSequencesQueue.GetChannel() {
 			var lastError error
 
-			// the dequeue is blocking with a timeout of 500ms
-			// as soon as a message is available the Dequeue will be unblocked
-			//msg := producer.pendingSequencesQueue.Dequeue(time.Millisecond * 500)
 			if producer.pendingSequencesQueue.IsStopped() {
 				break
 			}
-			if msg != nil {
-				// There is something in the queue.Checks the buffer is still less than the maxFrame
-				totalBufferToSend += len(msg.messageBytes)
-				if totalBufferToSend > maxFrame {
-					// if the totalBufferToSend is greater than the requestedMaxFrameSize
-					// the producer sends the messages and reset the buffer
-					lastError = producer.internalBatchSend(sequenceToSend)
-					sequenceToSend = sequenceToSend[:0]
-					totalBufferToSend = initBufferPublishSize
-				}
-
-				sequenceToSend = append(sequenceToSend, msg)
+			// There is something in the queue. Checks the buffer is still less than the maxFrame
+			totalBufferToSend += len(msg.messageBytes)
+			if totalBufferToSend > maxFrame {
+				// if the totalBufferToSend is greater than the requestedMaxFrameSize
+				// the producer sends the messages and reset the buffer
+				lastError = producer.internalBatchSend(sequenceToSend)
+				sequenceToSend = sequenceToSend[:0]
+				totalBufferToSend = initBufferPublishSize
 			}
 
-			canSend := producer.pendingSequencesQueue.IsEmpty()
+			sequenceToSend = append(sequenceToSend, msg)
+
 			// if producer.pendingSequencesQueue.IsEmpty() means that the queue is empty so the producer is not sending
 			// the messages during the checks of the buffer. In this case
-			if canSend || len(sequenceToSend) >= producer.options.BatchSize {
+			if producer.pendingSequencesQueue.IsEmpty() || len(sequenceToSend) >= producer.options.BatchSize {
 				if len(sequenceToSend) > 0 {
 					lastError = producer.internalBatchSend(sequenceToSend)
 					sequenceToSend = sequenceToSend[:0]
@@ -358,15 +353,13 @@ func (producer *Producer) fromMessageToMessageSequence(streamMessage message.Str
 	msqSeq.messageBytes = marshalBinary
 	msqSeq.publishingId = seq
 	msqSeq.filterValue = filterValue
-
 	return msqSeq, nil
-
 }
 
 // Send sends a message to the stream and returns an error if the message could not be sent.
 // The Send is asynchronous. The message is sent to a channel ant then other goroutines aggregate and sent the messages
 // The Send is dynamic so the number of messages sent decided internally based on the BatchSize
-// and the messages contained in the buffer. The aggregation is up to the client.
+// and the messages in the buffer. The aggregation is up to the client.
 // returns an error if the message could not be sent for marshal problems or if the buffer is too large
 func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	messageSeq, err := producer.fromMessageToMessageSequence(streamMessage)
@@ -421,7 +414,6 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		return FrameTooLarge
 	}
 
-	// all the messages are unconfirmed
 	return producer.internalBatchSend(messagesSequence)
 }
 

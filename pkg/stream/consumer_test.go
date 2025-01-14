@@ -641,6 +641,13 @@ var _ = Describe("Streaming Consumers", func() {
 				NewAutoCommitStrategy().SetFlushInterval(10*time.Millisecond)))
 		Expect(err).To(HaveOccurred())
 
+		// message handler must be set
+		_, err = env.NewConsumer(streamName,
+			nil, &ConsumerOptions{
+				Offset: OffsetSpecification{},
+			})
+		Expect(err).To(HaveOccurred())
+
 	})
 
 	It("Sub Batch consumer with different publishers GZIP and Not", func() {

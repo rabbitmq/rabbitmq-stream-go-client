@@ -331,7 +331,6 @@ func (consumer *Consumer) close(reason Event) error {
 		return nil
 	}
 
-	_, _ = consumer.options.client.coordinator.ExtractConsumerById(consumer.ID)
 	consumer.cacheStoreOffset()
 	consumer.setStatus(closed)
 
@@ -341,10 +340,7 @@ func (consumer *Consumer) close(reason Event) error {
 		consumer.closeHandler = nil
 	}
 
-	//if consumer.chunkForConsumer != nil {
 	close(consumer.chunkForConsumer)
-	//consumer.chunkForConsumer = nil
-	//}
 
 	if consumer.response.data != nil {
 		close(consumer.response.data)
@@ -365,6 +361,7 @@ func (consumer *Consumer) close(reason Event) error {
 			logs.LogWarn("error during consumer unsubscribe:%s", err.Err)
 		}
 	}
+	_, _ = consumer.options.client.coordinator.ExtractConsumerById(consumer.ID)
 
 	if consumer.options != nil && consumer.options.client.coordinator.ConsumersCount() == 0 {
 		_ = consumer.options.client.Close()

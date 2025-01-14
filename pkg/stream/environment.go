@@ -627,19 +627,6 @@ func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Bro
 
 	if clientResult == nil {
 		clientResult = newClient(connectionName, leader, tcpParameters, saslConfiguration, rpcTimeout)
-		//chMeta := make(chan metaDataUpdateEvent)
-		//clientResult.metadataListener = chMeta
-		//go func(ch <-chan metaDataUpdateEvent, cl *Client) {
-		//	for metaDataUpdateEvent := range ch {
-		//		clientResult.maybeCleanConsumers(metaDataUpdateEvent.StreamName)
-		//		cc.maybeCleanClients()
-		//		if !cl.socket.isOpen() {
-		//			return
-		//		}
-		//	}
-		//
-		//}(chMeta, clientResult)
-
 		cc.nextId++
 		cc.clientsPerContext[cc.nextId] = clientResult
 	}
