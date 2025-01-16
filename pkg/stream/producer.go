@@ -362,10 +362,25 @@ func (producer *Producer) fromMessageToMessageSequence(streamMessage message.Str
 // and the messages in the buffer. The aggregation is up to the client.
 // returns an error if the message could not be sent for marshal problems or if the buffer is too large
 func (producer *Producer) Send(streamMessage message.StreamMessage) error {
+
 	messageSeq, err := producer.fromMessageToMessageSequence(streamMessage)
 	if err != nil {
 		return err
 	}
+	if producer.getStatus() == closed {
+		producer.sendConfirmationStatus([]*ConfirmationStatus{
+			{
+				inserted:     time.Now(),
+				message:      streamMessage,
+				producerID:   producer.GetID(),
+				publishingId: messageSeq.publishingId,
+				confirmed:    false,
+				err:          AlreadyClosed,
+			},
+		})
+		return fmt.Errorf("producer id: %d closed", producer.id)
+	}
+
 	producer.unConfirmed.addFromSequence(messageSeq, &streamMessage, producer.GetID())
 
 	if len(messageSeq.messageBytes) > defaultMaxFrameSize {
@@ -377,7 +392,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	// se the processPendingSequencesQueue function
 	err = producer.pendingSequencesQueue.Enqueue(messageSeq)
 	if err != nil {
-		return fmt.Errorf("error during enqueue message: %s. Message will be in timed. Producer id: %d ", err, producer.id)
+		return fmt.Errorf("error during enqueue message: %s pending queue closed. Producer id: %d ", err, producer.id)
 	}
 	return nil
 }
