@@ -628,7 +628,6 @@ func (producer *Producer) close(reason Event) error {
 		logs.LogDebug("producer options is nil, the close will be ignored")
 		return nil
 	}
-	_, _ = producer.options.client.coordinator.ExtractProducerById(producer.id)
 
 	if !producer.options.client.socket.isOpen() {
 		return fmt.Errorf("tcp connection is closed")
@@ -638,6 +637,8 @@ func (producer *Producer) close(reason Event) error {
 	if reason.Reason == DeletePublisher {
 		_ = producer.options.client.deletePublisher(producer.id)
 	}
+
+	_, _ = producer.options.client.coordinator.ExtractProducerById(producer.id)
 
 	if producer.options.client.coordinator.ProducersCount() == 0 {
 		_ = producer.options.client.Close()
