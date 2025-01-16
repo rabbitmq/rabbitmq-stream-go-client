@@ -63,7 +63,6 @@ type ReliableProducer struct {
 	producerOptions       *stream.ProducerOptions
 	count                 int32
 	confirmMessageHandler ConfirmMessageHandler
-	channelPublishConfirm stream.ChannelPublishConfirm
 	mutex                 *sync.Mutex
 	mutexStatus           *sync.Mutex
 	status                int
@@ -108,8 +107,7 @@ func (p *ReliableProducer) newProducer() error {
 
 		return err
 	}
-	p.channelPublishConfirm = producer.NotifyPublishConfirmation()
-	p.handlePublishConfirm(p.channelPublishConfirm)
+	p.handlePublishConfirm(producer.NotifyPublishConfirmation())
 	channelNotifyClose := producer.NotifyClose()
 	p.handleNotifyClose(channelNotifyClose)
 	p.producer = producer
