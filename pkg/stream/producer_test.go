@@ -814,6 +814,15 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(err.Error()).To(ContainSubstring("producer id: 0 closed"))
 	})
 
+	It("Can't bach send message if the producer is closed", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
+		err = producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, 50))})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("producer id: 0 closed"))
+	})
+
 })
 
 func testCompress(producer *Producer) {

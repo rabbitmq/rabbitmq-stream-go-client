@@ -418,6 +418,14 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 	}
 	//
 
+	if producer.getStatus() == closed {
+		for _, msg := range messagesSequence {
+			m := producer.unConfirmed.extractWithError(msg.publishingId, entityClosed)
+			producer.sendConfirmationStatus([]*ConfirmationStatus{m})
+		}
+		return fmt.Errorf("producer id: %d closed", producer.id)
+	}
+
 	if totalBufferToSend+initBufferPublishSize > maxFrame {
 		// if the totalBufferToSend is greater than the requestedMaxFrameSize
 		// all the messages are unconfirmed
