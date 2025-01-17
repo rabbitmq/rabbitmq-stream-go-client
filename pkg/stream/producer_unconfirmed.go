@@ -3,8 +3,6 @@ package stream
 import (
 	"sync"
 	"time"
-
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 )
 
 // unConfirmed is a structure that holds unconfirmed messages
@@ -32,15 +30,16 @@ func newUnConfirmed() *unConfirmed {
 	return r
 }
 
-func (u *unConfirmed) addFromSequence(message *messageSequence, source *message.StreamMessage, producerID uint8) {
-
+func (u *unConfirmed) addFromSequences(messages []*messageSequence, producerID uint8) {
 	u.mutexMessageMap.Lock()
-	u.messages[message.publishingId] = &ConfirmationStatus{
-		inserted:     time.Now(),
-		message:      *source,
-		producerID:   producerID,
-		publishingId: message.publishingId,
-		confirmed:    false,
+	for _, msgSeq := range messages {
+		u.messages[msgSeq.publishingId] = &ConfirmationStatus{
+			inserted:     time.Now(),
+			message:      msgSeq.sourceMsg,
+			producerID:   producerID,
+			publishingId: msgSeq.publishingId,
+			confirmed:    false,
+		}
 	}
 	u.mutexMessageMap.Unlock()
 }

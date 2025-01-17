@@ -2,17 +2,17 @@ package stream
 
 import (
 	"errors"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync/atomic"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 var ErrBlockingQueueStopped = errors.New("blocking queue stopped")
 
 type BlockingQueue[T any] struct {
-	queue      chan T
-	status     int32
-	lastUpdate int64
+	queue  chan T
+	status int32
 }
 
 // NewBlockingQueue initializes a new BlockingQueue with the given capacity
@@ -28,7 +28,6 @@ func (bq *BlockingQueue[T]) Enqueue(item T) error {
 	if bq.IsStopped() {
 		return ErrBlockingQueueStopped
 	}
-	atomic.StoreInt64(&bq.lastUpdate, time.Now().UnixNano())
 	bq.queue <- item
 	return nil
 }
@@ -50,26 +49,22 @@ func (bq *BlockingQueue[T]) IsEmpty() bool {
 // Stop is different from Close in that it allows the
 // existing items to be processed.
 // Drain the queue to be sure there are not pending messages
-func (bq *BlockingQueue[T]) Stop() {
+func (bq *BlockingQueue[T]) Stop() []T {
 	atomic.StoreInt32(&bq.status, 1)
 	// drain the queue. To be sure there are not pending messages
-	// in the queue.
-	// it does not matter if we lose some messages here
-	// since there is the unConfirmed map to handle the messages
-	isActive := true
-	for isActive {
+	// in the queue and return to the caller the remaining pending messages
+	msgInQueue := make([]T, 0, len(bq.queue))
+outer:
+	for {
 		select {
-		case <-bq.queue:
-			// do nothing
+		case msg := <-bq.queue:
+			msgInQueue = append(msgInQueue, msg)
 		case <-time.After(10 * time.Millisecond):
-			isActive = false
-			return
-		default:
-			isActive = false
-			return
+			break outer
 		}
 	}
 	logs.LogDebug("BlockingQueue stopped")
+	return msgInQueue
 }
 
 func (bq *BlockingQueue[T]) Close() {

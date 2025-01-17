@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 )
 
 type ConfirmationStatus struct {
@@ -51,6 +52,7 @@ func (cs *ConfirmationStatus) GetErrorCode() uint16 {
 }
 
 type messageSequence struct {
+	sourceMsg    message.StreamMessage
 	messageBytes []byte
 	publishingId int64
 	filterValue  string
@@ -201,10 +203,6 @@ func (po *ProducerOptions) isSubEntriesBatching() bool {
 	return po.SubEntrySize > 1
 }
 
-func (producer *Producer) lenUnConfirmed() int {
-	return producer.unConfirmed.size()
-}
-
 // NotifyPublishConfirmation returns a channel that receives the confirmation status of the messages sent by the producer.
 func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
 	ch := make(chan []*ConfirmationStatus, 1)
@@ -292,6 +290,9 @@ func (producer *Producer) processPendingSequencesQueue() {
 			var lastError error
 
 			if producer.pendingSequencesQueue.IsStopped() {
+				// add also the last message to sequenceToSend
+				// otherwise it will be lost
+				sequenceToSend = append(sequenceToSend, msg)
 				break
 			}
 			// There is something in the queue. Checks the buffer is still less than the maxFrame
@@ -299,6 +300,7 @@ func (producer *Producer) processPendingSequencesQueue() {
 			if totalBufferToSend > maxFrame {
 				// if the totalBufferToSend is greater than the requestedMaxFrameSize
 				// the producer sends the messages and reset the buffer
+				producer.unConfirmed.addFromSequences(sequenceToSend, producer.GetID())
 				lastError = producer.internalBatchSend(sequenceToSend)
 				sequenceToSend = sequenceToSend[:0]
 				totalBufferToSend = initBufferPublishSize
@@ -310,6 +312,7 @@ func (producer *Producer) processPendingSequencesQueue() {
 			// the messages during the checks of the buffer. In this case
 			if producer.pendingSequencesQueue.IsEmpty() || len(sequenceToSend) >= producer.options.BatchSize {
 				if len(sequenceToSend) > 0 {
+					producer.unConfirmed.addFromSequences(sequenceToSend, producer.GetID())
 					lastError = producer.internalBatchSend(sequenceToSend)
 					sequenceToSend = sequenceToSend[:0]
 					totalBufferToSend += initBufferPublishSize
@@ -323,7 +326,7 @@ func (producer *Producer) processPendingSequencesQueue() {
 		// just in case there are messages in the buffer
 		// not matter is sent or not the messages will be timed out
 		if len(sequenceToSend) > 0 {
-			_ = producer.internalBatchSend(sequenceToSend)
+			producer.unConfirmed.addFromSequences(sequenceToSend, producer.GetID())
 		}
 
 	}()
@@ -349,10 +352,12 @@ func (producer *Producer) fromMessageToMessageSequence(streamMessage message.Str
 	if producer.options.IsFilterEnabled() {
 		filterValue = producer.options.Filter.FilterValue(streamMessage)
 	}
-	msqSeq := &messageSequence{}
-	msqSeq.messageBytes = marshalBinary
-	msqSeq.publishingId = seq
-	msqSeq.filterValue = filterValue
+	msqSeq := &messageSequence{
+		sourceMsg:    streamMessage,
+		messageBytes: marshalBinary,
+		publishingId: seq,
+		filterValue:  filterValue,
+	}
 	return msqSeq, nil
 }
 
@@ -362,7 +367,6 @@ func (producer *Producer) fromMessageToMessageSequence(streamMessage message.Str
 // and the messages in the buffer. The aggregation is up to the client.
 // returns an error if the message could not be sent for marshal problems or if the buffer is too large
 func (producer *Producer) Send(streamMessage message.StreamMessage) error {
-
 	messageSeq, err := producer.fromMessageToMessageSequence(streamMessage)
 	if err != nil {
 		return err
@@ -381,9 +385,8 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
-	producer.unConfirmed.addFromSequence(messageSeq, &streamMessage, producer.GetID())
-
 	if len(messageSeq.messageBytes) > defaultMaxFrameSize {
+		producer.unConfirmed.addFromSequences([]*messageSequence{messageSeq}, producer.GetID())
 		tooLarge := producer.unConfirmed.extractWithError(messageSeq.publishingId, responseCodeFrameTooLarge)
 		producer.sendConfirmationStatus([]*ConfirmationStatus{tooLarge})
 		return FrameTooLarge
@@ -404,22 +407,25 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 // returns an error if the message could not be sent for marshal problems or if the buffer is too large
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
 	maxFrame := defaultMaxFrameSize
-	var messagesSequence = make([]*messageSequence, 0)
+	var messagesSequences = make([]*messageSequence, 0, len(batchMessages))
 	totalBufferToSend := 0
+
 	for _, batchMessage := range batchMessages {
 		messageSeq, err := producer.fromMessageToMessageSequence(batchMessage)
 		if err != nil {
 			return err
 		}
-		producer.unConfirmed.addFromSequence(messageSeq, &batchMessage, producer.GetID())
 
 		totalBufferToSend += len(messageSeq.messageBytes)
-		messagesSequence = append(messagesSequence, messageSeq)
+		messagesSequences = append(messagesSequences, messageSeq)
 	}
-	//
+
+	if len(messagesSequences) > 0 {
+		producer.unConfirmed.addFromSequences(messagesSequences, producer.GetID())
+	}
 
 	if producer.getStatus() == closed {
-		for _, msg := range messagesSequence {
+		for _, msg := range messagesSequences {
 			m := producer.unConfirmed.extractWithError(msg.publishingId, entityClosed)
 			producer.sendConfirmationStatus([]*ConfirmationStatus{m})
 		}
@@ -430,14 +436,14 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		// if the totalBufferToSend is greater than the requestedMaxFrameSize
 		// all the messages are unconfirmed
 
-		for _, msg := range messagesSequence {
+		for _, msg := range messagesSequences {
 			m := producer.unConfirmed.extractWithError(msg.publishingId, responseCodeFrameTooLarge)
 			producer.sendConfirmationStatus([]*ConfirmationStatus{m})
 		}
 		return FrameTooLarge
 	}
 
-	return producer.internalBatchSend(messagesSequence)
+	return producer.internalBatchSend(messagesSequences)
 }
 
 func (producer *Producer) GetID() uint8 {
@@ -659,7 +665,11 @@ func (producer *Producer) stopAndWaitPendingSequencesQueue() {
 
 	// Stop the pendingSequencesQueue, so the producer can't send messages anymore
 	// but the producer can still handle the inflight messages
-	producer.pendingSequencesQueue.Stop()
+	pendingSequences := producer.pendingSequencesQueue.Stop()
+
+	if len(pendingSequences) > 0 {
+		producer.unConfirmed.addFromSequences(pendingSequences, producer.GetID())
+	}
 
 	// Stop the confirmationTimeoutTicker. It will flush the unconfirmed messages
 	producer.confirmationTimeoutTicker.Stop()
@@ -681,9 +691,9 @@ func (producer *Producer) waitForInflightMessages() {
 
 	tentatives := 0
 
-	for (producer.lenUnConfirmed() > 0) && tentatives < 5 {
+	for (producer.unConfirmed.size() > 0) && tentatives < 5 {
 		logs.LogInfo("wait inflight messages - unconfirmed len: %d - retry: %d",
-			producer.lenUnConfirmed(), tentatives)
+			producer.unConfirmed.size(), tentatives)
 		producer.flushUnConfirmedMessages()
 		time.Sleep(time.Duration(500) * time.Millisecond)
 		tentatives++
