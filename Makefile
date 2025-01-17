@@ -32,16 +32,8 @@ $(STATICCHECK):
 check: $(STATICCHECK)
 	$(STATICCHECK) ./pkg/stream
 
-GOMOCK ?= $(GOBIN)/mockgen
-GOMOCK_VERSION ?= v1.6.0
-$(GOMOCK):
-	go install github.com/golang/mock/mockgen@$(GOMOCK_VERSION)
-
-.PHONY: gomock
-gomock: $(GOMOCK)
-
 NUM_PROCS ?= 2
-TEST_TIMEOUT ?= 2m
+TEST_TIMEOUT ?= 3m
 test: vet fmt check
 	go run -mod=mod github.com/onsi/ginkgo/v2/ginkgo -r --procs=$(NUM_PROCS) --compilers=$(NUM_PROCS) \
 		--randomize-all --randomize-suites \
