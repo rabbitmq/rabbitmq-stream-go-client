@@ -1,9 +1,10 @@
 package stream
 
 import (
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 )
 
 // unConfirmed is a structure that holds unconfirmed messages
@@ -105,7 +106,7 @@ func (u *unConfirmed) extractWithTimeOut(timeout time.Duration) []*ConfirmationS
 	defer u.mutexMessageMap.Unlock()
 	var res []*ConfirmationStatus
 	for _, v := range u.messages {
-		if time.Since(v.inserted) > timeout {
+		if time.Since(v.inserted) >= timeout {
 			v := u.extract(v.publishingId, timeoutError, false)
 			res = append(res, v)
 		}
