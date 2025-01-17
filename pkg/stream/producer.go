@@ -195,10 +195,6 @@ func NewProducerOptions() *ProducerOptions {
 	}
 }
 
-func (producer *Producer) GetUnConfirmed() map[int64]*ConfirmationStatus {
-	return producer.unConfirmed.getAll()
-}
-
 func (po *ProducerOptions) isSubEntriesBatching() bool {
 	return po.SubEntrySize > 1
 }
