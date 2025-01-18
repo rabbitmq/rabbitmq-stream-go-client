@@ -256,7 +256,7 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	// to empty the buffer.
 	// The producer here could not exist because the producer is closed before the confirmations are received
 
-	var arraySeq []int64
+	arraySeq := make([]int64, 0, publishingIdCount)
 	for publishingIdCount != 0 {
 		seq := readInt64(r)
 		arraySeq = append(arraySeq, seq)

@@ -98,7 +98,7 @@ func (u *unConfirmed) extractWithConfirms(ids []int64) []*ConfirmationStatus {
 	u.mutexMessageMap.Lock()
 	defer u.mutexMessageMap.Unlock()
 
-	var res []*ConfirmationStatus
+	res := make([]*ConfirmationStatus, 0, len(ids))
 	for _, v := range ids {
 		if msg := u.extract(v, 0, true); msg != nil {
 			res = append(res, msg)
