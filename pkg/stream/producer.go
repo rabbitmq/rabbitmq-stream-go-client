@@ -331,11 +331,34 @@ func (producer *Producer) processPendingSequencesQueue() {
 		// just in case there are messages in the buffer
 		// not matter is sent or not the messages will be timed out
 		if len(sequenceToSend) > 0 {
-			producer.unConfirmed.addFromSequences(sequenceToSend, producer.GetID())
+			producer.markUnsentAsUnconfirmed(sequenceToSend)
 		}
 
 	}()
 	logs.LogDebug("producer %d processPendingSequencesQueue closed", producer.id)
+}
+
+func (producer *Producer) markUnsentAsUnconfirmed(sequences []*messageSequence) {
+	if len(sequences) == 0 {
+		return
+	}
+
+	// Send as unconfirmed the messages in the pendingSequencesQueue,
+	// that have never been sent,
+	// with the "entityClosed" error.
+	confirms := make([]*ConfirmationStatus, 0, len(sequences))
+	for _, ps := range sequences {
+		cs := &ConfirmationStatus{
+			inserted:     time.Now(),
+			message:      ps.sourceMsg,
+			producerID:   producer.GetID(),
+			publishingId: ps.publishingId,
+			confirmed:    false,
+		}
+		cs.updateStatus(entityClosed, false)
+		confirms = append(confirms, cs)
+	}
+	producer.sendConfirmationStatus(confirms)
 }
 
 func (producer *Producer) assignPublishingID(message message.StreamMessage) int64 {
@@ -377,15 +400,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return err
 	}
 	if producer.getStatus() == closed {
-		cs := &ConfirmationStatus{
-			inserted:     time.Now(),
-			message:      streamMessage,
-			producerID:   producer.GetID(),
-			publishingId: messageSeq.publishingId,
-		}
-		cs.updateStatus(entityClosed, false)
-
-		producer.sendConfirmationStatus([]*ConfirmationStatus{cs})
+		producer.markUnsentAsUnconfirmed([]*messageSequence{messageSeq})
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
@@ -424,16 +439,13 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		messagesSequences = append(messagesSequences, messageSeq)
 	}
 
-	if len(messagesSequences) > 0 {
-		producer.unConfirmed.addFromSequences(messagesSequences, producer.GetID())
+	if producer.getStatus() == closed {
+		producer.markUnsentAsUnconfirmed(messagesSequences)
+		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
-	if producer.getStatus() == closed {
-		for _, msg := range messagesSequences {
-			m := producer.unConfirmed.extractWithError(msg.publishingId, entityClosed)
-			producer.sendConfirmationStatus([]*ConfirmationStatus{m})
-		}
-		return fmt.Errorf("producer id: %d closed", producer.id)
+	if len(messagesSequences) > 0 {
+		producer.unConfirmed.addFromSequences(messagesSequences, producer.GetID())
 	}
 
 	if totalBufferToSend+initBufferPublishSize > maxFrame {
@@ -670,24 +682,7 @@ func (producer *Producer) stopAndWaitPendingSequencesQueue() {
 	// Stop the pendingSequencesQueue, so the producer can't send messages anymore
 	// but the producer can still handle the inflight messages
 	pendingSequences := producer.pendingSequencesQueue.Stop()
-
-	if len(pendingSequences) > 0 {
-		// Send as unconfirmed the messages in the pendingSequencesQueue, that have never been sent,
-		// with the "entityClosed" error.
-		pending := make([]*ConfirmationStatus, 0, len(pendingSequences))
-		for _, ps := range pendingSequences {
-			cs := &ConfirmationStatus{
-				inserted:     time.Now(),
-				message:      ps.sourceMsg,
-				producerID:   producer.GetID(),
-				publishingId: ps.publishingId,
-				confirmed:    false,
-			}
-			cs.updateStatus(entityClosed, false)
-			pending = append(pending, cs)
-		}
-		producer.sendConfirmationStatus(pending)
-	}
+	producer.markUnsentAsUnconfirmed(pendingSequences)
 
 	// Stop the confirmationTimeoutTicker. It will flush the unconfirmed messages
 	producer.confirmationTimeoutTicker.Stop()
