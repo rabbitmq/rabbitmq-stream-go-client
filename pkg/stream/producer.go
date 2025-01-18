@@ -51,6 +51,15 @@ func (cs *ConfirmationStatus) GetErrorCode() uint16 {
 	return cs.errorCode
 }
 
+func (cs *ConfirmationStatus) updateStatus(errorCode uint16, confirmed bool) {
+	cs.confirmed = confirmed
+	if confirmed {
+		return
+	}
+	cs.errorCode = errorCode
+	cs.err = lookErrorCode(errorCode)
+}
+
 type messageSequence struct {
 	sourceMsg    message.StreamMessage
 	messageBytes []byte

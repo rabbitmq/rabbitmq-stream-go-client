@@ -123,10 +123,10 @@ func (u *unConfirmed) extract(id int64, errorCode uint16, confirmed bool) *Confi
 	}
 
 	rootMessage := pm.ConfirmationStatus
-	u.updateStatus(rootMessage, errorCode, confirmed)
+	rootMessage.updateStatus(errorCode, confirmed)
 
 	for _, linkedMessage := range rootMessage.linkedTo {
-		u.updateStatus(linkedMessage, errorCode, confirmed)
+		linkedMessage.updateStatus(errorCode, confirmed)
 		if linkedPm := u.messages[linkedMessage.publishingId]; linkedPm != nil {
 			// Remove from priority queue if exists
 			if linkedPm.index != -1 {
@@ -143,15 +143,6 @@ func (u *unConfirmed) extract(id int64, errorCode uint16, confirmed bool) *Confi
 	delete(u.messages, id)
 
 	return rootMessage
-}
-
-func (u *unConfirmed) updateStatus(rootMessage *ConfirmationStatus, errorCode uint16, confirmed bool) {
-	rootMessage.confirmed = confirmed
-	if confirmed {
-		return
-	}
-	rootMessage.errorCode = errorCode
-	rootMessage.err = lookErrorCode(errorCode)
 }
 
 func (u *unConfirmed) extractWithTimeOut(timeout time.Duration) []*ConfirmationStatus {
