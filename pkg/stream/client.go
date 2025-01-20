@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"math/rand"
 	"net"
 	"net/url"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 // SaslConfiguration see
@@ -161,14 +162,20 @@ func (c *Client) connect() error {
 			return errorConnection
 		}
 
-		if err = connection.SetWriteBuffer(c.tcpParameters.WriteBuffer); err != nil {
-			logs.LogError("Failed to SetWriteBuffer to %d due to %v", c.tcpParameters.WriteBuffer, err)
-			return err
+		if c.tcpParameters.WriteBuffer > 0 {
+			if err = connection.SetWriteBuffer(c.tcpParameters.WriteBuffer); err != nil {
+				logs.LogError("Failed to SetWriteBuffer to %d due to %v", c.tcpParameters.WriteBuffer, err)
+				return err
+			}
 		}
-		if err = connection.SetReadBuffer(c.tcpParameters.ReadBuffer); err != nil {
-			logs.LogError("Failed to SetReadBuffer to %d due to %v", c.tcpParameters.ReadBuffer, err)
-			return err
+
+		if c.tcpParameters.ReadBuffer > 0 {
+			if err = connection.SetReadBuffer(c.tcpParameters.ReadBuffer); err != nil {
+				logs.LogError("Failed to SetReadBuffer to %d due to %v", c.tcpParameters.ReadBuffer, err)
+				return err
+			}
 		}
+
 		if err = connection.SetNoDelay(c.tcpParameters.NoDelay); err != nil {
 			logs.LogError("Failed to SetNoDelay to %b due to %v", c.tcpParameters.NoDelay, err)
 			return err
