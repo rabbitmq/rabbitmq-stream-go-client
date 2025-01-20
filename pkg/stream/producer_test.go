@@ -592,6 +592,9 @@ var _ = Describe("Streaming Producers", func() {
 			"it should receive some message")
 
 		Expect(env.DeleteStream(prodErrorStream)).NotTo(HaveOccurred())
+		// This test does not use production code. It is used only to simulate the publish error
+		// it gives the time to update the medata. that is not valid in this test
+		time.Sleep(500 * time.Millisecond)
 		Expect(env.Close()).NotTo(HaveOccurred())
 
 	})
