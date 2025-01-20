@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"time"
 )
@@ -22,26 +21,27 @@ type unConfirmed struct {
 const DefaultUnconfirmedSize = 10_000
 
 func newUnConfirmed() *unConfirmed {
-
 	r := &unConfirmed{
 		messages:        make(map[int64]*ConfirmationStatus, DefaultUnconfirmedSize),
 		mutexMessageMap: sync.RWMutex{},
 	}
-
 	return r
 }
 
-func (u *unConfirmed) addFromSequence(message *messageSequence, source *message.StreamMessage, producerID uint8) {
-
+func (u *unConfirmed) addFromSequences(messages []*messageSequence, producerID uint8) {
 	u.mutexMessageMap.Lock()
-	u.messages[message.publishingId] = &ConfirmationStatus{
-		inserted:     time.Now(),
-		message:      *source,
-		producerID:   producerID,
-		publishingId: message.publishingId,
-		confirmed:    false,
+	defer u.mutexMessageMap.Unlock()
+
+	for _, msgSeq := range messages {
+		u.messages[msgSeq.publishingId] = &ConfirmationStatus{
+			inserted:     time.Now(),
+			message:      msgSeq.sourceMsg,
+			producerID:   producerID,
+			publishingId: msgSeq.publishingId,
+			confirmed:    false,
+		}
+
 	}
-	u.mutexMessageMap.Unlock()
 }
 
 func (u *unConfirmed) link(from int64, to int64) {
@@ -56,8 +56,8 @@ func (u *unConfirmed) link(from int64, to int64) {
 func (u *unConfirmed) extractWithConfirms(ids []int64) []*ConfirmationStatus {
 	u.mutexMessageMap.Lock()
 	defer u.mutexMessageMap.Unlock()
-	var res []*ConfirmationStatus
 
+	res := make([]*ConfirmationStatus, 0, len(ids))
 	for _, v := range ids {
 		m := u.extract(v, 0, true)
 		if m != nil {
@@ -117,10 +117,4 @@ func (u *unConfirmed) size() int {
 	u.mutexMessageMap.Lock()
 	defer u.mutexMessageMap.Unlock()
 	return len(u.messages)
-}
-
-func (u *unConfirmed) getAll() map[int64]*ConfirmationStatus {
-	u.mutexMessageMap.Lock()
-	defer u.mutexMessageMap.Unlock()
-	return u.messages
 }

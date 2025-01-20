@@ -255,23 +255,11 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 	// even the producer is not found we need to read the publishingId
 	// to empty the buffer.
 	// The producer here could not exist because the producer is closed before the confirmations are received
-	//var unConfirmedRecv []*ConfirmationStatus
-	var arraySeq []int64
+
+	arraySeq := make([]int64, 0, publishingIdCount)
 	for publishingIdCount != 0 {
 		seq := readInt64(r)
 		arraySeq = append(arraySeq, seq)
-		//if producerFound {
-		//	m := producer.unConfirmed.extractWithConfirm(seq)
-		//	if m != nil {
-		//		unConfirmedRecv = append(unConfirmedRecv, m)
-		//
-		//		// in case of sub-batch entry the client receives only
-		//		// one publishingId (or sequence)
-		//		// so the other messages are confirmed using the linkedTo
-		//		unConfirmedRecv = append(unConfirmedRecv, m.linkedTo...)
-		//	}
-		//}
-
 		publishingIdCount--
 	}
 

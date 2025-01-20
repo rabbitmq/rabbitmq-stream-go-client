@@ -2,14 +2,15 @@ package stream
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 var _ = Describe("Streaming Producers", func() {
@@ -273,7 +274,7 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).Should(Equal(int32(14)),
 			"confirm should receive same messages Send by producer")
 
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.unConfirmed.size()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
@@ -288,7 +289,7 @@ var _ = Describe("Streaming Producers", func() {
 		}
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.unConfirmed.size()).To(Equal(0))
 		Expect(producer.pendingSequencesQueue.IsEmpty()).To(Equal(true))
 	})
 
@@ -337,7 +338,7 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).WithPolling(300*time.Millisecond).Should(Equal(int32(101)),
 			"confirm should receive same messages Send by producer")
 
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.unConfirmed.size()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		// in this case must raise an error since the producer is closed
 		Expect(producer.Close()).To(HaveOccurred())
@@ -389,7 +390,7 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).Should(Equal(int32(101)),
 			"confirm should receive same messages Send by producer")
 
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.unConfirmed.size()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 
 	})
@@ -422,7 +423,7 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).Should(Equal(int32(10)),
 			"confirm should receive same messages Send by producer")
 
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.unConfirmed.size()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
@@ -621,7 +622,7 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).Should(Equal(int32(232)),
 			"confirm should receive same messages Send by producer")
 
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.unConfirmed.size()).To(Equal(0))
 
 		// same test above but using batch Send
 		var arr []message.StreamMessage
@@ -639,7 +640,7 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).Should(Equal(int32(12*20)),
 			"confirm should receive same messages Send by producer")
 
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.unConfirmed.size()).To(Equal(0))
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 
@@ -753,7 +754,7 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).Should(Equal(int32(501)),
 			"confirm should receive same messages Send by producer")
 
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.unConfirmed.size()).To(Equal(0))
 		atomic.StoreInt32(&messagesConfirmed, 0)
 
 		for z := 0; z < 501; z++ {
@@ -766,7 +767,7 @@ var _ = Describe("Streaming Producers", func() {
 		}, 5*time.Second).Should(Equal(int32(501*5)),
 			"confirm should receive same messages Send by producer")
 
-		Expect(producer.lenUnConfirmed()).To(Equal(0))
+		Expect(producer.unConfirmed.size()).To(Equal(0))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
@@ -776,7 +777,7 @@ var _ = Describe("Streaming Producers", func() {
 				SetSubEntrySize(33).SetCompression(Compression{}.Gzip()))
 		Expect(err).NotTo(HaveOccurred())
 		testCompress(producerGZIP)
-		Expect(producerGZIP.lenUnConfirmed()).To(Equal(0))
+		Expect(producerGZIP.unConfirmed.size()).To(Equal(0))
 		Expect(producerGZIP.Close()).NotTo(HaveOccurred())
 
 		producerLz4, err := testEnvironment.NewProducer(testProducerStream,
@@ -784,7 +785,7 @@ var _ = Describe("Streaming Producers", func() {
 				SetSubEntrySize(55).SetCompression(Compression{}.Lz4()))
 		Expect(err).NotTo(HaveOccurred())
 		testCompress(producerLz4)
-		Expect(producerLz4.lenUnConfirmed()).To(Equal(0))
+		Expect(producerLz4.unConfirmed.size()).To(Equal(0))
 		Expect(producerLz4.Close()).NotTo(HaveOccurred())
 
 		producerSnappy, err := testEnvironment.NewProducer(testProducerStream,
@@ -792,7 +793,7 @@ var _ = Describe("Streaming Producers", func() {
 				SetSubEntrySize(666).SetCompression(Compression{}.Snappy()))
 		Expect(err).NotTo(HaveOccurred())
 		testCompress(producerSnappy)
-		Expect(producerSnappy.lenUnConfirmed()).To(Equal(0))
+		Expect(producerSnappy.unConfirmed.size()).To(Equal(0))
 		Expect(producerSnappy.Close()).NotTo(HaveOccurred())
 
 		producerZstd, err := testEnvironment.NewProducer(testProducerStream,
@@ -800,18 +801,27 @@ var _ = Describe("Streaming Producers", func() {
 				SetSubEntrySize(98).SetCompression(Compression{}.Zstd()))
 		Expect(err).NotTo(HaveOccurred())
 		testCompress(producerZstd)
-		Expect(producerZstd.lenUnConfirmed()).To(Equal(0))
+		Expect(producerZstd.unConfirmed.size()).To(Equal(0))
 		Expect(producerZstd.Close()).NotTo(HaveOccurred())
 
 	})
 
 	It("Can't send message if the producer is closed", func() {
-
 		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		err = producer.Send(amqp.NewMessage(make([]byte, 50)))
 		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("producer id: 0 closed"))
+	})
+
+	It("Can't bach send message if the producer is closed", func() {
+		producer, err := testEnvironment.NewProducer(testProducerStream, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).NotTo(HaveOccurred())
+		err = producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, 50))})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("producer id: 0 closed"))
 	})
 
 })
@@ -835,7 +845,7 @@ func testCompress(producer *Producer) {
 	}, 5*time.Second).Should(Equal(int32(457)),
 		"confirm should receive same messages Send by producer")
 
-	Expect(producer.lenUnConfirmed()).To(Equal(0))
+	Expect(producer.unConfirmed.size()).To(Equal(0))
 	atomic.StoreInt32(&messagesConfirmed, 0)
 
 	for z := 0; z < 457; z++ {
@@ -897,7 +907,7 @@ func verifyProducerSent(producer *Producer, confirmationReceived *int32, message
 	}, 10*time.Second, 1*time.Second).Should(Equal(int32(messageSent)),
 		"confirm should receive same messages Send by producer")
 
-	Expect(producer.lenUnConfirmed()).To(Equal(0))
+	Expect(producer.unConfirmed.size()).To(Equal(0))
 }
 
 func runConcurrentlyAndWaitTillAllDone(threadCount int, wg *sync.WaitGroup, runner func(int)) {

@@ -81,9 +81,8 @@ const (
 	responseCodeNoOffset                      = uint16(19)
 
 	/// responses out of protocol
-	closeChannel         = uint16(60)
-	connectionCloseError = uint16(61)
-	timeoutError         = uint16(62)
+	timeoutError = uint16(62)
+	entityClosed = uint16(63)
 
 	///
 	defaultSocketCallTimeout = 10 * time.Second
@@ -194,6 +193,9 @@ func lookErrorCode(errorCode uint16) error {
 		return AuthenticationFailureLoopbackError
 	case timeoutError:
 		return ConfirmationTimoutError
+	case entityClosed:
+		return AlreadyClosed
+
 	default:
 		{
 			logs.LogWarn("Error not handled %d", errorCode)
