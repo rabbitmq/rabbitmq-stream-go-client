@@ -2,6 +2,7 @@ package stream
 
 import (
 	"crypto/tls"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"sync"
 	"time"
 
@@ -417,6 +418,62 @@ var _ = Describe("Environment test", func() {
 			SetWriteBuffer(4096))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
+	It("close env should close all the producers and consumers ", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().
+			SetMaxConsumersPerClient(2).
+			SetMaxConsumersPerClient(3))
+
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		for i := 0; i < 5; i++ {
+			_, err := env.NewProducer(streamName, nil)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		for i := 0; i < 5; i++ {
+			_, err := env.NewConsumer(streamName, func(consumerContext ConsumerContext, message *amqp.Message) {
+
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// count element sync map
+		count := 0
+		env.consumers.getCoordinators()["localhost:5552"].clientsPerContext.Range(func(key, value any) bool {
+			Expect(value).NotTo(BeNil())
+			count++
+			return true
+		})
+
+		Expect(count).To(Equal(2))
+
+		Expect(env.Close()).NotTo(HaveOccurred())
+
+		// count element sync map
+
+		Eventually(func() int {
+			count = 0
+			env.producers.getCoordinators()["localhost:5552"].clientsPerContext.Range(func(key, value any) bool {
+				Expect(value).To(BeNil())
+				count++
+				return true
+			})
+			return count
+		}, "5s", "1s").Should(Equal(0))
+
+		Eventually(func() int {
+			count = 0
+			env.consumers.getCoordinators()["localhost:5552"].clientsPerContext.Range(func(key, value any) bool {
+				Expect(value).To(BeNil())
+				count++
+				return true
+			})
+			return count
+		}, "5s", "1s").Should(Equal(0))
+
 	})
 
 })
