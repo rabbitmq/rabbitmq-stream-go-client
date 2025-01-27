@@ -137,7 +137,7 @@ func (u *unConfirmed) maybeUnLock() {
 	if len(u.messages) < u.maxSize {
 		logs.LogDebug("unConfirmed size: %d back to normal, producer unblocked", u.maxSize)
 		u.blockSignal.L.Lock()
-		u.blockSignal.Signal()
+		u.blockSignal.Broadcast()
 		u.blockSignal.L.Unlock()
 	}
 }
