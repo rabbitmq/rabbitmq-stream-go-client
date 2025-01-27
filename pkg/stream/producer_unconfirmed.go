@@ -84,7 +84,9 @@ func (u *unConfirmed) extractWithConfirms(ids []int64) []*ConfirmationStatus {
 func (u *unConfirmed) extractWithError(id int64, errorCode uint16) *ConfirmationStatus {
 	u.mutexMessageMap.Lock()
 	defer u.mutexMessageMap.Unlock()
+	cs := u.extract(id, errorCode, false)
 	u.maybeUnLock()
+	return cs
 	return u.extract(id, errorCode, false)
 }
 
