@@ -87,7 +87,6 @@ func (u *unConfirmed) extractWithError(id int64, errorCode uint16) *Confirmation
 	cs := u.extract(id, errorCode, false)
 	u.maybeUnLock()
 	return cs
-	return u.extract(id, errorCode, false)
 }
 
 func (u *unConfirmed) extract(id int64, errorCode uint16, confirmed bool) *ConfirmationStatus {
