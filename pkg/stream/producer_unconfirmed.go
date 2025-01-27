@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
 	"time"
 )
@@ -16,22 +17,30 @@ import (
 type unConfirmed struct {
 	messages        map[int64]*ConfirmationStatus
 	mutexMessageMap sync.RWMutex
+	maxSize         int
+	blockSignal     *sync.Cond
 }
 
-const DefaultUnconfirmedSize = 10_000
-
-func newUnConfirmed() *unConfirmed {
+func newUnConfirmed(maxSize int) *unConfirmed {
 	r := &unConfirmed{
-		messages:        make(map[int64]*ConfirmationStatus, DefaultUnconfirmedSize),
+		messages:        make(map[int64]*ConfirmationStatus, maxSize),
 		mutexMessageMap: sync.RWMutex{},
+		maxSize:         maxSize,
+		blockSignal:     sync.NewCond(&sync.Mutex{}),
 	}
 	return r
 }
 
 func (u *unConfirmed) addFromSequences(messages []*messageSequence, producerID uint8) {
-	u.mutexMessageMap.Lock()
-	defer u.mutexMessageMap.Unlock()
 
+	if u.size() > u.maxSize {
+		logs.LogDebug("unConfirmed size: %d reached, producer blocked", u.maxSize)
+		u.blockSignal.L.Lock()
+		u.blockSignal.Wait()
+		u.blockSignal.L.Unlock()
+	}
+
+	u.mutexMessageMap.Lock()
 	for _, msgSeq := range messages {
 		u.messages[msgSeq.publishingId] = &ConfirmationStatus{
 			inserted:     time.Now(),
@@ -40,8 +49,9 @@ func (u *unConfirmed) addFromSequences(messages []*messageSequence, producerID u
 			publishingId: msgSeq.publishingId,
 			confirmed:    false,
 		}
-
 	}
+	u.mutexMessageMap.Unlock()
+
 }
 
 func (u *unConfirmed) link(from int64, to int64) {
@@ -67,13 +77,14 @@ func (u *unConfirmed) extractWithConfirms(ids []int64) []*ConfirmationStatus {
 			}
 		}
 	}
+	u.maybeUnLock()
 	return res
-
 }
 
 func (u *unConfirmed) extractWithError(id int64, errorCode uint16) *ConfirmationStatus {
 	u.mutexMessageMap.Lock()
 	defer u.mutexMessageMap.Unlock()
+	u.maybeUnLock()
 	return u.extract(id, errorCode, false)
 }
 
@@ -110,6 +121,7 @@ func (u *unConfirmed) extractWithTimeOut(timeout time.Duration) []*ConfirmationS
 			res = append(res, v)
 		}
 	}
+	u.maybeUnLock()
 	return res
 }
 
@@ -117,4 +129,13 @@ func (u *unConfirmed) size() int {
 	u.mutexMessageMap.Lock()
 	defer u.mutexMessageMap.Unlock()
 	return len(u.messages)
+}
+
+func (u *unConfirmed) maybeUnLock() {
+	if len(u.messages) < u.maxSize {
+		logs.LogDebug("unConfirmed size: %d back to normal, producer unblocked", u.maxSize)
+		u.blockSignal.L.Lock()
+		u.blockSignal.Signal()
+		u.blockSignal.L.Unlock()
+	}
 }

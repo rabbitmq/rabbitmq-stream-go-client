@@ -105,10 +105,12 @@ type ProducerOptions struct {
 	//  Deduplication is a feature that allows the producer to avoid sending duplicate messages to the stream.
 	// see: https://www.rabbitmq.com/blog/2021/07/28/rabbitmq-streams-message-deduplication for more information.
 	// Don't use it if you don't need the deduplication.
-	Name string
-	// Deprecated: starting from 1.5.0 the QueueSize is deprecated, and it will be removed in the next releases
-	// It is not used anymore given the dynamic batching
-	QueueSize int // Internal queue to handle back-pressure, low value reduces the back-pressure on the server
+	Name      string
+	QueueSize int // Internal queue to handle back-pressure.
+	// Default value is enough high (See defaultQueuePublisherSize). You usually don't need to change it unless high memory usage is a concern.
+	// High value can increase the memory usage and deal with spikes in the traffic.
+	// Low value can reduce the memory usage but can increase the back-pressure on the server.
+
 	BatchSize int // It is the batch-unCompressedSize aggregation, low value reduce the latency, high value increase the throughput. Valid only for the method Send()
 	// Deprecated: starting from 1.5.0 the SetBatchPublishingDelay is deprecated, and it will be removed in the next releases
 	// It is not used anymore given the dynamic batching
@@ -134,8 +136,7 @@ func (po *ProducerOptions) SetProducerName(name string) *ProducerOptions {
 	return po
 }
 
-// Deprecated: starting from 1.5.0 the SetQueueSize is deprecated, and it will be removed in the next releases
-// It is not used anymore given the dynamic batching
+// SetQueueSize See ProducerOptions.QueueSize for more details
 func (po *ProducerOptions) SetQueueSize(size int) *ProducerOptions {
 	po.QueueSize = size
 	return po

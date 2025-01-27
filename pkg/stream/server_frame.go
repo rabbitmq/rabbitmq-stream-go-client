@@ -350,9 +350,9 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	if consumer.options.CRCCheck {
 		checkSum := crc32.ChecksumIEEE(bytesBuffer)
 		if crc != checkSum {
-			logs.LogError("Error during the checkSum, expected %d, checksum %d", crc, checkSum)
-			panic("Error during CRC")
-		} /// ???
+			logs.LogError("Error during the checkSum, expected %d, checksum %d. Tcp connection will be closed", crc, checkSum)
+			c.Close()
+		}
 	}
 
 	bufferReader := bytes.NewReader(bytesBuffer)
@@ -469,7 +469,7 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		producer, err := c.coordinator.GetProducerById(publisherId)
 		if err != nil {
 			logs.LogWarn("producer id %d not found, publish error :%s", publisherId, lookErrorCode(code))
-			producer = &Producer{unConfirmed: newUnConfirmed()}
+			producer = &Producer{unConfirmed: newUnConfirmed(defaultQueuePublisherSize)}
 		} else {
 			unConfirmedMessage := producer.unConfirmed.extractWithError(publishingId, code)
 
