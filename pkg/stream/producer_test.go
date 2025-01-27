@@ -654,6 +654,7 @@ var _ = Describe("Streaming Producers", func() {
 	It(" sub-entry batching test Aggregation", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchPublishingDelay(100).
+				SetQueueSize(1000).
 				SetSubEntrySize(77))
 		Expect(err).NotTo(HaveOccurred())
 		messagesSequence := make([]*messageSequence, 201)
@@ -737,6 +738,7 @@ var _ = Describe("Streaming Producers", func() {
 	It("Sub Size Publish Confirm/Send", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().SetBatchPublishingDelay(100).
+				SetQueueSize(500).
 				SetSubEntrySize(77))
 		Expect(err).NotTo(HaveOccurred())
 		var messagesConfirmed int32

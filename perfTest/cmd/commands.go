@@ -39,6 +39,7 @@ var (
 	variableBody        int
 	fixedBody           int
 	batchSize           int
+	queueSize           int
 	subEntrySize        int
 	compression         string
 	exitOnError         bool
@@ -58,6 +59,7 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.PersistentFlags().StringSliceVarP(&rabbitmqBrokerUrl, "uris", "", []string{stream.LocalhostUriConnection}, "Broker URLs")
 	baseCmd.PersistentFlags().IntVarP(&publishers, "publishers", "", 1, "Number of Publishers")
 	baseCmd.PersistentFlags().IntVarP(&batchSize, "batch-size", "", 200, "Batch Size, from 1 to 300")
+	baseCmd.PersistentFlags().IntVarP(&queueSize, "queue-size", "", 50_000, "Queue Size for the server back pressure = messages send - messages confirmed")
 	baseCmd.PersistentFlags().IntVarP(&subEntrySize, "sub-entry-size", "", 1, "SubEntry size, default 1. > 1 Enable the subEntryBatch")
 	baseCmd.PersistentFlags().StringVarP(&compression, "compression", "", "", "Compression for sub batching, none,gzip,lz4,snappy,zstd")
 	baseCmd.PersistentFlags().IntVarP(&consumers, "consumers", "", 1, "Number of Consumers")

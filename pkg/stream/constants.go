@@ -96,8 +96,8 @@ const (
 	///
 	defaultWriteSocketBuffer  = 8192
 	defaultReadSocketBuffer   = 8192
-	defaultQueuePublisherSize = 10000
-	minQueuePublisherSize     = 100
+	defaultQueuePublisherSize = 10_000
+	minQueuePublisherSize     = 500
 	maxQueuePublisherSize     = 1_000_000
 
 	minBatchSize = 1

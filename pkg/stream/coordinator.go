@@ -54,10 +54,12 @@ func (coordinator *Coordinator) NewProducer(
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	dynSize := 10000
+	queueSize := defaultQueuePublisherSize
 	tickerTime := defaultConfirmationTimeOut
 	if parameters != nil {
 		dynSize = parameters.BatchSize
 		tickerTime = parameters.ConfirmationTimeOut
+		queueSize = parameters.QueueSize
 	}
 
 	var lastId, err = coordinator.getNextProducerItem()
@@ -67,7 +69,7 @@ func (coordinator *Coordinator) NewProducer(
 	var producer = &Producer{id: lastId,
 		options:                   parameters,
 		mutex:                     &sync.RWMutex{},
-		unConfirmed:               newUnConfirmed(),
+		unConfirmed:               newUnConfirmed(queueSize),
 		confirmationTimeoutTicker: time.NewTicker(tickerTime),
 		doneTimeoutTicker:         make(chan struct{}, 1),
 		status:                    open,
