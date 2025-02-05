@@ -89,7 +89,11 @@ Stream uri: `rabbitmq-stream://guest:guest@localhost:5552`
 
 ### Getting started for impatient
 
-See [getting started](./examples/getting_started.go) example.
+- [Getting started with reliable producer/consumer](./examples/reliable_getting_started/reliable_getting_started.go) example.
+- [Getting started with standard producer/consumer](./examples/getting_started/getting_started.go) example.
+- Getting started Video tutorial:
+
+[![Getting Started](https://img.youtube.com/vi/8qfvl6FgC50/0.jpg)](https://www.youtube.com/watch?v=8qfvl6FgC50)
 
 ### Examples
 
