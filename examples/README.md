@@ -1,7 +1,7 @@
 Stream examples
 ===
-
- - [Getting started](./getting_started.go) - A good point to start.
+ - [Reliable getting started](./getting_started/getting_started.go) - The structures you need to start.
+ - [Getting started](./getting_started/getting_started.go) - Producer and Consumer example without reconnection
  - [Offset Start](./offsetStart/offset.go) - How to set different points to start consuming
  - [Offset Tracking](./offsetTracking/offsetTracking.go) - Manually store the consumer offset
  - [Automatic Offset Tracking](./automaticOffsetTracking/automaticOffsetTracking.go) - Automatic store the consumer offset

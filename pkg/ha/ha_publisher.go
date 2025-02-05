@@ -48,7 +48,8 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 		p.reconnectionSignal.L.Lock()
 		p.reconnectionSignal.Broadcast()
 		p.reconnectionSignal.L.Unlock()
-		logs.LogInfo("[Reliable] - %s reconnection signal sent", p.getInfo())
+		logs.LogDebug("[Reliable] - %s reconnection signal sent", p.getInfo())
+
 	}()
 }
 
