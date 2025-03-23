@@ -1,6 +1,7 @@
 module github.com/rabbitmq/rabbitmq-stream-go-client
 
 go 1.22.0
+toolchain go1.24.1
 
 require (
 	github.com/golang/snappy v1.0.0
@@ -12,7 +13,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/spf13/cobra v1.9.1
-	golang.org/x/text v0.21.0
+	golang.org/x/text v0.23.0
 )
 
 require (
