@@ -118,12 +118,11 @@ Standard way to connect single node:
 
 ```golang
 env, err := stream.NewEnvironment(
-stream.NewEnvironmentOptions().
-SetHost("localhost").
-SetPort(5552).
-SetUser("guest").
-SetPassword("guest"))
-CheckErr(err)
+    stream.NewEnvironmentOptions().
+    SetHost("localhost").
+    SetPort(5552).
+    SetUser("guest").
+    SetPassword("guest"))
 ```
 
 you can define the number of producers per connections, the default value is 1:
@@ -169,10 +168,10 @@ Host: "load-balancer-ip",
 Port: 5552,
 }
 env, err := stream.NewEnvironment(
-stream.NewEnvironmentOptions().
-SetHost(addressResolver.Host).
-SetPort(addressResolver.Port).
-SetAddressResolver(addressResolver).
+    stream.NewEnvironmentOptions().
+    SetHost(addressResolver.Host).
+    SetPort(addressResolver.Port).
+    SetAddressResolver(addressResolver).
 ```
 
 In this configuration the client tries the connection until reach the right node.
@@ -188,12 +187,12 @@ To configure TLS you need to set the `IsTLS` parameter:
 ```golang
 env, err := stream.NewEnvironment(
 stream.NewEnvironmentOptions().
-SetHost("localhost").
-SetPort(5551). // standard TLS port
-SetUser("guest").
-SetPassword("guest").
-IsTLS(true).
-SetTLSConfig(&tls.Config{}),
+    SetHost("localhost").
+    SetPort(5551). // standard TLS port
+    SetUser("guest").
+    SetPassword("guest").
+    IsTLS(true).
+    SetTLSConfig(&tls.Config{}),
 )
 ```
 
@@ -220,18 +219,18 @@ cfg.ServerName = "my_server_name"
 cfg.RootCAs = x509.NewCertPool()
 
 if ca, err := os.ReadFile("certs/ca_certificate.pem"); err == nil {
-cfg.RootCAs.AppendCertsFromPEM(ca)
+    cfg.RootCAs.AppendCertsFromPEM(ca)
 }
 
 if cert, err := tls.LoadX509KeyPair("certs/client/cert.pem", "certs/client/key.pem"); err == nil {
-cfg.Certificates = append(cfg.Certificates, cert)
+    cfg.Certificates = append(cfg.Certificates, cert)
 }
 
 env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().
-SetUri("rabbitmq-stream+tls://my_server_name:5551/").
-IsTLS(true).
-SetSaslConfiguration(stream.SaslConfigurationExternal). // SASL EXTERNAL
-SetTLSConfig(cfg))
+    SetUri("rabbitmq-stream+tls://my_server_name:5551/").
+    IsTLS(true).
+    SetSaslConfiguration(stream.SaslConfigurationExternal). // SASL EXTERNAL
+    SetTLSConfig(cfg))
 ```
 
 ### Streams
@@ -300,7 +299,7 @@ and `BatchSend`:
 ```golang
 var messages []message.StreamMessage
 for z := 0; z < 10; z++ {
-messages = append(messages, amqp.NewMessage([]byte("hello")))
+    messages = append(messages, amqp.NewMessage([]byte("hello")))
 }
 err = producer.BatchSend(messages)
 ```
@@ -350,15 +349,15 @@ handlePublishConfirm(chPublishConfirm)
 
 func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 go func () {
-for confirmed := range confirms {
-for _, msg := range confirmed {
-if msg.IsConfirmed() {
-fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
-} else {
-fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
-}
-}
-}
+    for confirmed := range confirms {
+        for _, msg := range confirmed {
+            if msg.IsConfirmed() {
+                fmt.Printf("message %s stored \n  ", msg.GetMessage().GetData())
+            } else {
+                fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
+        }
+    }
+    }
 }()
 }
 ```
@@ -402,7 +401,7 @@ Run it more than time, the messages count will be always 10.
 
 To retrieve the last sequence id for producer you can use:
 
-```
+```golang
 publishingId, err := producer.GetLastPublishingId()
 ```
 
@@ -419,8 +418,8 @@ Compression is valid only is `SubEntrySize > 1`
 
 ```golang
 producer, err := env.NewProducer(streamName, stream.NewProducerOptions().
-SetSubEntrySize(100).
-SetCompression(stream.Compression{}.Gzip()))
+        SetSubEntrySize(100).
+        SetCompression(stream.Compression{}.Gzip()))
 ```
 
 ### Publish Filtering
@@ -437,12 +436,12 @@ In order to consume messages from a stream you need to use the `NewConsumer` int
 
 ```golang
 handleMessages := func (consumerContext stream.ConsumerContext, message *amqp.Message) {
-fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
-}
+    fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)
+    }
 
 consumer, err := env.NewConsumer(
-"my-stream",
-handleMessages,
+                "my-stream",
+                handleMessages,
 ....
 ```
 
