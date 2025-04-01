@@ -1,7 +1,6 @@
 module github.com/rabbitmq/rabbitmq-stream-go-client
 
-go 1.22.0
-toolchain go1.24.1
+go 1.23.0
 
 require (
 	github.com/golang/snappy v1.0.0
