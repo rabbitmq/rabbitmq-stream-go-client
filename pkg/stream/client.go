@@ -824,6 +824,19 @@ func (c *Client) queryOffset(consumerName string, streamName string) (int64, err
 	return offset.(int64), nil
 }
 
+func (c *Client) StoreOffset(consumerName string, streamName string, offset int64) error {
+	length := 2 + 2 + 2 + len(consumerName) + 2 +
+		len(streamName) + 8
+	var b = bytes.NewBuffer(make([]byte, 0, length+4))
+	writeProtocolHeader(b, length, commandStoreOffset)
+
+	writeString(b, consumerName)
+	writeString(b, streamName)
+
+	writeLong(b, offset)
+	return c.socket.writeAndFlush(b.Bytes())
+}
+
 func (c *Client) DeclareSubscriber(streamName string,
 	messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {

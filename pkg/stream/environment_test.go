@@ -476,4 +476,25 @@ var _ = Describe("Environment test", func() {
 
 	})
 
+	Describe("Query Offset should return the value from Store Offset", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions())
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		const consumerName = "my_consumer"
+		Expect(env.StoreOffset(consumerName, streamName, 123)).NotTo(HaveOccurred())
+		off, err := env.QueryOffset(consumerName, streamName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(off).To(Equal(int64(123)))
+		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
+	Describe("Query Offset should not return any error in case of stream does not exist", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.StoreOffset("my_consumer", "stream_doesnt_exist", 123)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
 })

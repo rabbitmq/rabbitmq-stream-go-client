@@ -836,6 +836,24 @@ func (env *Environment) QueryPartitions(superStreamName string) ([]string, error
 	return client.QueryPartitions(superStreamName)
 }
 
+// StoreOffset stores the offset for a consumer for a stream
+// You should use the StoreOffset method of the Consumer interface
+// to store the offset for a consumer
+// The StoreOffset should not be called for each message.
+// the best practice is to store after a batch of messages
+// StoreOffset does not return any application error, if the stream does not exist or the consumer does not exist
+// the error is logged in the server
+func (env *Environment) StoreOffset(consumerName string, streamName string, offset int64) error {
+	client, err := env.newReconnectClient()
+	defer func(client *Client) {
+		_ = client.Close()
+	}(client)
+	if err != nil {
+		return err
+	}
+	return client.StoreOffset(consumerName, streamName, offset)
+}
+
 func (env *Environment) QueryRoute(superStream string, routingKey string) ([]string, error) {
 	client, err := env.newReconnectClient()
 	defer func(client *Client) {
