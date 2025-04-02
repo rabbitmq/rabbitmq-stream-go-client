@@ -89,13 +89,13 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 		err := testEnvironment.maybeReconnectLocator()
 		Expect(err).NotTo(HaveOccurred())
 
-		err = testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions", newTestSuperStreamOption([]string{"go-partition_0", "go-partition_1"}, []string{"0", "1"}, map[string]string{"queue-leader-locator": "least-leaders"}))
+		err = testEnvironment.locator.Load().DeclareSuperStream("go-my_super_stream_with_2_partitions", newTestSuperStreamOption([]string{"go-partition_0", "go-partition_1"}, []string{"0", "1"}, map[string]string{"queue-leader-locator": "least-leaders"}))
 		Expect(err).NotTo(HaveOccurred())
 
-		err = testEnvironment.DeclareSuperStream("go-my_super_stream_with_2_partitions",
+		err2 := testEnvironment.locator.Load().DeclareSuperStream("go-my_super_stream_with_2_partitions",
 			newTestSuperStreamOption([]string{"go-partition_0", "go-partition_1"}, []string{"0", "1"}, map[string]string{"queue-leader-locator": "least-leaders"}))
 
-		Expect(err).To(Equal(StreamAlreadyExists))
+		Expect(err2).To(Equal(StreamAlreadyExists))
 
 		err = testEnvironment.DeleteSuperStream("go-my_super_stream_with_2_partitions")
 		Expect(err).NotTo(HaveOccurred())

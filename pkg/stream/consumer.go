@@ -310,6 +310,7 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 }
 
 func (consumer *Consumer) Close() error {
+
 	if consumer.getStatus() == closed {
 		return AlreadyClosed
 	}

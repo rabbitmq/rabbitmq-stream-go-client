@@ -620,7 +620,6 @@ func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Bro
 	}
 
 	subscriber, err := clientResult.DeclareSubscriber(streamName, messagesHandler, options)
-
 	if err != nil {
 		return nil, err
 	}
@@ -669,9 +668,9 @@ func newProducers(maxItemsForClient int) *producersEnvironment {
 
 func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName string,
 	options *ProducerOptions, resolver *AddressResolver, rpcTimeOut time.Duration) (*Producer, error) {
+	leader, err := clientLocator.BrokerLeader(streamName)
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
-	leader, err := clientLocator.BrokerLeader(streamName)
 	if err != nil {
 		return nil, err
 	}
@@ -733,9 +732,9 @@ func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {
 func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName string,
 	messagesHandler MessagesHandler,
 	consumerOptions *ConsumerOptions, resolver *AddressResolver, rpcTimeout time.Duration) (*Consumer, error) {
+	consumerBroker, err := clientLocator.BrokerForConsumer(streamName)
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
-	consumerBroker, err := clientLocator.BrokerForConsumer(streamName)
 	if err != nil {
 		return nil, err
 	}

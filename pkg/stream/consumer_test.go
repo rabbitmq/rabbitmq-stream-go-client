@@ -454,7 +454,7 @@ var _ = Describe("Streaming Consumers", func() {
 	It("Check already closed", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		err = producer.BatchSend(CreateArrayMessagesForTesting(500))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(1))
 		Expect(err).NotTo(HaveOccurred())
 
 		defer func(producer *Producer) {
@@ -463,17 +463,20 @@ var _ = Describe("Streaming Consumers", func() {
 		}(producer)
 
 		var messagesCount int32 = 0
+		var signal = make(chan struct{})
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				if atomic.AddInt32(&messagesCount, 1) >= 1 {
-					err := consumerContext.Consumer.Close()
-					if err != nil {
-						return
-					}
+					defer GinkgoRecover()
+					err1 := consumerContext.Consumer.Close()
+					Expect(err1).NotTo(HaveOccurred())
+					signal <- struct{}{}
 				}
 			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).
 				SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
+
+		<-signal
 		time.Sleep(200 * time.Millisecond)
 		Expect(consumer.Close()).To(Equal(AlreadyClosed))
 
