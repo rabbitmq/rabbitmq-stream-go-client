@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
@@ -18,6 +19,7 @@ type Environment struct {
 	producers *producersEnvironment
 	consumers *consumersEnvironment
 	options   *EnvironmentOptions
+	locator   atomic.Pointer[Client]
 	closed    bool
 }
 
@@ -111,124 +113,107 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		closed:    false,
 	}, connectionError
 }
-func (env *Environment) newReconnectClient() (*Client, error) {
+func (env *Environment) maybeReconnectLocator() error {
+	if env.locator.Load() != nil && env.locator.Load().socket.isOpen() {
+		return nil
+	}
+
 	broker := env.options.ConnectionParameters[0]
-	client := newClient("go-stream-locator", broker, env.options.TCPParameters,
+	c := newClient("go-stream-locator", broker, env.options.TCPParameters,
 		env.options.SaslConfiguration, env.options.RPCTimeout)
 
-	err := client.connect()
+	env.locator.Swap(c)
+	err := c.connect()
 	tentatives := 1
 	for err != nil {
 		sleepTime := rand.Intn(5000) + (tentatives * 1000)
 
-		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", client.broker.Scheme, client.broker.User, client.broker.Host, client.broker.Port, client.broker.Vhost)
+		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", c.broker.Scheme, c.broker.User, c.broker.Host, c.broker.Port, c.broker.Vhost)
 		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: ", err, sleepTime, brokerUri)
 
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 		r := rand.New(rand.NewSource(time.Now().Unix()))
 		n := r.Intn(len(env.options.ConnectionParameters))
-		client = newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
+		c1 := newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
 			env.options.SaslConfiguration, env.options.RPCTimeout)
 		tentatives = tentatives + 1
-		err = client.connect()
+		env.locator.Swap(c1)
+		err = c1.connect()
 
 	}
 
-	return client, client.connect()
+	return env.locator.Load().connect()
 }
 
 func (env *Environment) DeclareStream(streamName string, options *StreamOptions) error {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return err
 	}
-	if err := client.DeclareStream(streamName, options); err != nil && err != StreamAlreadyExists {
+	if err := env.locator.Load().DeclareStream(streamName, options); err != nil && err != StreamAlreadyExists {
 		return err
 	}
 	return nil
 }
 
 func (env *Environment) DeleteStream(streamName string) error {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return err
 	}
-	return client.DeleteStream(streamName)
+	return env.locator.Load().DeleteStream(streamName)
 }
 
 func (env *Environment) NewProducer(streamName string, producerOptions *ProducerOptions) (*Producer, error) {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
+
 	if err != nil {
 		return nil, err
 	}
 
-	return env.producers.newProducer(client, streamName, producerOptions, env.options.AddressResolver, env.options.RPCTimeout)
+	return env.producers.newProducer(env.locator.Load(), streamName, producerOptions, env.options.AddressResolver, env.options.RPCTimeout)
 }
 
 func (env *Environment) StreamExists(streamName string) (bool, error) {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return false, err
 	}
-	return client.StreamExists(streamName), nil
+	return env.locator.Load().StreamExists(streamName), nil
 }
 
 func (env *Environment) QueryOffset(consumerName string, streamName string) (int64, error) {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return 0, err
 	}
-	return client.queryOffset(consumerName, streamName)
+	return env.locator.Load().queryOffset(consumerName, streamName)
 }
 
 // QuerySequence gets the last id stored for a producer
 // you can also see producer.GetLastPublishingId() that is the easier way to get the last-id
 func (env *Environment) QuerySequence(publisherReference string, streamName string) (int64, error) {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return 0, err
 	}
-	return client.queryPublisherSequence(publisherReference, streamName)
+	return env.locator.Load().queryPublisherSequence(publisherReference, streamName)
 }
 
 func (env *Environment) StreamStats(streamName string) (*StreamStats, error) {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return nil, err
 	}
-	return client.StreamStats(streamName)
+	return env.locator.Load().StreamStats(streamName)
 }
 
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return nil, err
 	}
-	streamsMetadata := client.metaData(streamName)
+	streamsMetadata := env.locator.Load().metaData(streamName)
 	streamMetadata := streamsMetadata.Get(streamName)
 	if streamMetadata.responseCode != responseCodeOk {
 		return nil, lookErrorCode(streamMetadata.responseCode)
@@ -236,7 +221,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 
 	tentatives := 0
 	for streamMetadata == nil || streamMetadata.Leader == nil && tentatives < 3 {
-		streamsMetadata = client.metaData(streamName)
+		streamsMetadata = env.locator.Load().metaData(streamName)
 		streamMetadata = streamsMetadata.Get(streamName)
 		tentatives++
 		time.Sleep(100 * time.Millisecond)
@@ -253,15 +238,12 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 func (env *Environment) NewConsumer(streamName string,
 	messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return nil, err
 	}
 
-	return env.consumers.NewSubscriber(client, streamName, messagesHandler, options, env.options.AddressResolver, env.options.RPCTimeout)
+	return env.consumers.NewSubscriber(env.locator.Load(), streamName, messagesHandler, options, env.options.AddressResolver, env.options.RPCTimeout)
 }
 
 func (env *Environment) NewSuperStreamProducer(superStream string, superStreamProducerOptions *SuperStreamProducerOptions) (*SuperStreamProducer, error) {
@@ -275,6 +257,9 @@ func (env *Environment) NewSuperStreamProducer(superStream string, superStreamPr
 func (env *Environment) Close() error {
 	_ = env.producers.close()
 	_ = env.consumers.close()
+	if env.locator.Load() != nil {
+		_ = env.locator.Load().Close()
+	}
 	env.closed = true
 	return nil
 }
@@ -801,39 +786,30 @@ func (ps *consumersEnvironment) getCoordinators() map[string]*environmentCoordin
 // Super stream
 
 func (env *Environment) DeclareSuperStream(superStreamName string, options SuperStreamOptions) error {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return err
 	}
-	if err := client.DeclareSuperStream(superStreamName, options); err != nil && !errors.Is(err, StreamAlreadyExists) {
+	if err := env.locator.Load().DeclareSuperStream(superStreamName, options); err != nil && !errors.Is(err, StreamAlreadyExists) {
 		return err
 	}
 	return nil
 }
 
 func (env *Environment) DeleteSuperStream(superStreamName string) error {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return err
 	}
-	return client.DeleteSuperStream(superStreamName)
+	return env.locator.Load().DeleteSuperStream(superStreamName)
 }
 
 func (env *Environment) QueryPartitions(superStreamName string) ([]string, error) {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return nil, err
 	}
-	return client.QueryPartitions(superStreamName)
+	return env.locator.Load().QueryPartitions(superStreamName)
 }
 
 // StoreOffset stores the offset for a consumer for a stream
@@ -844,25 +820,19 @@ func (env *Environment) QueryPartitions(superStreamName string) ([]string, error
 // StoreOffset does not return any application error, if the stream does not exist or the consumer does not exist
 // the error is logged in the server
 func (env *Environment) StoreOffset(consumerName string, streamName string, offset int64) error {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return err
 	}
-	return client.StoreOffset(consumerName, streamName, offset)
+	return env.locator.Load().StoreOffset(consumerName, streamName, offset)
 }
 
 func (env *Environment) QueryRoute(superStream string, routingKey string) ([]string, error) {
-	client, err := env.newReconnectClient()
-	defer func(client *Client) {
-		_ = client.Close()
-	}(client)
+	err := env.maybeReconnectLocator()
 	if err != nil {
 		return nil, err
 	}
-	return client.queryRoute(superStream, routingKey)
+	return env.locator.Load().queryRoute(superStream, routingKey)
 }
 
 func (env *Environment) NewSuperStreamConsumer(superStream string, messagesHandler MessagesHandler, options *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {

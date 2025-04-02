@@ -201,7 +201,7 @@ var _ = Describe("Environment test", func() {
 
 	})
 
-	Describe("TCP Parameters", func() {
+	Describe("TCP Parameters", Focus, func() {
 
 		env, err := NewEnvironment(&EnvironmentOptions{
 			ConnectionParameters: []*Broker{
