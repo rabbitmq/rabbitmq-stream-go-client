@@ -60,19 +60,19 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		Expect(err2).To(HaveOccurred())
 
 		/// check support for single active consumer is not enabled
-		client, err3 := testEnvironment.newReconnectClient()
+		err3 := testEnvironment.maybeReconnectLocator()
 		Expect(err3).NotTo(HaveOccurred())
 
 		// here we inject a fake response to simulate a server that
 		// does not support SAC .
 		// so we can validate it
 		// This method is not thread safe and should be used only for testing purposes
-		client.availableFeatures.brokerSingleActiveConsumerEnabled = false
+		testEnvironment.locator.Load().availableFeatures.brokerSingleActiveConsumerEnabled = false
 		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
 
 		}
 
-		_, err = client.DeclareSubscriber(streamName, handleMessages, NewConsumerOptions().SetSingleActiveConsumer(
+		_, err = testEnvironment.locator.Load().DeclareSubscriber(streamName, handleMessages, NewConsumerOptions().SetSingleActiveConsumer(
 			NewSingleActiveConsumer(func(_ string, isActive bool) OffsetSpecification {
 				return OffsetSpecification{}.Last()
 			}),

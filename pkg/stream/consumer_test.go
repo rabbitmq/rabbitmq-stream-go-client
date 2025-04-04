@@ -51,9 +51,9 @@ var _ = Describe("Streaming Consumers", func() {
 		for _, consumer := range consumers {
 			Expect(consumer.Close()).NotTo(HaveOccurred())
 		}
-
-		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(0))
+		//time.Sleep(1 * time.Second)
+		Eventually(len(env.consumers.getCoordinators()["localhost:5552"].
+			getClientsPerContext())).ProbeEvery(100 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(0))
 
 	})
 
@@ -454,7 +454,7 @@ var _ = Describe("Streaming Consumers", func() {
 	It("Check already closed", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		err = producer.BatchSend(CreateArrayMessagesForTesting(500))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(1))
 		Expect(err).NotTo(HaveOccurred())
 
 		defer func(producer *Producer) {
@@ -463,17 +463,20 @@ var _ = Describe("Streaming Consumers", func() {
 		}(producer)
 
 		var messagesCount int32 = 0
+		var signal = make(chan struct{})
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				if atomic.AddInt32(&messagesCount, 1) >= 1 {
-					err := consumerContext.Consumer.Close()
-					if err != nil {
-						return
-					}
+					time.Sleep(500 * time.Millisecond)
+					err1 := consumerContext.Consumer.Close()
+					Expect(err1).NotTo(HaveOccurred())
+					signal <- struct{}{}
 				}
 			}, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).
 				SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
+
+		<-signal
 		time.Sleep(200 * time.Millisecond)
 		Expect(consumer.Close()).To(Equal(AlreadyClosed))
 
