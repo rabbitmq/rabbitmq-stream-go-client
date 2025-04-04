@@ -13,7 +13,7 @@ type Consumer struct {
 	ID               uint8
 	response         *Response
 	options          *ConsumerOptions
-	onClose          onInternalClose
+	onClose          chan uint8
 	mutex            *sync.Mutex
 	chunkForConsumer chan chunkInfo
 	MessagesHandler  MessagesHandler
@@ -368,10 +368,10 @@ func (consumer *Consumer) close(reason Event) error {
 		_ = consumer.options.client.Close()
 	}
 
-	ch := make(chan uint8, 1)
-	ch <- consumer.ID
-	consumer.onClose(ch)
-	close(ch)
+	if consumer.onClose != nil {
+		consumer.onClose <- consumer.ID
+	}
+
 	return nil
 }
 

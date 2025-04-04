@@ -418,23 +418,21 @@ func (c *Client) DeleteStream(streamName string) error {
 }
 
 func (c *Client) heartBeat() {
-	ticker := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat) * time.Second)
 	tickerHeartbeat := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat-2) * time.Second)
 
 	var heartBeatMissed int32
 	doneSendingTimeoutTicker := make(chan struct{}, 1)
-	wg := sync.WaitGroup{}
-	wg.Add(2)
+
 	go func() {
-		wg.Done()
 		select {
 		case <-c.doneTimeoutTicker:
 			doneSendingTimeoutTicker <- struct{}{}
-			ticker.Stop()
 			tickerHeartbeat.Stop()
 			return
 		case <-tickerHeartbeat.C:
 			if c.socket.isOpen() {
+				logs.LogDebug("Heartbeat ticker is open, sending heartbeat")
+				c.sendHeartbeat()
 				if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
 					v := atomic.AddInt32(&heartBeatMissed, 1)
 					logs.LogWarn("Missing heart beat: %d", v)
@@ -445,29 +443,15 @@ func (c *Client) heartBeat() {
 				} else {
 					atomic.StoreInt32(&heartBeatMissed, 0)
 				}
-			}
-		}
-
-	}()
-
-	go func() {
-		wg.Done()
-		for {
-			select {
-			case <-doneSendingTimeoutTicker:
-				logs.LogDebug("Stopping sending heartbeat")
+			} else {
+				logs.LogDebug("Socket Heartbeat ticker is closed. Closing ticker")
+				tickerHeartbeat.Stop()
 				return
-			case _, ok := <-ticker.C:
-				if !ok {
-					return
-				}
-				logs.LogDebug("Sending heart beat: %s", time.Now())
-				c.sendHeartbeat()
 			}
-		}
-	}()
 
-	wg.Wait()
+		}
+
+	}()
 
 }
 
@@ -487,6 +471,8 @@ func (c *Client) closeHartBeat() {
 }
 
 func (c *Client) Close() error {
+
+	c.closeHartBeat()
 	for _, p := range c.coordinator.Producers() {
 		err := c.coordinator.RemoveProducerById(p.(*Producer).id, Event{
 			Command:    CommandClose,
@@ -513,8 +499,6 @@ func (c *Client) Close() error {
 			logs.LogWarn("error removing consumer: %s", err)
 		}
 	}
-
-	c.closeHartBeat()
 	if c.getSocket().isOpen() {
 
 		res := c.coordinator.NewResponse(CommandClose)
@@ -535,6 +519,10 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
+	return c.declarePublisher(streamName, options, nil)
+}
+
+func (c *Client) declarePublisher(streamName string, options *ProducerOptions, chClose chan uint8) (*Producer, error) {
 	if options == nil {
 		options = NewProducerOptions()
 	}
@@ -590,7 +578,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 		ConfirmationTimeOut:  options.ConfirmationTimeOut,
 		ClientProvidedName:   options.ClientProvidedName,
 		Filter:               options.Filter,
-	})
+	}, chClose)
 
 	if err != nil {
 		return nil, err
@@ -836,10 +824,15 @@ func (c *Client) StoreOffset(consumerName string, streamName string, offset int6
 	writeLong(b, offset)
 	return c.socket.writeAndFlush(b.Bytes())
 }
-
 func (c *Client) DeclareSubscriber(streamName string,
 	messagesHandler MessagesHandler,
 	options *ConsumerOptions) (*Consumer, error) {
+	return c.declareSubscriber(streamName, messagesHandler, options, nil)
+}
+
+func (c *Client) declareSubscriber(streamName string,
+	messagesHandler MessagesHandler,
+	options *ConsumerOptions, chClose chan uint8) (*Consumer, error) {
 	if options == nil {
 		options = NewConsumerOptions()
 	}
@@ -919,7 +912,7 @@ func (c *Client) DeclareSubscriber(streamName string,
 
 	options.client = c
 	options.streamName = streamName
-	consumer := c.coordinator.NewConsumer(messagesHandler, options)
+	consumer := c.coordinator.NewConsumer(messagesHandler, options, chClose)
 
 	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
 	if options.Offset.isOffset() ||
@@ -1004,7 +997,6 @@ func (c *Client) DeclareSubscriber(streamName string,
 		}
 		return true
 	}
-
 	go func() {
 		for {
 			select {

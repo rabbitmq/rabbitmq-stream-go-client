@@ -214,6 +214,9 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 		return nil, err
 	}
 	streamsMetadata := env.locator.Load().metaData(streamName)
+	if streamsMetadata == nil {
+		return nil, errors.New("stream metadata not found, for: " + streamName)
+	}
 	streamMetadata := streamsMetadata.Get(streamName)
 	if streamMetadata.responseCode != responseCodeOk {
 		return nil, lookErrorCode(streamMetadata.responseCode)
@@ -532,7 +535,7 @@ func (c *Client) maybeCleanConsumers(streamName string) {
 }
 
 func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string,
-	options *ProducerOptions, rpcTimeout time.Duration) (*Producer, error) {
+	options *ProducerOptions, rpcTimeout time.Duration, chClose chan uint8) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
 	var clientResult *Client
@@ -595,7 +598,7 @@ func (cc *environmentCoordinator) newClientForProducer(connectionName string, le
 
 func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration,
 	streamName string, messagesHandler MessagesHandler,
-	options *ConsumerOptions, rpcTimeout time.Duration) (*Consumer, error) {
+	options *ConsumerOptions, rpcTimeout time.Duration, chClose chan uint8) (*Consumer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
 	var clientResult *Client
@@ -619,7 +622,7 @@ func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Bro
 		return nil, err
 	}
 
-	subscriber, err := clientResult.DeclareSubscriber(streamName, messagesHandler, options)
+	subscriber, err := clientResult.declareSubscriber(streamName, messagesHandler, options, chClose)
 	if err != nil {
 		return nil, err
 	}
@@ -685,15 +688,18 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 	}
 	leader.cloneFrom(clientLocator.broker, resolver)
 
-	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.tcpParameters,
-		clientLocator.saslConfiguration, streamName, options, rpcTimeOut)
-	if err != nil {
-		return nil, err
-	}
-	producer.onClose = func(ch <-chan uint8) {
+	chClose := make(chan uint8)
+	go func(ch chan uint8) {
+		<-ch
 		for _, coordinator := range ps.producersCoordinator {
 			coordinator.maybeCleanClients()
 		}
+		close(ch)
+	}(chClose)
+	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.tcpParameters,
+		clientLocator.saslConfiguration, streamName, options, rpcTimeOut, chClose)
+	if err != nil {
+		return nil, err
 	}
 
 	return producer, err
@@ -752,18 +758,22 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 	if consumerOptions != nil && consumerOptions.ClientProvidedName != "" {
 		clientProvidedName = consumerOptions.ClientProvidedName
 	}
-	consumer, err := ps.consumersCoordinator[coordinatorKey].
-		newConsumer(clientProvidedName, consumerBroker, clientLocator.tcpParameters,
-			clientLocator.saslConfiguration,
-			streamName, messagesHandler, consumerOptions, rpcTimeout)
-	if err != nil {
-		return nil, err
-	}
-	consumer.onClose = func(ch <-chan uint8) {
+	chClose := make(chan uint8, 1)
+	go func(ch chan uint8) {
+		<-ch
 		for _, coordinator := range ps.consumersCoordinator {
 			coordinator.maybeCleanClients()
 		}
+		close(chClose)
+	}(chClose)
+	consumer, err := ps.consumersCoordinator[coordinatorKey].
+		newConsumer(clientProvidedName, consumerBroker, clientLocator.tcpParameters,
+			clientLocator.saslConfiguration,
+			streamName, messagesHandler, consumerOptions, rpcTimeout, chClose)
+	if err != nil {
+		return nil, err
 	}
+
 	return consumer, err
 }
 

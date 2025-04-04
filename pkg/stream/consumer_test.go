@@ -467,7 +467,7 @@ var _ = Describe("Streaming Consumers", func() {
 		consumer, err := env.NewConsumer(streamName,
 			func(consumerContext ConsumerContext, message *amqp.Message) {
 				if atomic.AddInt32(&messagesCount, 1) >= 1 {
-					defer GinkgoRecover()
+					time.Sleep(500 * time.Millisecond)
 					err1 := consumerContext.Consumer.Close()
 					Expect(err1).NotTo(HaveOccurred())
 					signal <- struct{}{}
