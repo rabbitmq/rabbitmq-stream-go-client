@@ -13,7 +13,7 @@ type Consumer struct {
 	ID               uint8
 	response         *Response
 	options          *ConsumerOptions
-	onClose          chan uint8
+	onClose          func()
 	mutex            *sync.Mutex
 	chunkForConsumer chan chunkInfo
 	MessagesHandler  MessagesHandler
@@ -369,7 +369,7 @@ func (consumer *Consumer) close(reason Event) error {
 	}
 
 	if consumer.onClose != nil {
-		consumer.onClose <- consumer.ID
+		consumer.onClose()
 	}
 
 	return nil

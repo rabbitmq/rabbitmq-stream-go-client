@@ -522,7 +522,7 @@ func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (
 	return c.declarePublisher(streamName, options, nil)
 }
 
-func (c *Client) declarePublisher(streamName string, options *ProducerOptions, chClose chan uint8) (*Producer, error) {
+func (c *Client) declarePublisher(streamName string, options *ProducerOptions, cleanUp func()) (*Producer, error) {
 	if options == nil {
 		options = NewProducerOptions()
 	}
@@ -578,7 +578,7 @@ func (c *Client) declarePublisher(streamName string, options *ProducerOptions, c
 		ConfirmationTimeOut:  options.ConfirmationTimeOut,
 		ClientProvidedName:   options.ClientProvidedName,
 		Filter:               options.Filter,
-	}, chClose)
+	}, cleanUp)
 
 	if err != nil {
 		return nil, err
@@ -832,7 +832,7 @@ func (c *Client) DeclareSubscriber(streamName string,
 
 func (c *Client) declareSubscriber(streamName string,
 	messagesHandler MessagesHandler,
-	options *ConsumerOptions, chClose chan uint8) (*Consumer, error) {
+	options *ConsumerOptions, cleanUp func()) (*Consumer, error) {
 	if options == nil {
 		options = NewConsumerOptions()
 	}
@@ -912,7 +912,7 @@ func (c *Client) declareSubscriber(streamName string,
 
 	options.client = c
 	options.streamName = streamName
-	consumer := c.coordinator.NewConsumer(messagesHandler, options, chClose)
+	consumer := c.coordinator.NewConsumer(messagesHandler, options, cleanUp)
 
 	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
 	if options.Offset.isOffset() ||

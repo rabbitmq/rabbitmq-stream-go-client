@@ -70,7 +70,7 @@ type messageSequence struct {
 type Producer struct {
 	id          uint8
 	options     *ProducerOptions
-	onClose     chan uint8
+	onClose     func()
 	unConfirmed *unConfirmed
 	sequence    int64
 	mutex       *sync.RWMutex
@@ -668,7 +668,7 @@ func (producer *Producer) close(reason Event) error {
 	}
 
 	if producer.onClose != nil {
-		producer.onClose <- producer.id
+		producer.onClose()
 	}
 
 	return nil

@@ -51,9 +51,9 @@ var _ = Describe("Streaming Consumers", func() {
 		for _, consumer := range consumers {
 			Expect(consumer.Close()).NotTo(HaveOccurred())
 		}
-
-		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(0))
+		//time.Sleep(1 * time.Second)
+		Eventually(len(env.consumers.getCoordinators()["localhost:5552"].
+			getClientsPerContext())).ProbeEvery(100 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(0))
 
 	})
 

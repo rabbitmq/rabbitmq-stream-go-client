@@ -215,7 +215,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	}
 	streamsMetadata := env.locator.Load().metaData(streamName)
 	if streamsMetadata == nil {
-		return nil, errors.New("stream metadata not found, for: " + streamName)
+		return nil, StreamMetadataFailure
 	}
 	streamMetadata := streamsMetadata.Get(streamName)
 	if streamMetadata.responseCode != responseCodeOk {
@@ -534,8 +534,7 @@ func (c *Client) maybeCleanConsumers(streamName string) {
 	c.mutex.Unlock()
 }
 
-func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string,
-	options *ProducerOptions, rpcTimeout time.Duration, chClose chan uint8) (*Producer, error) {
+func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string, options *ProducerOptions, rpcTimeout time.Duration, cleanUp func()) (*Producer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
 	var clientResult *Client
@@ -579,7 +578,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 		time.Sleep(1 * time.Second)
 	}
 
-	producer, err := clientResult.DeclarePublisher(streamName, options)
+	producer, err := clientResult.declarePublisher(streamName, options, cleanUp)
 
 	if err != nil {
 		return nil, err
@@ -598,7 +597,7 @@ func (cc *environmentCoordinator) newClientForProducer(connectionName string, le
 
 func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration,
 	streamName string, messagesHandler MessagesHandler,
-	options *ConsumerOptions, rpcTimeout time.Duration, chClose chan uint8) (*Consumer, error) {
+	options *ConsumerOptions, rpcTimeout time.Duration, cleanUp func()) (*Consumer, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
 	var clientResult *Client
@@ -622,7 +621,7 @@ func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Bro
 		return nil, err
 	}
 
-	subscriber, err := clientResult.declareSubscriber(streamName, messagesHandler, options, chClose)
+	subscriber, err := clientResult.declareSubscriber(streamName, messagesHandler, options, cleanUp)
 	if err != nil {
 		return nil, err
 	}
@@ -671,9 +670,9 @@ func newProducers(maxItemsForClient int) *producersEnvironment {
 
 func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName string,
 	options *ProducerOptions, resolver *AddressResolver, rpcTimeOut time.Duration) (*Producer, error) {
-	leader, err := clientLocator.BrokerLeader(streamName)
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
+	leader, err := clientLocator.BrokerLeader(streamName)
 	if err != nil {
 		return nil, err
 	}
@@ -688,16 +687,13 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 	}
 	leader.cloneFrom(clientLocator.broker, resolver)
 
-	chClose := make(chan uint8)
-	go func(ch chan uint8) {
-		<-ch
+	cleanUp := func() {
 		for _, coordinator := range ps.producersCoordinator {
 			coordinator.maybeCleanClients()
 		}
-		close(ch)
-	}(chClose)
+	}
 	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.tcpParameters,
-		clientLocator.saslConfiguration, streamName, options, rpcTimeOut, chClose)
+		clientLocator.saslConfiguration, streamName, options, rpcTimeOut, cleanUp)
 	if err != nil {
 		return nil, err
 	}
@@ -738,9 +734,9 @@ func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {
 func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName string,
 	messagesHandler MessagesHandler,
 	consumerOptions *ConsumerOptions, resolver *AddressResolver, rpcTimeout time.Duration) (*Consumer, error) {
-	consumerBroker, err := clientLocator.BrokerForConsumer(streamName)
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
+	consumerBroker, err := clientLocator.BrokerForConsumer(streamName)
 	if err != nil {
 		return nil, err
 	}
@@ -758,18 +754,16 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 	if consumerOptions != nil && consumerOptions.ClientProvidedName != "" {
 		clientProvidedName = consumerOptions.ClientProvidedName
 	}
-	chClose := make(chan uint8, 1)
-	go func(ch chan uint8) {
-		<-ch
+	cleanUp := func() {
 		for _, coordinator := range ps.consumersCoordinator {
 			coordinator.maybeCleanClients()
 		}
-		close(chClose)
-	}(chClose)
+	}
+
 	consumer, err := ps.consumersCoordinator[coordinatorKey].
 		newConsumer(clientProvidedName, consumerBroker, clientLocator.tcpParameters,
 			clientLocator.saslConfiguration,
-			streamName, messagesHandler, consumerOptions, rpcTimeout, chClose)
+			streamName, messagesHandler, consumerOptions, rpcTimeout, cleanUp)
 	if err != nil {
 		return nil, err
 	}

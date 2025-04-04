@@ -50,7 +50,7 @@ func NewCoordinator() *Coordinator {
 
 // producersEnvironment
 func (coordinator *Coordinator) NewProducer(
-	parameters *ProducerOptions, chClose chan uint8) (*Producer, error) {
+	parameters *ProducerOptions, cleanUp func()) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	dynSize := 10000
@@ -75,7 +75,7 @@ func (coordinator *Coordinator) NewProducer(
 		status:                    open,
 		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](dynSize),
 		confirmMutex:              &sync.Mutex{},
-		onClose:                   chClose,
+		onClose:                   cleanUp,
 	}
 	coordinator.producers[lastId] = producer
 	return producer, err
@@ -175,7 +175,7 @@ func (coordinator *Coordinator) RemoveResponseByName(id string) error {
 
 // Consumer functions
 func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
-	parameters *ConsumerOptions, chClose chan uint8) *Consumer {
+	parameters *ConsumerOptions, cleanUp func()) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextConsumerItem()
@@ -189,7 +189,7 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 		isPromotedAsActive:   true,
 		lastAutoCommitStored: time.Now(),
 		chunkForConsumer:     make(chan chunkInfo, 100),
-		onClose:              chClose,
+		onClose:              cleanUp,
 	}
 
 	coordinator.consumers[lastId] = item
