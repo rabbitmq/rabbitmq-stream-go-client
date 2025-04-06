@@ -418,37 +418,39 @@ func (c *Client) DeleteStream(streamName string) error {
 }
 
 func (c *Client) heartBeat() {
-	tickerHeartbeat := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat-2) * time.Second)
+	tickerHeartbeat := time.NewTicker(time.Duration(20-2) * time.Second)
 
 	var heartBeatMissed int32
 	doneSendingTimeoutTicker := make(chan struct{}, 1)
 
 	go func() {
-		select {
-		case <-c.doneTimeoutTicker:
-			doneSendingTimeoutTicker <- struct{}{}
-			tickerHeartbeat.Stop()
-			return
-		case <-tickerHeartbeat.C:
-			if c.socket.isOpen() {
-				logs.LogDebug("Heartbeat ticker is open, sending heartbeat")
-				c.sendHeartbeat()
-				if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
-					v := atomic.AddInt32(&heartBeatMissed, 1)
-					logs.LogWarn("Missing heart beat: %d", v)
-					if v >= 2 {
-						logs.LogWarn("Too many heartbeat missing: %d", v)
-						c.Close()
-					}
-				} else {
-					atomic.StoreInt32(&heartBeatMissed, 0)
-				}
-			} else {
-				logs.LogDebug("Socket Heartbeat ticker is closed. Closing ticker")
+		for {
+			select {
+			case <-c.doneTimeoutTicker:
+				doneSendingTimeoutTicker <- struct{}{}
 				tickerHeartbeat.Stop()
 				return
-			}
+			case <-tickerHeartbeat.C:
+				if c.socket.isOpen() {
+					logs.LogDebug("Heartbeat ticker is open, sending heartbeat")
+					c.sendHeartbeat()
+					if time.Since(c.getLastHeartBeat()) > time.Duration(c.tuneState.requestedHeartbeat)*time.Second {
+						v := atomic.AddInt32(&heartBeatMissed, 1)
+						logs.LogWarn("Missing heart beat: %d", v)
+						if v >= 2 {
+							logs.LogWarn("Too many heartbeat missing: %d", v)
+							c.Close()
+						}
+					} else {
+						atomic.StoreInt32(&heartBeatMissed, 0)
+					}
+				} else {
+					logs.LogDebug("Socket Heartbeat ticker is closed. Closing ticker")
+					tickerHeartbeat.Stop()
+					return
+				}
 
+			}
 		}
 
 	}()

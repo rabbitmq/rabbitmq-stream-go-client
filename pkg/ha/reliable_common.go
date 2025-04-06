@@ -60,7 +60,7 @@ func retry(backoff int, reliable IReliable) (error, bool) {
 	}
 
 	if errors.Is(errS, stream.StreamMetadataFailure) {
-		logs.LogInfo("[Reliable] - Fail to retrieve the %s metadata failed for %s. Trying to reconnect", reliable.getStreamName(), reliable.getInfo())
+		logs.LogInfo("[Reliable] - Fail to retrieve the %s metadata for %s. Trying to reconnect", reliable.getStreamName(), reliable.getInfo())
 		return retry(backoff+1, reliable)
 	}
 

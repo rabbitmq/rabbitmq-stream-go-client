@@ -54,9 +54,9 @@ var _ = Describe("Streaming Filtering", func() {
 		// does not support broker filtering.
 		// so we can validate it
 		// This method is not thread safe and should be used only for testing purposes
-		testEnvironment.locator.Load().availableFeatures.brokerFilterEnabled = false
+		testEnvironment.locator.client.availableFeatures.brokerFilterEnabled = false
 
-		_, err = testEnvironment.locator.Load().DeclarePublisher(testProducerStream, NewProducerOptions().SetFilter(
+		_, err = testEnvironment.locator.client.DeclarePublisher(testProducerStream, NewProducerOptions().SetFilter(
 			NewProducerFilter(func(message message.StreamMessage) string {
 				return fmt.Sprintf("%s", message.GetApplicationProperties()["ID"])
 			}),
@@ -71,7 +71,7 @@ var _ = Describe("Streaming Filtering", func() {
 		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
 
 		}
-		_, err = testEnvironment.locator.Load().DeclareSubscriber(testProducerStream, handleMessages, NewConsumerOptions().SetFilter(filter))
+		_, err = testEnvironment.locator.client.DeclareSubscriber(testProducerStream, handleMessages, NewConsumerOptions().SetFilter(filter))
 		Expect(err).To(Equal(FilterNotSupported))
 
 	})

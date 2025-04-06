@@ -9,17 +9,28 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
+type locator struct {
+	client *Client
+	mutex  sync.Mutex
+}
+
+func newLocator(client *Client) *locator {
+	return &locator{
+		client: client,
+		mutex:  sync.Mutex{},
+	}
+}
+
 type Environment struct {
 	producers *producersEnvironment
 	consumers *consumersEnvironment
 	options   *EnvironmentOptions
-	locator   atomic.Pointer[Client]
+	locator   *locator
 	closed    bool
 }
 
@@ -111,10 +122,13 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		producers: newProducers(options.MaxProducersPerClient),
 		consumers: newConsumerEnvironment(options.MaxConsumersPerClient),
 		closed:    false,
+		locator:   newLocator(client),
 	}, connectionError
 }
 func (env *Environment) maybeReconnectLocator() error {
-	if env.locator.Load() != nil && env.locator.Load().socket.isOpen() {
+	env.locator.mutex.Lock()
+	defer env.locator.mutex.Unlock()
+	if env.locator.client != nil && env.locator.client.socket.isOpen() {
 		return nil
 	}
 
@@ -122,7 +136,7 @@ func (env *Environment) maybeReconnectLocator() error {
 	c := newClient("go-stream-locator", broker, env.options.TCPParameters,
 		env.options.SaslConfiguration, env.options.RPCTimeout)
 
-	env.locator.Swap(c)
+	env.locator.client = c
 	err := c.connect()
 	tentatives := 1
 	for err != nil {
@@ -137,12 +151,12 @@ func (env *Environment) maybeReconnectLocator() error {
 		c1 := newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
 			env.options.SaslConfiguration, env.options.RPCTimeout)
 		tentatives = tentatives + 1
-		env.locator.Swap(c1)
+		env.locator.client = c1
 		err = c1.connect()
 
 	}
 
-	return env.locator.Load().connect()
+	return env.locator.client.connect()
 }
 
 func (env *Environment) DeclareStream(streamName string, options *StreamOptions) error {
@@ -150,7 +164,7 @@ func (env *Environment) DeclareStream(streamName string, options *StreamOptions)
 	if err != nil {
 		return err
 	}
-	if err := env.locator.Load().DeclareStream(streamName, options); err != nil && err != StreamAlreadyExists {
+	if err := env.locator.client.DeclareStream(streamName, options); err != nil && err != StreamAlreadyExists {
 		return err
 	}
 	return nil
@@ -161,7 +175,7 @@ func (env *Environment) DeleteStream(streamName string) error {
 	if err != nil {
 		return err
 	}
-	return env.locator.Load().DeleteStream(streamName)
+	return env.locator.client.DeleteStream(streamName)
 }
 
 func (env *Environment) NewProducer(streamName string, producerOptions *ProducerOptions) (*Producer, error) {
@@ -171,7 +185,7 @@ func (env *Environment) NewProducer(streamName string, producerOptions *Producer
 		return nil, err
 	}
 
-	return env.producers.newProducer(env.locator.Load(), streamName, producerOptions, env.options.AddressResolver, env.options.RPCTimeout)
+	return env.producers.newProducer(env.locator.client, streamName, producerOptions, env.options.AddressResolver, env.options.RPCTimeout)
 }
 
 func (env *Environment) StreamExists(streamName string) (bool, error) {
@@ -179,7 +193,7 @@ func (env *Environment) StreamExists(streamName string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return env.locator.Load().StreamExists(streamName), nil
+	return env.locator.client.StreamExists(streamName), nil
 }
 
 func (env *Environment) QueryOffset(consumerName string, streamName string) (int64, error) {
@@ -187,7 +201,7 @@ func (env *Environment) QueryOffset(consumerName string, streamName string) (int
 	if err != nil {
 		return 0, err
 	}
-	return env.locator.Load().queryOffset(consumerName, streamName)
+	return env.locator.client.queryOffset(consumerName, streamName)
 }
 
 // QuerySequence gets the last id stored for a producer
@@ -197,7 +211,7 @@ func (env *Environment) QuerySequence(publisherReference string, streamName stri
 	if err != nil {
 		return 0, err
 	}
-	return env.locator.Load().queryPublisherSequence(publisherReference, streamName)
+	return env.locator.client.queryPublisherSequence(publisherReference, streamName)
 }
 
 func (env *Environment) StreamStats(streamName string) (*StreamStats, error) {
@@ -205,7 +219,7 @@ func (env *Environment) StreamStats(streamName string) (*StreamStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	return env.locator.Load().StreamStats(streamName)
+	return env.locator.client.StreamStats(streamName)
 }
 
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
@@ -213,7 +227,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	if err != nil {
 		return nil, err
 	}
-	streamsMetadata := env.locator.Load().metaData(streamName)
+	streamsMetadata := env.locator.client.metaData(streamName)
 	if streamsMetadata == nil {
 		return nil, StreamMetadataFailure
 	}
@@ -224,7 +238,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 
 	tentatives := 0
 	for streamMetadata == nil || streamMetadata.Leader == nil && tentatives < 3 {
-		streamsMetadata = env.locator.Load().metaData(streamName)
+		streamsMetadata = env.locator.client.metaData(streamName)
 		streamMetadata = streamsMetadata.Get(streamName)
 		tentatives++
 		time.Sleep(100 * time.Millisecond)
@@ -246,7 +260,7 @@ func (env *Environment) NewConsumer(streamName string,
 		return nil, err
 	}
 
-	return env.consumers.NewSubscriber(env.locator.Load(), streamName, messagesHandler, options, env.options.AddressResolver, env.options.RPCTimeout)
+	return env.consumers.NewSubscriber(env.locator.client, streamName, messagesHandler, options, env.options.AddressResolver, env.options.RPCTimeout)
 }
 
 func (env *Environment) NewSuperStreamProducer(superStream string, superStreamProducerOptions *SuperStreamProducerOptions) (*SuperStreamProducer, error) {
@@ -260,8 +274,8 @@ func (env *Environment) NewSuperStreamProducer(superStream string, superStreamPr
 func (env *Environment) Close() error {
 	_ = env.producers.close()
 	_ = env.consumers.close()
-	if env.locator.Load() != nil {
-		_ = env.locator.Load().Close()
+	if env.locator.client != nil {
+		_ = env.locator.client.Close()
 	}
 	env.closed = true
 	return nil
@@ -793,7 +807,7 @@ func (env *Environment) DeclareSuperStream(superStreamName string, options Super
 	if err != nil {
 		return err
 	}
-	if err := env.locator.Load().DeclareSuperStream(superStreamName, options); err != nil && !errors.Is(err, StreamAlreadyExists) {
+	if err := env.locator.client.DeclareSuperStream(superStreamName, options); err != nil && !errors.Is(err, StreamAlreadyExists) {
 		return err
 	}
 	return nil
@@ -804,7 +818,7 @@ func (env *Environment) DeleteSuperStream(superStreamName string) error {
 	if err != nil {
 		return err
 	}
-	return env.locator.Load().DeleteSuperStream(superStreamName)
+	return env.locator.client.DeleteSuperStream(superStreamName)
 }
 
 func (env *Environment) QueryPartitions(superStreamName string) ([]string, error) {
@@ -812,7 +826,7 @@ func (env *Environment) QueryPartitions(superStreamName string) ([]string, error
 	if err != nil {
 		return nil, err
 	}
-	return env.locator.Load().QueryPartitions(superStreamName)
+	return env.locator.client.QueryPartitions(superStreamName)
 }
 
 // StoreOffset stores the offset for a consumer for a stream
@@ -827,7 +841,7 @@ func (env *Environment) StoreOffset(consumerName string, streamName string, offs
 	if err != nil {
 		return err
 	}
-	return env.locator.Load().StoreOffset(consumerName, streamName, offset)
+	return env.locator.client.StoreOffset(consumerName, streamName, offset)
 }
 
 func (env *Environment) QueryRoute(superStream string, routingKey string) ([]string, error) {
@@ -835,7 +849,7 @@ func (env *Environment) QueryRoute(superStream string, routingKey string) ([]str
 	if err != nil {
 		return nil, err
 	}
-	return env.locator.Load().queryRoute(superStream, routingKey)
+	return env.locator.client.queryRoute(superStream, routingKey)
 }
 
 func (env *Environment) NewSuperStreamConsumer(superStream string, messagesHandler MessagesHandler, options *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {
