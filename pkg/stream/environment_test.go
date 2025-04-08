@@ -490,10 +490,30 @@ var _ = Describe("Environment test", func() {
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
-	Describe("Query Offset should not return any error in case of stream does not exist", func() {
+	// PR:https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/388
+	Describe("QueryOffset DeclareStream StoreOffset should reconnect the locator", func() {
 		env, err := NewEnvironment(NewEnvironmentOptions())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(env.StoreOffset("my_consumer", "stream_doesnt_exist", 123)).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		// here we force the client closing
+		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
+		const consumerName = "my_consumer_1"
+		// here we force the client closing
+		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		Expect(env.StoreOffset(consumerName, streamName, 123)).NotTo(HaveOccurred())
+		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
+		// here we force the client closing
+		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		off, err := env.QueryOffset(consumerName, streamName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
+		Expect(off).To(Equal(int64(123)))
+		// here we force the client closing
+		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 

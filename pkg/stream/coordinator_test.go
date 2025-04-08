@@ -23,7 +23,7 @@ var _ = Describe("Coordinator", func() {
 		})
 
 		It("Add/Remove Producers ", func() {
-			p, err := client.coordinator.NewProducer(nil)
+			p, err := client.coordinator.NewProducer(nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.id).To(Equal(uint8(0)))
 			err = client.coordinator.RemoveProducerById(p.id, Event{
@@ -46,7 +46,7 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete coordinator ", func() {
 			var producersId []uint8
 			for i := 0; i < 100; i++ {
-				p, err := client.coordinator.NewProducer(nil)
+				p, err := client.coordinator.NewProducer(nil, nil)
 				producersId = append(producersId, p.id)
 				Expect(err).NotTo(HaveOccurred())
 			}
@@ -66,7 +66,7 @@ var _ = Describe("Coordinator", func() {
 			// until reach 255 then start reusing the old
 			// unused ids
 			for i := 0; i < 250; i++ {
-				p, err := client.coordinator.NewProducer(nil)
+				p, err := client.coordinator.NewProducer(nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p.id).To(Equal(uint8(i)))
 				err = client.coordinator.RemoveProducerById(p.id, Event{
@@ -84,7 +84,7 @@ var _ = Describe("Coordinator", func() {
 			var producersId []uint8
 			for i := 0; i < 500; i++ {
 
-				p, err := client.coordinator.NewProducer(nil)
+				p, err := client.coordinator.NewProducer(nil, nil)
 				if i >= int(^uint8(0)) {
 					Expect(fmt.Sprintf("%s", err)).
 						To(ContainSubstring("No more items available"))
@@ -109,7 +109,7 @@ var _ = Describe("Coordinator", func() {
 				// raise an logError not found
 				Expect(err).To(HaveOccurred())
 
-				p, err := client.coordinator.NewProducer(nil)
+				p, err := client.coordinator.NewProducer(nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p.id).To(Equal(v))
 			}
@@ -140,7 +140,7 @@ var _ = Describe("Coordinator", func() {
 		})
 
 		It("Add/Remove consumers ", func() {
-			p, err := client.coordinator.NewProducer(nil)
+			p, err := client.coordinator.NewProducer(nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.id).To(Equal(uint8(0)))
 			err = client.coordinator.RemoveProducerById(p.id, Event{
@@ -163,7 +163,7 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete consumers ", func() {
 			var consumersId []uint8
 			for i := 0; i < 100; i++ {
-				p := client.coordinator.NewConsumer(nil, nil)
+				p := client.coordinator.NewConsumer(nil, nil, nil)
 				consumersId = append(consumersId, p.ID)
 			}
 			Expect(client.coordinator.ConsumersCount()).To(Equal(100))
