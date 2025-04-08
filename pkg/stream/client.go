@@ -421,13 +421,11 @@ func (c *Client) heartBeat() {
 	tickerHeartbeat := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat) * time.Second)
 
 	var heartBeatMissed int32
-	doneSendingTimeoutTicker := make(chan struct{}, 1)
 
 	go func() {
 		for {
 			select {
 			case <-c.doneTimeoutTicker:
-				doneSendingTimeoutTicker <- struct{}{}
 				tickerHeartbeat.Stop()
 				return
 			case <-tickerHeartbeat.C:
