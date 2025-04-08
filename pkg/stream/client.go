@@ -418,7 +418,7 @@ func (c *Client) DeleteStream(streamName string) error {
 }
 
 func (c *Client) heartBeat() {
-	tickerHeartbeat := time.NewTicker(time.Duration(20-2) * time.Second)
+	tickerHeartbeat := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat) * time.Second)
 
 	var heartBeatMissed int32
 	doneSendingTimeoutTicker := make(chan struct{}, 1)
