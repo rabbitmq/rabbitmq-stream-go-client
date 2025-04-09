@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -37,6 +38,16 @@ var reSent int32
 
 const enableResend = false
 
+func formatCommas(num int32) string {
+	str := fmt.Sprintf("%d", num)
+	re := regexp.MustCompile("(\\d+)(\\d{3})")
+	for n := ""; n != str; {
+		n = str
+		str = re.ReplaceAllString(str, "$1,$2")
+	}
+	return str
+}
+
 func main() {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
@@ -44,18 +55,18 @@ func main() {
 	// Your application code here
 
 	// Tune the parameters to test the reliability
-	const messagesToSend = 50_000_000
-	const numberOfProducers = 5
-	const concurrentProducers = 2
+	const messagesToSend = 10_000_000
+	const numberOfProducers = 1
+	const concurrentProducers = 1
 	const numberOfConsumers = 1
 	const sendDelay = 1 * time.Millisecond
 	const delayEachMessages = 500
-	const maxProducersPerClient = 2
-	const maxConsumersPerClient = 2
+	const maxProducersPerClient = 1
+	const maxConsumersPerClient = 1
 	//
 
 	reader := bufio.NewReader(os.Stdin)
-	stream.SetLevelInfo(logs.DEBUG)
+	stream.SetLevelInfo(logs.INFO)
 	fmt.Println("Reliable Producer/Consumer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
@@ -69,6 +80,7 @@ func main() {
 			SetMaxProducersPerClient(maxProducersPerClient).
 			SetMaxConsumersPerClient(maxConsumersPerClient).
 			SetUris(addresses))
+
 	CheckErr(err)
 	fmt.Printf("Environment created with %d producers and %d consumers\n\n", maxProducersPerClient, maxConsumersPerClient)
 
@@ -82,7 +94,7 @@ func main() {
 	}
 	err = env.DeclareStream(streamName,
 		&stream.StreamOptions{
-			MaxLengthBytes: stream.ByteCapacity{}.GB(1),
+			MaxLengthBytes: stream.ByteCapacity{}.GB(10),
 		},
 	)
 	CheckErr(err)
@@ -95,12 +107,12 @@ func main() {
 			totalConfirmed := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
 			expectedMessages := messagesToSend * numberOfProducers * concurrentProducers * 2
 			fmt.Printf("********************************************\n")
-			fmt.Printf("%s - ToSend: %d - nProducers: %d - concurrentProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC850),
-				expectedMessages, numberOfProducers, concurrentProducers, numberOfConsumers)
-			fmt.Printf("Sent:%d - ReSent %d - Confirmed:%d  - Not confirmed:%d - Fail+Confirmed  :%d \n",
-				sent, atomic.LoadInt32(&reSent), atomic.LoadInt32(&confirmed), atomic.LoadInt32(&fail), totalConfirmed)
-			fmt.Printf("Total Consumed: %d - Per consumer: %d  \n", atomic.LoadInt32(&consumed),
-				atomic.LoadInt32(&consumed)/numberOfConsumers)
+			fmt.Printf("%s - ToSend: %s - nProducers: %d - concurrentProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC850),
+				formatCommas(int32(expectedMessages)), numberOfProducers, concurrentProducers, numberOfConsumers)
+			fmt.Printf("Sent:%s - ReSent:%s - Confirmed:%s  - Not confirmed:%s - Fail+Confirmed:%s \n",
+				formatCommas(sent), formatCommas(atomic.LoadInt32(&reSent)), formatCommas(atomic.LoadInt32(&confirmed)), formatCommas(atomic.LoadInt32(&fail)), formatCommas(totalConfirmed))
+			fmt.Printf("Total Consumed:%s - Per consumer:%s  \n", formatCommas(atomic.LoadInt32(&consumed)),
+				formatCommas(atomic.LoadInt32(&consumed)/numberOfConsumers))
 
 			for _, producer := range producers {
 				fmt.Printf("%s, status: %s \n",
