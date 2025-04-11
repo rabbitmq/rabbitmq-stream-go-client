@@ -1045,6 +1045,7 @@ func (c *Client) declareSubscriber(streamName string,
 				}
 			}
 		}
+
 	}()
 	return consumer, err.Err
 }

@@ -347,12 +347,9 @@ func (consumer *Consumer) close(reason Event) error {
 		consumer.closeHandler = nil
 	}
 
-	if consumer.chunkForConsumer != nil {
-		close(consumer.chunkForConsumer)
-		consumer.chunkForConsumer = nil
-	}
-
 	if consumer.response.data != nil {
+		close(consumer.chunkForConsumer)
+
 		close(consumer.response.data)
 		consumer.response.data = nil
 	}
