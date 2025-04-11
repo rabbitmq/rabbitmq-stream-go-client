@@ -54,6 +54,12 @@ func (consumer *Consumer) getStatus() int {
 	return consumer.status
 }
 
+func (consumer *Consumer) isZombie() bool {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	return consumer.status == open && !consumer.options.client.socket.isOpen()
+}
+
 func (consumer *Consumer) GetStreamName() string {
 	if consumer.options == nil {
 		return ""
@@ -341,7 +347,10 @@ func (consumer *Consumer) close(reason Event) error {
 		consumer.closeHandler = nil
 	}
 
-	close(consumer.chunkForConsumer)
+	if consumer.chunkForConsumer != nil {
+		close(consumer.chunkForConsumer)
+		consumer.chunkForConsumer = nil
+	}
 
 	if consumer.response.data != nil {
 		close(consumer.response.data)
