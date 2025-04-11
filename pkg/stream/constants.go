@@ -114,6 +114,7 @@ const (
 	defaultConfirmationTimeOut  = 10 * time.Second
 	//
 
+	ZombieConsumer           = "zombie-consumer"
 	SocketClosed             = "socket client closed"
 	MetaDataUpdate           = "metadata Data update"
 	LeaderLocatorBalanced    = "balanced"

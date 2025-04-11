@@ -89,8 +89,14 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 	return consumer.close(reason)
 
 }
-func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error {
+func (coordinator *Coordinator) GetConsumers() map[interface{}]interface{} {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	return coordinator.consumers
 
+}
+
+func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error {
 	producer, err := coordinator.ExtractProducerById(id)
 	if err != nil {
 		return err

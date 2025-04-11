@@ -34,7 +34,6 @@ func newUnConfirmed(maxSize int) *unConfirmed {
 func (u *unConfirmed) addFromSequences(messages []*messageSequence, producerID uint8) {
 
 	if u.size() > u.maxSize {
-		logs.LogDebug("unConfirmed size: %d reached, producer blocked", u.maxSize)
 		u.blockSignal.L.Lock()
 		u.blockSignal.Wait()
 		u.blockSignal.L.Unlock()
