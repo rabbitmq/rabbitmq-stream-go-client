@@ -488,18 +488,18 @@ func (c *Client) Close() error {
 	}
 
 	for _, cs := range c.coordinator.GetConsumers() {
-		if cs == nil {
-			continue
-		}
-		err := c.coordinator.RemoveConsumerById(cs.(*Consumer).ID, Event{
-			Command:    CommandClose,
-			StreamName: cs.(*Consumer).GetStreamName(),
-			Name:       cs.(*Consumer).GetName(),
-			Reason:     SocketClosed,
-			Err:        nil,
-		})
-		if err != nil {
-			logs.LogWarn("error removing consumer: %s", err)
+		if cs != nil {
+			err := c.coordinator.RemoveConsumerById(cs.(*Consumer).ID, Event{
+				Command:    CommandClose,
+				StreamName: cs.(*Consumer).GetStreamName(),
+				Name:       cs.(*Consumer).GetName(),
+				Reason:     SocketClosed,
+				Err:        nil,
+			})
+
+			if err != nil {
+				logs.LogWarn("error removing consumer: %s", err)
+			}
 		}
 	}
 	if c.getSocket().isOpen() {
