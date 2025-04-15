@@ -487,16 +487,19 @@ func (c *Client) Close() error {
 		}
 	}
 
-	for _, cs := range c.coordinator.consumers {
-		err := c.coordinator.RemoveConsumerById(cs.(*Consumer).ID, Event{
-			Command:    CommandClose,
-			StreamName: cs.(*Consumer).GetStreamName(),
-			Name:       cs.(*Consumer).GetName(),
-			Reason:     SocketClosed,
-			Err:        nil,
-		})
-		if err != nil {
-			logs.LogWarn("error removing consumer: %s", err)
+	for _, cs := range c.coordinator.GetConsumers() {
+		if cs != nil {
+			err := c.coordinator.RemoveConsumerById(cs.(*Consumer).ID, Event{
+				Command:    CommandClose,
+				StreamName: cs.(*Consumer).GetStreamName(),
+				Name:       cs.(*Consumer).GetName(),
+				Reason:     SocketClosed,
+				Err:        nil,
+			})
+
+			if err != nil {
+				logs.LogWarn("error removing consumer: %s", err)
+			}
 		}
 	}
 	if c.getSocket().isOpen() {
@@ -1019,10 +1022,30 @@ func (c *Client) declareSubscriber(streamName string,
 					}
 				}
 
-			case <-time.After(consumer.options.autoCommitStrategy.flushInterval):
-				consumer.cacheStoreOffset()
+			case <-time.After(1_000 * time.Millisecond):
+				if consumer.options.autocommit && time.Since(consumer.getLastAutoCommitStored()) >= consumer.options.autoCommitStrategy.flushInterval {
+					consumer.cacheStoreOffset()
+				}
+
+				// This is a very edge case where the consumer is not active anymore
+				// but the consumer is still in the list of consumers
+				// It can happen during the reconnection with load-balancing
+				// found this problem with a caos test where random killing the load-balancer and node where
+				// the client should be connected
+				if consumer.isZombie() {
+					logs.LogWarn("Detected zombie consumer for stream %s, closing", streamName)
+					consumer.close(Event{
+						Command:    CommandUnsubscribe,
+						StreamName: consumer.GetStreamName(),
+						Name:       consumer.GetName(),
+						Reason:     ZombieConsumer,
+						Err:        nil,
+					})
+					return
+				}
 			}
 		}
+
 	}()
 	return consumer, err.Err
 }

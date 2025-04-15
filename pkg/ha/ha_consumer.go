@@ -46,9 +46,9 @@ func (c *ReliableConsumer) GetStatusAsString() string {
 func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		event := <-channelClose
-		if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
+		if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) || strings.EqualFold(event.Reason, stream.ZombieConsumer) {
 			c.setStatus(StatusReconnecting)
-			logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting..", c.getInfo())
+			logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", c.getInfo(), event.Reason)
 			c.bootstrap = false
 			err, reconnected := retry(1, c)
 			if err != nil {
