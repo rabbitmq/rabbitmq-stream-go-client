@@ -406,7 +406,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	// dispatch the messages with offset to the consumer
 	chunk.offsetMessages = batchConsumingMessages
-	logs.LogDebug("Dispatching %d messages to consumer %d", len(batchConsumingMessages), subscriptionId)
 	if consumer.getStatus() == open {
 		select {
 		case consumer.chunkForConsumer <- chunk:
