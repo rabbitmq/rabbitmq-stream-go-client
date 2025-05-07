@@ -410,7 +410,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	if consumer.getStatus() == open {
 		select {
 		case consumer.chunkForConsumer <- chunk:
-			return
 		default:
 			logs.LogDebug("The consumer %s for the stream %s reports as open but is probably "+
 				"closed during chunk dispatching. Messages won't be dispatched. ",
