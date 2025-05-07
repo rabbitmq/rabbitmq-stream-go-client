@@ -4,7 +4,6 @@
 <div align="center">
 
 ![Build](https://github.com/rabbitmq/rabbitmq-stream-go-client/actions/workflows/build_and_test.yml/badge.svg)
-[![codecov](https://codecov.io/gh/rabbitmq/rabbitmq-stream-go-client/branch/main/graph/badge.svg?token=HZD4S71QIM)](https://codecov.io/gh/rabbitmq/rabbitmq-stream-go-client)
 
 Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_stream)
 </div>
