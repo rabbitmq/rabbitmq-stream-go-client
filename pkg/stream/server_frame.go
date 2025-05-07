@@ -596,7 +596,7 @@ func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Rea
 		isActive == 1)
 	consumer.options.SingleActiveConsumer.offsetSpecification = responseOff
 
-	if isActive == 1 {
+	if isActive == 1 && responseOff.isOffset() {
 		consumer.setCurrentOffset(responseOff.offset)
 	}
 
