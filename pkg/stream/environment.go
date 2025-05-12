@@ -527,8 +527,7 @@ func (c *Client) maybeCleanProducers(streamName string) {
 }
 
 func (c *Client) maybeCleanConsumers(streamName string) {
-	c.mutex.Lock()
-	for pidx, consumer := range c.coordinator.consumers {
+	for pidx, consumer := range c.coordinator.GetConsumers() {
 		if consumer.(*Consumer).options.streamName == streamName {
 			err := c.coordinator.RemoveConsumerById(pidx.(uint8), Event{
 				Command:    CommandMetadataUpdate,
@@ -542,7 +541,6 @@ func (c *Client) maybeCleanConsumers(streamName string) {
 			}
 		}
 	}
-	c.mutex.Unlock()
 }
 
 func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string, options *ProducerOptions, rpcTimeout time.Duration, cleanUp func()) (*Producer, error) {
