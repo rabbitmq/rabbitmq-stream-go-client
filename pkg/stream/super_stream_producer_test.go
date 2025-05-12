@@ -476,4 +476,61 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
+	It("should reconnect to the same partition after a close event", func() {
+		const partitionsCount = 3
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		var superStream = fmt.Sprintf("reconnect-test-super-stream-%d", time.Now().Unix())
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(partitionsCount))).NotTo(HaveOccurred())
+
+		superProducer, err := newSuperStreamProducer(env, superStream, &SuperStreamProducerOptions{
+			RoutingStrategy: NewHashRoutingStrategy(func(msg message.StreamMessage) string {
+				return msg.GetApplicationProperties()["routingKey"].(string)
+			}),
+		})
+		Expect(err).To(BeNil())
+		Expect(superProducer).NotTo(BeNil())
+		Expect(superProducer.init()).NotTo(HaveOccurred())
+		producers := superProducer.getProducers()
+		Expect(producers).To(HaveLen(partitionsCount))
+		partitionToClose := producers[0].GetStreamName()
+
+		// Declare synchronization helpers and listeners
+		partitionCloseEvent := make(chan bool)
+
+		// Listen for the partition close event and try to reconnect
+		go func(ch <-chan PPartitionClose) {
+			for event := range ch {
+				err := event.Context.ConnectPartition(event.Partition)
+				Expect(err).To(BeNil())
+
+				partitionCloseEvent <- true
+
+				break
+
+			}
+		}(superProducer.NotifyPartitionClose(1))
+
+		// Imitates metadataUpdateFrameHandler - it can happen when stream members are changed.
+		go func() {
+			client, ok := env.producers.getCoordinators()["localhost:5552"].clientsPerContext.Load(1)
+			Expect(ok).To(BeTrue())
+			client.(*Client).maybeCleanProducers(partitionToClose)
+		}()
+
+		// Wait for the partition close event
+		Eventually(partitionCloseEvent).WithTimeout(5 * time.Second).WithPolling(100 * time.Millisecond).Should(Receive())
+
+		// Verify that the partition was successfully reconnected
+		Expect(superProducer.getProducers()).To(HaveLen(partitionsCount))
+		reconnectedProducer := superProducer.getProducer(partitionToClose)
+		Expect(reconnectedProducer).NotTo(BeNil())
+
+		// Clean up
+		Expect(superProducer.Close()).NotTo(HaveOccurred())
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
+
 })

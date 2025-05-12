@@ -510,7 +510,6 @@ func (cc *environmentCoordinator) maybeCleanClients() {
 }
 
 func (c *Client) maybeCleanProducers(streamName string) {
-	c.mutex.Lock()
 	for pidx, producer := range c.coordinator.Producers() {
 		if producer.(*Producer).GetStreamName() == streamName {
 			err := c.coordinator.RemoveProducerById(pidx.(uint8), Event{
@@ -525,8 +524,6 @@ func (c *Client) maybeCleanProducers(streamName string) {
 			}
 		}
 	}
-	c.mutex.Unlock()
-
 }
 
 func (c *Client) maybeCleanConsumers(streamName string) {
