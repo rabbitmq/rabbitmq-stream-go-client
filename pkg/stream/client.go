@@ -471,13 +471,13 @@ func (c *Client) closeHartBeat() {
 }
 
 func (c *Client) Close() error {
-
 	c.closeHartBeat()
-	for _, p := range c.coordinator.Producers() {
-		err := c.coordinator.RemoveProducerById(p.(*Producer).id, Event{
+	c.coordinator.Producers().Range(func(_, p any) bool {
+		producer := p.(*Producer)
+		err := c.coordinator.RemoveProducerById(producer.id, Event{
 			Command:    CommandClose,
-			StreamName: p.(*Producer).GetStreamName(),
-			Name:       p.(*Producer).GetName(),
+			StreamName: producer.GetStreamName(),
+			Name:       producer.GetName(),
 			Reason:     SocketClosed,
 			Err:        nil,
 		})
@@ -485,23 +485,27 @@ func (c *Client) Close() error {
 		if err != nil {
 			logs.LogWarn("error removing producer: %s", err)
 		}
-	}
 
-	for _, cs := range c.coordinator.GetConsumers() {
-		if cs != nil {
-			err := c.coordinator.RemoveConsumerById(cs.(*Consumer).ID, Event{
-				Command:    CommandClose,
-				StreamName: cs.(*Consumer).GetStreamName(),
-				Name:       cs.(*Consumer).GetName(),
-				Reason:     SocketClosed,
-				Err:        nil,
-			})
+		return true
+	})
 
-			if err != nil {
-				logs.LogWarn("error removing consumer: %s", err)
-			}
+	c.coordinator.Consumers().Range(func(_, cs any) bool {
+		consumer := cs.(*Consumer)
+		err := c.coordinator.RemoveConsumerById(consumer.ID, Event{
+			Command:    CommandClose,
+			StreamName: consumer.GetStreamName(),
+			Name:       consumer.GetName(),
+			Reason:     SocketClosed,
+			Err:        nil,
+		})
+
+		if err != nil {
+			logs.LogWarn("error removing consumer: %s", err)
 		}
-	}
+
+		return true
+	})
+
 	if c.getSocket().isOpen() {
 
 		res := c.coordinator.NewResponse(CommandClose)

@@ -510,37 +510,43 @@ func (cc *environmentCoordinator) maybeCleanClients() {
 }
 
 func (c *Client) maybeCleanProducers(streamName string) {
-	for pidx, producer := range c.coordinator.Producers() {
-		if producer.(*Producer).GetStreamName() == streamName {
+	c.coordinator.Producers().Range(func(pidx, p any) bool {
+		producer := p.(*Producer)
+		if producer.GetStreamName() == streamName {
 			err := c.coordinator.RemoveProducerById(pidx.(uint8), Event{
 				Command:    CommandMetadataUpdate,
 				StreamName: streamName,
-				Name:       producer.(*Producer).GetName(),
+				Name:       producer.GetName(),
 				Reason:     MetaDataUpdate,
 				Err:        nil,
 			})
 			if err != nil {
-				return
+				return false
 			}
 		}
-	}
+
+		return true
+	})
 }
 
 func (c *Client) maybeCleanConsumers(streamName string) {
-	for pidx, consumer := range c.coordinator.GetConsumers() {
-		if consumer.(*Consumer).options.streamName == streamName {
+	c.coordinator.Consumers().Range(func(pidx, cs any) bool {
+		consumer := cs.(*Consumer)
+		if consumer.options.streamName == streamName {
 			err := c.coordinator.RemoveConsumerById(pidx.(uint8), Event{
 				Command:    CommandMetadataUpdate,
 				StreamName: streamName,
-				Name:       consumer.(*Consumer).GetName(),
+				Name:       consumer.GetName(),
 				Reason:     MetaDataUpdate,
 				Err:        nil,
 			})
 			if err != nil {
-				return
+				return false
 			}
 		}
-	}
+
+		return true
+	})
 }
 
 func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string, options *ProducerOptions, rpcTimeout time.Duration, cleanUp func()) (*Producer, error) {
@@ -638,15 +644,9 @@ func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Bro
 }
 
 func (cc *environmentCoordinator) Close() error {
-
 	cc.clientsPerContext.Range(func(key, value any) bool {
-		client := value.(*Client)
-		for i := range client.coordinator.producers {
-			_ = client.coordinator.producers[i].(*Producer).Close()
-		}
-		for i := range client.coordinator.consumers {
-			_ = client.coordinator.consumers[i].(*Consumer).Close()
-		}
+		value.(*Client).coordinator.Close()
+
 		return true
 	})
 
