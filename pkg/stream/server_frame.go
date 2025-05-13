@@ -210,7 +210,12 @@ func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Re
 	readProtocol.CorrelationId, _ = readUInt(r)
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
-	logErrorCommand(err, "handleGenericResponse")
+	if err != nil {
+		logErrorCommand(err, "handleGenericResponse")
+
+		return
+	}
+
 	res.code <- Code{id: readProtocol.ResponseCode}
 }
 

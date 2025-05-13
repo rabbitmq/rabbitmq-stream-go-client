@@ -221,7 +221,7 @@ func (coordinator *Coordinator) GetResponseById(id uint32) (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	return v.(*Response), err
+	return v.(*Response), nil
 }
 
 func (coordinator *Coordinator) ConsumersCount() int {
