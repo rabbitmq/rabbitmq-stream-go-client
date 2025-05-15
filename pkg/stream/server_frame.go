@@ -212,7 +212,6 @@ func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Re
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
 	if err != nil {
 		logErrorCommand(err, "handleGenericResponse")
-
 		return
 	}
 
