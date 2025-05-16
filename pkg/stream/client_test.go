@@ -213,4 +213,21 @@ var _ = Describe("Streaming testEnvironment", func() {
 		Expect(res).To(BeNil())
 	})
 
+	It("Client.handleGenericResponse handles timeout and missing response gracefully", func() {
+		cli := newClient("connName", nil, nil, nil, defaultSocketCallTimeout)
+
+		// Simulate timeout: create a response and remove it immediately
+		res := cli.coordinator.NewResponse(commandDeclarePublisher, "Simulated Test")
+		err := cli.coordinator.RemoveResponseById(res.correlationid)
+		Expect(err).To(BeNil())
+
+		// Simulate receiving a response for the removed correlation ID
+		readerProtocol := &ReaderProtocol{
+			CorrelationId: uint32(res.correlationid),
+			ResponseCode:  responseCodeStreamNotAvailable,
+		}
+		cli.handleGenericResponse(readerProtocol, bufio.NewReader(bytes.NewBuffer([]byte{})))
+
+	})
+
 })
