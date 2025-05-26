@@ -532,5 +532,27 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
+	It("should detect potential data races when sending concurrently", func() {
+		env, err := NewEnvironment(nil)
+		Expect(err).NotTo(HaveOccurred())
+		var superStream = fmt.Sprintf("race-super-stream-%d", time.Now().Unix())
+		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(10))).NotTo(HaveOccurred())
 
+		superProducer, err := env.NewSuperStreamProducer(superStream, NewSuperStreamProducerOptions(
+			NewHashRoutingStrategy(func(message message.StreamMessage) string {
+				return message.GetApplicationProperties()["routingKey"].(string)
+			}),
+		))
+		Expect(err).NotTo(HaveOccurred())
+
+		// example error handling from producer on the client side
+		go func() {
+			for _ = range superProducer.NotifyPartitionClose(1) {
+				// handler errors on client side
+			}
+		}()
+
+		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
+		Expect(env.Close()).NotTo(HaveOccurred())
+	})
 })
