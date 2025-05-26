@@ -279,21 +279,20 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		event := <-_closedEvent
 
 		s.mutex.Lock()
+		defer s.mutex.Unlock()
 		for i := range s.activeProducers {
 			if s.activeProducers[i].GetStreamName() == gpartion {
 				s.activeProducers = append(s.activeProducers[:i], s.activeProducers[i+1:]...)
 				break
 			}
 		}
-		s.mutex.Unlock()
+
 		if s.chSuperStreamPartitionClose != nil {
-			s.mutex.Lock()
 			s.chSuperStreamPartitionClose <- PPartitionClose{
 				Partition: gpartion,
 				Event:     event,
 				Context:   s,
 			}
-			s.mutex.Unlock()
 		}
 		logs.LogDebug("[SuperStreamProducer] chSuperStreamPartitionClose for partition: %s", gpartion)
 	}(partition, closedEvent)
@@ -327,6 +326,9 @@ func (s *SuperStreamProducer) NotifyPublishConfirmation(size int) chan Partition
 // Event will give the reason of the close
 // size is the size of the channel
 func (s *SuperStreamProducer) NotifyPartitionClose(size int) chan PPartitionClose {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	ch := make(chan PPartitionClose, size)
 	s.chSuperStreamPartitionClose = ch
 	return ch

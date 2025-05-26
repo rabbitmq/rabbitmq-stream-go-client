@@ -547,9 +547,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 
 		// example error handling from producer on the client side
 		go func() {
-			for _ = range superProducer.NotifyPartitionClose(1) {
-				// handler errors on client side
-			}
+			superProducer.NotifyPartitionClose(1)
 		}()
 
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
