@@ -236,7 +236,7 @@ env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().
 
 ### Streams
 
-To define streams you need to use the the `environment` interfaces `DeclareStream` and `DeleteStream`.
+To define streams you need to use the `environment` interfaces `DeclareStream` and `DeleteStream`.
 
 It is highly recommended to define stream retention policies during the stream creation, like `MaxLengthBytes` or
 `MaxAge`:
