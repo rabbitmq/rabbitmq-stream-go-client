@@ -19,12 +19,13 @@ type newEntityInstance func() error
 
 type IReliable interface {
 	setStatus(value int)
-	GetStatus() int
 	getInfo() string
 	getEnv() *stream.Environment
 	getNewInstance() newEntityInstance
 	getTimeOut() time.Duration
 	getStreamName() string
+
+	GetStatus() int
 	GetStatusAsString() string
 }
 
@@ -41,41 +42,41 @@ type IReliable interface {
 // `LeaderNotReady` is a client side error: Stream exists it is Ready but the leader is not elected yet. It is mandatory for the Producer
 // In both cases it retries the reconnection
 
-func retry(backoff int, reliable IReliable) (error, bool) {
+func retry(backoff int, reliable IReliable, streamName string) (error, bool) {
 	waitTime := randomWaitWithBackoff(backoff)
-	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), reliable.getStreamName(), waitTime)
+	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), streamName, waitTime)
 	time.Sleep(time.Duration(waitTime) * time.Millisecond)
-	streamMetaData, errS := reliable.getEnv().StreamMetaData(reliable.getStreamName())
+	streamMetaData, errS := reliable.getEnv().StreamMetaData(streamName)
 	if errors.Is(errS, stream.StreamDoesNotExist) {
-		logs.LogInfo("[Reliable] - The stream %s does not exist for %s. Stopping it", reliable.getStreamName(), reliable.getInfo())
+		logs.LogInfo("[Reliable] - The stream %s does not exist for %s. Stopping it", streamName, reliable.getInfo())
 		return errS, false
 	}
 	if errors.Is(errS, stream.StreamNotAvailable) {
-		logs.LogInfo("[Reliable] - The stream %s is not available for %s. Trying to reconnect", reliable.getStreamName(), reliable.getInfo())
-		return retry(backoff+1, reliable)
+		logs.LogInfo("[Reliable] - The stream %s is not available for %s. Trying to reconnect", streamName, reliable.getInfo())
+		return retry(backoff+1, reliable, streamName)
 	}
 	if errors.Is(errS, stream.LeaderNotReady) {
-		logs.LogInfo("[Reliable] - The leader for the stream %s is not ready for %s. Trying to reconnect", reliable.getStreamName(), reliable.getInfo())
-		return retry(backoff+1, reliable)
+		logs.LogInfo("[Reliable] - The leader for the stream %s is not ready for %s. Trying to reconnect", streamName, reliable.getInfo())
+		return retry(backoff+1, reliable, streamName)
 	}
 
 	if errors.Is(errS, stream.StreamMetadataFailure) {
-		logs.LogInfo("[Reliable] - Fail to retrieve the %s metadata for %s. Trying to reconnect", reliable.getStreamName(), reliable.getInfo())
-		return retry(backoff+1, reliable)
+		logs.LogInfo("[Reliable] - Fail to retrieve the %s metadata for %s. Trying to reconnect", streamName, reliable.getInfo())
+		return retry(backoff+1, reliable, streamName)
 	}
 
 	var result error
 	if streamMetaData != nil {
-		logs.LogInfo("[Reliable] - The stream %s exists. Reconnecting the %s.", reliable.getStreamName(), reliable.getInfo())
+		logs.LogInfo("[Reliable] - The stream %s exists. Reconnecting the %s.", streamName, reliable.getInfo())
 		result = reliable.getNewInstance()()
 		if result == nil {
-			logs.LogInfo("[Reliable] - The stream %s exists. %s reconnected.", reliable.getInfo(), reliable.getStreamName())
+			logs.LogInfo("[Reliable] - The stream %s exists. %s reconnected.", reliable.getInfo(), streamName)
 		} else {
-			logs.LogInfo("[Reliable] - error %s creating %s for the stream %s. Trying to reconnect", result, reliable.getInfo(), reliable.getStreamName())
-			return retry(backoff+1, reliable)
+			logs.LogInfo("[Reliable] - error %s creating %s for the stream %s. Trying to reconnect", result, reliable.getInfo(), streamName)
+			return retry(backoff+1, reliable, streamName)
 		}
 	} else {
-		logs.LogError("[Reliable] - The stream %s does not exist for %s. Closing..", reliable.getStreamName(), reliable.getInfo())
+		logs.LogError("[Reliable] - The stream %s does not exist for %s. Closing..", streamName, reliable.getInfo())
 		return stream.StreamDoesNotExist, false
 	}
 
@@ -96,5 +97,19 @@ func randomWaitWithBackoff(attempt int) int {
 	}
 
 	return waitTime
+}
 
+func getStatusAsString(c IReliable) string {
+	switch c.GetStatus() {
+	case StatusOpen:
+		return "Open"
+	case StatusClosed:
+		return "Closed"
+	case StatusStreamDoesNotExist:
+		return "StreamDoesNotExist"
+	case StatusReconnecting:
+		return "Reconnecting"
+	default:
+		return "Unknown"
+	}
 }
