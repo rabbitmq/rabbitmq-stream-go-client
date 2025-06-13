@@ -30,7 +30,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 			waitTime := randomWaitWithBackoff(1)
 			logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting in %d milliseconds waiting pending messages", p.getInfo(), waitTime)
 			time.Sleep(time.Duration(waitTime) * time.Millisecond)
-			err, reconnected := retry(1, p)
+			err, reconnected := retry(1, p, p.getStreamName())
 			if err != nil {
 				logs.LogInfo(
 					"[Reliable] - %s won't be reconnected. Error: %s", p.getInfo(), err)
@@ -186,18 +186,7 @@ func (p *ReliableProducer) GetStatus() int {
 }
 
 func (p *ReliableProducer) GetStatusAsString() string {
-	switch p.GetStatus() {
-	case StatusOpen:
-		return "Open"
-	case StatusClosed:
-		return "Closed"
-	case StatusStreamDoesNotExist:
-		return "StreamDoesNotExist"
-	case StatusReconnecting:
-		return "Reconnecting"
-	default:
-		return "Unknown"
-	}
+	return getStatusAsString(p)
 }
 
 // IReliable interface
