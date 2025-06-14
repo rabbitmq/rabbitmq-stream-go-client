@@ -2,11 +2,12 @@ package stream
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
 type Coordinator struct {
@@ -86,7 +87,8 @@ func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event)
 	if err != nil {
 		return err
 	}
-	return consumer.close(reason)
+	consumer.close(reason)
+	return nil
 
 }
 func (coordinator *Coordinator) Consumers() *sync.Map {

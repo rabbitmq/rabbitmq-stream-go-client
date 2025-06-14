@@ -50,12 +50,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	client := newClient("go-stream-locator", nil,
 		options.TCPParameters, options.SaslConfiguration, options.RPCTimeout)
-	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
-	}(client)
+	defer client.Close()
 
 	// we put a limit to the heartbeat.
 	// it doesn't make sense to have a heartbeat less than 3 seconds
@@ -275,7 +270,7 @@ func (env *Environment) Close() error {
 	_ = env.producers.close()
 	_ = env.consumers.close()
 	if env.locator.client != nil {
-		_ = env.locator.client.Close()
+		env.locator.client.Close()
 	}
 	env.closed = true
 	return nil
@@ -581,10 +576,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 		logs.LogDebug("connectionProperties host %s doesn't match with the advertised_host %s, advertised_port %s .. retry",
 			clientResult.connectionProperties.host,
 			leader.advHost, leader.advPort)
-		err := clientResult.Close()
-		if err != nil {
-			return nil, err
-		}
+		clientResult.Close()
 		clientResult = cc.newClientForProducer(clientProvidedName, leader, tcpParameters, saslConfiguration, rpcTimeout)
 		err = clientResult.connect()
 		if err != nil {

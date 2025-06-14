@@ -3,10 +3,11 @@ package stream
 import (
 	"bytes"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	logs "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	logs "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 type Consumer struct {
@@ -316,26 +317,27 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 }
 
 func (consumer *Consumer) Close() error {
-
 	if consumer.getStatus() == closed {
 		return AlreadyClosed
 	}
-	return consumer.close(Event{
+
+	consumer.close(Event{
 		Command:    CommandUnsubscribe,
 		StreamName: consumer.GetStreamName(),
 		Name:       consumer.GetName(),
 		Reason:     UnSubscribe,
 		Err:        nil,
 	})
+
+	return nil
 }
 
-func (consumer *Consumer) close(reason Event) error {
-
+func (consumer *Consumer) close(reason Event) {
 	if consumer.options == nil {
 		// the config is usually set. this check is just to avoid panic and to make some test
 		// easier to write
 		logs.LogDebug("consumer options is nil, the close will be ignored")
-		return nil
+		return
 	}
 
 	consumer.cacheStoreOffset()
@@ -371,14 +373,12 @@ func (consumer *Consumer) close(reason Event) error {
 	_, _ = consumer.options.client.coordinator.ExtractConsumerById(consumer.ID)
 
 	if consumer.options != nil && consumer.options.client.coordinator.ConsumersCount() == 0 {
-		_ = consumer.options.client.Close()
+		consumer.options.client.Close()
 	}
 
 	if consumer.onClose != nil {
 		consumer.onClose()
 	}
-
-	return nil
 }
 
 func (consumer *Consumer) cacheStoreOffset() {

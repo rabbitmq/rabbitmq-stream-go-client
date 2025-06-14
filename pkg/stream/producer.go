@@ -711,7 +711,7 @@ func (producer *Producer) close(reason Event) error {
 	_, _ = producer.options.client.coordinator.ExtractProducerById(producer.id)
 
 	if producer.options.client.coordinator.ProducersCount() == 0 {
-		_ = producer.options.client.Close()
+		producer.options.client.Close()
 	}
 
 	if producer.onClose != nil {

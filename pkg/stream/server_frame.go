@@ -37,7 +37,7 @@ func (c *Client) handleResponse() {
 		frameLen, err := readUInt(buffer)
 		if err != nil {
 			logs.LogDebug("Read connection failed: %s", err)
-			_ = c.Close()
+			c.Close()
 			break
 		}
 
