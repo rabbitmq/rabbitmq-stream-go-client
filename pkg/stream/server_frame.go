@@ -37,7 +37,7 @@ func (c *Client) handleResponse() {
 		frameLen, err := readUInt(buffer)
 		if err != nil {
 			logs.LogDebug("Read connection failed: %s", err)
-			_ = c.Close()
+			c.Close()
 			break
 		}
 
@@ -83,7 +83,6 @@ func (c *Client) handleResponse() {
 		case commandDeliver:
 			{
 				c.handleDeliver(buffer)
-
 			}
 		case commandQueryPublisherSequence:
 			{
@@ -296,6 +295,7 @@ func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- sequence
 }
+
 func (c *Client) handleDeliver(r *bufio.Reader) {
 	subscriptionId := readByte(r)
 	consumer, err := c.coordinator.GetConsumerById(subscriptionId)
@@ -360,7 +360,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	var chunk chunkInfo
 	chunk.numEntries = numEntries
 
-	/// headers ---> payload -> messages
+	// headers ---> payload -> messages
 
 	if consumer.options.CRCCheck {
 		checkSum := crc32.ChecksumIEEE(bytesBuffer)
@@ -400,9 +400,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			dataSize, _ := readUInt(dataReader)
 			numRecords -= uint32(numRecordsInBatch)
 			compression := (entryType & 0x70) >> 4 //compression
-			uncompressedReader := compressByValue(compression).UnCompress(dataReader,
+			uncompressedReader, err := compressByValue(compression).UnCompress(dataReader,
 				dataSize,
 				uncompressedDataSize)
+			if err != nil {
+				// TODO: it should return error
+				logs.LogError("error during data uncompression %w", err)
+			}
 
 			for numRecordsInBatch != 0 {
 				batchConsumingMessages = c.decodeMessage(uncompressedReader,
