@@ -99,7 +99,6 @@ func (consumer *Consumer) setPromotedAsActive(promoted bool) {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
 	consumer.isPromotedAsActive = promoted
-
 }
 
 func (consumer *Consumer) GetLastStoredOffset() int64 {

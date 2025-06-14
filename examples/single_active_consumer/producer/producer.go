@@ -3,10 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErr(err error) {
@@ -25,7 +26,6 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 				} else {
 					fmt.Printf("[%s] message %s failed \n", time.Now().Format(time.TimeOnly), msg.GetMessage().GetData())
 				}
-
 			}
 		}
 	}()
@@ -64,12 +64,12 @@ func main() {
 	producer, err := env.NewProducer(streamName, nil)
 	CheckErr(err)
 
-	//optional publish confirmation channel
+	// optional publish confirmation channel
 	chPublishConfirm := producer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
 
 	// Put some sleep to make the example easy
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		var body = fmt.Sprintf("hello_world_%d", i)
 		fmt.Printf("[%s] sending message %s ...\n", time.Now().Format(time.TimeOnly), body)
 		err := producer.Send(amqp.NewMessage([]byte(body)))

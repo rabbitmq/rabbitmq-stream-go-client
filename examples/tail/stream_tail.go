@@ -31,7 +31,6 @@ func main() {
 		offsetSpec = stream.OffsetSpecification{}.Last()
 	case "next":
 		offsetSpec = stream.OffsetSpecification{}.Next()
-
 	}
 
 	fmt.Printf("Stream Tail, serverUri: %s, streamName: %s, offsetStart: %s \n",
@@ -64,5 +63,4 @@ func main() {
 	err = consumerTail.Close()
 	CheckErr(err)
 	CheckErr(err)
-
 }

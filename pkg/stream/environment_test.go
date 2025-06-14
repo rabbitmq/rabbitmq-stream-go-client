@@ -22,7 +22,7 @@ var _ = Describe("Environment test", func() {
 		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
 		var producers []*Producer
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			producer, err := env.NewProducer(streamName, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(producer.id).To(Equal(uint8(0)))

@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -45,7 +46,7 @@ var _ = Describe("Coordinator", func() {
 
 		It("massive insert/delete coordinator ", func() {
 			var producersId []uint8
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				p, err := client.coordinator.NewProducer(nil, nil)
 				producersId = append(producersId, p.id)
 				Expect(err).NotTo(HaveOccurred())

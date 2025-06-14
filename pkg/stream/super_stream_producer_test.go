@@ -47,7 +47,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 			partitions := []string{"invoices-01", "invoices-02", "invoices-03"}
 
 			msg := amqp.NewMessage(make([]byte, 0))
-			msg.ApplicationProperties = map[string]interface{}{"routingKey": key}
+			msg.ApplicationProperties = map[string]any{"routingKey": key}
 			_, err := msg.MarshalBinary()
 			Expect(err).NotTo(HaveOccurred())
 			routing, err := routingMurmur.Route(msg, partitions)
@@ -152,7 +152,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Expect(superProducer.activeProducers).To(HaveLen(3))
 
 		go func(ch <-chan PartitionPublishConfirm) {
-			//defer GinkgoRecover()
+			// defer GinkgoRecover()
 			for superStreamPublishConfirm := range ch {
 				Expect(superStreamPublishConfirm).NotTo(BeNil())
 				for _, status := range superStreamPublishConfirm.ConfirmationStatus {
@@ -168,9 +168,9 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 
 		}(superProducer.NotifyPublishConfirmation(0))
 
-		for i := 0; i < 20; i++ {
+		for i := range 20 {
 			msg := amqp.NewMessage(make([]byte, 0))
-			msg.ApplicationProperties = map[string]interface{}{"routingKey": fmt.Sprintf("hello%d", i)}
+			msg.ApplicationProperties = map[string]any{"routingKey": fmt.Sprintf("hello%d", i)}
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 		time.Sleep(1 * time.Second)
@@ -402,13 +402,13 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 
 		for _, country := range countries {
 			msg := amqp.NewMessage(make([]byte, 0))
-			msg.ApplicationProperties = map[string]interface{}{"county": country}
+			msg.ApplicationProperties = map[string]any{"county": country}
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 			// two times the same country in this way we use the cached map
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 		msg := amqp.NewMessage(make([]byte, 0))
-		msg.ApplicationProperties = map[string]interface{}{"county": "this_country_does_not_exist"}
+		msg.ApplicationProperties = map[string]any{"county": "this_country_does_not_exist"}
 		err = superProducer.Send(msg)
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(Equal(ErrMessageRouteNotFound))

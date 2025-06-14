@@ -49,7 +49,6 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 		p.reconnectionSignal.Broadcast()
 		p.reconnectionSignal.L.Unlock()
 		logs.LogDebug("[Reliable] - %s reconnection signal sent", p.getInfo())
-
 	}()
 }
 
@@ -105,7 +104,6 @@ func (p *ReliableProducer) newProducer() error {
 	defer p.mutex.Unlock()
 	producer, err := p.env.NewProducer(p.streamName, p.producerOptions)
 	if err != nil {
-
 		return err
 	}
 	p.handlePublishConfirm(producer.NotifyPublishConfirmation())

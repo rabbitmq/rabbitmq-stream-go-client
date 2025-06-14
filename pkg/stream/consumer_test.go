@@ -1,17 +1,18 @@
 package stream
 
 import (
+	"math/rand"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"math/rand"
-	"strconv"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 var _ = Describe("Streaming Consumers", func() {
@@ -34,7 +35,7 @@ var _ = Describe("Streaming Consumers", func() {
 
 	It("Multi Consumers", func() {
 		var consumers []*Consumer
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			consumer, err := env.NewConsumer(streamName,
 				func(consumerContext ConsumerContext, message *amqp.Message) {
 
@@ -51,7 +52,7 @@ var _ = Describe("Streaming Consumers", func() {
 		for _, consumer := range consumers {
 			Expect(consumer.Close()).NotTo(HaveOccurred())
 		}
-		//time.Sleep(1 * time.Second)
+		// time.Sleep(1 * time.Second)
 		Eventually(len(env.consumers.getCoordinators()["localhost:5552"].
 			getClientsPerContext())).ProbeEvery(100 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(0))
 
@@ -557,7 +558,7 @@ var _ = Describe("Streaming Consumers", func() {
 			}
 		}(chConfirm, producer)
 
-		appMap := map[string]interface{}{
+		appMap := map[string]any{
 			"key1": "value1",
 			"key2": "value2",
 			"key3": "value3",
@@ -567,7 +568,7 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		msg := amqp.NewMessage([]byte("message"))
 		msg.ApplicationProperties = appMap
-		msg.Annotations = map[interface{}]interface{}{
+		msg.Annotations = map[any]any{
 			"annotation_key_1": "annotation_vale_1",
 			"annotation_key_2": "annotation_vale_2",
 		}

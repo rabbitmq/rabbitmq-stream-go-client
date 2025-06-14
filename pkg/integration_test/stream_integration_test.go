@@ -63,7 +63,7 @@ var _ = Describe("StreamIntegration", func() {
 				c <- true
 			}(readyCh)
 
-			for i := 0; i < totalInitialMessages; i++ {
+			for i := range totalInitialMessages {
 				var message message.StreamMessage
 				body := fmt.Sprintf(`{"name": "item-%d", "age": %d}`, i, i)
 				message = amqp.NewMessage([]byte(body))

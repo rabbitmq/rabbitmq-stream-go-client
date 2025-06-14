@@ -3,10 +3,11 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErrConsumer(err error) {
@@ -23,7 +24,7 @@ func main() {
 	appName := os.Args[1]
 	reader := bufio.NewReader(os.Stdin)
 
-	//You need RabbitMQ 3.11.0 or later to run this example
+	// You need RabbitMQ 3.11.0 or later to run this example
 	fmt.Println("Single Active Consumer example.")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
@@ -94,5 +95,4 @@ func main() {
 	time.Sleep(5 * time.Second)
 	err = env.Close()
 	CheckErrConsumer(err)
-
 }

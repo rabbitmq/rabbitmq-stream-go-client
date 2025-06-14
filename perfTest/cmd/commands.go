@@ -2,16 +2,17 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"github.com/spf13/cobra"
 	"log"
 	"os"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+	"github.com/spf13/cobra"
 )
 
-func logInfo(message string, v ...interface{}) {
+func logInfo(message string, v ...any) {
 	log.Printf(fmt.Sprintf("[info] - %s", message), v...)
 }
-func logError(message string, v ...interface{}) {
+func logError(message string, v ...any) {
 	log.Printf(fmt.Sprintf("[error] - %s", message), v...)
 }
 
@@ -98,5 +99,4 @@ func Execute() {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
 }

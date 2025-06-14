@@ -73,8 +73,8 @@ func main() {
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
 	addresses := []string{
-		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
-		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
+		// "rabbitmq-stream://guest:guest@node1:5572/%2f",
+		// "rabbitmq-stream://guest:guest@node1:5572/%2f",
 		"rabbitmq-stream://guest:guest@localhost:5552/%2f"}
 
 	env, err := stream.NewEnvironment(
@@ -119,7 +119,6 @@ func main() {
 			for _, producer := range producers {
 				fmt.Printf("%s, status: %s \n",
 					producer.GetInfo(), producer.GetStatusAsString())
-
 			}
 			for _, consumer := range consumers {
 				fmt.Printf("%s, status: %s \n",
@@ -131,7 +130,7 @@ func main() {
 		}
 	}()
 
-	for i := 0; i < numberOfConsumers; i++ {
+	for range numberOfConsumers {
 		consumer, err := ha.NewReliableConsumer(env,
 			streamName,
 			stream.NewConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()),
@@ -194,7 +193,6 @@ func main() {
 						errBatch := rProducer.BatchSend([]message.StreamMessage{msg})
 						CheckErr(errBatch)
 						atomic.AddInt32(&sent, 1)
-
 					}
 				}()
 			}
