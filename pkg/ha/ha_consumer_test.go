@@ -1,14 +1,15 @@
 package ha
 
 import (
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	. "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
-	"sync/atomic"
-	"time"
+	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 )
 
 var _ = Describe("Reliable Consumer", func() {
@@ -37,7 +38,7 @@ var _ = Describe("Reliable Consumer", func() {
 		_, err := NewReliableConsumer(envForRConsumer,
 			streamForRConsumer, &ConsumerOptions{}, nil)
 		Expect(err).To(HaveOccurred())
-		_, err = NewReliableConsumer(envForRConsumer, streamForRConsumer, nil, func(consumerContext ConsumerContext, message *amqp.Message) {
+		_, err = NewReliableConsumer(envForRConsumer, streamForRConsumer, nil, func(_ ConsumerContext, _ *amqp.Message) {
 		})
 		Expect(err).To(HaveOccurred())
 	})
@@ -55,7 +56,7 @@ var _ = Describe("Reliable Consumer", func() {
 				}
 			})
 		Expect(err).NotTo(HaveOccurred())
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			msg := amqp.NewMessage([]byte("ha"))
 			err := producer.Send(msg)
 			Expect(err).NotTo(HaveOccurred())
@@ -65,7 +66,7 @@ var _ = Describe("Reliable Consumer", func() {
 
 		signal = make(chan struct{})
 		var consumed int32
-		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()), func(consumerContext ConsumerContext, message *amqp.Message) {
+		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()), func(_ ConsumerContext, _ *amqp.Message) {
 			atomic.AddInt32(&consumed, 1)
 			if atomic.LoadInt32(&consumed) == 10 {
 				signal <- struct{}{}
@@ -82,8 +83,7 @@ var _ = Describe("Reliable Consumer", func() {
 
 		clientProvidedName := uuid.New().String()
 		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetClientProvidedName(clientProvidedName),
-			func(consumerContext ConsumerContext, message *amqp.Message) {
-			})
+			func(_ ConsumerContext, _ *amqp.Message) {})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumer).NotTo(BeNil())
 		time.Sleep(1 * time.Second)
@@ -120,7 +120,7 @@ var _ = Describe("Reliable Consumer", func() {
 	It("Delete the stream should close the consumer", func() {
 		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer,
 			NewConsumerOptions(),
-			func(consumerContext ConsumerContext, message *amqp.Message) {
+			func(_ ConsumerContext, _ *amqp.Message) {
 			})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumer).NotTo(BeNil())

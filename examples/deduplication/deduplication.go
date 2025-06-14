@@ -75,7 +75,7 @@ func main() {
 	data[8] = "Aprilia"
 	data[9] = "Benelli"
 
-	for i := 0; i < len(data); i++ {
+	for i := range len(data) {
 		msg := amqp.NewMessage([]byte(data[i]))
 		msg.SetPublishingId(int64(i)) // mandatory to handle the deduplication
 		err := producer.Send(msg)

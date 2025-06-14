@@ -40,9 +40,7 @@ var _ = Describe("Reliable Producer", func() {
 		_, err := NewReliableProducer(envForRProducer,
 			streamForRProducer, &ProducerOptions{}, nil)
 		Expect(err).To(HaveOccurred())
-		_, err = NewReliableProducer(envForRProducer, streamForRProducer, nil, func(messageConfirm []*ConfirmationStatus) {
-
-		})
+		_, err = NewReliableProducer(envForRProducer, streamForRProducer, nil, func(_ []*ConfirmationStatus) {})
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -60,7 +58,7 @@ var _ = Describe("Reliable Producer", func() {
 				}
 			})
 		Expect(err).NotTo(HaveOccurred())
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			msg := amqp.NewMessage([]byte("ha"))
 			err := producer.Send(msg)
 			Expect(err).NotTo(HaveOccurred())
@@ -165,7 +163,7 @@ var _ = Describe("Reliable Producer", func() {
 
 		Expect(connectionToDrop).NotTo(BeEmpty())
 
-		// concurret writes while reconnecting
+		// concurrent writes while reconnecting
 		sendMsg := func() {
 			msg := amqp.NewMessage([]byte("ha"))
 			batch := []message.StreamMessage{msg}
@@ -198,7 +196,7 @@ var _ = Describe("Reliable Producer", func() {
 
 	It("Delete the stream should close the producer", func() {
 		producer, err := NewReliableProducer(envForRProducer,
-			streamForRProducer, NewProducerOptions(), func(messageConfirm []*ConfirmationStatus) {
+			streamForRProducer, NewProducerOptions(), func(_ []*ConfirmationStatus) {
 			})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(producer).NotTo(BeNil())

@@ -46,7 +46,7 @@ func main() {
 	CheckErr(err)
 
 	go func() {
-		for i := 0; i < 220; i++ {
+		for i := range 220 {
 			err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 			CheckErr(err)
 		}
@@ -88,7 +88,7 @@ func main() {
 			SetConsumerName("my_consumer").                         // set a consumerOffsetNumber name
 			SetOffset(stream.OffsetSpecification{}.Offset(offset))) // With last consumed we point to the last saved.
 	// in this case will be 200. So it will consume 20
-	//messages
+	// messages
 	CheckErr(err)
 
 	fmt.Println("Press any key to stop ")
@@ -101,5 +101,4 @@ func main() {
 	CheckErr(err)
 	err = env.DeleteStream(streamName)
 	CheckErr(err)
-
 }

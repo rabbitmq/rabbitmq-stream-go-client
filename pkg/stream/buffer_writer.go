@@ -108,7 +108,6 @@ func writeMapStringString(inputBuff *bytes.Buffer, mapString map[string]string) 
 		writeString(inputBuff, k)
 		writeString(inputBuff, v)
 	}
-
 }
 
 func writeBytes(inputBuff *bytes.Buffer, value []byte) {
@@ -119,14 +118,12 @@ func writeBytes(inputBuff *bytes.Buffer, value []byte) {
 func writeProtocolHeader(inputBuff *bytes.Buffer,
 	length int, command uint16,
 	correlationId ...int) {
-
 	writeInt(inputBuff, length)
 	writeUShort(inputBuff, command)
 	writeShort(inputBuff, version1)
 	if len(correlationId) > 0 {
 		writeInt(inputBuff, correlationId[0])
 	}
-
 }
 
 func writeBProtocolHeader(inputBuff *bufio.Writer,
@@ -137,7 +134,6 @@ func writeBProtocolHeader(inputBuff *bufio.Writer,
 
 func writeBProtocolHeaderVersion(inputBuff *bufio.Writer, length int, command int16,
 	version int16, correlationId ...int) error {
-
 	if err := writeBInt(inputBuff, length); err != nil {
 		return err
 	}

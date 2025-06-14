@@ -270,7 +270,6 @@ func (es compressLZ4) UnCompress(source *bufio.Reader, dataSize, uncompressedDat
 
 	// headers --> payload --> headers --> payload (compressed) --> uncompressed payload
 	return bufio.NewReader(bytes.NewReader(uncompressedReader)), nil
-
 }
 
 type compressZSTD struct{}

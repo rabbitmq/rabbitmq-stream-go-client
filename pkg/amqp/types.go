@@ -1,25 +1,25 @@
-//MIT License
+// MIT License
 //
-//Copyright (C) 2017 Kale Blankenship
-//Portions Copyright (C) Microsoft Corporation
+// Copyright (C) 2017 Kale Blankenship
+// Portions Copyright (C) Microsoft Corporation
 //
-//Permission is hereby granted, free of charge, to any person obtaining a copy
-//of this software and associated documentation files (the "Software"), to deal
-//in the Software without restriction, including without limitation the rights
-//to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-//copies of the Software, and to permit persons to whom the Software is
-//furnished to do so, subject to the following conditions:
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
 //
-//The above copyright notice and this permission notice shall be included in all
-//copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
 //
-//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-//AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-//OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-//SOFTWARE
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE
 
 package amqp
 
@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"time"
 	"unicode/utf8"
 )
@@ -147,7 +148,7 @@ const (
 //     extended header (opt)
 //     body (opt)
 
-type deliveryState interface{} // TODO: http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-declared
+type deliveryState any // TODO: http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-declared
 
 type unsettled map[string]deliveryState
 
@@ -277,7 +278,7 @@ type Error struct {
 	Description string
 
 	// map carrying information about the error condition
-	Info map[string]interface{}
+	Info map[string]any
 }
 
 func (e *Error) marshal(wr *buffer) error {
@@ -379,7 +380,7 @@ type Message struct {
 	// The application-properties section is a part of the bare message used for
 	// structured application data. Intermediaries can use the data within this
 	// structure for the purposes of filtering or routing.
-	ApplicationProperties map[string]interface{}
+	ApplicationProperties map[string]any
 	// The keys of this map are restricted to be of type string (which excludes
 	// the possibility of a null key) and the values are restricted to be of
 	// simple types only, that is, excluding map, list, and array types.
@@ -392,7 +393,7 @@ type Message struct {
 	//  sections, one or more amqp-sequence sections, or a single amqp-value section."
 
 	// Value payload.
-	Value interface{}
+	Value any
 	// An amqp-value section contains a single AMQP value.
 
 	// The footer section is used for details about the message or delivery which
@@ -419,7 +420,7 @@ type AMQP10 struct {
 	message               *Message
 	Properties            *MessageProperties
 	Annotations           Annotations
-	ApplicationProperties map[string]interface{}
+	ApplicationProperties map[string]any
 }
 
 func NewMessage(data []byte) *AMQP10 {
@@ -451,7 +452,6 @@ func (amqp *AMQP10) MarshalBinary() ([]byte, error) {
 }
 
 func (amqp *AMQP10) UnmarshalBinary(data []byte) error {
-
 	e := amqp.message.UnmarshalBinary(data)
 	if e != nil {
 		return e
@@ -474,7 +474,7 @@ func (amqp *AMQP10) GetMessageAnnotations() Annotations {
 	return amqp.Annotations
 }
 
-func (amqp *AMQP10) GetApplicationProperties() map[string]interface{} {
+func (amqp *AMQP10) GetApplicationProperties() map[string]any {
 	return amqp.ApplicationProperties
 }
 
@@ -482,7 +482,7 @@ func (amqp *AMQP10) GetMessageHeader() *MessageHeader {
 	return amqp.message.Header
 }
 
-func (amqp *AMQP10) GetAMQPValue() interface{} {
+func (amqp *AMQP10) GetAMQPValue() any {
 	return amqp.message.Value
 }
 
@@ -597,13 +597,12 @@ func (m *Message) unmarshal(r *buffer) error {
 		}
 
 		var (
-			section interface{}
+			section any
 			// section header is read from r before
 			// unmarshaling section is set to true
 			discardHeader = true
 		)
 		switch amqpType(type_) {
-
 		case typeCodeMessageHeader:
 			discardHeader = false
 			section = &m.Header
@@ -702,7 +701,7 @@ func tryReadNull(r *buffer) bool {
 // Annotations keys must be of type string, int, or int64.
 //
 // String keys are encoded as AMQP Symbols.
-type Annotations map[interface{}]interface{}
+type Annotations map[any]any
 
 func (a Annotations) marshal(wr *buffer) error {
 	return writeMap(wr, a)
@@ -797,7 +796,7 @@ type MessageProperties struct {
 	// such a way that it is assured to be globally unique. A broker MAY discard a
 	// message as a duplicate if the value of the message-id matches that of a
 	// previously received message sent to the same node.
-	MessageID interface{} // uint64, UUID, []byte, or string
+	MessageID any // uint64, UUID, []byte, or string
 
 	// The identity of the user responsible for producing the message.
 	// The client sets this value, and it MAY be authenticated by intermediaries.
@@ -815,7 +814,7 @@ type MessageProperties struct {
 
 	// This is a client-specific id that can be used to mark or identify messages
 	// between clients.
-	CorrelationID interface{} // uint64, UUID, []byte, or string
+	CorrelationID any // uint64, UUID, []byte, or string
 
 	// The RFC-2046 [RFC2046] MIME type for the message's application-data section
 	// (body). As per RFC-2046 [RFC2046] this can contain a charset parameter defining
@@ -1123,10 +1122,10 @@ func (m *milliseconds) unmarshal(r *buffer) error {
 
 // mapAnyAny is used to decode AMQP maps who's keys are undefined or
 // inconsistently typed.
-type mapAnyAny map[interface{}]interface{}
+type mapAnyAny map[any]any
 
 func (m mapAnyAny) marshal(wr *buffer) error {
-	return writeMap(wr, map[interface{}]interface{}(m))
+	return writeMap(wr, map[any]any(m))
 }
 
 func (m *mapAnyAny) unmarshal(r *buffer) error {
@@ -1162,10 +1161,10 @@ func (m *mapAnyAny) unmarshal(r *buffer) error {
 }
 
 // mapStringAny is used to decode AMQP maps that have string keys
-type mapStringAny map[string]interface{}
+type mapStringAny map[string]any
 
 func (m mapStringAny) marshal(wr *buffer) error {
-	return writeMap(wr, map[string]interface{}(m))
+	return writeMap(wr, map[string]any(m))
 }
 
 func (m *mapStringAny) unmarshal(r *buffer) error {
@@ -1192,10 +1191,10 @@ func (m *mapStringAny) unmarshal(r *buffer) error {
 }
 
 // mapStringAny is used to decode AMQP maps that have Symbol keys
-type mapSymbolAny map[symbol]interface{}
+type mapSymbolAny map[symbol]any
 
 func (m mapSymbolAny) marshal(wr *buffer) error {
-	return writeMap(wr, map[symbol]interface{}(m))
+	return writeMap(wr, map[symbol]any(m))
 }
 
 func (m *mapSymbolAny) unmarshal(r *buffer) error {
@@ -1468,8 +1467,8 @@ func (e *ExpiryPolicy) String() string {
 }
 
 type describedType struct {
-	descriptor interface{}
-	value      interface{}
+	descriptor any
+	value      any
 }
 
 func (t describedType) marshal(wr *buffer) error {
@@ -1538,7 +1537,7 @@ func (a *ArrayUByte) unmarshal(r *buffer) error {
 	if !ok {
 		return errorErrorf("invalid length %d", length)
 	}
-	*a = append([]byte(nil), buf...)
+	*a = slices.Clone(buf)
 
 	return nil
 }
@@ -1551,7 +1550,7 @@ func (a arrayInt8) marshal(wr *buffer) error {
 	writeArrayHeader(wr, len(a), typeSize, typeCodeByte)
 
 	for _, value := range a {
-		wr.writeByte(uint8(value))
+		wr.writeByte(byte(value))
 	}
 
 	return nil
@@ -2598,7 +2597,7 @@ func (a *arrayUUID) unmarshal(r *buffer) error {
 
 // LIST
 
-type list []interface{}
+type list []any
 
 func (l list) marshal(wr *buffer) error {
 	length := len(l)
@@ -2643,7 +2642,7 @@ func (l *list) unmarshal(r *buffer) error {
 
 	ll := *l
 	if int64(cap(ll)) < length {
-		ll = make([]interface{}, length)
+		ll = make([]any, length)
 	} else {
 		ll = ll[:length]
 	}

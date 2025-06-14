@@ -2,10 +2,11 @@ package ha
 
 import (
 	"errors"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"math/rand"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 const (
@@ -80,7 +81,6 @@ func retry(backoff int, reliable IReliable) (error, bool) {
 	}
 
 	return result, true
-
 }
 
 func randomWaitWithBackoff(attempt int) int {
@@ -88,13 +88,7 @@ func randomWaitWithBackoff(attempt int) int {
 	baseWait := 3_000 + r.Intn(8_000)
 
 	// Calculate the wait time considering the number of attempts
-	waitTime := baseWait * (1 << (attempt - 1)) // Exponential back-off
-
-	// Cap the wait time at a maximum of 15 seconds
-	if waitTime > 15_000 {
-		waitTime = 15_000
-	}
+	waitTime := min(baseWait*(1<<(attempt-1)), 15_000)
 
 	return waitTime
-
 }

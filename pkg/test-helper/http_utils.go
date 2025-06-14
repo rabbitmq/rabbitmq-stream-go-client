@@ -103,5 +103,4 @@ func baseCall(url, username, password string, method string) (string, error) {
 	}
 
 	return "", errors.New(strconv.Itoa(resp.StatusCode))
-
 }

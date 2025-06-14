@@ -29,7 +29,7 @@ func main() {
 	// Set the log level to DEBUG.
 	// Enable it only for debugging purposes or to
 	// have more information about the client behavior
-	//stream.SetLevelInfo(logs.DEBUG)
+	// stream.SetLevelInfo(logs.DEBUG)
 
 	// Connect to the broker ( or brokers )
 	env, err := stream.NewEnvironment(
@@ -102,7 +102,7 @@ func main() {
 
 	// Publish messages
 loop:
-	for i := 0; i < 5_000; i++ {
+	for i := range 5_000 {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("hello_super_stream_%d", i)))
 		msg.Properties = &amqp.MessageProperties{
 			MessageID: fmt.Sprintf("key_%d", i),
@@ -146,5 +146,4 @@ loop:
 
 	fmt.Println("Press enter to exit")
 	_, _ = reader.ReadString('\n')
-
 }

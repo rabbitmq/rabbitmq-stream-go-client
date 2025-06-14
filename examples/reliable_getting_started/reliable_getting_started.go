@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
@@ -70,7 +71,7 @@ func main() {
 	}
 
 	// Send a message
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		err = producer.Send(amqp.NewMessage([]byte(fmt.Sprintf("Hello stream:%d", i))))
 		if err != nil {
 			fmt.Printf("Error sending message: %v\n", err)
@@ -104,5 +105,4 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error closing environment: %s\n", err)
 	}
-
 }

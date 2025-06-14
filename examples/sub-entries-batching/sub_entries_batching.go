@@ -3,12 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErr(err error) {
@@ -27,7 +28,6 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 				} else {
 					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
 				}
-
 			}
 		}
 	}()
@@ -74,13 +74,13 @@ func main() {
 		SetCompression(stream.Compression{}.Gzip()))
 	CheckErr(err)
 
-	//optional publish confirmation channel
+	// optional publish confirmation channel
 	chPublishConfirm := producer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
 
 	// the send method automatically aggregates the messages
 	// based on batch size
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 		CheckErr(err)
 	}

@@ -3,12 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErr(err error) {
@@ -18,13 +19,12 @@ func CheckErr(err error) {
 	}
 }
 func main() {
-
 	// *** RUN the producer first *****
 	// Example for super stream with single active consumer
 	// with EnableSingleActiveConsumer is possible to enable/disable the single active consumer feature
 	const EnableSingleActiveConsumer = true
 
-	//stream.SetLevelInfo(logs.DEBUG)
+	// stream.SetLevelInfo(logs.DEBUG)
 	appName := "MyApplication"
 
 	fmt.Printf("Super stream consumer example - Single Active Consumer active: %t\n", EnableSingleActiveConsumer)

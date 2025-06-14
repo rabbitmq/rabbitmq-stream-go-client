@@ -2,11 +2,14 @@ package stream
 
 import (
 	"fmt"
+	"sync"
+	"time"
+
+	"slices"
+
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/spaolacci/murmur3"
-	"sync"
-	"time"
 )
 
 // The base interface for routing strategies
@@ -18,7 +21,7 @@ import (
 // See the test: Implement custom routing strategy in case you need to implement a custom routing strategy
 
 type RoutingStrategy interface {
-	//Route Based on the message and the partitions the routing strategy returns the partitions where the message should be sent
+	// Route Based on the message and the partitions the routing strategy returns the partitions where the message should be sent
 	// It could be zero, one or more partitions
 	Route(message message.StreamMessage, partitions []string) ([]string, error)
 
@@ -44,7 +47,6 @@ func NewHashRoutingStrategy(routingKeyExtractor func(message message.StreamMessa
 }
 
 func (h *HashRoutingStrategy) Route(message message.StreamMessage, partitions []string) ([]string, error) {
-
 	if message == nil {
 		return nil, fmt.Errorf("message is nil")
 	}
@@ -102,10 +104,8 @@ func (k *KeyRoutingStrategy) Route(message message.StreamMessage, partitions []s
 	}
 
 	for _, p := range partitions {
-		for _, r := range routing {
-			if r == p {
-				return []string{p}, nil
-			}
+		if slices.Contains(routing, p) {
+			return []string{p}, nil
 		}
 	}
 
@@ -166,7 +166,7 @@ type SuperStreamProducer struct {
 	// Only the active producers are stored here
 	activeProducers []*Producer
 	// we need to copy the partitions here since the
-	//activeProducers is only the producers active
+	// activeProducers is only the producers active
 	// in a normal situation len(partitions) == len(activeProducers)
 	// but in case of disconnection the len(partitions) can be > len(activeProducers)
 	// since the producer is in reconnection
@@ -183,7 +183,6 @@ type SuperStreamProducer struct {
 }
 
 func newSuperStreamProducer(env *Environment, superStream string, superStreamProducerOptions *SuperStreamProducerOptions) (*SuperStreamProducer, error) {
-
 	if env == nil {
 		return nil, ErrEnvironmentNotDefined
 	}
@@ -197,7 +196,6 @@ func newSuperStreamProducer(env *Environment, superStream string, superStreamPro
 	}
 
 	if superStream == "" || containsOnlySpaces(superStream) {
-
 		return nil, fmt.Errorf("super Stream Name can't be empty")
 	}
 
@@ -305,7 +303,6 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 					Partition:          gpartion,
 					ConfirmationStatus: confirmed,
 				}
-
 			}
 		}
 		logs.LogDebug("[SuperStreamProducer] chNotifyPublishConfirmation closed - partition: %s", gpartion)

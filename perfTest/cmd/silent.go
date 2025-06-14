@@ -42,12 +42,12 @@ func newSilent() *cobra.Command {
 var (
 	publisherMessageCount int32
 	consumerMessageCount  int32
-	//consumerMessageCountPerLatency int32
+	// consumerMessageCountPerLatency int32
 	totalLatency             int64
 	confirmedMessageCount    int32
 	notConfirmedMessageCount int32
 	consumersCloseCount      int32
-	//connections           []*stream.Client
+	// connections           []*stream.Client
 	simulEnvironment *stream.Environment
 )
 
@@ -113,7 +113,6 @@ func printStats() {
 
 func decodeBody() string {
 	if publishers > 0 {
-
 		if fixedBody > 0 {
 			return fmt.Sprintf("Body sz: %d", fixedBody+8)
 		}
@@ -229,7 +228,6 @@ func initStreams() error {
 		streamMetadata, err := env.StreamMetaData(streamName)
 		checkErr(err)
 		logInfo("stream %s, meta data: %s", streamName, streamMetadata)
-
 	}
 	logInfo("End Init streams :%s\n", streams)
 	return env.Close()
@@ -248,7 +246,6 @@ func handlePublishConfirms(messageConfirm []*stream.ConfirmationStatus) {
 }
 
 func startPublisher(streamName string) error {
-
 	producerOptions := stream.NewProducerOptions()
 
 	if subEntrySize > 1 {
@@ -282,12 +279,10 @@ func startPublisher(streamName string) error {
 
 	go func(prod *ha.ReliableProducer) {
 		for {
-
 			if rate > 0 {
 				rateWithBatchSize := float64(rate) / float64(batchSize)
 				sleepAfterMessage := float64(time.Second) / rateWithBatchSize
 				time.Sleep(time.Duration(sleepAfterMessage))
-
 			}
 
 			if variableRate > 0 {
@@ -312,17 +307,15 @@ func startPublisher(streamName string) error {
 				checkErr(err)
 			}
 			atomic.AddInt32(&publisherMessageCount, int32(len(messages)))
-
 		}
 	}(rPublisher)
 
 	return nil
-
 }
 
 func buildMessages() []message.StreamMessage {
 	var arr []message.StreamMessage
-	for z := 0; z < batchSize; z++ {
+	for range batchSize {
 		var body []byte
 		if fixedBody > 0 {
 			body = make([]byte, fixedBody)
@@ -343,7 +336,6 @@ func buildMessages() []message.StreamMessage {
 }
 
 func startPublishers() error {
-
 	logInfo("Starting %d publishers...", publishers)
 
 	for _, streamName := range streams {
@@ -371,12 +363,9 @@ func handleConsumerClose(channelClose stream.ChannelClose) {
 		}
 		checkErr(err)
 	}()
-
 }
 func startConsumer(consumerName string, streamName string) error {
-
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-
 		sentTime := binary.BigEndian.Uint64(message.GetData()[:8]) // Decode the timestamp
 		startTimeFromMessage := time.UnixMilli(int64(sentTime))
 		latency := time.Since(startTimeFromMessage).Milliseconds()
@@ -435,7 +424,6 @@ func startConsumers() error {
 				return err
 			}
 			checkErr(err)
-
 		}
 	}
 	return nil
