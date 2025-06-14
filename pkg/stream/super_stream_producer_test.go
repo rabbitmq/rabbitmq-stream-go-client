@@ -48,7 +48,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 
 			msg := amqp.NewMessage(make([]byte, 0))
 			msg.ApplicationProperties = map[string]interface{}{"routingKey": key}
-			msg.MarshalBinary()
+			_, err := msg.MarshalBinary()
+			Expect(err).NotTo(HaveOccurred())
 			routing, err := routingMurmur.Route(msg, partitions)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(routing).To(HaveLen(1))
