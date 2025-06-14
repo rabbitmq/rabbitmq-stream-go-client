@@ -3,10 +3,11 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"sync/atomic"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErr(err error) {
@@ -47,7 +48,7 @@ func main() {
 		prop := message.Properties
 		appProp := message.ApplicationProperties
 		fmt.Printf("\n")
-		fmt.Printf("message body: %s properties: %s, app properties: %s, consumed: %d \n ",
+		fmt.Printf("message body: %s properties: %v, app properties: %s, consumed: %d \n ",
 			message.GetData(), prop, appProp, atomic.AddInt32(&counter, 1))
 	}
 

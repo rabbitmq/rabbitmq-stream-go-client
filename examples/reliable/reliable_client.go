@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"log"
 	"net/http"
 	"os"
@@ -14,11 +13,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+
+	_ "net/http/pprof"
+
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	_ "net/http/pprof"
 )
 
 // The ha producer and consumer provide a way to auto-reconnect in case of connection problems
@@ -40,7 +42,7 @@ const enableResend = false
 
 func formatCommas(num int32) string {
 	str := fmt.Sprintf("%d", num)
-	re := regexp.MustCompile("(\\d+)(\\d{3})")
+	re := regexp.MustCompile(`(\\d+)(\\d{3})`)
 	for n := ""; n != str; {
 		n = str
 		str = re.ReplaceAllString(str, "$1,$2")

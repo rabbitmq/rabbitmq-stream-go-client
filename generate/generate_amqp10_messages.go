@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"math/rand"
 	"os"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
 func saveMessageToFile(filename string, data []byte) {
@@ -35,16 +36,13 @@ func saveMessageToFile(filename string, data []byte) {
 
 }
 
-func init() {
-	rand.Seed(1)
-}
-
+var randomSource = rand.New(rand.NewSource(1))
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 func generateString(n int) string {
 	b := make([]rune, n)
 	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+		b[i] = letterRunes[randomSource.Intn(len(letterRunes))]
 	}
 	return string(b)
 }
@@ -64,7 +62,13 @@ func main() {
 	}
 	getwd += "/generate" + "/" + "files"
 	err = os.RemoveAll(getwd)
+	if err != nil {
+		return
+	}
 	err = os.Mkdir(getwd, 0755)
+	if err != nil {
+		return
+	}
 
 	msg := amqp.NewMessage([]byte(""))
 	binary, err := msg.MarshalBinary()
