@@ -5,15 +5,6 @@ else
 GOBIN = $(shell go env GOBIN)
 endif
 
-ifdef GO_VERSION
-	ifeq ($(GO_VERSION),1.18)
-		STATICCHECK_VERSION=2022.1.3
-	endif
-	ifeq ($(GO_VERSION),1.17)
-		STATICCHECK_VERSION=2021.1.2
-	endif
-endif
-
 VERSION ?= latest
 LDFLAGS = "-X main.Version=$(VERSION)"
 
@@ -25,16 +16,12 @@ vet: $(go_sources)
 fmt:
 	go fmt ./...
 
-STATICCHECK ?= $(GOBIN)/staticcheck
-STATICCHECK_VERSION ?= latest
-$(STATICCHECK):
-	go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
-check: $(STATICCHECK)
-	$(STATICCHECK) ./pkg/stream
+check:
+	golangci-lint run --fix
 
 NUM_PROCS ?= 2
 TEST_TIMEOUT ?= 3m
-test: vet fmt check
+test: vet fmt 
 	go run -mod=mod github.com/onsi/ginkgo/v2/ginkgo -r --procs=$(NUM_PROCS) --compilers=$(NUM_PROCS) \
 		--randomize-all --randomize-suites \
 		--cover --coverprofile=coverage.txt --covermode=atomic \
