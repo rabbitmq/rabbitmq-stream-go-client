@@ -10,7 +10,6 @@ import (
 	"github.com/golang/snappy"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 const (
@@ -66,7 +65,7 @@ type subEntries struct {
 
 type iCompress interface {
 	Compress(subEntries *subEntries) error
-	UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader
+	UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) (*bufio.Reader, error)
 }
 
 func compressByValue(value byte) iCompress {
@@ -101,8 +100,8 @@ func (es compressNONE) Compress(subEntries *subEntries) error {
 	return nil
 }
 
-func (es compressNONE) UnCompress(source *bufio.Reader, _, _ uint32) *bufio.Reader {
-	return source
+func (es compressNONE) UnCompress(source *bufio.Reader, _, _ uint32) (*bufio.Reader, error) {
+	return source, nil
 }
 
 type compressGZIP struct {
@@ -136,37 +135,32 @@ func (es compressGZIP) Compress(subEntries *subEntries) error {
 	return nil
 }
 
-func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
-
+func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) (*bufio.Reader, error) {
 	var zipperBuffer = make([]byte, dataSize)
-	/// empty
-	_, err := io.ReadFull(source, zipperBuffer)
-	/// array of compress data
-
-	if err != nil {
-		logs.LogError("GZIP Error during reading buffer %s", err)
+	if _, err := io.ReadFull(source, zipperBuffer); err != nil {
+		return nil, fmt.Errorf("GZIP error during reading buffer %s", err)
 	}
 
 	reader, err := gzip.NewReader(bytes.NewBuffer(zipperBuffer))
-
 	if err != nil {
-		logs.LogError("Error creating GZIP NewReader  %s", err)
+		return nil, fmt.Errorf("error creating GZIP NewReader  %s", err)
 	}
+	//nolint:errcheck
 	defer reader.Close()
-	/// headers ---> payload --> headers --> payload (compressed)
 
+	// headers --> payload --> headers --> payload (compressed)
 	// Read in data.
 	uncompressedReader, err := io.ReadAll(reader)
 	if err != nil {
-		logs.LogError("Error during reading buffer %s", err)
+		return nil, fmt.Errorf("error during reading buffer %s", err)
 	}
+
 	if uint32(len(uncompressedReader)) != uncompressedDataSize {
-		panic("uncompressedDataSize != count")
+		return nil, fmt.Errorf("uncompressedDataSize != count")
 	}
 
-	/// headers ---> payload --> headers --> payload (compressed) --> uncompressed payload
-
-	return bufio.NewReader(bytes.NewReader(uncompressedReader))
+	// headers --> payload --> headers --> payload (compressed) --> uncompressed payload
+	return bufio.NewReader(bytes.NewReader(uncompressedReader)), nil
 }
 
 type compressSnappy struct{}
@@ -198,37 +192,29 @@ func (es compressSnappy) Compress(subEntries *subEntries) error {
 	return nil
 }
 
-func (es compressSnappy) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
-
+func (es compressSnappy) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) (*bufio.Reader, error) {
 	var zipperBuffer = make([]byte, dataSize)
-	/// empty
-	_, err := io.ReadFull(source, zipperBuffer)
-	/// array of compress data
-
-	if err != nil {
-		logs.LogError("SNAPPY Error during reading buffer %s", err)
+	// array of compress data
+	if _, err := io.ReadFull(source, zipperBuffer); err != nil {
+		return nil, fmt.Errorf("SNAPPY error during reading buffer %s", err)
 	}
 
 	reader := snappy.NewReader(bytes.NewBuffer(zipperBuffer))
-	if err != nil {
-		logs.LogError("Error creating SNAPPY NewReader  %s", err)
-	}
 	defer reader.Reset(nil)
-	/// headers ---> payload --> headers --> payload (compressed)
+	// headers --> payload --> headers --> payload (compressed)
 
 	// Read in data.
 	uncompressedReader, err := io.ReadAll(reader)
 	if err != nil {
-		logs.LogError("Error during reading buffer %s", err)
+		return nil, fmt.Errorf("error during reading buffer %s", err)
 	}
+
 	if uint32(len(uncompressedReader)) != uncompressedDataSize {
-		panic("uncompressedDataSize != count")
+		return nil, fmt.Errorf("uncompressedDataSize != count")
 	}
 
-	/// headers ---> payload --> headers --> payload (compressed) --> uncompressed payload
-
-	return bufio.NewReader(bytes.NewReader(uncompressedReader))
-
+	// headers --> payload --> headers --> payload (compressed) --> uncompressed payload
+	return bufio.NewReader(bytes.NewReader(uncompressedReader)), nil
 }
 
 type compressLZ4 struct{}
@@ -261,33 +247,29 @@ func (es compressLZ4) Compress(subEntries *subEntries) error {
 	return nil
 }
 
-func (es compressLZ4) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
-
+func (es compressLZ4) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) (*bufio.Reader, error) {
 	var zipperBuffer = make([]byte, dataSize)
-	/// empty
-	_, err := io.ReadFull(source, zipperBuffer)
-	/// array of compress data
-
-	if err != nil {
-		logs.LogError("LZ4 Error during reading buffer %s", err)
+	// array of compress data
+	if _, err := io.ReadFull(source, zipperBuffer); err != nil {
+		return nil, fmt.Errorf("LZ4 error during reading buffer %s", err)
 	}
 
 	reader := lz4.NewReader(bytes.NewBuffer(zipperBuffer))
 	defer reader.Reset(nil)
-	/// headers ---> payload --> headers --> payload (compressed)
+	// headers --> payload --> headers --> payload (compressed)
 
 	// Read in data.
 	uncompressedReader, err := io.ReadAll(reader)
 	if err != nil {
-		logs.LogError("Error during reading buffer %s", err)
+		return nil, fmt.Errorf("error during reading buffer %s", err)
 	}
+
 	if uint32(len(uncompressedReader)) != uncompressedDataSize {
-		panic("uncompressedDataSize != count")
+		return nil, fmt.Errorf("uncompressedDataSize != count")
 	}
 
-	/// headers ---> payload --> headers --> payload (compressed) --> uncompressed payload
-
-	return bufio.NewReader(bytes.NewReader(uncompressedReader))
+	// headers --> payload --> headers --> payload (compressed) --> uncompressed payload
+	return bufio.NewReader(bytes.NewReader(uncompressedReader)), nil
 
 }
 
@@ -324,35 +306,30 @@ func (es compressZSTD) Compress(subEntries *subEntries) error {
 	return nil
 }
 
-func (es compressZSTD) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
-
+func (es compressZSTD) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) (*bufio.Reader, error) {
 	var zipperBuffer = make([]byte, dataSize)
-	/// empty
-	_, err := io.ReadFull(source, zipperBuffer)
-	/// array of compress data
-
-	if err != nil {
-		logs.LogError("ZSTD Error during reading buffer %s", err)
+	// array of compress data
+	if _, err := io.ReadFull(source, zipperBuffer); err != nil {
+		return nil, fmt.Errorf("ZSTD error during reading buffer %s", err)
 	}
 
 	reader, err := zstd.NewReader(bytes.NewBuffer(zipperBuffer))
 	if err != nil {
-		logs.LogError("Error creating ZSTD NewReader  %s", err)
+		return nil, fmt.Errorf("error creating ZSTD NewReader  %s", err)
 	}
-	defer reader.Reset(nil)
-	/// headers ---> payload --> headers --> payload (compressed)
+	defer reader.Close()
+	// headers --> payload --> headers --> payload (compressed)
 
 	// Read in data.
 	uncompressedReader, err := io.ReadAll(reader)
 	if err != nil {
-		logs.LogError("Error during reading buffer %s", err)
+		return nil, fmt.Errorf("error during reading buffer %s", err)
 	}
+
 	if uint32(len(uncompressedReader)) != uncompressedDataSize {
-		panic("uncompressedDataSize != count")
+		return nil, fmt.Errorf("uncompressedDataSize != count")
 	}
 
-	/// headers ---> payload --> headers --> payload (compressed) --> uncompressed payload
-
-	return bufio.NewReader(bytes.NewReader(uncompressedReader))
-
+	// headers --> payload --> headers --> payload (compressed) --> uncompressed payload
+	return bufio.NewReader(bytes.NewReader(uncompressedReader)), nil
 }
