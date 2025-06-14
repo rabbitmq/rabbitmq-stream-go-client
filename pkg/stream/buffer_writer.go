@@ -16,13 +16,15 @@ func writeULong(inputBuff *bytes.Buffer, value uint64) {
 	inputBuff.Write(buff)
 }
 
-func writeBLong(inputBuff *bufio.Writer, value int64) {
-	writeBULong(inputBuff, uint64(value))
+func writeBLong(inputBuff *bufio.Writer, value int64) error {
+	return writeBULong(inputBuff, uint64(value))
 }
-func writeBULong(inputBuff *bufio.Writer, value uint64) {
+
+func writeBULong(inputBuff *bufio.Writer, value uint64) error {
 	var buff = make([]byte, 8)
 	binary.BigEndian.PutUint64(buff, value)
-	inputBuff.Write(buff)
+	_, err := inputBuff.Write(buff)
+	return err
 }
 
 func writeShort(inputBuff *bytes.Buffer, value int16) {
@@ -35,18 +37,24 @@ func writeUShort(inputBuff *bytes.Buffer, value uint16) {
 	inputBuff.Write(buff)
 }
 
-func writeBShort(inputBuff *bufio.Writer, value int16) {
-	writeBUShort(inputBuff, uint16(value))
+func writeBShort(inputBuff *bufio.Writer, value int16) error {
+	return writeBUShort(inputBuff, uint16(value))
 }
-func writeBUShort(inputBuff *bufio.Writer, value uint16) {
+func writeBUShort(inputBuff *bufio.Writer, value uint16) error {
 	var buff = make([]byte, 2)
 	binary.BigEndian.PutUint16(buff, value)
-	inputBuff.Write(buff)
+	_, err := inputBuff.Write(buff)
+	return err
 }
 
-func writeBString(inputBuff *bufio.Writer, value string) {
-	writeBUShort(inputBuff, uint16(len(value)))
-	inputBuff.Write([]byte(value))
+func writeBString(inputBuff *bufio.Writer, value string) error {
+	err := writeBUShort(inputBuff, uint16(len(value)))
+	if err != nil {
+		return err
+	}
+
+	_, err = inputBuff.Write([]byte(value))
+	return err
 }
 
 func writeByte(inputBuff *bytes.Buffer, value byte) {
@@ -55,10 +63,11 @@ func writeByte(inputBuff *bytes.Buffer, value byte) {
 	inputBuff.Write(buff)
 }
 
-func writeBByte(inputBuff *bufio.Writer, value byte) {
+func writeBByte(inputBuff *bufio.Writer, value byte) error {
 	var buff = make([]byte, 1)
 	buff[0] = value
-	inputBuff.Write(buff)
+	_, err := inputBuff.Write(buff)
+	return err
 }
 
 func writeInt(inputBuff *bytes.Buffer, value int) {
@@ -70,14 +79,15 @@ func writeUInt(inputBuff *bytes.Buffer, value uint32) {
 	inputBuff.Write(buff)
 }
 
-func writeBInt(inputBuff *bufio.Writer, value int) {
-	writeBUInt(inputBuff, uint32(value))
+func writeBInt(inputBuff *bufio.Writer, value int) error {
+	return writeBUInt(inputBuff, uint32(value))
 }
 
-func writeBUInt(inputBuff *bufio.Writer, value uint32) {
+func writeBUInt(inputBuff *bufio.Writer, value uint32) error {
 	var buff = make([]byte, 4)
 	binary.BigEndian.PutUint32(buff, value)
-	inputBuff.Write(buff)
+	_, err := inputBuff.Write(buff)
+	return err
 }
 
 func writeString(inputBuff *bytes.Buffer, value string) {
@@ -105,7 +115,7 @@ func writeBytes(inputBuff *bytes.Buffer, value []byte) {
 	inputBuff.Write(value)
 }
 
-// writeProtocolHeader  protocol utils functions
+// writeProtocolHeader protocol utils functions
 func writeProtocolHeader(inputBuff *bytes.Buffer,
 	length int, command uint16,
 	correlationId ...int) {
@@ -121,20 +131,30 @@ func writeProtocolHeader(inputBuff *bytes.Buffer,
 
 func writeBProtocolHeader(inputBuff *bufio.Writer,
 	length int, command int16,
-	correlationId ...int) {
-	writeBProtocolHeaderVersion(inputBuff, length, command, version1, correlationId...)
+	correlationId ...int) error {
+	return writeBProtocolHeaderVersion(inputBuff, length, command, version1, correlationId...)
 }
 
-func writeBProtocolHeaderVersion(inputBuff *bufio.Writer,
-	length int, command int16, version int16,
-	correlationId ...int) {
+func writeBProtocolHeaderVersion(inputBuff *bufio.Writer, length int, command int16,
+	version int16, correlationId ...int) error {
 
-	writeBInt(inputBuff, length)
-	writeBShort(inputBuff, command)
-	writeBShort(inputBuff, version)
-	if len(correlationId) > 0 {
-		writeBInt(inputBuff, correlationId[0])
+	if err := writeBInt(inputBuff, length); err != nil {
+		return err
 	}
+	if err := writeBShort(inputBuff, command); err != nil {
+		return err
+	}
+	if err := writeBShort(inputBuff, version); err != nil {
+		return err
+	}
+
+	if len(correlationId) > 0 {
+		if err := writeBInt(inputBuff, correlationId[0]); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func sizeOfStringArray(array []string) int {
