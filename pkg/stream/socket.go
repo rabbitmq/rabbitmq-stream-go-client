@@ -3,9 +3,10 @@ package stream
 import (
 	"bufio"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"net"
 	"sync"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 type socket struct {
@@ -27,7 +28,7 @@ func (sck *socket) isOpen() bool {
 	defer sck.mutex.Unlock()
 	return sck.closed == 1
 }
-func (sck *socket) shutdown(err error) {
+func (sck *socket) shutdown(_ error) {
 	if !sck.isOpen() {
 		return
 	}
@@ -43,7 +44,6 @@ func (sck *socket) shutdown(err error) {
 			logs.LogWarn("error during close socket: %s", err)
 		}
 	})
-
 }
 
 func (sck *socket) writeAndFlush(buffer []byte) error {

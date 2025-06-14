@@ -1,12 +1,13 @@
 package stream
 
 import (
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"sync/atomic"
-	"time"
 )
 
 func SendMessages(testEnvironment *Environment, streamName string) {

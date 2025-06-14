@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"os"
+	"strconv"
+
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"os"
-	"strconv"
 )
 
 func CheckErr(err error) {
@@ -21,7 +22,7 @@ func CheckErr(err error) {
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 
-	//stream.SetLevelInfo(logs.DEBUG)
+	// stream.SetLevelInfo(logs.DEBUG)
 	fmt.Println("Configure a load-balancer TLS for RabbitMQ")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
@@ -45,7 +46,7 @@ func main() {
 
 	/// We create a few streams, in order to distribute the streams across the cluster
 	var streamsName []string
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		streamsName = append(streamsName, uuid.New().String())
 	}
 
@@ -84,17 +85,15 @@ func main() {
 
 	// the consumer can connect to the leader o follower
 	// the AddressResolver just resolve the ip
-	var consumers []*stream.Consumer
 	for _, streamName := range streamsName {
 		fmt.Printf("Create consumer for %s ...\n", streamName)
-		consumer, err := env.NewConsumer(
+		_, err := env.NewConsumer(
 			streamName,
 			handleMessages,
 			stream.NewConsumerOptions().
 				SetConsumerName(uuid.New().String()).            // set a random name
 				SetOffset(stream.OffsetSpecification{}.First())) // start consuming from the beginning
 		CheckErr(err)
-		consumers = append(consumers, consumer)
 	}
 
 	/// check on the UI http://localhost:15673/#/stream/connections
@@ -110,5 +109,4 @@ func main() {
 	CheckErr(err)
 	err = env.Close()
 	CheckErr(err)
-
 }

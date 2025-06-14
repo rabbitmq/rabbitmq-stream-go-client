@@ -3,9 +3,10 @@ package integration_test
 import (
 	"errors"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"sync"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -17,9 +18,9 @@ import (
 var _ = Describe("StreamIntegration", func() {
 	Context("Issue 158", func() {
 		var (
-			addresses []string = []string{
+			addresses = []string{
 				"rabbitmq-stream://guest:guest@localhost:5552/"}
-			streamName           string = "test-next"
+			streamName           = "test-next"
 			streamEnv            *stream.Environment
 			producer             *stream.Producer
 			totalInitialMessages int
@@ -48,24 +49,21 @@ var _ = Describe("StreamIntegration", func() {
 				totalExpected := totalInitialMessages
 				count := 0
 			loop:
-				for {
-					select {
-					case confirmations := <-confirmationCh:
-						for i := range confirmations {
-							Expect(confirmations[i].IsConfirmed()).To(BeTrue())
-						}
-						for range confirmations {
-							count += 1
-							if count == totalExpected {
-								break loop
-							}
+				for confirmations := range confirmationCh {
+					for i := range confirmations {
+						Expect(confirmations[i].IsConfirmed()).To(BeTrue())
+					}
+					for range confirmations {
+						count += 1
+						if count == totalExpected {
+							break loop
 						}
 					}
 				}
 				c <- true
 			}(readyCh)
 
-			for i := 0; i < totalInitialMessages; i++ {
+			for i := range totalInitialMessages {
 				var message message.StreamMessage
 				body := fmt.Sprintf(`{"name": "item-%d", "age": %d}`, i, i)
 				message = amqp.NewMessage([]byte(body))
@@ -150,9 +148,9 @@ var _ = Describe("StreamIntegration", func() {
 
 	Context("Initial timestamp offset when no messages exist", func() {
 		var (
-			addresses []string = []string{
+			addresses = []string{
 				"rabbitmq-stream://guest:guest@localhost:5552/"}
-			streamName string = "empty-test-stream"
+			streamName = "empty-test-stream"
 			streamEnv  *stream.Environment
 		)
 

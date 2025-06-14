@@ -1,14 +1,15 @@
 package ha
 
 import (
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	. "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
-	"sync/atomic"
-	"time"
+	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 )
 
 var _ = Describe("Reliable Consumer", func() {
@@ -55,7 +56,7 @@ var _ = Describe("Reliable Consumer", func() {
 				}
 			})
 		Expect(err).NotTo(HaveOccurred())
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			msg := amqp.NewMessage([]byte("ha"))
 			err := producer.Send(msg)
 			Expect(err).NotTo(HaveOccurred())

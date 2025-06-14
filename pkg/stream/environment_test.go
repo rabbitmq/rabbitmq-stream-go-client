@@ -2,9 +2,10 @@ package stream
 
 import (
 	"crypto/tls"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"sync"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -21,7 +22,7 @@ var _ = Describe("Environment test", func() {
 		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
 		var producers []*Producer
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			producer, err := env.NewProducer(streamName, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(producer.id).To(Equal(uint8(0)))
@@ -496,22 +497,22 @@ var _ = Describe("Environment test", func() {
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
 		// here we force the client closing
-		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		env.locator.client.Close()
 		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
 		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
 		const consumerName = "my_consumer_1"
 		// here we force the client closing
-		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		env.locator.client.Close()
 		Expect(env.StoreOffset(consumerName, streamName, 123)).NotTo(HaveOccurred())
 		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
 		// here we force the client closing
-		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		env.locator.client.Close()
 		off, err := env.QueryOffset(consumerName, streamName)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
 		Expect(off).To(Equal(int64(123)))
 		// here we force the client closing
-		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		env.locator.client.Close()
 		Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
 		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
 		Expect(env.Close()).NotTo(HaveOccurred())

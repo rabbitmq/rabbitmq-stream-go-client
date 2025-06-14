@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"log"
 	"net/http"
 	"os"
@@ -14,11 +13,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+
+	_ "net/http/pprof"
+
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	_ "net/http/pprof"
 )
 
 // The ha producer and consumer provide a way to auto-reconnect in case of connection problems
@@ -40,7 +42,7 @@ const enableResend = false
 
 func formatCommas(num int32) string {
 	str := fmt.Sprintf("%d", num)
-	re := regexp.MustCompile("(\\d+)(\\d{3})")
+	re := regexp.MustCompile(`(\\d+)(\\d{3})`)
 	for n := ""; n != str; {
 		n = str
 		str = re.ReplaceAllString(str, "$1,$2")
@@ -71,8 +73,8 @@ func main() {
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
 	addresses := []string{
-		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
-		//"rabbitmq-stream://guest:guest@node1:5572/%2f",
+		// "rabbitmq-stream://guest:guest@node1:5572/%2f",
+		// "rabbitmq-stream://guest:guest@node1:5572/%2f",
 		"rabbitmq-stream://guest:guest@localhost:5552/%2f"}
 
 	env, err := stream.NewEnvironment(
@@ -117,7 +119,6 @@ func main() {
 			for _, producer := range producers {
 				fmt.Printf("%s, status: %s \n",
 					producer.GetInfo(), producer.GetStatusAsString())
-
 			}
 			for _, consumer := range consumers {
 				fmt.Printf("%s, status: %s \n",
@@ -129,7 +130,7 @@ func main() {
 		}
 	}()
 
-	for i := 0; i < numberOfConsumers; i++ {
+	for range numberOfConsumers {
 		consumer, err := ha.NewReliableConsumer(env,
 			streamName,
 			stream.NewConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()),
@@ -192,7 +193,6 @@ func main() {
 						errBatch := rProducer.BatchSend([]message.StreamMessage{msg})
 						CheckErr(errBatch)
 						atomic.AddInt32(&sent, 1)
-
 					}
 				}()
 			}

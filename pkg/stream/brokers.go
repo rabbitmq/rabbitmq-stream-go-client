@@ -86,7 +86,6 @@ func (br *Broker) mergeWithDefault() {
 	if br.Scheme == "" {
 		br.Scheme = broker.Scheme
 	}
-
 }
 
 func (br *Broker) cloneFrom(broker *Broker, resolver *AddressResolver) {

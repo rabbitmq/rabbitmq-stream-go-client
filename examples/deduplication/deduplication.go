@@ -3,10 +3,10 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErr(err error) {
@@ -75,9 +75,8 @@ func main() {
 	data[8] = "Aprilia"
 	data[9] = "Benelli"
 
-	for i := 0; i < len(data); i++ {
-		var msg message.StreamMessage
-		msg = amqp.NewMessage([]byte(data[i]))
+	for i := range len(data) {
+		msg := amqp.NewMessage([]byte(data[i]))
 		msg.SetPublishingId(int64(i)) // mandatory to handle the deduplication
 		err := producer.Send(msg)
 		CheckErr(err)

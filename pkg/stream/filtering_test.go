@@ -2,14 +2,15 @@ package stream
 
 import (
 	"fmt"
+	"strconv"
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"strconv"
-	"sync/atomic"
-	"time"
 )
 
 var _ = Describe("Streaming Filtering", func() {
@@ -83,9 +84,9 @@ var _ = Describe("Streaming Filtering", func() {
 			}),
 		))
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			msg := amqp.NewMessage([]byte(strconv.Itoa(i)))
-			msg.ApplicationProperties = map[string]interface{}{"ID": i}
+			msg.ApplicationProperties = map[string]any{"ID": i}
 			Expect(producer.Send(msg)).NotTo(HaveOccurred())
 		}
 
@@ -205,16 +206,15 @@ var _ = Describe("Streaming Filtering", func() {
 func send(producer *Producer, state string) {
 	for i := 0; i < 25; i++ {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("message %d, state %s", i, state)))
-		msg.ApplicationProperties = map[string]interface{}{"state": state}
+		msg.ApplicationProperties = map[string]any{"state": state}
 		Expect(producer.Send(msg)).NotTo(HaveOccurred())
 	}
 	var messages []message.StreamMessage
 	for i := 0; i < 25; i++ {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("message %d, state %s", i, state)))
-		msg.ApplicationProperties = map[string]interface{}{"state": state}
+		msg.ApplicationProperties = map[string]any{"state": state}
 		messages = append(messages, msg)
 	}
 	err := producer.BatchSend(messages)
 	Expect(err).NotTo(HaveOccurred())
-
 }
