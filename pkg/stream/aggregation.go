@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"io"
+
 	"github.com/golang/snappy"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
-	"io"
 )
 
 const (
@@ -64,12 +65,11 @@ type subEntries struct {
 }
 
 type iCompress interface {
-	Compress(subEntries *subEntries)
+	Compress(subEntries *subEntries) error
 	UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader
 }
 
 func compressByValue(value byte) iCompress {
-
 	switch value {
 	case GZIP:
 		return compressGZIP{}
@@ -84,10 +84,9 @@ func compressByValue(value byte) iCompress {
 	return compressNONE{}
 }
 
-type compressNONE struct {
-}
+type compressNONE struct{}
 
-func (es compressNONE) Compress(subEntries *subEntries) {
+func (es compressNONE) Compress(subEntries *subEntries) error {
 	for _, entry := range subEntries.items {
 		var tmp bytes.Buffer
 		for _, msg := range entry.messages {
@@ -98,6 +97,8 @@ func (es compressNONE) Compress(subEntries *subEntries) {
 		entry.sizeInBytes += len(entry.dataInBytes)
 		subEntries.totalSizeInBytes += len(entry.dataInBytes)
 	}
+
+	return nil
 }
 
 func (es compressNONE) UnCompress(source *bufio.Reader, _, _ uint32) *bufio.Reader {
@@ -107,25 +108,32 @@ func (es compressNONE) UnCompress(source *bufio.Reader, _, _ uint32) *bufio.Read
 type compressGZIP struct {
 }
 
-func (es compressGZIP) Compress(subEntries *subEntries) {
+func (es compressGZIP) Compress(subEntries *subEntries) error {
 	for _, entry := range subEntries.items {
 		var tmp bytes.Buffer
 		w := gzip.NewWriter(&tmp)
+
 		for _, msg := range entry.messages {
-			size := len(msg.messageBytes)
-			//w.Write(bytesFromInt((uint32(size) >> 24) & 0xFF))
-			//w.Write(bytesFromInt((uint32(size) >> 16) & 0xFF))
-			//w.Write(bytesFromInt((uint32(size) >> 8) & 0xFF))
-			//w.Write(bytesFromInt((uint32(size) >> 0) & 0xFF))
-			w.Write(bytesFromInt(uint32(size)))
-			w.Write(msg.messageBytes)
+			prefixedMsg := bytesLenghPrefixed(msg.messageBytes)
+			if _, err := w.Write(prefixedMsg); err != nil {
+				return fmt.Errorf("failed to write message size to gzip writer: %w", err)
+			}
 		}
-		w.Flush()
-		w.Close()
+
+		if err := w.Flush(); err != nil {
+			return fmt.Errorf("failed to flush gzip writer: %w", err)
+		}
+
+		if err := w.Close(); err != nil {
+			return fmt.Errorf("failed to close gzip writer: %w", err)
+		}
+
 		entry.sizeInBytes += len(tmp.Bytes())
 		entry.dataInBytes = tmp.Bytes()
 		subEntries.totalSizeInBytes += len(tmp.Bytes())
 	}
+
+	return nil
 }
 
 func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
@@ -161,36 +169,33 @@ func (es compressGZIP) UnCompress(source *bufio.Reader, dataSize, uncompressedDa
 	return bufio.NewReader(bytes.NewReader(uncompressedReader))
 }
 
-type compressSnappy struct {
-}
+type compressSnappy struct{}
 
-func (es compressSnappy) Compress(subEntries *subEntries) {
+func (es compressSnappy) Compress(subEntries *subEntries) error {
 	for _, entry := range subEntries.items {
 		var tmp bytes.Buffer
 		w := snappy.NewBufferedWriter(&tmp)
 		for _, msg := range entry.messages {
-			size := len(msg.messageBytes)
-			if _, err := w.Write(bytesFromInt(uint32(size))); err != nil {
-				logs.LogError("Error compressing with Snappy %v", err)
-				//return err  // TODO we should return error if we cannot compress
-			}
-			if _, err := w.Write(msg.messageBytes); err != nil {
-				logs.LogError("Error compressing with Snappy %v", err)
-				//return err  // TODO we should return error if we cannot compress
+			prefixedMsg := bytesLenghPrefixed(msg.messageBytes)
+			if _, err := w.Write(prefixedMsg); err != nil {
+				return fmt.Errorf("failed to write message size to snappy writer: %w", err)
 			}
 		}
+
 		if err := w.Flush(); err != nil {
-			logs.LogError("Error compressing with Snappy %v", err)
-			//return err  // TODO we should return error if we cannot compress
+			return fmt.Errorf("failed to flush snappy writer: %w", err)
 		}
+
 		if err := w.Close(); err != nil {
-			logs.LogError("Error compressing with Snappy %v", err)
-			//return err  // TODO we should return error if we cannot compress
+			return fmt.Errorf("failed to close snappy writer: %w", err)
 		}
+
 		entry.sizeInBytes += len(tmp.Bytes())
 		entry.dataInBytes = tmp.Bytes()
 		subEntries.totalSizeInBytes += len(tmp.Bytes())
 	}
+
+	return nil
 }
 
 func (es compressSnappy) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
@@ -226,36 +231,34 @@ func (es compressSnappy) UnCompress(source *bufio.Reader, dataSize, uncompressed
 
 }
 
-type compressLZ4 struct {
-}
+type compressLZ4 struct{}
 
-func (es compressLZ4) Compress(subEntries *subEntries) {
+func (es compressLZ4) Compress(subEntries *subEntries) error {
 	for _, entry := range subEntries.items {
 		var tmp bytes.Buffer
 		w := lz4.NewWriter(&tmp)
+
 		for _, msg := range entry.messages {
-			size := len(msg.messageBytes)
-			if _, err := w.Write(bytesFromInt(uint32(size))); err != nil {
-				logs.LogError("Error compressing with LZ4 %v", err)
-				//return err  // TODO we should return error if we cannot compress
-			}
-			if _, err := w.Write(msg.messageBytes); err != nil {
-				logs.LogError("Error compressing with LZ4 %v", err)
-				//return err  // TODO we should return error if we cannot compress
+			prefixedMsg := bytesLenghPrefixed(msg.messageBytes)
+			if _, err := w.Write(prefixedMsg); err != nil {
+				return fmt.Errorf("failed to write message size to LZ4 writer: %w", err)
 			}
 		}
+
 		if err := w.Flush(); err != nil {
-			logs.LogError("Error compressing with LZ4 %v", err)
-			//return err  // TODO we should return error if we cannot compress
+			return fmt.Errorf("failed to flush LZ4 writer: %w", err)
 		}
+
 		if err := w.Close(); err != nil {
-			logs.LogError("Error compressing with LZ4 %v", err)
-			//return err  // TODO we should return error if we cannot compress
+			return fmt.Errorf("failed to close LZ4 writer: %w", err)
 		}
+
 		entry.sizeInBytes += len(tmp.Bytes())
 		entry.dataInBytes = tmp.Bytes()
 		subEntries.totalSizeInBytes += len(tmp.Bytes())
 	}
+
+	return nil
 }
 
 func (es compressLZ4) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {
@@ -288,41 +291,37 @@ func (es compressLZ4) UnCompress(source *bufio.Reader, dataSize, uncompressedDat
 
 }
 
-type compressZSTD struct {
-}
+type compressZSTD struct{}
 
-func (es compressZSTD) Compress(subEntries *subEntries) {
+func (es compressZSTD) Compress(subEntries *subEntries) error {
 	for _, entry := range subEntries.items {
 		var tmp bytes.Buffer
 		w, err := zstd.NewWriter(&tmp)
 		if err != nil {
-			logs.LogError("Error creating ZSTD compression algorithm writer %v", err)
-			//return err  // TODO we should return error if we cannot compress
+			return fmt.Errorf("error creating ZSTD compression algorithm writer %w", err)
 		}
 
 		for _, msg := range entry.messages {
-			size := len(msg.messageBytes)
-			if _, err := w.Write(bytesFromInt(uint32(size))); err != nil {
-				logs.LogError("Error compressing with ZSTD %v", err)
-				//return err  // TODO we should return error if we cannot compress
-			}
-			if _, err := w.Write(msg.messageBytes); err != nil {
-				logs.LogError("Error compressing with ZSTD %v", err)
-				//return err  // TODO we should return error if we cannot compress
+			prefixedMsg := bytesLenghPrefixed(msg.messageBytes)
+			if _, err := w.Write(prefixedMsg); err != nil {
+				return fmt.Errorf("failed to write message size to ZSTD writer: %w", err)
 			}
 		}
+
 		if err := w.Flush(); err != nil {
-			logs.LogError("Error compressing with ZSTD %v", err)
-			//return err  // TODO we should return error if we cannot compress
+			return fmt.Errorf("failed to flush ZSTD writer: %w", err)
 		}
+
 		if err := w.Close(); err != nil {
-			logs.LogError("Error compressing with ZSTD %v", err)
-			//return err  // TODO we should return error if we cannot compress
+			return fmt.Errorf("failed to close ZSTD writer: %w", err)
 		}
+
 		entry.sizeInBytes += len(tmp.Bytes())
 		entry.dataInBytes = tmp.Bytes()
 		subEntries.totalSizeInBytes += len(tmp.Bytes())
 	}
+
+	return nil
 }
 
 func (es compressZSTD) UnCompress(source *bufio.Reader, dataSize, uncompressedDataSize uint32) *bufio.Reader {

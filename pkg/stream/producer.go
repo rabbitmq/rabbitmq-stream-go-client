@@ -531,7 +531,10 @@ func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, c
 		}
 	}
 
-	compressByValue(compression.value).Compress(&subEntries)
+	err := compressByValue(compression.value).Compress(&subEntries)
+	if err != nil {
+		return subEntries, err
+	}
 
 	return subEntries, nil
 }

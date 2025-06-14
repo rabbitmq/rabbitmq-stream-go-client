@@ -80,11 +80,6 @@ func writeBUInt(inputBuff *bufio.Writer, value uint32) {
 	inputBuff.Write(buff)
 }
 
-func bytesFromInt(value uint32) []byte {
-	var buff = make([]byte, 4)
-	binary.BigEndian.PutUint32(buff, value)
-	return buff
-}
 func writeString(inputBuff *bytes.Buffer, value string) {
 	writeUShort(inputBuff, uint16(len(value)))
 	inputBuff.Write([]byte(value))
@@ -156,4 +151,14 @@ func sizeOfMapStringString(mapString map[string]string) int {
 		size += 2 + len(k) + 2 + len(v)
 	}
 	return size
+}
+
+func bytesLenghPrefixed(msg []byte) []byte {
+	size := len(msg)
+	buff := make([]byte, 4+size)
+
+	binary.BigEndian.PutUint32(buff, uint32(size))
+	copy(buff[4:], msg)
+
+	return buff
 }
