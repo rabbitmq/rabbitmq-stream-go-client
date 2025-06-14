@@ -405,10 +405,6 @@ type Message struct {
 	//
 	// This field is ignored when LinkSenderSettle is not ModeMixed.
 	SendSettled bool
-
-	//receiver   *Receiver // Receiver the message was received from
-	settled bool // whether transfer was settled by sender
-
 }
 
 // AMQP10 is an AMQP 1.0 message with the necessary fields to work with the
@@ -423,8 +419,6 @@ type AMQP10 struct {
 	message               *Message
 	Properties            *MessageProperties
 	Annotations           Annotations
-	header                *MessageHeader
-	amqpData              interface{}
 	ApplicationProperties map[string]interface{}
 }
 
@@ -517,10 +511,6 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf := new(buffer)
 	err := m.marshal(buf)
 	return buf.b, err
-}
-
-func (m *Message) shouldSendDisposition() bool {
-	return !m.settled
 }
 
 func (m *Message) marshal(wr *buffer) error {

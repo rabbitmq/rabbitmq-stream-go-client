@@ -3,13 +3,14 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErr(err error) {
@@ -78,11 +79,14 @@ func main() {
 			fmt.Printf("messages consumed after: %d \n ", atomic.LoadInt32(&counter))
 		}
 	}
+
+	offset, err := env.QueryOffset("my_consumer", streamName)
+	CheckErr(err)
 	consumerNext, err := env.NewConsumer(streamName,
 		handleMessagesAfter,
 		stream.NewConsumerOptions().
 			SetConsumerName("my_consumer").                         // set a consumerOffsetNumber name
-			SetOffset(stream.OffsetSpecification{}.LastConsumed())) // With last consumed we point to the last saved.
+			SetOffset(stream.OffsetSpecification{}.Offset(offset))) // With last consumed we point to the last saved.
 	// in this case will be 200. So it will consume 20
 	//messages
 	CheckErr(err)
