@@ -1292,12 +1292,14 @@ const (
 	ModeMixed SenderSettleMode = 2
 )
 
+const nilString = "<nil>"
+
 // SenderSettleMode specifies how the sender will settle messages.
 type SenderSettleMode uint8
 
 func (m *SenderSettleMode) String() string {
 	if m == nil {
-		return "<nil>"
+		return nilString
 	}
 
 	switch *m {
@@ -1341,7 +1343,7 @@ type ReceiverSettleMode uint8
 
 func (m *ReceiverSettleMode) String() string {
 	if m == nil {
-		return "<nil>"
+		return nilString
 	}
 
 	switch *m {
@@ -1386,7 +1388,7 @@ type Durability uint32
 
 func (d *Durability) String() string {
 	if d == nil {
-		return "<nil>"
+		return nilString
 	}
 
 	switch *d {
@@ -1461,7 +1463,7 @@ func (e *ExpiryPolicy) unmarshal(r *buffer) error {
 
 func (e *ExpiryPolicy) String() string {
 	if e == nil {
-		return "<nil>"
+		return nilString
 	}
 	return string(*e)
 }
@@ -2252,6 +2254,7 @@ func (a arrayString) marshal(wr *buffer) error {
 	return nil
 }
 
+//nolint:dupl
 func (a *arrayString) unmarshal(r *buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
@@ -2343,6 +2346,7 @@ func (a arraySymbol) marshal(wr *buffer) error {
 	return nil
 }
 
+//nolint:dupl
 func (a *arraySymbol) unmarshal(r *buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {

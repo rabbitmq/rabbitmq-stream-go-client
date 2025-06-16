@@ -183,7 +183,7 @@ var _ = Describe("Reliable Producer", func() {
 
 		// wait for the producer to be in reconnecting state
 		Eventually(func() bool {
-			return producer.GetStatusAsString() == "Reconnecting"
+			return producer.GetStatus() == StatusReconnecting
 		}, time.Second*5, time.Millisecond).
 			Should(BeTrue())
 

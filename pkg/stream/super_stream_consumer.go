@@ -97,7 +97,7 @@ type SuperStreamConsumer struct {
 	MessagesHandler            MessagesHandler
 }
 
-func newSuperStreamConsumer(env *Environment, superStream string, MessagesHandler MessagesHandler, superStreamConsumerOptions *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {
+func newSuperStreamConsumer(env *Environment, superStream string, messagesHandler MessagesHandler, superStreamConsumerOptions *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {
 	if env == nil {
 		return nil, ErrEnvironmentNotDefined
 	}
@@ -116,7 +116,7 @@ func newSuperStreamConsumer(env *Environment, superStream string, MessagesHandle
 		env:                        env,
 		SuperStream:                superStream,
 		SuperStreamConsumerOptions: superStreamConsumerOptions,
-		MessagesHandler:            MessagesHandler,
+		MessagesHandler:            messagesHandler,
 	}, nil
 }
 

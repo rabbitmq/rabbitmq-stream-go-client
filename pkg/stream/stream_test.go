@@ -14,9 +14,9 @@ func CreateArrayMessagesForTesting(numberOfMessages int) []message.StreamMessage
 	return CreateArrayMessagesForTestingWithPrefix("test_", numberOfMessages)
 }
 func CreateArrayMessagesForTestingWithPrefix(prefix string, numberOfMessages int) []message.StreamMessage {
-	var arr []message.StreamMessage
-	for z := range numberOfMessages {
-		arr = append(arr, CreateMessageForTesting(prefix, z))
+	arr := make([]message.StreamMessage, numberOfMessages)
+	for i := range numberOfMessages {
+		arr[i] = CreateMessageForTesting(prefix, i)
 	}
 	return arr
 }

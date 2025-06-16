@@ -1,6 +1,7 @@
 package test_helper
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -74,8 +75,9 @@ func httpDelete(url, username, password string) (string, error) {
 }
 
 func baseCall(url, username, password string, method string) (string, error) {
+	ctx := context.Background()
 	var client http.Client
-	req, err := http.NewRequest(method, url, nil)
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return "", err
 	}

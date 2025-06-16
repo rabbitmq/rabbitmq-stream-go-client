@@ -199,18 +199,18 @@ type SingleActiveConsumer struct {
 	superStream string
 }
 
-func NewSingleActiveConsumer(ConsumerUpdate ConsumerUpdate) *SingleActiveConsumer {
+func NewSingleActiveConsumer(consumerUpdate ConsumerUpdate) *SingleActiveConsumer {
 	return &SingleActiveConsumer{
 		Enabled:        true,
-		ConsumerUpdate: ConsumerUpdate,
+		ConsumerUpdate: consumerUpdate,
 	}
 }
 
 func newSingleActiveConsumerWithAllParameters(
-	ConsumerUpdate ConsumerUpdate, isEnabled bool, superStream string) *SingleActiveConsumer {
+	consumerUpdate ConsumerUpdate, isEnabled bool, superStream string) *SingleActiveConsumer {
 	return &SingleActiveConsumer{
 		Enabled:        isEnabled,
-		ConsumerUpdate: ConsumerUpdate,
+		ConsumerUpdate: consumerUpdate,
 		superStream:    superStream,
 	}
 }
@@ -251,8 +251,8 @@ func (c *ConsumerOptions) SetConsumerName(consumerName string) *ConsumerOptions 
 	return c
 }
 
-func (c *ConsumerOptions) SetCRCCheck(CRCCheck bool) *ConsumerOptions {
-	c.CRCCheck = CRCCheck
+func (c *ConsumerOptions) SetCRCCheck(crcCheck bool) *ConsumerOptions {
+	c.CRCCheck = crcCheck
 	return c
 }
 

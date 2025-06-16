@@ -143,10 +143,10 @@ func (c *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bu
 	streamingRes.CorrelationId, _ = readUInt(r)
 	streamingRes.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	mechanismsCount, _ := readUInt(r)
-	var mechanisms []string
-	for range int(mechanismsCount) {
+	mechanisms := make([]string, mechanismsCount)
+	for i := range int(mechanismsCount) {
 		mechanism := readString(r)
-		mechanisms = append(mechanisms, mechanism)
+		mechanisms[i] = mechanism
 	}
 
 	res, err := c.coordinator.GetResponseById(streamingRes.CorrelationId)
