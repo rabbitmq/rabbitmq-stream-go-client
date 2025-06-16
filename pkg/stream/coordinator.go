@@ -155,12 +155,13 @@ func (coordinator *Coordinator) NewResponse(commandId uint16, info ...string) *R
 func (coordinator *Coordinator) GetResponseByName(id string) (*Response, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	if coordinator.responses[id] == nil {
-		return nil, errors.New("Response #{id} not found ")
+	c := coordinator.responses[id]
+	if c == nil {
+		return nil, fmt.Errorf("Response %s not found", id)
 	}
-	switch coordinator.responses[id].(type) {
-	case *Response:
-		return coordinator.responses[id].(*Response), nil
+
+	if resp, ok := c.(*Response); ok {
+		return resp, nil
 	}
 
 	return nil, nil
