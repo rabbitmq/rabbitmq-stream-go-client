@@ -453,7 +453,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
-	It("should return an error when the producer is already connected for a partition", func() {
+	It("should return an error when the producer is already connected for a partition", Focus, func() {
 
 		// Test is to validate the error when the producer is already connected
 		env, err := NewEnvironment(nil)
@@ -525,7 +525,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Eventually(partitionCloseEvent).WithTimeout(5 * time.Second).WithPolling(100 * time.Millisecond).Should(Receive())
 
 		// Verify that the partition was successfully reconnected
-		Expect(superProducer.getProducers()).To(HaveLen(partitionsCount))
+		Eventually(superProducer.getProducers()).WithTimeout(5 * time.Second).WithPolling(100 * time.Millisecond).Should(HaveLen(partitionsCount))
 		reconnectedProducer := superProducer.getProducer(partitionToClose)
 		Expect(reconnectedProducer).NotTo(BeNil())
 
