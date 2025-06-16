@@ -49,12 +49,7 @@ func (byteCapacity ByteCapacity) From(value string) *ByteCapacity {
 		return &ByteCapacity{bytes: 0, error: nil}
 	}
 
-	match, err := regexp.Compile("^((kb|mb|gb|tb))")
-	if err != nil {
-		return &ByteCapacity{bytes: 0,
-			error: errors.New(fmt.Sprintf("Capacity, invalid unit size format:%s", value))}
-	}
-
+	match := regexp.MustCompile("^((kb|mb|gb|tb))")
 	foundUnitSize := strings.ToLower(value[len(value)-2:])
 
 	if match.MatchString(foundUnitSize) {
