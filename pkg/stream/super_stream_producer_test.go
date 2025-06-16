@@ -453,7 +453,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
-	It("should return an error when the producer is already connected for a partition", Focus, func() {
+	It("should return an error when the producer is already connected for a partition", func() {
 
 		// Test is to validate the error when the producer is already connected
 		env, err := NewEnvironment(nil)
