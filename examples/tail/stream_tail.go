@@ -43,7 +43,7 @@ func main() {
 	CheckErr(err)
 
 	var counter int32
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	handleMessages := func(_ stream.ConsumerContext, message *amqp.Message) {
 		prop := message.Properties
 		appProp := message.ApplicationProperties
 		fmt.Printf("\n")

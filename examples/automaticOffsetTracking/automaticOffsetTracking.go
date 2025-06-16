@@ -53,7 +53,7 @@ func main() {
 	}()
 
 	var counter int32
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	handleMessages := func(_ stream.ConsumerContext, _ *amqp.Message) {
 		if atomic.AddInt32(&counter, 1)%20 == 0 {
 			fmt.Printf("messages consumed with auto commit: %d \n ", atomic.LoadInt32(&counter))
 		}
@@ -74,7 +74,7 @@ func main() {
 	time.Sleep(2 * time.Second)
 	atomic.StoreInt32(&counter, 0)
 	// so here we consume only 20 messages
-	handleMessagesAfter := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	handleMessagesAfter := func(_ stream.ConsumerContext, _ *amqp.Message) {
 		if atomic.AddInt32(&counter, 1)%20 == 0 {
 			fmt.Printf("messages consumed after: %d \n ", atomic.LoadInt32(&counter))
 		}

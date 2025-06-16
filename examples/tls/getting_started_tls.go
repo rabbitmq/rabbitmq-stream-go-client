@@ -58,6 +58,7 @@ func main() {
 			IsTLS(true).
 			// use tls.Config  to customize the TLS configuration
 			// for tests you may need InsecureSkipVerify: true
+			//nolint:gosec
 			SetTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
 	/// TLS connection

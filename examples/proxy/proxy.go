@@ -31,6 +31,7 @@ func main() {
 		Host: "localhost",
 		Port: 5554,
 	}
+	//nolint:gosec
 	conf := &tls.Config{InsecureSkipVerify: true}
 
 	env, err := stream.NewEnvironment(
@@ -45,7 +46,7 @@ func main() {
 	CheckErr(err)
 
 	/// We create a few streams, in order to distribute the streams across the cluster
-	var streamsName []string
+	streamsName := make([]string, 0, 3)
 	for range 3 {
 		streamsName = append(streamsName, uuid.New().String())
 	}
@@ -60,7 +61,7 @@ func main() {
 	}
 
 	CheckErr(err)
-	var producers []*stream.Producer
+	producers := make([]*stream.Producer, 0, len(streamsName))
 	// The producer MUST connect to the leader stream
 	// here the AddressResolver try to get the leader
 	// if fails retry

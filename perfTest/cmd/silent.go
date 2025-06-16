@@ -27,7 +27,7 @@ func newSilent() *cobra.Command {
 		Use:   "silent",
 		Short: "Start the performance test (default command)",
 
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			wg.Add(1)
 			err := startSimulation()
 			if err == nil {
@@ -289,7 +289,7 @@ func startPublisher(streamName string) error {
 				n := randomSource.Intn(variableRate)
 				sleep := float64(batchSize) / float64(n)
 
-				sleep = sleep * 1000
+				sleep *= 1000
 				if sleep > 3000 {
 					sleep = 0
 				}
@@ -314,16 +314,14 @@ func startPublisher(streamName string) error {
 }
 
 func buildMessages() []message.StreamMessage {
-	var arr []message.StreamMessage
+	arr := make([]message.StreamMessage, 0, batchSize)
 	for range batchSize {
 		var body []byte
 		if fixedBody > 0 {
 			body = make([]byte, fixedBody)
-		} else {
-			if variableBody > 0 {
-				r := rand.New(rand.NewSource(time.Now().Unix()))
-				body = make([]byte, r.Intn(variableBody))
-			}
+		} else if variableBody > 0 {
+			r := rand.New(rand.NewSource(time.Now().Unix()))
+			body = make([]byte, r.Intn(variableBody))
 		}
 		var buff = make([]byte, 8)
 		sentTime := time.Now().UnixMilli()
@@ -365,7 +363,7 @@ func handleConsumerClose(channelClose stream.ChannelClose) {
 	}()
 }
 func startConsumer(consumerName string, streamName string) error {
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	handleMessages := func(_ stream.ConsumerContext, message *amqp.Message) {
 		sentTime := binary.BigEndian.Uint64(message.GetData()[:8]) // Decode the timestamp
 		startTimeFromMessage := time.UnixMilli(int64(sentTime))
 		latency := time.Since(startTimeFromMessage).Milliseconds()

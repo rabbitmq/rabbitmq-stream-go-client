@@ -55,7 +55,7 @@ func main() {
 
 	var count int32
 
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	handleMessages := func(consumerContext stream.ConsumerContext, _ *amqp.Message) {
 		if atomic.AddInt32(&count, 1)%1000 == 0 {
 			fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
 			// AVOID to store for each single message, it will reduce the performances

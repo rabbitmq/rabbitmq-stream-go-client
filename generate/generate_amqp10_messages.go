@@ -9,6 +9,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
+//nolint:gosec
 func saveMessageToFile(filename string, data []byte) {
 	getwd, err := os.Getwd()
 	if err != nil {
@@ -64,6 +65,7 @@ func main() {
 	if err != nil {
 		return
 	}
+	//nolint:gosec
 	err = os.Mkdir(getwd, 0755)
 	if err != nil {
 		return

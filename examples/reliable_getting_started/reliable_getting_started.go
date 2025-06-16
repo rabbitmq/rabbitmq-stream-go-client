@@ -41,7 +41,7 @@ func main() {
 		stream.NewConsumerOptions().
 			SetOffset(stream.OffsetSpecification{}.First()),
 		// handler where the messages will be processed
-		func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		func(_ stream.ConsumerContext, message *amqp.Message) {
 			fmt.Printf("Message received: %s\n", message.GetData())
 		})
 

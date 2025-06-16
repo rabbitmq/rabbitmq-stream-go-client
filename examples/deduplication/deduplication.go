@@ -43,7 +43,7 @@ func main() {
 	CheckErr(err)
 
 	chConfirm := producer.NotifyPublishConfirmation()
-	go func(ch stream.ChannelPublishConfirm, p *stream.Producer) {
+	go func(ch stream.ChannelPublishConfirm, _ *stream.Producer) {
 		for messagesStatus := range ch {
 			for _, messageStatus := range messagesStatus {
 				if messageStatus.IsConfirmed() {

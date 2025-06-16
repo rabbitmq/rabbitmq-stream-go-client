@@ -15,8 +15,6 @@ import (
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 
-	_ "net/http/pprof"
-
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
@@ -52,6 +50,7 @@ func formatCommas(num int32) string {
 
 func main() {
 	go func() {
+		//nolint:gosec
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 	// Your application code here
@@ -101,8 +100,8 @@ func main() {
 	)
 	CheckErr(err)
 
-	var producers []*ha.ReliableProducer
-	var consumers []*ha.ReliableConsumer
+	producers := make([]*ha.ReliableProducer, 0, numberOfProducers)
+	consumers := make([]*ha.ReliableConsumer, 0, numberOfConsumers)
 	isRunning := true
 	go func() {
 		for isRunning {
@@ -134,7 +133,7 @@ func main() {
 		consumer, err := ha.NewReliableConsumer(env,
 			streamName,
 			stream.NewConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()),
-			func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+			func(_ stream.ConsumerContext, _ *amqp.Message) {
 				atomic.AddInt32(&consumed, 1)
 			})
 		CheckErr(err)

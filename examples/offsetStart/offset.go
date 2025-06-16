@@ -54,7 +54,7 @@ func main() {
 	}()
 
 	var counter int32
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	handleMessages := func(_ stream.ConsumerContext, _ *amqp.Message) {
 		fmt.Printf("messages consumed: %d \n ", atomic.AddInt32(&counter, 1))
 	}
 
