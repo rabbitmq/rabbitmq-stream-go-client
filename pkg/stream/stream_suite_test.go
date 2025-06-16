@@ -2,10 +2,11 @@ package stream_test
 
 import (
 	"fmt"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"net/http"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 const testVhost = "rabbitmq-streams-go-test"
@@ -48,7 +49,10 @@ func httpCall(method, url string) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	err = resp.Body.Close()
+	if err != nil {
+		return err
+	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("http error (%d): %s", resp.StatusCode, resp.Status)

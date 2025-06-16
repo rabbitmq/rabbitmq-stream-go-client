@@ -3,12 +3,12 @@ package stream
 import (
 	"bufio"
 	"bytes"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Compression algorithms", func() {
-
 	var entries *subEntries
 
 	BeforeEach(func() {
@@ -35,46 +35,48 @@ var _ = Describe("Compression algorithms", func() {
 	})
 
 	It("NONE", func() {
-		compressNONE{}.Compress(entries)
+		err := compressNONE{}.Compress(entries)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(entries.totalSizeInBytes).To(Equal(entries.items[0].sizeInBytes))
 		Expect(entries.totalSizeInBytes).To(Equal(entries.items[0].unCompressedSize))
-
 	})
 
 	It("GZIP", func() {
 		gzip := compressGZIP{}
-		gzip.Compress(entries)
+		err := gzip.Compress(entries)
+		Expect(err).NotTo(HaveOccurred())
 		verifyCompression(gzip, entries)
-
 	})
 
 	It("SNAPPY", func() {
 		snappy := compressSnappy{}
-		snappy.Compress(entries)
+		err := snappy.Compress(entries)
+		Expect(err).NotTo(HaveOccurred())
 		verifyCompression(snappy, entries)
 	})
 
 	It("LZ4", func() {
 		lz4 := compressLZ4{}
-		lz4.Compress(entries)
+		err := lz4.Compress(entries)
+		Expect(err).NotTo(HaveOccurred())
 		verifyCompression(lz4, entries)
 	})
 
 	It("ZSTD", func() {
 		zstd := compressZSTD{}
-		zstd.Compress(entries)
+		err := zstd.Compress(entries)
+		Expect(err).NotTo(HaveOccurred())
 		verifyCompression(zstd, entries)
 	})
-
 })
 
 func verifyCompression(algo iCompress, subEntries *subEntries) {
-
 	Expect(subEntries.totalSizeInBytes).To(SatisfyAll(BeNumerically("<", subEntries.items[0].unCompressedSize)))
 	Expect(subEntries.totalSizeInBytes).To(Equal(subEntries.items[0].sizeInBytes))
 
 	bufferReader := bytes.NewReader(subEntries.items[0].dataInBytes)
-	algo.UnCompress(bufio.NewReader(bufferReader),
+	_, err := algo.UnCompress(bufio.NewReader(bufferReader),
 		uint32(subEntries.totalSizeInBytes), uint32(subEntries.items[0].unCompressedSize))
 
+	Expect(err).NotTo(HaveOccurred())
 }

@@ -2,10 +2,11 @@ package test_helper
 
 import (
 	"encoding/json"
-	"github.com/pkg/errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
+
+	"github.com/pkg/errors"
 )
 
 type client_properties struct {
@@ -86,10 +87,11 @@ func baseCall(url, username, password string, method string) (string, error) {
 		return "", err3
 	}
 
+	//nolint:errcheck
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 { // OK
-		bodyBytes, err2 := ioutil.ReadAll(resp.Body)
+		bodyBytes, err2 := io.ReadAll(resp.Body)
 		if err2 != nil {
 			return "", err2
 		}

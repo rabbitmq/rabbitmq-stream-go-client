@@ -2,15 +2,16 @@ package stream
 
 import (
 	"fmt"
+	"math/rand"
+	"sync"
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
-	"math/rand"
-	"sync"
-	"time"
+	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 )
 
 type TestingRandomStrategy struct {
@@ -47,7 +48,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 
 			msg := amqp.NewMessage(make([]byte, 0))
 			msg.ApplicationProperties = map[string]interface{}{"routingKey": key}
-			msg.MarshalBinary()
+			_, err := msg.MarshalBinary()
+			Expect(err).NotTo(HaveOccurred())
 			routing, err := routingMurmur.Route(msg, partitions)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(routing).To(HaveLen(1))
@@ -344,7 +346,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(route).To(Equal([]string{}))
 
-		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		env.locator.client.Close()
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
@@ -358,7 +360,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		route, err := env.locator.client.queryRoute("not-found", "italy")
 		Expect(err).To(HaveOccurred())
 		Expect(route).To(BeNil())
-		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		env.locator.client.Close()
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
@@ -523,7 +525,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Eventually(partitionCloseEvent).WithTimeout(5 * time.Second).WithPolling(100 * time.Millisecond).Should(Receive())
 
 		// Verify that the partition was successfully reconnected
-		Expect(superProducer.getProducers()).To(HaveLen(partitionsCount))
+		Eventually(superProducer.getProducers()).WithTimeout(5 * time.Second).WithPolling(100 * time.Millisecond).Should(HaveLen(partitionsCount))
 		reconnectedProducer := superProducer.getProducer(partitionToClose)
 		Expect(reconnectedProducer).NotTo(BeNil())
 

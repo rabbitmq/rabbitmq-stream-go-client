@@ -470,7 +470,7 @@ func (c *Client) closeHartBeat() {
 
 }
 
-func (c *Client) Close() error {
+func (c *Client) Close() {
 	c.closeHartBeat()
 	c.coordinator.Producers().Range(func(_, p any) bool {
 		producer := p.(*Producer)
@@ -522,7 +522,6 @@ func (c *Client) Close() error {
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
 	c.getSocket().shutdown(nil)
-	return nil
 }
 
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {

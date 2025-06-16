@@ -1,9 +1,10 @@
 package stream
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"time"
 )
 
 type testSuperStreamOption struct {
@@ -82,7 +83,7 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 		err = testEnvironment.locator.client.DeclareSuperStream("valid name", newTestSuperStreamOption([]string{"valid "}, []string{""}, nil))
 		Expect(err).To(HaveOccurred())
 
-		Expect(testEnvironment.locator.client.Close()).NotTo(HaveOccurred())
+		testEnvironment.locator.client.Close()
 	})
 
 	It("Create Super stream two times and delete it with client", Label("super-stream"), func() {
