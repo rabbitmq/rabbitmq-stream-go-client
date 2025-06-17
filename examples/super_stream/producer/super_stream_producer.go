@@ -4,14 +4,15 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"math/rand"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErr(err error) {
@@ -28,7 +29,7 @@ func main() {
 	// Set the log level to DEBUG.
 	// Enable it only for debugging purposes or to
 	// have more information about the client behavior
-	//stream.SetLevelInfo(logs.DEBUG)
+	// stream.SetLevelInfo(logs.DEBUG)
 
 	// Connect to the broker ( or brokers )
 	env, err := stream.NewEnvironment(
@@ -100,7 +101,8 @@ func main() {
 	}(superStreamProducer.NotifyPublishConfirmation(1))
 
 	// Publish messages
-	for i := 0; i < 5_000; i++ {
+loop:
+	for i := range 5_000 {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("hello_super_stream_%d", i)))
 		msg.Properties = &amqp.MessageProperties{
 			MessageID: fmt.Sprintf("key_%d", i),
@@ -119,7 +121,7 @@ func main() {
 			// like unConfirmed.append(msg...) messages ...
 			// In this example we won't handle it to leave it simple
 			// like the superStreamPublishConfirm event for  messages
-			break
+			break loop
 		case errors.Is(err, stream.ErrMessageRouteNotFound):
 			atomic.AddInt32(&failed, 1)
 			// the message can't be routed to a partition
@@ -127,7 +129,7 @@ func main() {
 			// in this specific case the routing strategy is a hash routing strategy so won't happen
 			// if the strategy is based on key routing strategy it can happen if the key is not found
 			fmt.Printf("can't send the message ... the message route was not found")
-			break
+			break loop
 		default:
 			CheckErr(err)
 		}
@@ -144,5 +146,4 @@ func main() {
 
 	fmt.Println("Press enter to exit")
 	_, _ = reader.ReadString('\n')
-
 }

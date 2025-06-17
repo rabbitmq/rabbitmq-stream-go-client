@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"os"
-	"time"
 )
 
 func CheckErr(err error) {
@@ -27,7 +28,6 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 				} else {
 					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
 				}
-
 			}
 		}
 	}()
@@ -41,7 +41,7 @@ func consumerClose(channelClose stream.ChannelClose) {
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 
-	//You need RabbitMQ 3.13.0 or later to run this example
+	// You need RabbitMQ 3.13.0 or later to run this example
 	fmt.Println("Filtering example.")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
@@ -149,9 +149,9 @@ func main() {
 }
 
 func send(producer *stream.Producer, state string) {
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("message %d, state %s", i, state)))
-		msg.ApplicationProperties = map[string]interface{}{"state": state}
+		msg.ApplicationProperties = map[string]any{"state": state}
 		err := producer.Send(msg)
 		CheckErr(err)
 	}

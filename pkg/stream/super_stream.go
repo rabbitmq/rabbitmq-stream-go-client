@@ -5,24 +5,24 @@ import (
 	"time"
 )
 
-//public TimeSpan MaxAge
+// public TimeSpan MaxAge
 //{
-//set => Args["max-age"] = $"{value.TotalSeconds}s";
+// set => Args["max-age"] = $"{value.TotalSeconds}s";
 //}
 //
-//public ulong MaxLengthBytes
+// public ulong MaxLengthBytes
 //{
-//set => Args["max-length-bytes"] = $"{value}";
+// set => Args["max-length-bytes"] = $"{value}";
 //}
 //
-//public LeaderLocator LeaderLocator
+// public LeaderLocator LeaderLocator
 //{
-//set => Args["queue-leader-locator"] = $"{value.ToString()}";
+// set => Args["queue-leader-locator"] = $"{value.ToString()}";
 //}
 //
-//public int MaxSegmentSizeBytes
+// public int MaxSegmentSizeBytes
 //{
-//set => Args["stream-max-segment-size-bytes"] = $"{value}";
+// set => Args["stream-max-segment-size-bytes"] = $"{value}";
 //}
 
 const maxAge = "max-age"
@@ -78,10 +78,9 @@ func (t *PartitionsOptions) SetClientLocalLocator() *PartitionsOptions {
 }
 
 func (t *PartitionsOptions) getPartitions(prefix string) []string {
-	var partitions []string
-	for i := 0; i < t.Partitions; i++ {
-		partitions = append(partitions, fmt.Sprintf("%s-%d", prefix, i))
-
+	partitions := make([]string, t.Partitions)
+	for i := range t.Partitions {
+		partitions[i] = fmt.Sprintf("%s-%d", prefix, i)
 	}
 	return partitions
 }
@@ -152,9 +151,9 @@ func (t *BindingsOptions) SetClientLocalLocator() *BindingsOptions {
 }
 
 func (t *BindingsOptions) getPartitions(prefix string) []string {
-	var partitions []string
-	for _, bindingKey := range t.Bindings {
-		partitions = append(partitions, fmt.Sprintf("%s-%s", prefix, bindingKey))
+	partitions := make([]string, len(t.Bindings))
+	for i, bindingKey := range t.Bindings {
+		partitions[i] = fmt.Sprintf("%s-%s", prefix, bindingKey)
 	}
 	return partitions
 }

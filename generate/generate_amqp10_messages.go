@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"math/rand"
 	"os"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
+//nolint:gosec
 func saveMessageToFile(filename string, data []byte) {
 	getwd, err := os.Getwd()
 	if err != nil {
@@ -32,19 +34,15 @@ func saveMessageToFile(filename string, data []byte) {
 	if err != nil {
 		fmt.Printf("can't close file: %s", err)
 	}
-
 }
 
-func init() {
-	rand.Seed(1)
-}
-
+var randomSource = rand.New(rand.NewSource(1))
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 func generateString(n int) string {
 	b := make([]rune, n)
 	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+		b[i] = letterRunes[randomSource.Intn(len(letterRunes))]
 	}
 	return string(b)
 }
@@ -64,11 +62,18 @@ func main() {
 	}
 	getwd += "/generate" + "/" + "files"
 	err = os.RemoveAll(getwd)
+	if err != nil {
+		return
+	}
+	//nolint:gosec
 	err = os.Mkdir(getwd, 0755)
+	if err != nil {
+		return
+	}
 
 	msg := amqp.NewMessage([]byte(""))
 	binary, err := msg.MarshalBinary()
-	//msg.UnmarshalBinary()
+	// msg.UnmarshalBinary()
 	if err != nil {
 		return
 	}
@@ -103,7 +108,7 @@ func main() {
 	saveMessageToFile("message_body_700", binary)
 
 	msg = amqp.NewMessage([]byte(generateString(300)))
-	msg.ApplicationProperties = map[string]interface{}{
+	msg.ApplicationProperties = map[string]any{
 		generateString(30):  generateString(250),
 		generateString(40):  generateString(50),
 		generateString(200): generateString(250),
@@ -122,7 +127,7 @@ func main() {
 	saveMessageToFile("message_random_application_properties_300", binary)
 
 	msg = amqp.NewMessage([]byte(generateString(800)))
-	msg.ApplicationProperties = map[string]interface{}{
+	msg.ApplicationProperties = map[string]any{
 		generateString(530): generateString(500),
 		generateString(40):  generateString(700),
 		generateString(200): generateString(499),
@@ -149,7 +154,7 @@ func main() {
 		GroupSequence:      10,
 		ReplyToGroupID:     generateString(50),
 	}
-	msg.ApplicationProperties = map[string]interface{}{
+	msg.ApplicationProperties = map[string]any{
 		generateString(900): generateString(900),
 	}
 	binary, err = msg.MarshalBinary()
@@ -174,10 +179,10 @@ func main() {
 		GroupSequence:      1,
 		ReplyToGroupID:     "test",
 	}
-	msg.ApplicationProperties = map[string]interface{}{
+	msg.ApplicationProperties = map[string]any{
 		"test": "test",
 	}
-	msg.Annotations = map[interface{}]interface{}{
+	msg.Annotations = map[any]any{
 		"test":  "test",
 		1:       1,
 		100_000: 100_000,
@@ -192,7 +197,7 @@ func main() {
 
 	greekTest := "Ο Άλαν Μάθισον Τούρινγκ (23 Ιουνίου 1912 – 7 Ιουνίου 1954) ήταν Άγγλος μαθηματικός, επιστήμονας υπολογιστών, λογικός, κρυπαναλυτής, φιλόσοφος και θεωρητικός βιολόγος. Ο Τούρινγκ είχε μεγάλη επιρροή στην ανάπτυξη της θεωρητικής επιστήμης των υπολογιστών."
 	msg = amqp.NewMessage([]byte(byteString))
-	msg.ApplicationProperties = map[string]interface{}{
+	msg.ApplicationProperties = map[string]any{
 		"from_go":         "祝您有美好的一天，并享受客户",
 		"from_go_ch_long": chineseStringTest,
 		"from_go_greek":   greekTest,
@@ -223,7 +228,7 @@ func main() {
 		ReplyTo:       "",
 		CorrelationID: nil,
 	}
-	msg.ApplicationProperties = map[string]interface{}{
+	msg.ApplicationProperties = map[string]any{
 		"empty":      "",
 		"long_value": 91_000_001_001,
 		"byte_value": byte(216),

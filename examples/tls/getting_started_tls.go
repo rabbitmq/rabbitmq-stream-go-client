@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"os"
-	"strconv"
-	"time"
 )
 
 func CheckErr(err error) {
@@ -29,7 +30,6 @@ func handlePublishConfirm(confirms stream.ChannelPublishConfirm) {
 				} else {
 					fmt.Printf("message %s failed \n  ", msg.GetMessage().GetData())
 				}
-
 			}
 		}
 	}()
@@ -58,11 +58,12 @@ func main() {
 			IsTLS(true).
 			// use tls.Config  to customize the TLS configuration
 			// for tests you may need InsecureSkipVerify: true
+			//nolint:gosec
 			SetTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
 	/// TLS connection
 	// it is also possible to configure the TLS connection using the URI
-	//env, err := stream.NewEnvironment(
+	// env, err := stream.NewEnvironment(
 	//	stream.NewEnvironmentOptions().
 	//		SetUri("rabbitmq-stream+tls://guest:guest@localhost:5551/").
 	//		SetTLSConfig(&tls.Config{}),
@@ -86,13 +87,13 @@ func main() {
 	producer, err := env.NewProducer(streamName, nil)
 	CheckErr(err)
 
-	//optional publish confirmation channel
+	// optional publish confirmation channel
 	chPublishConfirm := producer.NotifyPublishConfirmation()
 	handlePublishConfirm(chPublishConfirm)
 
 	// the send method automatically aggregates the messages
 	// based on batch size
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 		CheckErr(err)
 	}
@@ -103,9 +104,9 @@ func main() {
 	CheckErr(err)
 
 	// Define a consumer per stream, there are different offset options to define a consumer, default is
-	//env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.message) {
+	// env.NewConsumer(streamName, func(Context streaming.ConsumerContext, message *amqp.message) {
 	//
-	//}, nil)
+	// }, nil)
 	// if you need to track the offset you need a consumer name like:
 	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		fmt.Printf("consumer name: %s, text: %s \n ", consumerContext.Consumer.GetName(), message.Data)

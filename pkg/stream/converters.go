@@ -2,10 +2,11 @@ package stream
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -48,16 +49,10 @@ func (byteCapacity ByteCapacity) From(value string) *ByteCapacity {
 		return &ByteCapacity{bytes: 0, error: nil}
 	}
 
-	match, err := regexp.Compile("^((kb|mb|gb|tb))")
-	if err != nil {
-		return &ByteCapacity{bytes: 0,
-			error: errors.New(fmt.Sprintf("Capacity, invalid unit size format:%s", value))}
-	}
-
+	match := regexp.MustCompile("^((kb|mb|gb|tb))")
 	foundUnitSize := strings.ToLower(value[len(value)-2:])
 
 	if match.MatchString(foundUnitSize) {
-
 		size, err := strconv.Atoi(value[:len(value)-2])
 		if err != nil {
 			return &ByteCapacity{bytes: 0, error: errors.New(fmt.Sprintf("Capacity, Invalid number format: %s", value))}
@@ -76,10 +71,8 @@ func (byteCapacity ByteCapacity) From(value string) *ByteCapacity {
 		case UnitTb:
 			return byteCapacity.TB(int64(size))
 		}
-
 	}
 
 	return &ByteCapacity{bytes: 0,
 		error: errors.New(fmt.Sprintf("Capacity, Invalid unit size format: %s", value))}
-
 }

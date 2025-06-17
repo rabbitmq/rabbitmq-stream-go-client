@@ -2,14 +2,15 @@ package stream
 
 import (
 	"fmt"
+	"strconv"
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"strconv"
-	"sync/atomic"
-	"time"
 )
 
 var _ = Describe("Streaming Filtering", func() {
@@ -63,14 +64,13 @@ var _ = Describe("Streaming Filtering", func() {
 		))
 		Expect(err).To(Equal(FilterNotSupported))
 
+		const filterValue = "New York"
 		postFilter := func(message *amqp.Message) bool {
-			return message.ApplicationProperties["state"] == "New York"
+			return message.ApplicationProperties["state"] == filterValue
 		}
 
-		filter := NewConsumerFilter([]string{"New York"}, true, postFilter)
-		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
-
-		}
+		filter := NewConsumerFilter([]string{filterValue}, true, postFilter)
+		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {}
 		_, err = testEnvironment.locator.client.DeclareSubscriber(testProducerStream, handleMessages, NewConsumerOptions().SetFilter(filter))
 		Expect(err).To(Equal(FilterNotSupported))
 
@@ -83,9 +83,9 @@ var _ = Describe("Streaming Filtering", func() {
 			}),
 		))
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			msg := amqp.NewMessage([]byte(strconv.Itoa(i)))
-			msg.ApplicationProperties = map[string]interface{}{"ID": i}
+			msg.ApplicationProperties = map[string]any{"ID": i}
 			Expect(producer.Send(msg)).NotTo(HaveOccurred())
 		}
 
@@ -94,13 +94,13 @@ var _ = Describe("Streaming Filtering", func() {
 	})
 
 	It("Validate filter Producer/Consumer ", func() {
+		const filterValue = "New York"
 		postFilter := func(message *amqp.Message) bool {
-			return message.ApplicationProperties["state"] == "New York"
+			return message.ApplicationProperties["state"] == filterValue
 		}
 
-		filter := NewConsumerFilter([]string{"New York"}, true, nil)
-		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
-		}
+		filter := NewConsumerFilter([]string{filterValue}, true, nil)
+		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {}
 
 		_, err := testEnvironment.NewConsumer(testProducerStream, handleMessages,
 			NewConsumerOptions().SetFilter(filter))
@@ -125,16 +125,16 @@ var _ = Describe("Streaming Filtering", func() {
 	})
 
 	It("Consume messages with Filtering", func() {
-
-		postFilterAlwaysTrue := func(message *amqp.Message) bool {
+		const filterValue = "New York"
+		postFilterAlwaysTrue := func(_ *amqp.Message) bool {
 			// always return true but the filter should be applied server side
 			// so no
 			return true
 		}
 
 		var consumerNewYork int32
-		filter := NewConsumerFilter([]string{"New York"}, true, postFilterAlwaysTrue)
-		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+		filter := NewConsumerFilter([]string{filterValue}, true, postFilterAlwaysTrue)
+		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {
 			atomic.AddInt32(&consumerNewYork, 1)
 		}
 
@@ -148,7 +148,7 @@ var _ = Describe("Streaming Filtering", func() {
 			}),
 		))
 		Expect(err).NotTo(HaveOccurred())
-		send(producer, "New York")
+		send(producer, filterValue)
 		// Here we wait a bit to be sure that the messages are stored in the same chunk
 		time.Sleep(2 * time.Second)
 
@@ -162,6 +162,7 @@ var _ = Describe("Streaming Filtering", func() {
 	})
 
 	It("Consume messages with Filtering and PostFilter", func() {
+		const filterValue = "New York"
 
 		// here is a post filter that will be applied after the server side filter
 		// the messages are stored in the same chunk
@@ -171,12 +172,12 @@ var _ = Describe("Streaming Filtering", func() {
 		// in real case can happen that some chunks are not filtered
 		// that's why the post filter is useful
 		postFilterNY := func(message *amqp.Message) bool {
-			return message.ApplicationProperties["state"] == "New York"
+			return message.ApplicationProperties["state"] == filterValue
 		}
 
 		var consumerNewYork int32
-		filter := NewConsumerFilter([]string{"New York"}, true, postFilterNY)
-		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+		filter := NewConsumerFilter([]string{filterValue}, true, postFilterNY)
+		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {
 			atomic.AddInt32(&consumerNewYork, 1)
 		}
 
@@ -205,16 +206,15 @@ var _ = Describe("Streaming Filtering", func() {
 func send(producer *Producer, state string) {
 	for i := 0; i < 25; i++ {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("message %d, state %s", i, state)))
-		msg.ApplicationProperties = map[string]interface{}{"state": state}
+		msg.ApplicationProperties = map[string]any{"state": state}
 		Expect(producer.Send(msg)).NotTo(HaveOccurred())
 	}
 	var messages []message.StreamMessage
 	for i := 0; i < 25; i++ {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("message %d, state %s", i, state)))
-		msg.ApplicationProperties = map[string]interface{}{"state": state}
+		msg.ApplicationProperties = map[string]any{"state": state}
 		messages = append(messages, msg)
 	}
 	err := producer.BatchSend(messages)
 	Expect(err).NotTo(HaveOccurred())
-
 }

@@ -45,7 +45,6 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	if options.TCPParameters == nil {
 		options.TCPParameters = newTCPParameterDefault()
-
 	}
 
 	client := newClient("go-stream-locator", nil,
@@ -74,7 +73,6 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	}
 	var connectionError error
 	for idx, parameter := range options.ConnectionParameters {
-
 		if parameter.Uri != "" {
 			u, err := url.Parse(parameter.Uri)
 			if err != nil {
@@ -108,7 +106,6 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 			}
 			logs.LogError("New environment creation. Can't connect to the broker: %s port: %s. %s",
 				parameter.Host, parameter.Port, nextIfThereIs)
-
 		}
 	}
 
@@ -145,10 +142,9 @@ func (env *Environment) maybeReconnectLocator() error {
 		n := r.Intn(len(env.options.ConnectionParameters))
 		c1 := newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
 			env.options.SaslConfiguration, env.options.RPCTimeout)
-		tentatives = tentatives + 1
+		tentatives++
 		env.locator.client = c1
 		err = c1.connect()
-
 	}
 
 	return env.locator.client.connect()
@@ -240,7 +236,6 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	}
 
 	if streamMetadata.Leader == nil {
-
 		return nil, LeaderNotReady
 	}
 
@@ -392,7 +387,6 @@ func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
 		envOptions.ConnectionParameters[0].Port = strconv.Itoa(port)
 	}
 	return envOptions
-
 }
 
 func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
@@ -402,7 +396,6 @@ func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
 		envOptions.ConnectionParameters[0].User = user
 	}
 	return envOptions
-
 }
 
 func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentOptions {
@@ -412,7 +405,6 @@ func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentO
 		envOptions.ConnectionParameters[0].Password = password
 	}
 	return envOptions
-
 }
 
 func (envOptions *EnvironmentOptions) SetRequestedHeartbeat(requestedHeartbeat time.Duration) *EnvironmentOptions {
@@ -479,7 +471,6 @@ func (cc *environmentCoordinator) isProducerListFull(clientsPerContextId int) bo
 		return false
 	}
 	return client.(*Client).coordinator.ProducersCount() >= cc.maxItemsForClient
-
 }
 
 func (cc *environmentCoordinator) isConsumerListFull(clientsPerContextId int) bool {
@@ -636,7 +627,7 @@ func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Bro
 }
 
 func (cc *environmentCoordinator) Close() error {
-	cc.clientsPerContext.Range(func(key, value any) bool {
+	cc.clientsPerContext.Range(func(_, value any) bool {
 		value.(*Client).coordinator.Close()
 
 		return true

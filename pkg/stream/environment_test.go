@@ -22,7 +22,7 @@ var _ = Describe("Environment test", func() {
 		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
 		var producers []*Producer
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			producer, err := env.NewProducer(streamName, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(producer.id).To(Equal(uint8(0)))
@@ -397,6 +397,7 @@ var _ = Describe("Environment test", func() {
 	})
 
 	It("Fail TLS connection", func() {
+		//nolint:gosec
 		_, err := NewEnvironment(NewEnvironmentOptions().
 			SetTLSConfig(&tls.Config{InsecureSkipVerify: true}).
 			IsTLS(true))
@@ -435,15 +436,13 @@ var _ = Describe("Environment test", func() {
 		}
 
 		for i := 0; i < 5; i++ {
-			_, err := env.NewConsumer(streamName, func(consumerContext ConsumerContext, message *amqp.Message) {
-
-			}, nil)
+			_, err := env.NewConsumer(streamName, func(_ ConsumerContext, _ *amqp.Message) {}, nil)
 			Expect(err).NotTo(HaveOccurred())
 		}
 
 		// count element sync map
 		count := 0
-		env.consumers.getCoordinators()["localhost:5552"].clientsPerContext.Range(func(key, value any) bool {
+		env.consumers.getCoordinators()["localhost:5552"].clientsPerContext.Range(func(_, value any) bool {
 			Expect(value).NotTo(BeNil())
 			count++
 			return true
@@ -457,7 +456,7 @@ var _ = Describe("Environment test", func() {
 
 		Eventually(func() int {
 			count = 0
-			env.producers.getCoordinators()["localhost:5552"].clientsPerContext.Range(func(key, value any) bool {
+			env.producers.getCoordinators()["localhost:5552"].clientsPerContext.Range(func(_, value any) bool {
 				Expect(value).To(BeNil())
 				count++
 				return true
@@ -467,7 +466,7 @@ var _ = Describe("Environment test", func() {
 
 		Eventually(func() int {
 			count = 0
-			env.consumers.getCoordinators()["localhost:5552"].clientsPerContext.Range(func(key, value any) bool {
+			env.consumers.getCoordinators()["localhost:5552"].clientsPerContext.Range(func(_, value any) bool {
 				Expect(value).To(BeNil())
 				count++
 				return true

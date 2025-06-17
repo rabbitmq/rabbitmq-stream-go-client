@@ -3,13 +3,14 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErr(err error) {
@@ -46,14 +47,14 @@ func main() {
 	CheckErr(err)
 
 	go func() {
-		for i := 0; i < 200; i++ {
+		for i := range 200 {
 			err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 			CheckErr(err)
 		}
 	}()
 
 	var counter int32
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	handleMessages := func(_ stream.ConsumerContext, _ *amqp.Message) {
 		fmt.Printf("messages consumed: %d \n ", atomic.AddInt32(&counter, 1))
 	}
 
@@ -87,5 +88,4 @@ func main() {
 	CheckErr(err)
 	err = env.DeleteStream(streamName)
 	CheckErr(err)
-
 }

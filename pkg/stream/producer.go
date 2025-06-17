@@ -243,7 +243,6 @@ func (producer *Producer) getStatus() int {
 }
 
 func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
-
 	go func() {
 		for {
 			select {
@@ -264,7 +263,6 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 			}
 		}
 	}()
-
 }
 
 func (producer *Producer) sendConfirmationStatus(status []*ConfirmationStatus) {
@@ -287,7 +285,6 @@ func (producer *Producer) closeConfirmationStatus() {
 // processPendingSequencesQueue aggregates the messages sequence in the queue and sends them to the server
 // messages coming form the Send method through the pendingSequencesQueue
 func (producer *Producer) processPendingSequencesQueue() {
-
 	maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
 	go func() {
 		sequenceToSend := make([]*messageSequence, 0)
@@ -334,7 +331,6 @@ func (producer *Producer) processPendingSequencesQueue() {
 		if len(sequenceToSend) > 0 {
 			producer.markUnsentAsUnconfirmed(sequenceToSend)
 		}
-
 	}()
 	logs.LogDebug("producer %d processPendingSequencesQueue closed", producer.id)
 }
@@ -550,7 +546,7 @@ func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, c
 		/// since there is only one publishingId
 		// the others publishingId(s) are linked
 		// so the client confirms all the messages
-		//when the client receives the confirmation form the server
+		// when the client receives the confirmation form the server
 		// see: server_frame:handleConfirm/2
 		// suppose you have 10 messages with publishingId [5..15]
 		// the message 5 is linked to 6,7,8,9..15
@@ -614,12 +610,12 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	}
 
 	numberOfMessages := len(messagesSequence)
-	numberOfMessages = numberOfMessages / producer.options.SubEntrySize
+	numberOfMessages /= producer.options.SubEntrySize
 	if len(messagesSequence)%producer.options.SubEntrySize != 0 {
 		numberOfMessages += 1
 	}
 
-	//toExcluded - fromInclude
+	// toExcluded - fromInclude
 	if err := writeBInt(producer.options.client.socket.writer, numberOfMessages); err != nil {
 		return fmt.Errorf("failed to write number of messages: %w", err)
 	}
@@ -651,7 +647,6 @@ func (producer *Producer) flushUnConfirmedMessages() {
 	if len(timeOut) > 0 {
 		producer.sendConfirmationStatus(timeOut)
 	}
-
 }
 
 // GetLastPublishingId returns the last publishing id sent by the producer given the producer name.
@@ -663,7 +658,6 @@ func (producer *Producer) GetLastPublishingId() (int64, error) {
 
 // Close closes the producer and returns an error if the producer could not be closed.
 func (producer *Producer) Close() error {
-
 	return producer.close(Event{
 		Command:    CommandDeletePublisher,
 		StreamName: producer.GetStreamName(),
@@ -673,7 +667,6 @@ func (producer *Producer) Close() error {
 	})
 }
 func (producer *Producer) close(reason Event) error {
-
 	if producer.getStatus() == closed {
 		return AlreadyClosed
 	}
@@ -723,7 +716,6 @@ func (producer *Producer) close(reason Event) error {
 
 // stopAndWaitPendingSequencesQueue stops the pendingSequencesQueue and waits for the inflight messages to be sent
 func (producer *Producer) stopAndWaitPendingSequencesQueue() {
-
 	// Stop the pendingSequencesQueue, so the producer can't send messages anymore
 	// but the producer can still handle the inflight messages
 	pendingSequences := producer.pendingSequencesQueue.Stop()
@@ -738,7 +730,6 @@ func (producer *Producer) stopAndWaitPendingSequencesQueue() {
 	producer.waitForInflightMessages()
 	// Close the pendingSequencesQueue. It closes the channel
 	producer.pendingSequencesQueue.Close()
-
 }
 
 func (producer *Producer) waitForInflightMessages() {

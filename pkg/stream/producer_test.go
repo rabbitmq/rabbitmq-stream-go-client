@@ -51,7 +51,7 @@ var _ = Describe("Streaming Producers", func() {
 	It("Close Publishers before send is competed", func() {
 		// force a high batch size to test the close
 		// during the close the producer should send the messages in the buffer
-		//and flush as timeout the messages can't be sent
+		// and flush as timeout the messages can't be sent
 		producer, err := testEnvironment.NewProducer(testProducerStream, NewProducerOptions().SetBatchSize(500))
 		ch := producer.NotifyPublishConfirmation()
 		var confirmedMessages int32
@@ -70,7 +70,7 @@ var _ = Describe("Streaming Producers", func() {
 			}
 		}(ch)
 		Expect(err).NotTo(HaveOccurred())
-		for i := 0; i < 1_000; i++ {
+		for range 1_000 {
 			Expect(producer.Send(amqp.NewMessage([]byte("test")))).NotTo(HaveOccurred())
 		}
 		Expect(producer.Close()).NotTo(HaveOccurred())
@@ -257,7 +257,7 @@ var _ = Describe("Streaming Producers", func() {
 					Expect(msg.IsConfirmed()).To(Equal(true))
 					Expect(msg.message.GetPublishingId()).To(Equal(int64(0)))
 					Expect(msg.message.HasPublishingId()).To(Equal(false))
-					body := string(msg.message.GetData()[0][:])
+					body := string(msg.message.GetData()[0])
 					// -1 because the first message is 0
 					be := fmt.Sprintf("test_%d", atomic.LoadInt64(&nRecv)-1)
 					Expect(body).To(Equal(be))
@@ -856,7 +856,6 @@ func testCompress(producer *Producer) {
 	for z := 0; z < 457; z++ {
 		err := producer.BatchSend(CreateArrayMessagesForTesting(5))
 		Expect(err).NotTo(HaveOccurred())
-
 	}
 
 	Eventually(func() int32 {
@@ -923,5 +922,5 @@ func runConcurrentlyAndWaitTillAllDone(threadCount int, wg *sync.WaitGroup, runn
 		}(index)
 	}
 	wg.Wait()
-	//fmt.Printf("Finished running concurrently with %d threads\n", threadCount)
+	// fmt.Printf("Finished running concurrently with %d threads\n", threadCount)
 }

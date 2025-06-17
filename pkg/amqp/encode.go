@@ -1,25 +1,25 @@
-//MIT License
+// MIT License
 //
-//Copyright (C) 2017 Kale Blankenship
-//Portions Copyright (C) Microsoft Corporation
+// Copyright (C) 2017 Kale Blankenship
+// Portions Copyright (C) Microsoft Corporation
 //
-//Permission is hereby granted, free of charge, to any person obtaining a copy
-//of this software and associated documentation files (the "Software"), to deal
-//in the Software without restriction, including without limitation the rights
-//to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-//copies of the Software, and to permit persons to whom the Software is
-//furnished to do so, subject to the following conditions:
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
 //
-//The above copyright notice and this permission notice shall be included in all
-//copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
 //
-//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-//AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-//OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-//SOFTWARE
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE
 
 package amqp
 
@@ -34,7 +34,7 @@ type marshaler interface {
 	marshal(*buffer) error
 }
 
-func marshal(wr *buffer, i interface{}) error {
+func marshal(wr *buffer, i any) error {
 	switch t := i.(type) {
 	case nil:
 		wr.writeByte(byte(typeCodeNull))
@@ -122,17 +122,17 @@ func marshal(wr *buffer, i interface{}) error {
 		return writeBinary(wr, t)
 	case *[]byte:
 		return writeBinary(wr, *t)
-	case map[interface{}]interface{}:
+	case map[any]any:
 		return writeMap(wr, t)
-	case *map[interface{}]interface{}:
+	case *map[any]any:
 		return writeMap(wr, *t)
-	case map[string]interface{}:
+	case map[string]any:
 		return writeMap(wr, t)
-	case *map[string]interface{}:
+	case *map[string]any:
 		return writeMap(wr, *t)
-	case map[symbol]interface{}:
+	case map[symbol]any:
 		return writeMap(wr, t)
-	case *map[symbol]interface{}:
+	case *map[symbol]any:
 		return writeMap(wr, *t)
 	case unsettled:
 		return writeMap(wr, t)
@@ -202,9 +202,9 @@ func marshal(wr *buffer, i interface{}) error {
 		return arrayUUID(t).marshal(wr)
 	case *[]UUID:
 		return arrayUUID(*t).marshal(wr)
-	case []interface{}:
+	case []any:
 		return list(t).marshal(wr)
-	case *[]interface{}:
+	case *[]any:
 		return list(*t).marshal(wr)
 	case marshaler:
 		return t.marshal(wr)
@@ -294,8 +294,8 @@ func writeTimestamp(wr *buffer, t time.Time) {
 
 // marshalField is a field to be marshaled
 type marshalField struct {
-	value interface{} // value to be marshaled, use pointers to avoid interface conversion overhead
-	omit  bool        // indicates that this field should be omitted (set to null)
+	value any  // value to be marshaled, use pointers to avoid interface conversion overhead
+	omit  bool // indicates that this field should be omitted (set to null)
 }
 
 // marshalComposite is a helper for us in a composite's marshal() function.
@@ -423,7 +423,7 @@ func writeBinary(wr *buffer, bin []byte) error {
 	}
 }
 
-func writeMap(wr *buffer, m interface{}) error {
+func writeMap(wr *buffer, m any) error {
 	startIdx := wr.len()
 	wr.write([]byte{
 		byte(typeCodeMap32), // type
@@ -433,7 +433,7 @@ func writeMap(wr *buffer, m interface{}) error {
 
 	var pairs int
 	switch m := m.(type) {
-	case map[interface{}]interface{}:
+	case map[any]any:
 		pairs = len(m) * 2
 		for key, val := range m {
 			err := marshal(wr, key)
@@ -445,7 +445,7 @@ func writeMap(wr *buffer, m interface{}) error {
 				return err
 			}
 		}
-	case map[string]interface{}:
+	case map[string]any:
 		pairs = len(m) * 2
 		for key, val := range m {
 			err := writeString(wr, key)
@@ -457,7 +457,7 @@ func writeMap(wr *buffer, m interface{}) error {
 				return err
 			}
 		}
-	case map[symbol]interface{}:
+	case map[symbol]any:
 		pairs = len(m) * 2
 		for key, val := range m {
 			err := key.marshal(wr)
@@ -557,7 +557,7 @@ func writeArrayHeader(wr *buffer, length, typeSize int, type_ amqpType) {
 			byte(type_),               // element type
 		})
 	} else {
-		wr.writeByte(byte(typeCodeArray32))          //type
+		wr.writeByte(byte(typeCodeArray32))          // type
 		wr.writeUint32(uint32(size + array32TLSize)) // size
 		wr.writeUint32(uint32(length))               // length
 		wr.writeByte(byte(type_))                    // element type

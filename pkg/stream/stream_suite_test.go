@@ -1,6 +1,7 @@
 package stream_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
@@ -40,7 +41,8 @@ func vhostUrl(vhost string) string {
 }
 
 func httpCall(method, url string) error {
-	req, err := http.NewRequest(method, url, nil)
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return err
 	}

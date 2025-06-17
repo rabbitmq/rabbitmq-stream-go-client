@@ -3,13 +3,14 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
 func CheckErr(err error) {
@@ -45,7 +46,7 @@ func main() {
 	CheckErr(err)
 
 	go func() {
-		for i := 0; i < 2000; i++ {
+		for i := range 2000 {
 			err := producer.Send(amqp.NewMessage([]byte("hello_world_" + strconv.Itoa(i))))
 			CheckErr(err)
 			time.Sleep(100 * time.Millisecond)
@@ -54,7 +55,7 @@ func main() {
 
 	var count int32
 
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	handleMessages := func(consumerContext stream.ConsumerContext, _ *amqp.Message) {
 		if atomic.AddInt32(&count, 1)%1000 == 0 {
 			fmt.Printf("cousumed %d  messages \n", atomic.LoadInt32(&count))
 			// AVOID to store for each single message, it will reduce the performances
@@ -64,7 +65,6 @@ func main() {
 				CheckErr(err)
 			}
 		}
-
 	}
 
 	consumer, err := env.NewConsumer(
@@ -84,5 +84,4 @@ func main() {
 	CheckErr(err)
 	err = env.DeleteStream(streamName)
 	CheckErr(err)
-
 }
