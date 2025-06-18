@@ -518,6 +518,8 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		go func() {
 			client, ok := env.producers.getCoordinators()["localhost:5552"].clientsPerContext.Load(1)
 			Expect(ok).To(BeTrue())
+			// https://github.com/rabbitmq/rabbitmq-stream-go-client/issues/406
+			// we use internal mutex, we can safely call maybeCleanProducers
 			env.producers.mutex.Lock()
 			client.(*Client).maybeCleanProducers(partitionToClose)
 			env.producers.mutex.Unlock()
