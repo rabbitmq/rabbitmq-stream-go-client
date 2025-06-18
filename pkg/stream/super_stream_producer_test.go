@@ -518,7 +518,9 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		go func() {
 			client, ok := env.producers.getCoordinators()["localhost:5552"].clientsPerContext.Load(1)
 			Expect(ok).To(BeTrue())
+			env.producers.mutex.Lock()
 			client.(*Client).maybeCleanProducers(partitionToClose)
+			env.producers.mutex.Unlock()
 		}()
 
 		// Wait for the partition close event
