@@ -135,7 +135,7 @@ func (env *Environment) maybeReconnectLocator() error {
 		sleepTime := rand.Intn(5000) + (tentatives * 1000)
 
 		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", c.broker.Scheme, c.broker.User, c.broker.Host, c.broker.Port, c.broker.Vhost)
-		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: ", err, sleepTime, brokerUri)
+		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: %s", err, sleepTime, brokerUri)
 
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 		r := rand.New(rand.NewSource(time.Now().Unix()))
