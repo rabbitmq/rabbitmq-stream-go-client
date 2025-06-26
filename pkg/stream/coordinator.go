@@ -193,7 +193,7 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 		lastStoredOffset:     -1, // because 0 is a valid value for the offset
 		isPromotedAsActive:   true,
 		lastAutoCommitStored: time.Now(),
-		chunkForConsumer:     make(chan chunkInfo, 100),
+		chunkForConsumer:     make(chan chunkInfo, parameters.initialCredits),
 		onClose:              cleanUp,
 	}
 
