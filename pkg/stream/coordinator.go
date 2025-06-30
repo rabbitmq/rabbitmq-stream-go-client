@@ -179,12 +179,17 @@ func (coordinator *Coordinator) RemoveResponseByName(id string) error {
 }
 
 // Consumer functions
-func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
-	parameters *ConsumerOptions, cleanUp func()) *Consumer {
+func (coordinator *Coordinator) NewConsumer(
+	messagesHandler MessagesHandler,
+	parameters *ConsumerOptions,
+	cleanUp func(),
+) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextConsumerItem()
-	var item = &Consumer{ID: lastId, options: parameters,
+	var item = &Consumer{
+		ID:                   lastId,
+		options:              parameters,
 		response:             newResponse(lookUpCommand(commandSubscribe)),
 		status:               open,
 		mutex:                &sync.Mutex{},

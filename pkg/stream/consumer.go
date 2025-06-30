@@ -332,13 +332,6 @@ func (consumer *Consumer) Close() error {
 }
 
 func (consumer *Consumer) close(reason Event) {
-	if consumer.options == nil {
-		// the config is usually set. this check is just to avoid panic and to make some test
-		// easier to write
-		logs.LogDebug("consumer options is nil, the close will be ignored")
-		return
-	}
-
 	consumer.cacheStoreOffset()
 	consumer.setStatus(closed)
 
@@ -369,10 +362,14 @@ func (consumer *Consumer) close(reason Event) {
 			logs.LogWarn("error during consumer unsubscribe:%s", err.Err)
 		}
 	}
-	_, _ = consumer.options.client.coordinator.ExtractConsumerById(consumer.ID)
 
-	if consumer.options != nil && consumer.options.client.coordinator.ConsumersCount() == 0 {
-		consumer.options.client.Close()
+	// it could be nil only during tests
+	if consumer.options.client != nil {
+		_, _ = consumer.options.client.coordinator.ExtractConsumerById(consumer.ID)
+
+		if consumer.options != nil && consumer.options.client.coordinator.ConsumersCount() == 0 {
+			consumer.options.client.Close()
+		}
 	}
 
 	if consumer.onClose != nil {
