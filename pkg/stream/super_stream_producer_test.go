@@ -2,15 +2,16 @@ package stream
 
 import (
 	"fmt"
+	"math/rand"
+	"sync"
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
-	"math/rand"
-	"sync"
-	"time"
+	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 )
 
 type TestingRandomStrategy struct {
@@ -46,8 +47,9 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 			partitions := []string{"invoices-01", "invoices-02", "invoices-03"}
 
 			msg := amqp.NewMessage(make([]byte, 0))
-			msg.ApplicationProperties = map[string]interface{}{"routingKey": key}
-			msg.MarshalBinary()
+			msg.ApplicationProperties = map[string]any{"routingKey": key}
+			_, err := msg.MarshalBinary()
+			Expect(err).NotTo(HaveOccurred())
 			routing, err := routingMurmur.Route(msg, partitions)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(routing).To(HaveLen(1))
@@ -150,7 +152,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Expect(superProducer.activeProducers).To(HaveLen(3))
 
 		go func(ch <-chan PartitionPublishConfirm) {
-			//defer GinkgoRecover()
+			// defer GinkgoRecover()
 			for superStreamPublishConfirm := range ch {
 				Expect(superStreamPublishConfirm).NotTo(BeNil())
 				for _, status := range superStreamPublishConfirm.ConfirmationStatus {
@@ -166,9 +168,9 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 
 		}(superProducer.NotifyPublishConfirmation(0))
 
-		for i := 0; i < 20; i++ {
+		for i := range 20 {
 			msg := amqp.NewMessage(make([]byte, 0))
-			msg.ApplicationProperties = map[string]interface{}{"routingKey": fmt.Sprintf("hello%d", i)}
+			msg.ApplicationProperties = map[string]any{"routingKey": fmt.Sprintf("hello%d", i)}
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 		time.Sleep(1 * time.Second)
@@ -344,7 +346,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(route).To(Equal([]string{}))
 
-		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		env.locator.client.Close()
 		Expect(env.DeleteSuperStream(superStream)).NotTo(HaveOccurred())
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
@@ -358,7 +360,7 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		route, err := env.locator.client.queryRoute("not-found", "italy")
 		Expect(err).To(HaveOccurred())
 		Expect(route).To(BeNil())
-		Expect(env.locator.client.Close()).NotTo(HaveOccurred())
+		env.locator.client.Close()
 		Expect(env.Close()).NotTo(HaveOccurred())
 	})
 
@@ -400,13 +402,13 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 
 		for _, country := range countries {
 			msg := amqp.NewMessage(make([]byte, 0))
-			msg.ApplicationProperties = map[string]interface{}{"county": country}
+			msg.ApplicationProperties = map[string]any{"county": country}
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 			// two times the same country in this way we use the cached map
 			Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 		}
 		msg := amqp.NewMessage(make([]byte, 0))
-		msg.ApplicationProperties = map[string]interface{}{"county": "this_country_does_not_exist"}
+		msg.ApplicationProperties = map[string]any{"county": "this_country_does_not_exist"}
 		err = superProducer.Send(msg)
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(Equal(ErrMessageRouteNotFound))
@@ -516,14 +518,18 @@ var _ = Describe("Super Stream Producer", Label("super-stream-producer"), func()
 		go func() {
 			client, ok := env.producers.getCoordinators()["localhost:5552"].clientsPerContext.Load(1)
 			Expect(ok).To(BeTrue())
+			// https://github.com/rabbitmq/rabbitmq-stream-go-client/issues/406
+			// we use internal mutex, we can safely call maybeCleanProducers
+			env.producers.mutex.Lock()
 			client.(*Client).maybeCleanProducers(partitionToClose)
+			env.producers.mutex.Unlock()
 		}()
 
 		// Wait for the partition close event
 		Eventually(partitionCloseEvent).WithTimeout(5 * time.Second).WithPolling(100 * time.Millisecond).Should(Receive())
 
 		// Verify that the partition was successfully reconnected
-		Expect(superProducer.getProducers()).To(HaveLen(partitionsCount))
+		Eventually(superProducer.getProducers()).WithTimeout(5 * time.Second).WithPolling(100 * time.Millisecond).Should(HaveLen(partitionsCount))
 		reconnectedProducer := superProducer.getProducer(partitionToClose)
 		Expect(reconnectedProducer).NotTo(BeNil())
 

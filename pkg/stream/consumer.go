@@ -3,10 +3,11 @@ package stream
 import (
 	"bytes"
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	logs "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	logs "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 type Consumer struct {
@@ -98,7 +99,6 @@ func (consumer *Consumer) setPromotedAsActive(promoted bool) {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
 	consumer.isPromotedAsActive = promoted
-
 }
 
 func (consumer *Consumer) GetLastStoredOffset() int64 {
@@ -199,18 +199,18 @@ type SingleActiveConsumer struct {
 	superStream string
 }
 
-func NewSingleActiveConsumer(ConsumerUpdate ConsumerUpdate) *SingleActiveConsumer {
+func NewSingleActiveConsumer(consumerUpdate ConsumerUpdate) *SingleActiveConsumer {
 	return &SingleActiveConsumer{
 		Enabled:        true,
-		ConsumerUpdate: ConsumerUpdate,
+		ConsumerUpdate: consumerUpdate,
 	}
 }
 
 func newSingleActiveConsumerWithAllParameters(
-	ConsumerUpdate ConsumerUpdate, isEnabled bool, superStream string) *SingleActiveConsumer {
+	consumerUpdate ConsumerUpdate, isEnabled bool, superStream string) *SingleActiveConsumer {
 	return &SingleActiveConsumer{
 		Enabled:        isEnabled,
-		ConsumerUpdate: ConsumerUpdate,
+		ConsumerUpdate: consumerUpdate,
 		superStream:    superStream,
 	}
 }
@@ -251,8 +251,8 @@ func (c *ConsumerOptions) SetConsumerName(consumerName string) *ConsumerOptions 
 	return c
 }
 
-func (c *ConsumerOptions) SetCRCCheck(CRCCheck bool) *ConsumerOptions {
-	c.CRCCheck = CRCCheck
+func (c *ConsumerOptions) SetCRCCheck(crcCheck bool) *ConsumerOptions {
+	c.CRCCheck = crcCheck
 	return c
 }
 
@@ -316,28 +316,22 @@ func (c *Client) credit(subscriptionId byte, credit int16) {
 }
 
 func (consumer *Consumer) Close() error {
-
 	if consumer.getStatus() == closed {
 		return AlreadyClosed
 	}
-	return consumer.close(Event{
+
+	consumer.close(Event{
 		Command:    CommandUnsubscribe,
 		StreamName: consumer.GetStreamName(),
 		Name:       consumer.GetName(),
 		Reason:     UnSubscribe,
 		Err:        nil,
 	})
+
+	return nil
 }
 
-func (consumer *Consumer) close(reason Event) error {
-
-	if consumer.options == nil {
-		// the config is usually set. this check is just to avoid panic and to make some test
-		// easier to write
-		logs.LogDebug("consumer options is nil, the close will be ignored")
-		return nil
-	}
-
+func (consumer *Consumer) close(reason Event) {
 	consumer.cacheStoreOffset()
 	consumer.setStatus(closed)
 
@@ -368,17 +362,19 @@ func (consumer *Consumer) close(reason Event) error {
 			logs.LogWarn("error during consumer unsubscribe:%s", err.Err)
 		}
 	}
-	_, _ = consumer.options.client.coordinator.ExtractConsumerById(consumer.ID)
 
-	if consumer.options != nil && consumer.options.client.coordinator.ConsumersCount() == 0 {
-		_ = consumer.options.client.Close()
+	// it could be nil only during tests
+	if consumer.options.client != nil {
+		_, _ = consumer.options.client.coordinator.ExtractConsumerById(consumer.ID)
+
+		if consumer.options != nil && consumer.options.client.coordinator.ConsumersCount() == 0 {
+			consumer.options.client.Close()
+		}
 	}
 
 	if consumer.onClose != nil {
 		consumer.onClose()
 	}
-
-	return nil
 }
 
 func (consumer *Consumer) cacheStoreOffset() {

@@ -243,7 +243,6 @@ func (producer *Producer) getStatus() int {
 }
 
 func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
-
 	go func() {
 		for {
 			select {
@@ -264,7 +263,6 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 			}
 		}
 	}()
-
 }
 
 func (producer *Producer) sendConfirmationStatus(status []*ConfirmationStatus) {
@@ -287,7 +285,6 @@ func (producer *Producer) closeConfirmationStatus() {
 // processPendingSequencesQueue aggregates the messages sequence in the queue and sends them to the server
 // messages coming form the Send method through the pendingSequencesQueue
 func (producer *Producer) processPendingSequencesQueue() {
-
 	maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
 	go func() {
 		sequenceToSend := make([]*messageSequence, 0)
@@ -334,7 +331,6 @@ func (producer *Producer) processPendingSequencesQueue() {
 		if len(sequenceToSend) > 0 {
 			producer.markUnsentAsUnconfirmed(sequenceToSend)
 		}
-
 	}()
 	logs.LogDebug("producer %d processPendingSequencesQueue closed", producer.id)
 }
@@ -471,28 +467,57 @@ func (producer *Producer) internalBatchSend(messagesSequence []*messageSequence)
 	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
 }
 
-func (producer *Producer) simpleAggregation(messagesSequence []*messageSequence,
-	b *bufio.Writer) {
+func (producer *Producer) simpleAggregation(messagesSequence []*messageSequence, b *bufio.Writer) error {
 	for _, msg := range messagesSequence {
 		r := msg.messageBytes
-		writeBLong(b, msg.publishingId) // publishingId
-		writeBInt(b, len(r))            // len
-		b.Write(r)
+		// publishingId
+		if err := writeBLong(b, msg.publishingId); err != nil {
+			return err
+		}
+
+		// len
+		if err := writeBInt(b, len(r)); err != nil {
+			return err
+		}
+
+		if _, err := b.Write(r); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
-func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bufio.Writer, compression Compression) {
+func (producer *Producer) subEntryAggregation(aggregation subEntries, b *bufio.Writer, compression Compression) error {
 	/// 51 messages
 	// aggregation.items == (5 --> [10] messages) + (1 --> [1]message)
 	for _, entry := range aggregation.items {
-		writeBLong(b, entry.publishingId)
-		writeBByte(b, 0x80|
-			compression.value<<4) // 1=SubBatchEntryType:1,CompressionType:3,Reserved:4,
-		writeBShort(b, int16(len(entry.messages)))
-		writeBInt(b, entry.unCompressedSize)
-		writeBInt(b, entry.sizeInBytes)
-		b.Write(entry.dataInBytes)
+		if err := writeBLong(b, entry.publishingId); err != nil {
+			return fmt.Errorf("failed to write publishingId: %w", err)
+		}
+		// 1=SubBatchEntryType:1,CompressionType:3,Reserved:4,
+		if err := writeBByte(b, 0x80|compression.value<<4); err != nil {
+			return fmt.Errorf("failed to write type and compression byte: %w", err)
+		}
+
+		if err := writeBShort(b, int16(len(entry.messages))); err != nil {
+			return fmt.Errorf("failed to write message count: %w", err)
+		}
+
+		if err := writeBInt(b, entry.unCompressedSize); err != nil {
+			return fmt.Errorf("failed to write uncompressed size: %w", err)
+		}
+
+		if err := writeBInt(b, entry.sizeInBytes); err != nil {
+			return fmt.Errorf("failed to write size in bytes: %w", err)
+		}
+
+		if _, err := b.Write(entry.dataInBytes); err != nil {
+			return fmt.Errorf("failed to write data in bytes: %w", err)
+		}
 	}
+
+	return nil
 }
 
 func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, compression Compression) (subEntries, error) {
@@ -521,7 +546,7 @@ func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, c
 		/// since there is only one publishingId
 		// the others publishingId(s) are linked
 		// so the client confirms all the messages
-		//when the client receives the confirmation form the server
+		// when the client receives the confirmation form the server
 		// see: server_frame:handleConfirm/2
 		// suppose you have 10 messages with publishingId [5..15]
 		// the message 5 is linked to 6,7,8,9..15
@@ -531,7 +556,10 @@ func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, c
 		}
 	}
 
-	compressByValue(compression.value).Compress(&subEntries)
+	err := compressByValue(compression.value).Compress(&subEntries)
+	if err != nil {
+		return subEntries, err
+	}
 
 	return subEntries, nil
 }
@@ -573,29 +601,44 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	frameHeaderLength := initBufferPublishSize
 	length := frameHeaderLength + msgLen
 
-	writeBProtocolHeader(producer.options.client.socket.writer, length, commandPublish)
-	writeBByte(producer.options.client.socket.writer, producerID)
+	if err := writeBProtocolHeader(producer.options.client.socket.writer, length, commandPublish); err != nil {
+		return fmt.Errorf("failed to write protocol header: %w", err)
+	}
+
+	if err := writeBByte(producer.options.client.socket.writer, producerID); err != nil {
+		return fmt.Errorf("failed to write producer ID: %w", err)
+	}
+
 	numberOfMessages := len(messagesSequence)
-	numberOfMessages = numberOfMessages / producer.options.SubEntrySize
+	numberOfMessages /= producer.options.SubEntrySize
 	if len(messagesSequence)%producer.options.SubEntrySize != 0 {
 		numberOfMessages += 1
 	}
 
-	writeBInt(producer.options.client.socket.writer, numberOfMessages) //toExcluded - fromInclude
+	// toExcluded - fromInclude
+	if err := writeBInt(producer.options.client.socket.writer, numberOfMessages); err != nil {
+		return fmt.Errorf("failed to write number of messages: %w", err)
+	}
 
 	if producer.options.isSubEntriesBatching() {
-		producer.subEntryAggregation(aggregation, producer.options.client.socket.writer, producer.options.Compression)
+		err := producer.subEntryAggregation(aggregation, producer.options.client.socket.writer, producer.options.Compression)
+		if err != nil {
+			return fmt.Errorf("failed to write sub entry aggregation: %w", err)
+		}
 	}
 
 	if !producer.options.isSubEntriesBatching() {
-		producer.simpleAggregation(messagesSequence, producer.options.client.socket.writer)
+		err := producer.simpleAggregation(messagesSequence, producer.options.client.socket.writer)
+		if err != nil {
+			return fmt.Errorf("failed to write simple aggregation: %w", err)
+		}
 	}
 
-	err := producer.options.client.socket.writer.Flush() //writeAndFlush(b.Bytes())
+	err := producer.options.client.socket.writer.Flush()
 	if err != nil {
-		logs.LogError("Producer BatchSend error during flush: %s", err)
-		return err
+		return fmt.Errorf("producer BatchSend error during flush: %w", err)
 	}
+
 	return nil
 }
 
@@ -604,7 +647,6 @@ func (producer *Producer) flushUnConfirmedMessages() {
 	if len(timeOut) > 0 {
 		producer.sendConfirmationStatus(timeOut)
 	}
-
 }
 
 // GetLastPublishingId returns the last publishing id sent by the producer given the producer name.
@@ -616,7 +658,6 @@ func (producer *Producer) GetLastPublishingId() (int64, error) {
 
 // Close closes the producer and returns an error if the producer could not be closed.
 func (producer *Producer) Close() error {
-
 	return producer.close(Event{
 		Command:    CommandDeletePublisher,
 		StreamName: producer.GetStreamName(),
@@ -626,7 +667,6 @@ func (producer *Producer) Close() error {
 	})
 }
 func (producer *Producer) close(reason Event) error {
-
 	if producer.getStatus() == closed {
 		return AlreadyClosed
 	}
@@ -664,7 +704,7 @@ func (producer *Producer) close(reason Event) error {
 	_, _ = producer.options.client.coordinator.ExtractProducerById(producer.id)
 
 	if producer.options.client.coordinator.ProducersCount() == 0 {
-		_ = producer.options.client.Close()
+		producer.options.client.Close()
 	}
 
 	if producer.onClose != nil {
@@ -676,7 +716,6 @@ func (producer *Producer) close(reason Event) error {
 
 // stopAndWaitPendingSequencesQueue stops the pendingSequencesQueue and waits for the inflight messages to be sent
 func (producer *Producer) stopAndWaitPendingSequencesQueue() {
-
 	// Stop the pendingSequencesQueue, so the producer can't send messages anymore
 	// but the producer can still handle the inflight messages
 	pendingSequences := producer.pendingSequencesQueue.Stop()
@@ -691,7 +730,6 @@ func (producer *Producer) stopAndWaitPendingSequencesQueue() {
 	producer.waitForInflightMessages()
 	// Close the pendingSequencesQueue. It closes the channel
 	producer.pendingSequencesQueue.Close()
-
 }
 
 func (producer *Producer) waitForInflightMessages() {
@@ -729,33 +767,55 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 	frameHeaderLength := initBufferPublishSize
 	var msgLen int
 	for _, msg := range messagesSequence {
-		msgLen += len(msg.messageBytes) + 8 + 4
+		msgLen += len(msg.messageBytes) + 8 + 4 // 8 for publishingId, 4 for message length
 		if msg.filterValue != "" {
-			msgLen += 2 + len(msg.filterValue)
+			msgLen += 2 + len(msg.filterValue) // 2 for string length, then string bytes
 		}
 	}
 	length := frameHeaderLength + msgLen
 
-	writeBProtocolHeaderVersion(producer.options.client.socket.writer, length, commandPublish, version2)
-	writeBByte(producer.options.client.socket.writer, producerID)
+	if err := writeBProtocolHeaderVersion(producer.options.client.socket.writer, length, commandPublish, version2); err != nil {
+		return fmt.Errorf("failed to write protocol header version: %w", err)
+	}
+
+	if err := writeBByte(producer.options.client.socket.writer, producerID); err != nil {
+		return fmt.Errorf("failed to write producer ID: %w", err)
+	}
+
 	numberOfMessages := len(messagesSequence)
-	writeBInt(producer.options.client.socket.writer, numberOfMessages)
+	if err := writeBInt(producer.options.client.socket.writer, numberOfMessages); err != nil {
+		return fmt.Errorf("failed to write number of messages: %w", err)
+	}
 
 	for _, msg := range messagesSequence {
-		writeBLong(producer.options.client.socket.writer, msg.publishingId)
-		if msg.filterValue != "" {
-			writeBString(producer.options.client.socket.writer, msg.filterValue)
-		} else {
-			writeBInt(producer.options.client.socket.writer, -1)
+		if err := writeBLong(producer.options.client.socket.writer, msg.publishingId); err != nil {
+			return fmt.Errorf("failed to write publishing ID for message: %w", err)
 		}
-		writeBInt(producer.options.client.socket.writer, len(msg.messageBytes)) // len
-		_, err := producer.options.client.socket.writer.Write(msg.messageBytes)
-		if err != nil {
-			return err
+
+		if msg.filterValue != "" {
+			if err := writeBString(producer.options.client.socket.writer, msg.filterValue); err != nil {
+				return fmt.Errorf("failed to write filter value for message: %w", err)
+			}
+		} else {
+			if err := writeBInt(producer.options.client.socket.writer, -1); err != nil {
+				return fmt.Errorf("failed to write -1 for filter value: %w", err)
+			}
+		}
+
+		if err := writeBInt(producer.options.client.socket.writer, len(msg.messageBytes)); err != nil {
+			return fmt.Errorf("failed to write message length: %w", err)
+		}
+
+		if _, err := producer.options.client.socket.writer.Write(msg.messageBytes); err != nil {
+			return fmt.Errorf("failed to write message bytes: %w", err)
 		}
 	}
 
-	return producer.options.client.socket.writer.Flush()
+	if err := producer.options.client.socket.writer.Flush(); err != nil {
+		return fmt.Errorf("failed to flush writer: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) deletePublisher(publisherId byte) error {

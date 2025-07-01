@@ -1,0 +1,46 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - copyloopvar
+    - dogsled
+    - dupl
+    - errcheck
+    - goconst
+    - gocritic
+    - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - prealloc
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+    - whitespace
+  settings:
+      gosec:
+        excludes:
+          - G404
+          - G115
+      revive:
+        rules:
+          - name: unexported-return
+            disabled: true
+          - name: unused-parameter
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: false
+      rewrite-rules:
+        - pattern: interface{}
+          replacement: any

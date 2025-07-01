@@ -2,10 +2,13 @@ package stream
 
 import (
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
 	"time"
+
+	"slices"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 type SuperStreamConsumerOptions struct {
@@ -80,7 +83,7 @@ type SuperStreamConsumer struct {
 	// Only the active consumers are stored here
 	activeConsumers []*Consumer
 	// we need to copy the partitions here since the
-	//activeConsumers is only the consumers active
+	// activeConsumers is only the consumers active
 	// in a normal situation len(partitions) == len(consumers)
 	// but in case of disconnection the len(partitions) can be > len(consumers)
 	// since the consumer is in reconnection
@@ -94,8 +97,7 @@ type SuperStreamConsumer struct {
 	MessagesHandler            MessagesHandler
 }
 
-func newSuperStreamConsumer(env *Environment, superStream string, MessagesHandler MessagesHandler, superStreamConsumerOptions *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {
-
+func newSuperStreamConsumer(env *Environment, superStream string, messagesHandler MessagesHandler, superStreamConsumerOptions *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {
 	if env == nil {
 		return nil, ErrEnvironmentNotDefined
 	}
@@ -114,7 +116,7 @@ func newSuperStreamConsumer(env *Environment, superStream string, MessagesHandle
 		env:                        env,
 		SuperStream:                superStream,
 		SuperStreamConsumerOptions: superStreamConsumerOptions,
-		MessagesHandler:            MessagesHandler,
+		MessagesHandler:            messagesHandler,
 	}, nil
 }
 
@@ -151,13 +153,7 @@ func (s *SuperStreamConsumer) getConsumers() []*Consumer {
 func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSpecification) error {
 	logs.LogDebug("[SuperStreamConsumer] ConnectPartition for partition: %s", partition)
 	s.mutex.Lock()
-	found := false
-	for _, p := range s.partitions {
-		if p == partition {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(s.partitions, partition)
 	if !found {
 		s.mutex.Unlock()
 		return fmt.Errorf("partition %s not found in the super stream %s", partition, s.SuperStream)

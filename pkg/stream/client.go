@@ -182,6 +182,7 @@ func (c *Client) connect() error {
 		}
 
 		if c.broker.isTLS() {
+			//nolint:gosec
 			conf := &tls.Config{}
 			if c.tcpParameters.tlsConfig != nil {
 				conf = c.tcpParameters.tlsConfig
@@ -281,13 +282,12 @@ func (c *Client) peerProperties() (map[string]string, error) {
 }
 
 func (c *Client) authenticate(user string, password string) error {
-
 	saslMechanisms, err := c.getSaslMechanisms()
 	if err != nil {
 		return err
 	}
 	saslMechanism := ""
-	for i := 0; i < len(saslMechanisms); i++ {
+	for i := range saslMechanisms {
 		if saslMechanisms[i] == c.saslConfiguration.Mechanism {
 			saslMechanism = c.saslConfiguration.Mechanism
 			break
@@ -320,7 +320,6 @@ func (c *Client) getSaslMechanisms() ([]string, error) {
 		return nil, errWrite
 	}
 	return data.([]string), nil
-
 }
 
 func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
@@ -401,7 +400,6 @@ func (c *Client) open(virtualHost string) error {
 
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return nil
-
 }
 
 func (c *Client) DeleteStream(streamName string) error {
@@ -447,12 +445,9 @@ func (c *Client) heartBeat() {
 					tickerHeartbeat.Stop()
 					return
 				}
-
 			}
 		}
-
 	}()
-
 }
 
 func (c *Client) sendHeartbeat() {
@@ -467,10 +462,9 @@ func (c *Client) closeHartBeat() {
 		c.doneTimeoutTicker <- struct{}{}
 		close(c.doneTimeoutTicker)
 	})
-
 }
 
-func (c *Client) Close() error {
+func (c *Client) Close() {
 	c.closeHartBeat()
 	c.coordinator.Producers().Range(func(_, p any) bool {
 		producer := p.(*Producer)
@@ -507,7 +501,6 @@ func (c *Client) Close() error {
 	})
 
 	if c.getSocket().isOpen() {
-
 		res := c.coordinator.NewResponse(CommandClose)
 		length := 2 + 2 + 4 + 2 + 2 + len("OK")
 		var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -522,7 +515,6 @@ func (c *Client) Close() error {
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
 	}
 	c.getSocket().shutdown(nil)
-	return nil
 }
 
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
@@ -599,7 +591,6 @@ func (c *Client) declarePublisher(streamName string, options *ProducerOptions, c
 }
 
 func (c *Client) internalDeclarePublisher(streamName string, producer *Producer) responseError {
-
 	publisherReferenceSize := 0
 	if producer.options != nil {
 		if producer.options.Name != "" {
@@ -639,12 +630,10 @@ func (c *Client) internalDeclarePublisher(streamName string, producer *Producer)
 }
 
 func (c *Client) metaData(streams ...string) *StreamsMetadata {
-
 	length := 2 + 2 + 4 + 4 // API code, version, correlation id, size of array
 	for _, stream := range streams {
 		length += 2
 		length += len(stream)
-
 	}
 	resp := c.coordinator.NewResponse(commandMetadata)
 	correlationId := resp.correlationid
@@ -668,7 +657,6 @@ func (c *Client) metaData(streams ...string) *StreamsMetadata {
 }
 
 func (c *Client) queryPublisherSequence(publisherReference string, stream string) (int64, error) {
-
 	length := 2 + 2 + 4 + 2 + len(publisherReference) + 2 + len(stream)
 	resp := c.coordinator.NewResponse(commandQueryPublisherSequence)
 	correlationId := resp.correlationid
@@ -685,11 +673,9 @@ func (c *Client) queryPublisherSequence(publisherReference string, stream string
 	sequence := <-resp.data
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return sequence.(int64), nil
-
 }
 
 func (c *Client) BrokerLeader(stream string) (*Broker, error) {
-
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
 		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
@@ -740,7 +726,6 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 
 	streamMetadata := streamsMetadata.Get(stream)
 	if streamMetadata.responseCode != responseCodeOk {
-
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 
@@ -795,7 +780,6 @@ func (c *Client) DeclareStream(streamName string, options *StreamOptions) error 
 	}
 
 	return c.handleWrite(b.Bytes(), resp).Err
-
 }
 
 func (c *Client) queryOffset(consumerName string, streamName string) (int64, error) {
@@ -928,7 +912,7 @@ func (c *Client) declareSubscriber(streamName string,
 	}
 
 	// copy the option offset to the consumer offset
-	// the option.offset won't change ( in case we need to retrive the original configuration)
+	// the option.offset won't change ( in case we need to retrieve the original configuration)
 	// consumer.current offset will be moved when reading
 	if !options.IsSingleActiveConsumerEnabled() && options.Offset.isOffset() {
 		consumer.setCurrentOffset(options.Offset.offset)
@@ -963,7 +947,6 @@ func (c *Client) declareSubscriber(streamName string,
 		for k, v := range consumerProperties {
 			length += 2 + len(k)
 			length += 2 + len(v)
-
 		}
 	}
 
@@ -1007,7 +990,6 @@ func (c *Client) declareSubscriber(streamName string,
 	go func() {
 		for {
 			select {
-
 			case chunk, ok := <-consumer.chunkForConsumer:
 				if !ok {
 					return
@@ -1049,13 +1031,11 @@ func (c *Client) declareSubscriber(streamName string,
 				}
 			}
 		}
-
 	}()
 	return consumer, err.Err
 }
 
 func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
-
 	resp := c.coordinator.NewResponse(commandStreamStatus)
 	correlationId := resp.correlationid
 
@@ -1081,7 +1061,6 @@ func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
 }
 
 func (c *Client) DeclareSuperStream(superStream string, options SuperStreamOptions) error {
-
 	if !c.availableFeatures.is313OrMore {
 		return fmt.Errorf("declaring super stream via client API not supported, server version is less than 3.13.0")
 	}
@@ -1133,7 +1112,6 @@ func (c *Client) DeclareSuperStream(superStream string, options SuperStreamOptio
 }
 
 func (c *Client) DeleteSuperStream(superStream string) error {
-
 	if !c.availableFeatures.is313OrMore {
 		return fmt.Errorf("deleting super stream not supported via client API, server version is less than 3.13.0")
 	}
@@ -1167,7 +1145,6 @@ func (c *Client) QueryPartitions(superStream string) ([]string, error) {
 }
 
 func (c *Client) queryRoute(superStream string, routingKey string) ([]string, error) {
-
 	length := 2 + 2 + 4 + 2 + len(superStream) + 2 + len(routingKey)
 	resp := c.coordinator.NewResponse(commandQueryRoute, superStream)
 	correlationId := resp.correlationid
@@ -1184,5 +1161,4 @@ func (c *Client) queryRoute(superStream string, routingKey string) ([]string, er
 	data := <-resp.data
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return data.([]string), nil
-
 }

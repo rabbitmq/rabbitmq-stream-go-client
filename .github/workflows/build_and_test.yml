@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        go: [ '1.22']
+        go: ['1.24']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,6 +52,8 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
+      - name: Install golangci-lint 
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
       - run: make test GO_VERSION=${{ steps.setup_go.outputs.go-version }}
       - uses: actions/checkout@main
       - uses: codecov/codecov-action@v5

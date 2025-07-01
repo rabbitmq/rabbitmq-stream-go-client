@@ -9,7 +9,6 @@ type StreamStats struct {
 
 func newStreamStats(stats map[string]int64, streamName string) *StreamStats {
 	return &StreamStats{stats: stats, streamName: streamName}
-
 }
 
 // FirstOffset - The first offset in the stream.
@@ -23,7 +22,7 @@ func (s *StreamStats) FirstOffset() (int64, error) {
 }
 
 // Deprecated: The method name may be misleading.
-// It does not indicate the last offset of the stream. It indicates the last uncommited chunk id. This information is not necessary. The user should use CommittedChunkId().
+// It does not indicate the last offset of the stream. It indicates the last uncommitted chunk id. This information is not necessary. The user should use CommittedChunkId().
 func (s *StreamStats) LastOffset() (int64, error) {
 	if s.stats["last_chunk_id"] == -1 {
 		return -1, fmt.Errorf("LastOffset not found for %s", s.streamName)

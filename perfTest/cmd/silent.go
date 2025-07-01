@@ -3,6 +3,12 @@ package cmd
 import (
 	"encoding/binary"
 	"fmt"
+	"math/rand"
+	"os"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
@@ -11,13 +17,9 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/text/language"
 	gomsg "golang.org/x/text/message"
-	"math/rand"
-	"os"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
+var randomSource = rand.New(rand.NewSource(time.Now().UnixNano()))
 var wg sync.WaitGroup
 
 func newSilent() *cobra.Command {
@@ -25,7 +27,7 @@ func newSilent() *cobra.Command {
 		Use:   "silent",
 		Short: "Start the performance test (default command)",
 
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			wg.Add(1)
 			err := startSimulation()
 			if err == nil {
@@ -40,12 +42,12 @@ func newSilent() *cobra.Command {
 var (
 	publisherMessageCount int32
 	consumerMessageCount  int32
-	//consumerMessageCountPerLatency int32
+	// consumerMessageCountPerLatency int32
 	totalLatency             int64
 	confirmedMessageCount    int32
 	notConfirmedMessageCount int32
 	consumersCloseCount      int32
-	//connections           []*stream.Client
+	// connections           []*stream.Client
 	simulEnvironment *stream.Environment
 )
 
@@ -54,14 +56,11 @@ func checkRunDuration() {
 		start := time.Now()
 		ticker := time.NewTicker(10 * time.Second)
 		go func() {
-			for {
-				select {
-				case _ = <-ticker.C:
-					v := time.Now().Sub(start).Seconds()
-					if v >= float64(runDuration) {
-						logInfo("Stopping after %d seconds", runDuration)
-						os.Exit(0)
-					}
+			for range ticker.C {
+				v := time.Since(start).Seconds()
+				if v >= float64(runDuration) {
+					logInfo("Stopping after %d seconds", runDuration)
+					os.Exit(0)
 				}
 			}
 		}()
@@ -73,55 +72,47 @@ func printStats() {
 		start := time.Now()
 		ticker := time.NewTicker(1 * time.Second)
 		go func() {
-			for {
-				select {
-				case _ = <-ticker.C:
-					v := time.Now().Sub(start).Milliseconds()
-					PMessagesPerSecond := float64(0)
-					if publisherMessageCount > 0 {
-						PMessagesPerSecond = float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
-					}
-
-					averageLatency := int64(0)
-					CMessagesPerSecond := float64(0)
-					if atomic.LoadInt32(&consumerMessageCount) > 0 {
-						CMessagesPerSecond = float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
-						averageLatency = totalLatency / int64(atomic.LoadInt32(&consumerMessageCount))
-					}
-
-					ConfirmedMessagesPerSecond := float64(0)
-					if atomic.LoadInt32(&confirmedMessageCount) > 0 {
-						ConfirmedMessagesPerSecond = float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
-					}
-					p := gomsg.NewPrinter(language.English)
-					logInfo(p.Sprintf("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %2v | %2v | latency: %d ms",
-						PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), averageLatency))
+			for range ticker.C {
+				v := time.Since(start).Milliseconds()
+				PMessagesPerSecond := float64(0)
+				if publisherMessageCount > 0 {
+					PMessagesPerSecond = float64(atomic.LoadInt32(&publisherMessageCount)) / float64(v) * 1000
 				}
-			}
 
+				averageLatency := int64(0)
+				CMessagesPerSecond := float64(0)
+				if atomic.LoadInt32(&consumerMessageCount) > 0 {
+					CMessagesPerSecond = float64(atomic.LoadInt32(&consumerMessageCount)) / float64(v) * 1000
+					averageLatency = totalLatency / int64(atomic.LoadInt32(&consumerMessageCount))
+				}
+
+				ConfirmedMessagesPerSecond := float64(0)
+				if atomic.LoadInt32(&confirmedMessageCount) > 0 {
+					ConfirmedMessagesPerSecond = float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
+				}
+				p := gomsg.NewPrinter(language.English)
+				logInfo(p.Sprintf("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %2v | %2v | latency: %d ms",
+					PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), averageLatency))
+			}
 		}()
+
 		tickerReset := time.NewTicker(1 * time.Minute)
 		go func() {
-			for {
-				select {
-				case _ = <-tickerReset.C:
-					logInfo("***********Resetting counters***********")
-					atomic.SwapInt32(&consumerMessageCount, 0)
-					atomic.SwapInt32(&notConfirmedMessageCount, 0)
-					atomic.SwapInt32(&confirmedMessageCount, 0)
-					atomic.SwapInt32(&publisherMessageCount, 0)
-					atomic.SwapInt64(&totalLatency, 0)
-					start = time.Now()
-				}
+			for range tickerReset.C {
+				logInfo("***********Resetting counters***********")
+				atomic.SwapInt32(&consumerMessageCount, 0)
+				atomic.SwapInt32(&notConfirmedMessageCount, 0)
+				atomic.SwapInt32(&confirmedMessageCount, 0)
+				atomic.SwapInt32(&publisherMessageCount, 0)
+				atomic.SwapInt64(&totalLatency, 0)
+				start = time.Now()
 			}
-
 		}()
 	}
 }
 
 func decodeBody() string {
 	if publishers > 0 {
-
 		if fixedBody > 0 {
 			return fmt.Sprintf("Body sz: %d", fixedBody+8)
 		}
@@ -196,10 +187,8 @@ func checkErr(err error) {
 		}
 	}
 }
-
 func randomSleep() {
-	rand.Seed(time.Now().UnixNano())
-	n := rand.Intn(500)
+	n := randomSource.Intn(500)
 	time.Sleep(time.Duration(n) * time.Millisecond)
 }
 
@@ -239,7 +228,6 @@ func initStreams() error {
 		streamMetadata, err := env.StreamMetaData(streamName)
 		checkErr(err)
 		logInfo("stream %s, meta data: %s", streamName, streamMetadata)
-
 	}
 	logInfo("End Init streams :%s\n", streams)
 	return env.Close()
@@ -258,7 +246,6 @@ func handlePublishConfirms(messageConfirm []*stream.ConfirmationStatus) {
 }
 
 func startPublisher(streamName string) error {
-
 	producerOptions := stream.NewProducerOptions()
 
 	if subEntrySize > 1 {
@@ -292,20 +279,17 @@ func startPublisher(streamName string) error {
 
 	go func(prod *ha.ReliableProducer) {
 		for {
-
 			if rate > 0 {
 				rateWithBatchSize := float64(rate) / float64(batchSize)
 				sleepAfterMessage := float64(time.Second) / rateWithBatchSize
 				time.Sleep(time.Duration(sleepAfterMessage))
-
 			}
 
 			if variableRate > 0 {
-				rand.Seed(time.Now().UnixNano())
-				n := rand.Intn(variableRate)
+				n := randomSource.Intn(variableRate)
 				sleep := float64(batchSize) / float64(n)
 
-				sleep = sleep * 1000
+				sleep *= 1000
 				if sleep > 3000 {
 					sleep = 0
 				}
@@ -323,25 +307,21 @@ func startPublisher(streamName string) error {
 				checkErr(err)
 			}
 			atomic.AddInt32(&publisherMessageCount, int32(len(messages)))
-
 		}
 	}(rPublisher)
 
 	return nil
-
 }
 
 func buildMessages() []message.StreamMessage {
-	var arr []message.StreamMessage
-	for z := 0; z < batchSize; z++ {
+	arr := make([]message.StreamMessage, 0, batchSize)
+	for range batchSize {
 		var body []byte
 		if fixedBody > 0 {
 			body = make([]byte, fixedBody)
-		} else {
-			if variableBody > 0 {
-				r := rand.New(rand.NewSource(time.Now().Unix()))
-				body = make([]byte, r.Intn(variableBody))
-			}
+		} else if variableBody > 0 {
+			r := rand.New(rand.NewSource(time.Now().Unix()))
+			body = make([]byte, r.Intn(variableBody))
 		}
 		var buff = make([]byte, 8)
 		sentTime := time.Now().UnixMilli()
@@ -354,7 +334,6 @@ func buildMessages() []message.StreamMessage {
 }
 
 func startPublishers() error {
-
 	logInfo("Starting %d publishers...", publishers)
 
 	for _, streamName := range streams {
@@ -382,15 +361,12 @@ func handleConsumerClose(channelClose stream.ChannelClose) {
 		}
 		checkErr(err)
 	}()
-
 }
 func startConsumer(consumerName string, streamName string) error {
-
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-
+	handleMessages := func(_ stream.ConsumerContext, message *amqp.Message) {
 		sentTime := binary.BigEndian.Uint64(message.GetData()[:8]) // Decode the timestamp
 		startTimeFromMessage := time.UnixMilli(int64(sentTime))
-		latency := time.Now().Sub(startTimeFromMessage).Milliseconds()
+		latency := time.Since(startTimeFromMessage).Milliseconds()
 		totalLatency += latency
 		atomic.AddInt32(&consumerMessageCount, 1)
 	}
@@ -403,8 +379,7 @@ func startConsumer(consumerName string, streamName string) error {
 	case "next":
 		offsetSpec = stream.OffsetSpecification{}.Next()
 	case "random":
-		rand.Seed(time.Now().UnixNano())
-		n := rand.Intn(3)
+		n := randomSource.Intn(3)
 		switch n {
 		case 0:
 			offsetSpec = stream.OffsetSpecification{}.First()
@@ -447,7 +422,6 @@ func startConsumers() error {
 				return err
 			}
 			checkErr(err)
-
 		}
 	}
 	return nil

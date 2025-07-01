@@ -1,25 +1,25 @@
-//MIT License
+// MIT License
 //
-//Copyright (C) 2017 Kale Blankenship
-//Portions Copyright (C) Microsoft Corporation
+// Copyright (C) 2017 Kale Blankenship
+// Portions Copyright (C) Microsoft Corporation
 //
-//Permission is hereby granted, free of charge, to any person obtaining a copy
-//of this software and associated documentation files (the "Software"), to deal
-//in the Software without restriction, including without limitation the rights
-//to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-//copies of the Software, and to permit persons to whom the Software is
-//furnished to do so, subject to the following conditions:
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
 //
-//The above copyright notice and this permission notice shall be included in all
-//copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
 //
-//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-//AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-//OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-//SOFTWARE
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE
 
 package amqp
 
@@ -27,6 +27,7 @@ import (
 	"encoding/binary"
 	"math"
 	"reflect"
+	"slices"
 	"time"
 )
 
@@ -50,7 +51,7 @@ type unmarshaler interface {
 // Common map types (map[string]string, map[Symbol]interface{}, and
 // map[interface{}]interface{}), will be decoded via conversion to the mapStringAny,
 // mapSymbolAny, and mapAnyAny types.
-func unmarshal(r *buffer, i interface{}) error {
+func unmarshal(r *buffer, i any) error {
 	if tryReadNull(r) {
 		return nil
 	}
@@ -188,13 +189,13 @@ func unmarshal(r *buffer, i interface{}) error {
 		return (*arrayTimestamp)(t).unmarshal(r)
 	case *[]UUID:
 		return (*arrayUUID)(t).unmarshal(r)
-	case *[]interface{}:
+	case *[]any:
 		return (*list)(t).unmarshal(r)
-	case *map[interface{}]interface{}:
+	case *map[any]any:
 		return (*mapAnyAny)(t).unmarshal(r)
-	case *map[string]interface{}:
+	case *map[string]any:
 		return (*mapStringAny)(t).unmarshal(r)
-	case *map[symbol]interface{}:
+	case *map[symbol]any:
 		return (*mapSymbolAny)(t).unmarshal(r)
 	case *deliveryState:
 		type_, err := peekMessageType(r.bytes())
@@ -218,7 +219,7 @@ func unmarshal(r *buffer, i interface{}) error {
 		}
 		return unmarshal(r, *t)
 
-	case *interface{}:
+	case *any:
 		v, err := readAny(r)
 		if err != nil {
 			return err
@@ -305,7 +306,7 @@ func unmarshalComposite(r *buffer, type_ amqpType, fields ...unmarshalField) err
 // An optional nullHandler can be set. If the composite field being unmarshaled
 // is null and handleNull is not nil, nullHandler will be called.
 type unmarshalField struct {
-	field      interface{}
+	field      any
 	handleNull nullHandler
 }
 
@@ -483,10 +484,10 @@ func readBinary(r *buffer) ([]byte, error) {
 	if !ok {
 		return nil, errorNew("invalid length")
 	}
-	return append([]byte(nil), buf...), nil
+	return slices.Clone(buf), nil
 }
 
-func readAny(r *buffer) (interface{}, error) {
+func readAny(r *buffer) (any, error) {
 	if tryReadNull(r) {
 		return nil, nil
 	}
@@ -587,8 +588,8 @@ func readAny(r *buffer) (interface{}, error) {
 	}
 }
 
-func readAnyMap(r *buffer) (interface{}, error) {
-	var m map[interface{}]interface{}
+func readAnyMap(r *buffer) (any, error) {
+	var m map[any]any
 	err := (*mapAnyAny)(&m).unmarshal(r)
 	if err != nil {
 		return nil, err
@@ -611,7 +612,7 @@ Loop:
 	}
 
 	if stringKeys {
-		mm := make(map[string]interface{}, len(m))
+		mm := make(map[string]any, len(m))
 		for key, value := range m {
 			switch key := key.(type) {
 			case string:
@@ -626,13 +627,13 @@ Loop:
 	return m, nil
 }
 
-func readAnyList(r *buffer) (interface{}, error) {
-	var a []interface{}
+func readAnyList(r *buffer) (any, error) {
+	var a []any
 	err := (*list)(&a).unmarshal(r)
 	return a, err
 }
 
-func readAnyArray(r *buffer) (interface{}, error) {
+func readAnyArray(r *buffer) (any, error) {
 	// get the array type
 	buf := r.bytes()
 	if len(buf) < 1 {
@@ -722,7 +723,7 @@ func readAnyArray(r *buffer) (interface{}, error) {
 	}
 }
 
-func readComposite(r *buffer) (interface{}, error) {
+func readComposite(r *buffer) (any, error) {
 	buf := r.bytes()
 
 	if len(buf) < 2 {

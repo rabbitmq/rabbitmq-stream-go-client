@@ -2,18 +2,19 @@ package stream
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
 type Coordinator struct {
 	counter          int
 	producers        *sync.Map
 	consumers        *sync.Map
-	responses        map[interface{}]interface{}
+	responses        map[any]any
 	nextItemProducer uint8
 	nextItemConsumer uint8
 	mutex            *sync.Mutex
@@ -36,7 +37,7 @@ type chunkInfo struct {
 
 type Response struct {
 	code               chan Code
-	data               chan interface{}
+	data               chan any
 	commandDescription string
 	correlationid      int
 }
@@ -45,7 +46,7 @@ func NewCoordinator() *Coordinator {
 	return &Coordinator{mutex: &sync.Mutex{},
 		producers: &sync.Map{},
 		consumers: &sync.Map{},
-		responses: make(map[interface{}]interface{})}
+		responses: make(map[any]any)}
 }
 
 // producersEnvironment
@@ -81,13 +82,13 @@ func (coordinator *Coordinator) NewProducer(
 	return producer, err
 }
 
-func (coordinator *Coordinator) RemoveConsumerById(id interface{}, reason Event) error {
+func (coordinator *Coordinator) RemoveConsumerById(id any, reason Event) error {
 	consumer, err := coordinator.ExtractConsumerById(id)
 	if err != nil {
 		return err
 	}
-	return consumer.close(reason)
-
+	consumer.close(reason)
+	return nil
 }
 func (coordinator *Coordinator) Consumers() *sync.Map {
 	return coordinator.consumers
@@ -101,7 +102,7 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 	return producer.close(reason)
 }
 
-func (coordinator *Coordinator) RemoveResponseById(id interface{}) error {
+func (coordinator *Coordinator) RemoveResponseById(id any) error {
 	resp, err := coordinator.GetResponseByName(fmt.Sprintf("%d", id))
 	if err != nil {
 		return err
@@ -122,7 +123,7 @@ func newResponse(commandDescription string) *Response {
 	res := &Response{}
 	res.commandDescription = commandDescription
 	res.code = make(chan Code, 1)
-	res.data = make(chan interface{}, 1)
+	res.data = make(chan any, 1)
 	return res
 }
 
@@ -154,12 +155,13 @@ func (coordinator *Coordinator) NewResponse(commandId uint16, info ...string) *R
 func (coordinator *Coordinator) GetResponseByName(id string) (*Response, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	if coordinator.responses[id] == nil {
-		return nil, errors.New("Response #{id} not found ")
+	c := coordinator.responses[id]
+	if c == nil {
+		return nil, fmt.Errorf("Response %s not found", id)
 	}
-	switch coordinator.responses[id].(type) {
-	case *Response:
-		return coordinator.responses[id].(*Response), nil
+
+	if resp, ok := c.(*Response); ok {
+		return resp, nil
 	}
 
 	return nil, nil
@@ -177,12 +179,17 @@ func (coordinator *Coordinator) RemoveResponseByName(id string) error {
 }
 
 // Consumer functions
-func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
-	parameters *ConsumerOptions, cleanUp func()) *Consumer {
+func (coordinator *Coordinator) NewConsumer(
+	messagesHandler MessagesHandler,
+	parameters *ConsumerOptions,
+	cleanUp func(),
+) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextConsumerItem()
-	var item = &Consumer{ID: lastId, options: parameters,
+	var item = &Consumer{
+		ID:                   lastId,
+		options:              parameters,
 		response:             newResponse(lookUpCommand(commandSubscribe)),
 		status:               open,
 		mutex:                &sync.Mutex{},
@@ -191,7 +198,7 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 		lastStoredOffset:     -1, // because 0 is a valid value for the offset
 		isPromotedAsActive:   true,
 		lastAutoCommitStored: time.Now(),
-		chunkForConsumer:     make(chan chunkInfo, 100),
+		chunkForConsumer:     make(chan chunkInfo, parameters.initialCredits),
 		onClose:              cleanUp,
 	}
 
@@ -200,7 +207,7 @@ func (coordinator *Coordinator) NewConsumer(messagesHandler MessagesHandler,
 	return item
 }
 
-func (coordinator *Coordinator) GetConsumerById(id interface{}) (*Consumer, error) {
+func (coordinator *Coordinator) GetConsumerById(id any) (*Consumer, error) {
 	if consumer, exists := coordinator.consumers.Load(id); exists {
 		return consumer.(*Consumer), nil
 	}
@@ -208,7 +215,7 @@ func (coordinator *Coordinator) GetConsumerById(id interface{}) (*Consumer, erro
 	return nil, errors.New("item #{id} not found ")
 }
 
-func (coordinator *Coordinator) ExtractConsumerById(id interface{}) (*Consumer, error) {
+func (coordinator *Coordinator) ExtractConsumerById(id any) (*Consumer, error) {
 	if consumer, exists := coordinator.consumers.LoadAndDelete(id); exists {
 		return consumer.(*Consumer), nil
 	}
@@ -228,7 +235,7 @@ func (coordinator *Coordinator) ConsumersCount() int {
 	return coordinator.countSyncMap(coordinator.consumers)
 }
 
-func (coordinator *Coordinator) GetProducerById(id interface{}) (*Producer, error) {
+func (coordinator *Coordinator) GetProducerById(id any) (*Producer, error) {
 	if producer, exists := coordinator.producers.Load(id); exists {
 		return producer.(*Producer), nil
 	}
@@ -236,7 +243,7 @@ func (coordinator *Coordinator) GetProducerById(id interface{}) (*Producer, erro
 	return nil, errors.New("item #{id} not found ")
 }
 
-func (coordinator *Coordinator) ExtractProducerById(id interface{}) (*Producer, error) {
+func (coordinator *Coordinator) ExtractProducerById(id any) (*Producer, error) {
 	if producer, exists := coordinator.producers.LoadAndDelete(id); exists {
 		return producer.(*Producer), nil
 	}
@@ -245,7 +252,7 @@ func (coordinator *Coordinator) ExtractProducerById(id interface{}) (*Producer, 
 }
 
 // general functions
-func (coordinator *Coordinator) getById(id interface{}, refmap map[interface{}]interface{}) (interface{}, error) {
+func (coordinator *Coordinator) getById(id any, refmap map[any]any) (any, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	if refmap[id] == nil {
@@ -254,7 +261,7 @@ func (coordinator *Coordinator) getById(id interface{}, refmap map[interface{}]i
 	return refmap[id], nil
 }
 
-func (coordinator *Coordinator) removeById(id interface{}, refmap map[interface{}]interface{}) error {
+func (coordinator *Coordinator) removeById(id any, refmap map[any]any) error {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	if refmap[id] == nil {
@@ -267,7 +274,7 @@ func (coordinator *Coordinator) removeById(id interface{}, refmap map[interface{
 
 func (coordinator *Coordinator) countSyncMap(refmap *sync.Map) int {
 	count := 0
-	refmap.Range(func(_, _ interface{}) bool {
+	refmap.Range(func(_, _ any) bool {
 		count++
 		return true
 	})
@@ -296,7 +303,7 @@ func (coordinator *Coordinator) getNextConsumerItem() (uint8, error) {
 func (coordinator *Coordinator) reuseFreeId(refMap *sync.Map) (byte, error) {
 	maxValue := int(^uint8(0))
 	var result byte
-	for i := 0; i < maxValue; i++ {
+	for i := range maxValue {
 		if _, exists := refMap.Load(byte(i)); !exists {
 			return byte(i), nil
 		}
@@ -313,13 +320,13 @@ func (coordinator *Coordinator) Producers() *sync.Map {
 }
 
 func (coordinator *Coordinator) Close() {
-	coordinator.producers.Range(func(_, producer interface{}) bool {
+	coordinator.producers.Range(func(_, producer any) bool {
 		_ = producer.(*Producer).Close()
 
 		return true
 	})
 
-	coordinator.consumers.Range(func(_, consumer interface{}) bool {
+	coordinator.consumers.Range(func(_, consumer any) bool {
 		_ = consumer.(*Consumer).Close()
 
 		return true

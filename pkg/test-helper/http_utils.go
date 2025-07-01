@@ -1,11 +1,13 @@
 package test_helper
 
 import (
+	"context"
 	"encoding/json"
-	"github.com/pkg/errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
+
+	"github.com/pkg/errors"
 )
 
 type client_properties struct {
@@ -73,8 +75,9 @@ func httpDelete(url, username, password string) (string, error) {
 }
 
 func baseCall(url, username, password string, method string) (string, error) {
+	ctx := context.Background()
 	var client http.Client
-	req, err := http.NewRequest(method, url, nil)
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -86,10 +89,11 @@ func baseCall(url, username, password string, method string) (string, error) {
 		return "", err3
 	}
 
+	//nolint:errcheck
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 { // OK
-		bodyBytes, err2 := ioutil.ReadAll(resp.Body)
+		bodyBytes, err2 := io.ReadAll(resp.Body)
 		if err2 != nil {
 			return "", err2
 		}
@@ -101,5 +105,4 @@ func baseCall(url, username, password string, method string) (string, error) {
 	}
 
 	return "", errors.New(strconv.Itoa(resp.StatusCode))
-
 }

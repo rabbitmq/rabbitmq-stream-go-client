@@ -1,12 +1,13 @@
 package stream
 
 import (
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
-	"sync/atomic"
-	"time"
 )
 
 func SendMessages(testEnvironment *Environment, streamName string) {
@@ -38,10 +39,10 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 	It("Validate Single Active Consumer", func() {
 		// name not set
 		_, err := testEnvironment.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
+			func(_ ConsumerContext, _ *amqp.Message) {
 
 			}, NewConsumerOptions().SetSingleActiveConsumer(NewSingleActiveConsumer(
-				func(stream string, isActive bool) OffsetSpecification {
+				func(stream string, _ bool) OffsetSpecification {
 					Expect(stream).To(Equal(streamName))
 					return OffsetSpecification{}.First()
 				},
@@ -50,11 +51,11 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 
 		// string name contains spaces
 		_, err2 := testEnvironment.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
+			func(_ ConsumerContext, _ *amqp.Message) {
 
 			},
 			NewConsumerOptions().SetConsumerName("     ").SetSingleActiveConsumer(NewSingleActiveConsumer(
-				func(_ string, isActive bool) OffsetSpecification {
+				func(_ string, _ bool) OffsetSpecification {
 					return OffsetSpecification{}.Last()
 				})))
 		Expect(err2).To(HaveOccurred())
@@ -68,12 +69,12 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		// so we can validate it
 		// This method is not thread safe and should be used only for testing purposes
 		testEnvironment.locator.client.availableFeatures.brokerSingleActiveConsumerEnabled = false
-		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {
 
 		}
 
 		_, err = testEnvironment.locator.client.DeclareSubscriber(streamName, handleMessages, NewConsumerOptions().SetSingleActiveConsumer(
-			NewSingleActiveConsumer(func(_ string, isActive bool) OffsetSpecification {
+			NewSingleActiveConsumer(func(_ string, _ bool) OffsetSpecification {
 				return OffsetSpecification{}.Last()
 			}),
 		))
@@ -81,9 +82,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 
 		// Consumer update is nil and it must be set
 		_, err4 := testEnvironment.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
-
-			},
+			func(_ ConsumerContext, _ *amqp.Message) {},
 			NewConsumerOptions().SetSingleActiveConsumer(NewSingleActiveConsumer(nil)))
 		Expect(err4).To(HaveOccurred())
 	})
@@ -96,11 +95,11 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		var c1ReceivedMessages int32
 		var c2ReceivedMessages int32
 		c1, err := testEnvironment.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
+			func(_ ConsumerContext, _ *amqp.Message) {
 				atomic.AddInt32(&c1ReceivedMessages, 1)
 			}, NewConsumerOptions().SetConsumerName(appName).
 				SetSingleActiveConsumer(NewSingleActiveConsumer(
-					func(stream string, isActive bool) OffsetSpecification {
+					func(stream string, _ bool) OffsetSpecification {
 						Expect(stream).To(Equal(streamName))
 						return OffsetSpecification{}.First()
 					},
@@ -110,13 +109,13 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		Expect(c1.isActive()).To(BeTrue())
 
 		c2, err := testEnvironment.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
+			func(_ ConsumerContext, _ *amqp.Message) {
 				// Here should never receive the messages
 				// c2ReceivedMessages should be == 0
 				atomic.AddInt32(&c2ReceivedMessages, 1)
 			}, NewConsumerOptions().SetConsumerName(appName).
 				SetSingleActiveConsumer(NewSingleActiveConsumer(
-					func(_ string, isActive bool) OffsetSpecification {
+					func(_ string, _ bool) OffsetSpecification {
 						return OffsetSpecification{}.First()
 					},
 				)))
@@ -144,11 +143,11 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		var c1ReceivedMessages int32
 		var c2ReceivedMessages int32
 		c1, err := testEnvironment.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
+			func(_ ConsumerContext, _ *amqp.Message) {
 				atomic.AddInt32(&c1ReceivedMessages, 1)
 			}, NewConsumerOptions().SetConsumerName(appName).
 				SetSingleActiveConsumer(NewSingleActiveConsumer(
-					func(stream string, isActive bool) OffsetSpecification {
+					func(_ string, _ bool) OffsetSpecification {
 						return OffsetSpecification{}.First()
 					},
 				)))
@@ -157,11 +156,11 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		Expect(c1.isActive()).To(BeTrue())
 
 		c2, err := testEnvironment.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
+			func(_ ConsumerContext, _ *amqp.Message) {
 				atomic.AddInt32(&c2ReceivedMessages, 1)
 			}, NewConsumerOptions().SetConsumerName(appName).
 				SetSingleActiveConsumer(NewSingleActiveConsumer(
-					func(stream string, isActive bool) OffsetSpecification {
+					func(_ string, _ bool) OffsetSpecification {
 						// Here the consumer is promoted it will restart from
 						// offset 10
 						// so c2ReceivedMessages should be 20
@@ -193,7 +192,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		producer, err := testEnvironment.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		consumerUpdate := func(streamName string, isActive bool) OffsetSpecification {
+		consumerUpdate := func(streamName string, _ bool) OffsetSpecification {
 			offset, err := testEnvironment.QueryOffset("my_consumer", streamName)
 			if err != nil {
 				return OffsetSpecification{}.First()
@@ -204,7 +203,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 
 		var messagesReceived int32 = 0
 		consumerA, err := testEnvironment.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
+			func(_ ConsumerContext, _ *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
 			}, NewConsumerOptions().
 				SetSingleActiveConsumer(NewSingleActiveConsumer(consumerUpdate)).
@@ -229,7 +228,7 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 
 		messagesReceived = 0
 		consumerB, err := testEnvironment.NewConsumer(streamName,
-			func(consumerContext ConsumerContext, message *amqp.Message) {
+			func(_ ConsumerContext, _ *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
 			}, NewConsumerOptions().
 				SetConsumerName("my_consumer").

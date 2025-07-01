@@ -1,9 +1,10 @@
 package stream
 
 import (
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"sync"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 // unConfirmed is a structure that holds unconfirmed messages
@@ -32,7 +33,6 @@ func newUnConfirmed(maxSize int) *unConfirmed {
 }
 
 func (u *unConfirmed) addFromSequences(messages []*messageSequence, producerID uint8) {
-
 	if u.size() > u.maxSize {
 		u.blockSignal.L.Lock()
 		u.blockSignal.Wait()
@@ -50,7 +50,6 @@ func (u *unConfirmed) addFromSequences(messages []*messageSequence, producerID u
 		}
 	}
 	u.mutexMessageMap.Unlock()
-
 }
 
 func (u *unConfirmed) link(from int64, to int64) {

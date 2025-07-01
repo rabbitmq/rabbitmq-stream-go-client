@@ -45,17 +45,11 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	if options.TCPParameters == nil {
 		options.TCPParameters = newTCPParameterDefault()
-
 	}
 
 	client := newClient("go-stream-locator", nil,
 		options.TCPParameters, options.SaslConfiguration, options.RPCTimeout)
-	defer func(client *Client) {
-		err := client.Close()
-		if err != nil {
-			return
-		}
-	}(client)
+	defer client.Close()
 
 	// we put a limit to the heartbeat.
 	// it doesn't make sense to have a heartbeat less than 3 seconds
@@ -79,7 +73,6 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	}
 	var connectionError error
 	for idx, parameter := range options.ConnectionParameters {
-
 		if parameter.Uri != "" {
 			u, err := url.Parse(parameter.Uri)
 			if err != nil {
@@ -113,7 +106,6 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 			}
 			logs.LogError("New environment creation. Can't connect to the broker: %s port: %s. %s",
 				parameter.Host, parameter.Port, nextIfThereIs)
-
 		}
 	}
 
@@ -143,17 +135,16 @@ func (env *Environment) maybeReconnectLocator() error {
 		sleepTime := rand.Intn(5000) + (tentatives * 1000)
 
 		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", c.broker.Scheme, c.broker.User, c.broker.Host, c.broker.Port, c.broker.Vhost)
-		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: ", err, sleepTime, brokerUri)
+		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: %s", err, sleepTime, brokerUri)
 
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 		r := rand.New(rand.NewSource(time.Now().Unix()))
 		n := r.Intn(len(env.options.ConnectionParameters))
 		c1 := newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
 			env.options.SaslConfiguration, env.options.RPCTimeout)
-		tentatives = tentatives + 1
+		tentatives++
 		env.locator.client = c1
 		err = c1.connect()
-
 	}
 
 	return env.locator.client.connect()
@@ -245,7 +236,6 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	}
 
 	if streamMetadata.Leader == nil {
-
 		return nil, LeaderNotReady
 	}
 
@@ -275,7 +265,7 @@ func (env *Environment) Close() error {
 	_ = env.producers.close()
 	_ = env.consumers.close()
 	if env.locator.client != nil {
-		_ = env.locator.client.Close()
+		env.locator.client.Close()
 	}
 	env.closed = true
 	return nil
@@ -397,7 +387,6 @@ func (envOptions *EnvironmentOptions) SetPort(port int) *EnvironmentOptions {
 		envOptions.ConnectionParameters[0].Port = strconv.Itoa(port)
 	}
 	return envOptions
-
 }
 
 func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
@@ -407,7 +396,6 @@ func (envOptions *EnvironmentOptions) SetUser(user string) *EnvironmentOptions {
 		envOptions.ConnectionParameters[0].User = user
 	}
 	return envOptions
-
 }
 
 func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentOptions {
@@ -417,7 +405,6 @@ func (envOptions *EnvironmentOptions) SetPassword(password string) *EnvironmentO
 		envOptions.ConnectionParameters[0].Password = password
 	}
 	return envOptions
-
 }
 
 func (envOptions *EnvironmentOptions) SetRequestedHeartbeat(requestedHeartbeat time.Duration) *EnvironmentOptions {
@@ -484,7 +471,6 @@ func (cc *environmentCoordinator) isProducerListFull(clientsPerContextId int) bo
 		return false
 	}
 	return client.(*Client).coordinator.ProducersCount() >= cc.maxItemsForClient
-
 }
 
 func (cc *environmentCoordinator) isConsumerListFull(clientsPerContextId int) bool {
@@ -581,10 +567,7 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 		logs.LogDebug("connectionProperties host %s doesn't match with the advertised_host %s, advertised_port %s .. retry",
 			clientResult.connectionProperties.host,
 			leader.advHost, leader.advPort)
-		err := clientResult.Close()
-		if err != nil {
-			return nil, err
-		}
+		clientResult.Close()
 		clientResult = cc.newClientForProducer(clientProvidedName, leader, tcpParameters, saslConfiguration, rpcTimeout)
 		err = clientResult.connect()
 		if err != nil {
@@ -644,7 +627,7 @@ func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Bro
 }
 
 func (cc *environmentCoordinator) Close() error {
-	cc.clientsPerContext.Range(func(key, value any) bool {
+	cc.clientsPerContext.Range(func(_, value any) bool {
 		value.(*Client).coordinator.Close()
 
 		return true

@@ -2,19 +2,19 @@ package stream
 
 import (
 	"fmt"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
-	"strconv"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 func Send(env *Environment, superStream string) {
-
 	signal := make(chan struct{})
 	superProducer, err := env.NewSuperStreamProducer(superStream,
 		&SuperStreamProducerOptions{
@@ -31,18 +31,16 @@ func Send(env *Environment, superStream string) {
 				signal <- struct{}{}
 			}
 		}
-
 	}(superProducer.NotifyPublishConfirmation(1))
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		msg := amqp.NewMessage(make([]byte, 0))
-		msg.ApplicationProperties = map[string]interface{}{"routingKey": fmt.Sprintf("hello%d", i)}
+		msg.ApplicationProperties = map[string]any{"routingKey": fmt.Sprintf("hello%d", i)}
 		Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
 	}
 	<-signal
 	close(signal)
 	Expect(superProducer.Close()).NotTo(HaveOccurred())
-
 }
 
 var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func() {
@@ -77,7 +75,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		superStream := fmt.Sprintf("first-super-stream-consumer-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
-		messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {}
+		messagesHandler := func(_ ConsumerContext, _ *amqp.Message) {}
 		options := &SuperStreamConsumerOptions{
 			ClientProvidedName: "client-provided-name",
 			Offset:             OffsetSpecification{}.First(),
@@ -106,7 +104,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		superStream := fmt.Sprintf("validate-super-stream-consumer-%d", time.Now().Unix())
 		Expect(env.DeclareSuperStream(superStream, NewPartitionsOptions(3))).NotTo(HaveOccurred())
 
-		messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {}
+		messagesHandler := func(_ ConsumerContext, _ *amqp.Message) {}
 		options := &SuperStreamConsumerOptions{
 			ClientProvidedName: "client-provided-name",
 			Offset:             OffsetSpecification{}.First(),
@@ -136,7 +134,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		var receivedMessages int32
 		receivedMap := make(map[string]int)
 		mutex := sync.Mutex{}
-		messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
+		messagesHandler := func(consumerContext ConsumerContext, _ *amqp.Message) {
 			mutex.Lock()
 			receivedMap[consumerContext.Consumer.GetStreamName()] += 1
 			mutex.Unlock()
@@ -174,7 +172,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 
 			receivedMap := make(map[string]int)
 			mutex := sync.Mutex{}
-			messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
+			messagesHandler := func(consumerContext ConsumerContext, _ *amqp.Message) {
 				mutex.Lock()
 				receivedMap[consumerContext.Consumer.GetStreamName()] += 1
 				mutex.Unlock()
@@ -186,7 +184,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 				ConsumerName: applicationName1,
 				SingleActiveConsumer: &SingleActiveConsumer{
 					Enabled: isSac,
-					ConsumerUpdate: func(_ string, isActive bool) OffsetSpecification {
+					ConsumerUpdate: func(_ string, _ bool) OffsetSpecification {
 						return OffsetSpecification{}.First()
 					},
 				},
@@ -199,7 +197,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 				ConsumerName: applicationName2,
 				SingleActiveConsumer: &SingleActiveConsumer{
 					Enabled: isSac,
-					ConsumerUpdate: func(_ string, isActive bool) OffsetSpecification {
+					ConsumerUpdate: func(_ string, _ bool) OffsetSpecification {
 						return OffsetSpecification{}.First()
 					},
 				},
@@ -295,7 +293,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		receivedMap := make(map[string]int)
 		var receivedMessages int32
 		mutex := sync.Mutex{}
-		messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
+		messagesHandler := func(consumerContext ConsumerContext, _ *amqp.Message) {
 			mutex.Lock()
 			receivedMap[consumerContext.Consumer.GetStreamName()] += 1
 			mutex.Unlock()
@@ -308,7 +306,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		firstSuperStreamConsumer, err := env.NewSuperStreamConsumer(superStream, messagesHandler,
 			NewSuperStreamConsumerOptions().
 				SetConsumerName(appName).SetSingleActiveConsumer(
-				NewSingleActiveConsumer(func(_ string, isActive bool) OffsetSpecification {
+				NewSingleActiveConsumer(func(_ string, _ bool) OffsetSpecification {
 					return OffsetSpecification{}.First()
 				})))
 		Expect(err).NotTo(HaveOccurred())
@@ -316,7 +314,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		// the secondSuperStreamConsumer takes the second partition
 		secondSuperStreamConsumer, err := env.NewSuperStreamConsumer(superStream, messagesHandler, NewSuperStreamConsumerOptions().
 			SetConsumerName(appName).SetSingleActiveConsumer(NewSingleActiveConsumer(
-			func(streamName string, isActive bool) OffsetSpecification {
+			func(_ string, _ bool) OffsetSpecification {
 				return OffsetSpecification{}.First()
 			},
 		)))
@@ -373,7 +371,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 
 		for i := 0; i < 7; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
-			msg.ApplicationProperties = map[string]interface{}{"county": "italy"}
+			msg.ApplicationProperties = map[string]any{"county": "italy"}
 			msg.Properties = &amqp.MessageProperties{
 				GroupID: "group_first",
 			}
@@ -386,7 +384,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 
 		for i := 0; i < 6; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
-			msg.ApplicationProperties = map[string]interface{}{"county": "spain"}
+			msg.ApplicationProperties = map[string]any{"county": "spain"}
 			msg.Properties = &amqp.MessageProperties{
 				GroupID: "group_first",
 			}
@@ -398,11 +396,11 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		// we don't need to apply any post filter here
 		// the server side filter is enough
 		var consumerItaly int32
-		filter := NewConsumerFilter([]string{"italy"}, false, func(message *amqp.Message) bool {
+		filter := NewConsumerFilter([]string{"italy"}, false, func(_ *amqp.Message) bool {
 			return true
 		})
 
-		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {
 			atomic.AddInt32(&consumerItaly, 1)
 		}
 
@@ -449,14 +447,14 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		// total 10 messages
 		for i := 0; i < 5; i++ {
 			msgItaly := amqp.NewMessage(make([]byte, 0))
-			msgItaly.ApplicationProperties = map[string]interface{}{"county": "italy"}
+			msgItaly.ApplicationProperties = map[string]any{"county": "italy"}
 			msgItaly.Properties = &amqp.MessageProperties{
 				GroupID: "group_first",
 			}
 			Expect(superProducer.Send(msgItaly)).NotTo(HaveOccurred())
 
 			msgSpain := amqp.NewMessage(make([]byte, 0))
-			msgSpain.ApplicationProperties = map[string]interface{}{"county": "spain"}
+			msgSpain.ApplicationProperties = map[string]any{"county": "spain"}
 			msgSpain.Properties = &amqp.MessageProperties{
 				GroupID: "group_first",
 			}
@@ -470,7 +468,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 
 		for i := 0; i < 10; i++ {
 			msg := amqp.NewMessage(make([]byte, 0))
-			msg.ApplicationProperties = map[string]interface{}{"county": "spain"}
+			msg.ApplicationProperties = map[string]any{"county": "spain"}
 			msg.Properties = &amqp.MessageProperties{
 				GroupID: "group_first",
 			}
@@ -488,7 +486,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 				return message.ApplicationProperties["county"] == "italy"
 			})
 
-		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {
 			atomic.AddInt32(&consumerItaly, 1)
 		}
 
@@ -534,7 +532,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		}
 
 		var receivedMessages int32
-		handleMessages := func(consumerContext ConsumerContext, message *amqp.Message) {
+		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {
 			atomic.AddInt32(&receivedMessages, 1)
 		}
 

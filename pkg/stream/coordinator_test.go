@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -45,7 +46,7 @@ var _ = Describe("Coordinator", func() {
 
 		It("massive insert/delete coordinator ", func() {
 			var producersId []uint8
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				p, err := client.coordinator.NewProducer(nil, nil)
 				producersId = append(producersId, p.id)
 				Expect(err).NotTo(HaveOccurred())
@@ -162,8 +163,8 @@ var _ = Describe("Coordinator", func() {
 
 		It("massive insert/delete consumers ", func() {
 			var consumersId []uint8
-			for i := 0; i < 100; i++ {
-				p := client.coordinator.NewConsumer(nil, nil, nil)
+			for range 100 {
+				p := client.coordinator.NewConsumer(nil, NewConsumerOptions(), nil)
 				consumersId = append(consumersId, p.ID)
 			}
 			Expect(client.coordinator.ConsumersCount()).To(Equal(100))
@@ -213,7 +214,7 @@ var _ = Describe("Coordinator", func() {
 		})
 		It("massive insert/delete Responses ", func() {
 			var responsesId []int
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				r := client.coordinator.NewResponse(commandUnitTest)
 				responsesId = append(responsesId, r.correlationid)
 			}

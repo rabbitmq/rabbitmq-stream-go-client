@@ -37,7 +37,7 @@ func (c *Client) handleResponse() {
 		frameLen, err := readUInt(buffer)
 		if err != nil {
 			logs.LogDebug("Read connection failed: %s", err)
-			_ = c.Close()
+			c.Close()
 			break
 		}
 
@@ -47,7 +47,6 @@ func (c *Client) handleResponse() {
 		readerProtocol.Version = readUShort(buffer)
 
 		switch readerProtocol.CommandID {
-
 		case commandPeerProperties:
 			{
 				c.handlePeerProperties(readerProtocol, buffer)
@@ -74,7 +73,6 @@ func (c *Client) handleResponse() {
 		case commandPublishError:
 			{
 				c.handlePublishError(buffer)
-
 			}
 		case commandPublishConfirm:
 			{
@@ -83,7 +81,6 @@ func (c *Client) handleResponse() {
 		case commandDeliver:
 			{
 				c.handleDeliver(buffer)
-
 			}
 		case commandQueryPublisherSequence:
 			{
@@ -91,7 +88,6 @@ func (c *Client) handleResponse() {
 			}
 		case CommandMetadataUpdate:
 			{
-
 				c.metadataUpdateFrameHandler(buffer)
 			}
 		case commandCredit:
@@ -100,14 +96,11 @@ func (c *Client) handleResponse() {
 			}
 		case commandHeartbeat:
 			{
-
 				c.handleHeartbeat()
-
 			}
 		case CommandQueryOffset:
 			{
 				c.queryOffsetFrameHandler(readerProtocol, buffer)
-
 			}
 		case commandStreamStatus:
 			{
@@ -150,10 +143,10 @@ func (c *Client) handleSaslHandshakeResponse(streamingRes *ReaderProtocol, r *bu
 	streamingRes.CorrelationId, _ = readUInt(r)
 	streamingRes.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	mechanismsCount, _ := readUInt(r)
-	var mechanisms []string
-	for i := 0; i < int(mechanismsCount); i++ {
+	mechanisms := make([]string, mechanismsCount)
+	for i := range int(mechanismsCount) {
 		mechanism := readString(r)
-		mechanisms = append(mechanisms, mechanism)
+		mechanisms[i] = mechanism
 	}
 
 	res, err := c.coordinator.GetResponseById(streamingRes.CorrelationId)
@@ -184,11 +177,9 @@ func (c *Client) handlePeerProperties(readProtocol *ReaderProtocol, r *bufio.Rea
 
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- serverProperties
-
 }
 
-func (c *Client) handleTune(r *bufio.Reader) interface{} {
-
+func (c *Client) handleTune(r *bufio.Reader) any {
 	serverMaxFrameSize, _ := readUInt(r)
 	serverHeartbeat, _ := readUInt(r)
 
@@ -206,7 +197,6 @@ func (c *Client) handleTune(r *bufio.Reader) interface{} {
 	logErrorCommand(err, "handleTune")
 	res.data <- b.Bytes()
 	return b.Bytes()
-
 }
 
 func (c *Client) handleGenericResponse(readProtocol *ReaderProtocol, r *bufio.Reader) {
@@ -229,7 +219,6 @@ func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
 	for i := 0; i < int(connectionPropertiesCount); i++ {
 		v := readString(r)
 		switch v {
-
 		case "advertised_host":
 			{
 				clientProperties.host = readString(r)
@@ -238,9 +227,7 @@ func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
 			{
 				clientProperties.port = readString(r)
 			}
-
 		}
-
 	}
 
 	res, err := c.coordinator.GetResponseById(readProtocol.CorrelationId)
@@ -251,10 +238,9 @@ func (c *Client) commandOpen(readProtocol *ReaderProtocol, r *bufio.Reader) {
 
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- clientProperties
-
 }
 
-func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) interface{} {
+func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) any {
 	producerFound := false
 	readProtocol.PublishID = readByte(r)
 	publishingIdCount, _ := readUInt(r)
@@ -283,7 +269,6 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) in
 }
 
 func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol, r *bufio.Reader) {
-
 	readProtocol.CorrelationId, _ = readUInt(r)
 	readProtocol.ResponseCode = uShortExtractResponseCode(readUShort(r))
 	sequence := readInt64(r)
@@ -296,13 +281,13 @@ func (c *Client) queryPublisherSequenceFrameHandler(readProtocol *ReaderProtocol
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- sequence
 }
+
 func (c *Client) handleDeliver(r *bufio.Reader) {
 	subscriptionId := readByte(r)
 	consumer, err := c.coordinator.GetConsumerById(subscriptionId)
 	consumerFound := err == nil
 	if err != nil {
 		logs.LogError("Handle Deliver consumer not found %s", err)
-
 	}
 
 	_ = readByte(r)
@@ -355,12 +340,12 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	filter := offsetLimit != -1
 
-	//messages
+	// messages
 	batchConsumingMessages := make(offsetMessages, 0, numRecords)
 	var chunk chunkInfo
 	chunk.numEntries = numEntries
 
-	/// headers ---> payload -> messages
+	// headers ---> payload -> messages
 
 	if consumer.options.CRCCheck {
 		checkSum := crc32.ChecksumIEEE(bytesBuffer)
@@ -396,13 +381,17 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			entryType, _ := readByteError(dataReader)
 			// sub-batch case.
 			numRecordsInBatch := readUShort(dataReader)
-			uncompressedDataSize, _ := readUInt(dataReader) //uncompressedDataSize
+			uncompressedDataSize, _ := readUInt(dataReader) // uncompressedDataSize
 			dataSize, _ := readUInt(dataReader)
 			numRecords -= uint32(numRecordsInBatch)
-			compression := (entryType & 0x70) >> 4 //compression
-			uncompressedReader := compressByValue(compression).UnCompress(dataReader,
+			compression := (entryType & 0x70) >> 4 // compression
+			uncompressedReader, err := compressByValue(compression).UnCompress(dataReader,
 				dataSize,
 				uncompressedDataSize)
+			if err != nil {
+				// TODO: it should return error
+				logs.LogError("error during data uncompression %w", err)
+			}
 
 			for numRecordsInBatch != 0 {
 				batchConsumingMessages = c.decodeMessage(uncompressedReader,
@@ -413,7 +402,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				numRecordsInBatch--
 				offset++
 			}
-
 		}
 	}
 	// request a credit for the next chunk
@@ -433,7 +421,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		logs.LogDebug("The consumer %s for the stream %s is closed during the chunk dispatching. "+
 			"Messages won't dispatched", consumer.GetName(), consumer.GetStreamName())
 	}
-
 }
 
 func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offsetLimit int64, batchConsumingMessages offsetMessages) offsetMessages {
@@ -465,7 +452,6 @@ func (c *Client) creditNotificationFrameHandler(readProtocol *ReaderProtocol,
 		logs.LogDebug("received a credit for a closed consumer %d", subscriptionId)
 		return
 	}
-
 }
 
 func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol,
@@ -482,7 +468,6 @@ func (c *Client) queryOffsetFrameHandler(readProtocol *ReaderProtocol,
 }
 
 func (c *Client) handlePublishError(buffer *bufio.Reader) {
-
 	publisherId := readByte(buffer)
 
 	publishingErrorCount, _ := readUInt(buffer)
@@ -504,7 +489,6 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 		}
 		publishingErrorCount--
 	}
-
 }
 
 func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
@@ -514,16 +498,14 @@ func (c *Client) metadataUpdateFrameHandler(buffer *bufio.Reader) {
 		logs.LogDebug("stream %s is no longer available", stream)
 		c.maybeCleanProducers(stream)
 		c.maybeCleanConsumers(stream)
-
 	} else {
-		//TODO handle the error, see the java code
+		// TODO handle the error, see the java code
 		logs.LogWarn("unsupported metadata update code %d", code)
 	}
 }
 
 func (c *Client) streamStatusFrameHandler(readProtocol *ReaderProtocol,
 	r *bufio.Reader) {
-
 	c.handleGenericResponse(readProtocol, r)
 
 	count, _ := readUInt(r)
@@ -542,7 +524,6 @@ func (c *Client) streamStatusFrameHandler(readProtocol *ReaderProtocol,
 
 	res.code <- Code{id: readProtocol.ResponseCode}
 	res.data <- streamStatus
-
 }
 
 func (c *Client) metadataFrameHandler(readProtocol *ReaderProtocol,
@@ -601,7 +582,6 @@ func (c *Client) closeFrameHandler(readProtocol *ReaderProtocol,
 
 	err := c.socket.writeAndFlush(b.Bytes())
 	logErrorCommand(err, "Socket write buffer closeFrameHandler")
-
 }
 
 func (c *Client) handleConsumerUpdate(readProtocol *ReaderProtocol, r *bufio.Reader) {

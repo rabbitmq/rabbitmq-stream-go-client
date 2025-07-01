@@ -2,9 +2,10 @@ package stream
 
 import (
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"strings"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
 type responseError struct {
@@ -23,7 +24,7 @@ func uShortExtractResponseCode(code uint16) uint16 {
 	return code & 0b0111_1111_1111_1111
 }
 
-//func UIntExtractResponseCode(code int32) int32 {
+// func UIntExtractResponseCode(code int32) int32 {
 //	return code & 0b0111_1111_1111_1111
 //}
 

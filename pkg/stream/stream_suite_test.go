@@ -1,11 +1,13 @@
 package stream_test
 
 import (
+	"context"
 	"fmt"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"net/http"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 const testVhost = "rabbitmq-streams-go-test"
@@ -39,7 +41,8 @@ func vhostUrl(vhost string) string {
 }
 
 func httpCall(method, url string) error {
-	req, err := http.NewRequest(method, url, nil)
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return err
 	}
@@ -48,7 +51,10 @@ func httpCall(method, url string) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	err = resp.Body.Close()
+	if err != nil {
+		return err
+	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("http error (%d): %s", resp.StatusCode, resp.Status)
