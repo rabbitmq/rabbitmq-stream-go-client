@@ -222,7 +222,7 @@ func (p *ReliableProducer) getTimeOut() time.Duration {
 	return p.producerOptions.ConfirmationTimeOut
 }
 
-func (p *ReliableProducer) getStreamName() string {
+func (p *ReliableProducer) GetStreamName() string {
 	return p.streamName
 }
 
