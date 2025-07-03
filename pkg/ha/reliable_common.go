@@ -25,7 +25,7 @@ type IReliable interface {
 	getEnv() *stream.Environment
 	getNewInstance() newEntityInstance
 	getTimeOut() time.Duration
-	getStreamName() string
+	GetStreamName() string
 	GetStatusAsString() string
 }
 
@@ -44,39 +44,39 @@ type IReliable interface {
 
 func retry(backoff int, reliable IReliable) (error, bool) {
 	waitTime := randomWaitWithBackoff(backoff)
-	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), reliable.getStreamName(), waitTime)
+	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), reliable.GetStreamName(), waitTime)
 	time.Sleep(time.Duration(waitTime) * time.Millisecond)
-	streamMetaData, errS := reliable.getEnv().StreamMetaData(reliable.getStreamName())
+	streamMetaData, errS := reliable.getEnv().StreamMetaData(reliable.GetStreamName())
 	if errors.Is(errS, stream.StreamDoesNotExist) {
-		logs.LogInfo("[Reliable] - The stream %s does not exist for %s. Stopping it", reliable.getStreamName(), reliable.getInfo())
+		logs.LogInfo("[Reliable] - The stream %s does not exist for %s. Stopping it", reliable.GetStreamName(), reliable.getInfo())
 		return errS, false
 	}
 	if errors.Is(errS, stream.StreamNotAvailable) {
-		logs.LogInfo("[Reliable] - The stream %s is not available for %s. Trying to reconnect", reliable.getStreamName(), reliable.getInfo())
+		logs.LogInfo("[Reliable] - The stream %s is not available for %s. Trying to reconnect", reliable.GetStreamName(), reliable.getInfo())
 		return retry(backoff+1, reliable)
 	}
 	if errors.Is(errS, stream.LeaderNotReady) {
-		logs.LogInfo("[Reliable] - The leader for the stream %s is not ready for %s. Trying to reconnect", reliable.getStreamName(), reliable.getInfo())
+		logs.LogInfo("[Reliable] - The leader for the stream %s is not ready for %s. Trying to reconnect", reliable.GetStreamName(), reliable.getInfo())
 		return retry(backoff+1, reliable)
 	}
 
 	if errors.Is(errS, stream.StreamMetadataFailure) {
-		logs.LogInfo("[Reliable] - Fail to retrieve the %s metadata for %s. Trying to reconnect", reliable.getStreamName(), reliable.getInfo())
+		logs.LogInfo("[Reliable] - Fail to retrieve the %s metadata for %s. Trying to reconnect", reliable.GetStreamName(), reliable.getInfo())
 		return retry(backoff+1, reliable)
 	}
 
 	var result error
 	if streamMetaData != nil {
-		logs.LogInfo("[Reliable] - The stream %s exists. Reconnecting the %s.", reliable.getStreamName(), reliable.getInfo())
+		logs.LogInfo("[Reliable] - The stream %s exists. Reconnecting the %s.", reliable.GetStreamName(), reliable.getInfo())
 		result = reliable.getNewInstance()()
 		if result == nil {
-			logs.LogInfo("[Reliable] - The stream %s exists. %s reconnected.", reliable.getInfo(), reliable.getStreamName())
+			logs.LogInfo("[Reliable] - The stream %s exists. %s reconnected.", reliable.getInfo(), reliable.GetStreamName())
 		} else {
-			logs.LogInfo("[Reliable] - error %s creating %s for the stream %s. Trying to reconnect", result, reliable.getInfo(), reliable.getStreamName())
+			logs.LogInfo("[Reliable] - error %s creating %s for the stream %s. Trying to reconnect", result, reliable.getInfo(), reliable.GetStreamName())
 			return retry(backoff+1, reliable)
 		}
 	} else {
-		logs.LogError("[Reliable] - The stream %s does not exist for %s. Closing..", reliable.getStreamName(), reliable.getInfo())
+		logs.LogError("[Reliable] - The stream %s does not exist for %s. Closing..", reliable.GetStreamName(), reliable.getInfo())
 		return stream.StreamDoesNotExist, false
 	}
 
