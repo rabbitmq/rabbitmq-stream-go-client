@@ -410,13 +410,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	// dispatch the messages with offset to the consumer
 	chunk.offsetMessages = batchConsumingMessages
 	if consumer.getStatus() == open {
-		select {
-		case consumer.chunkForConsumer <- chunk:
-		default:
-			logs.LogDebug("The consumer %s for the stream %s reports as open but is probably "+
-				"closed during chunk dispatching. Messages won't be dispatched. ",
-				consumer.GetName(), consumer.GetStreamName())
-		}
+		consumer.chunkForConsumer <- chunk
 	} else {
 		logs.LogDebug("The consumer %s for the stream %s is closed during the chunk dispatching. "+
 			"Messages won't dispatched", consumer.GetName(), consumer.GetStreamName())
