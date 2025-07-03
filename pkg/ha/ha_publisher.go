@@ -30,7 +30,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 			waitTime := randomWaitWithBackoff(1)
 			logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting in %d milliseconds waiting pending messages", p.getInfo(), waitTime)
 			time.Sleep(time.Duration(waitTime) * time.Millisecond)
-			err, reconnected := retry(1, p, p.getStreamName())
+			err, reconnected := retry(1, p, p.GetStreamName())
 			if err != nil {
 				logs.LogInfo(
 					"[Reliable] - %s won't be reconnected. Error: %s", p.getInfo(), err)
@@ -203,7 +203,7 @@ func (p *ReliableProducer) getEnv() *stream.Environment {
 	return p.env
 }
 
-func (p *ReliableProducer) getNewInstance() newEntityInstance {
+func (p *ReliableProducer) getNewInstance(_ string) newEntityInstance {
 	return p.newProducer
 }
 

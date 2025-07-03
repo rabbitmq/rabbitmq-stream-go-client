@@ -22,7 +22,7 @@ type IReliable interface {
 	setStatus(value int)
 	getInfo() string
 	getEnv() *stream.Environment
-	getNewInstance() newEntityInstance
+	getNewInstance(streamName string) newEntityInstance
 	getTimeOut() time.Duration
 	GetStatus() int
 	GetStreamName() string
@@ -68,7 +68,7 @@ func retry(backoff int, reliable IReliable, streamName string) (error, bool) {
 	var result error
 	if streamMetaData != nil {
 		logs.LogInfo("[Reliable] - The stream %s exists. Reconnecting the %s.", streamName, reliable.getInfo())
-		result = reliable.getNewInstance()()
+		result = reliable.getNewInstance(streamName)()
 		if result == nil {
 			logs.LogInfo("[Reliable] - The stream %s exists. %s reconnected.", reliable.getInfo(), streamName)
 		} else {
@@ -91,6 +91,7 @@ func randomWaitWithBackoff(attempt int) int {
 	waitTime := min(baseWait*(1<<(attempt-1)), 15_000)
 
 	return waitTime
+}
 func getStatusAsString(c IReliable) string {
 	switch c.GetStatus() {
 	case StatusOpen:

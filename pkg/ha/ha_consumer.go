@@ -31,7 +31,6 @@ type ReliableConsumer struct {
 
 func (c *ReliableConsumer) GetStatusAsString() string {
 	return getStatusAsString(c)
-
 }
 
 func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
@@ -41,7 +40,7 @@ func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 			c.setStatus(StatusReconnecting)
 			logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", c.getInfo(), event.Reason)
 			c.bootstrap = false
-			err, reconnected := retry(1, c, c.getStreamName())
+			err, reconnected := retry(1, c, c.GetStreamName())
 			if err != nil {
 				logs.LogInfo(""+
 					"[Reliable] - %s won't be reconnected. Error: %s", c.getInfo(), err)
@@ -105,7 +104,7 @@ func (c *ReliableConsumer) GetStreamName() string {
 	return c.streamName
 }
 
-func (c *ReliableConsumer) getNewInstance() newEntityInstance {
+func (c *ReliableConsumer) getNewInstance(_ string) newEntityInstance {
 	return c.newConsumer
 }
 
