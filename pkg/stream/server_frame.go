@@ -404,17 +404,25 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			}
 		}
 	}
-	// request a credit for the next chunk
-	c.credit(subscriptionId, 1)
 
+	consumer.wg.Add(1)
 	// dispatch the messages with offset to the consumer
 	chunk.offsetMessages = batchConsumingMessages
 	if consumer.getStatus() == open {
-		consumer.chunkForConsumer <- chunk
+		select {
+		case consumer.chunkForConsumer <- chunk:
+			consumer.wg.Done()
+		case <-consumer.ctx.Done():
+			consumer.wg.Done()
+			return
+		}
 	} else {
 		logs.LogDebug("The consumer %s for the stream %s is closed during the chunk dispatching. "+
 			"Messages won't dispatched", consumer.GetName(), consumer.GetStreamName())
 	}
+
+	// request a credit for the next chunk
+	c.credit(subscriptionId, 1)
 }
 
 func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offsetLimit int64, batchConsumingMessages offsetMessages) offsetMessages {
