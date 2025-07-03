@@ -472,6 +472,35 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
+	It("Not panics on close when the internal queue is full", func() {
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		err = producer.BatchSend(CreateArrayMessagesForTesting(10_000))
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func(producer *Producer) {
+			err := producer.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}(producer)
+
+		const credits = 2
+		consumer, err := env.NewConsumer(streamName,
+			func(_ ConsumerContext, _ *amqp.Message) {
+				// it usually happens with slow consumer that fulfill the internal queue
+				time.Sleep(time.Hour)
+			}, NewConsumerOptions().
+				SetInitialCredits(credits).
+				SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+
+		// waiting the internal queue to fulfill
+		time.Sleep(time.Second)
+		Expect(len(consumer.chunkForConsumer)).To(Equal(credits))
+
+		Expect(consumer.Close()).NotTo(HaveOccurred())
+	})
+
 	It("message Properties", func() {
 		producer, err := env.NewProducer(streamName, nil)
 
