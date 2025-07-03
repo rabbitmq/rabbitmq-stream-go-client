@@ -101,7 +101,7 @@ func (c *ReliableConsumer) getEnv() *stream.Environment {
 	return c.env
 }
 
-func (c *ReliableConsumer) getStreamName() string {
+func (c *ReliableConsumer) GetStreamName() string {
 	return c.streamName
 }
 

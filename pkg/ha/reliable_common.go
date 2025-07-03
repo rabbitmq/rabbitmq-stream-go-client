@@ -24,9 +24,8 @@ type IReliable interface {
 	getEnv() *stream.Environment
 	getNewInstance() newEntityInstance
 	getTimeOut() time.Duration
-	getStreamName() string
-
 	GetStatus() int
+	GetStreamName() string
 	GetStatusAsString() string
 }
 
