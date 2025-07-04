@@ -342,8 +342,14 @@ func (consumer *Consumer) close(reason Event) {
 	}
 
 	if consumer.response.data != nil {
+		// drain the queue to avoid race condition
+		for len(consumer.chunkForConsumer) > 0 {
+			select {
+			case <-consumer.chunkForConsumer:
+			default:
+			}
+		}
 		close(consumer.chunkForConsumer)
-
 		close(consumer.response.data)
 		consumer.response.data = nil
 	}
