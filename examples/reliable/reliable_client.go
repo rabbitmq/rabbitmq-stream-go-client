@@ -71,16 +71,22 @@ func main() {
 	fmt.Println("Reliable Producer/Consumer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
-	addresses := []string{
-		// "rabbitmq-stream://guest:guest@node1:5572/%2f",
-		// "rabbitmq-stream://guest:guest@node1:5572/%2f",
-		"rabbitmq-stream://guest:guest@localhost:5552/%2f"}
+	// addresses := []string{
+	//	// "rabbitmq-stream://guest:guest@node1:5572/%2f",
+	//	// "rabbitmq-stream://guest:guest@node1:5572/%2f",
+	//	"rabbitmq-stream://guest:guest@localhost:5553/%2f"}
 
+	var addressesResolver = stream.AddressResolver{
+		Host: "localhost",
+		Port: 5552,
+	}
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetMaxProducersPerClient(maxProducersPerClient).
 			SetMaxConsumersPerClient(maxConsumersPerClient).
-			SetUris(addresses))
+			SetAddressResolver(addressesResolver).
+			SetHost(addressesResolver.Host).
+			SetPort(addressesResolver.Port))
 
 	CheckErr(err)
 	fmt.Printf("Environment created with %d producers and %d consumers\n\n", maxProducersPerClient, maxConsumersPerClient)

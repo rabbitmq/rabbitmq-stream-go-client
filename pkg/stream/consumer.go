@@ -2,7 +2,6 @@ package stream
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -17,9 +16,6 @@ type Consumer struct {
 	options          *ConsumerOptions
 	onClose          func()
 	mutex            *sync.Mutex
-	ctx              context.Context
-	cancel           context.CancelFunc
-	wg               sync.WaitGroup
 	chunkForConsumer chan chunkInfo
 	MessagesHandler  MessagesHandler
 	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
@@ -338,8 +334,6 @@ func (consumer *Consumer) Close() error {
 func (consumer *Consumer) close(reason Event) {
 	consumer.cacheStoreOffset()
 	consumer.setStatus(closed)
-	consumer.cancel()
-	consumer.wg.Wait()
 
 	if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
 		closeHandler <- reason
@@ -348,6 +342,16 @@ func (consumer *Consumer) close(reason Event) {
 	}
 
 	if consumer.response.data != nil {
+		// drain the chunkForConsumer channel
+		for len(consumer.chunkForConsumer) > 0 {
+			select {
+			case <-consumer.chunkForConsumer:
+				// drain the channel
+			default:
+				// break
+			}
+		}
+
 		close(consumer.chunkForConsumer)
 		close(consumer.response.data)
 		consumer.response.data = nil

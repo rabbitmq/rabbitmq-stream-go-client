@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"sync"
@@ -187,7 +186,6 @@ func (coordinator *Coordinator) NewConsumer(
 ) *Consumer {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	ctx, cancel := context.WithCancel(context.Background())
 	var lastId, _ = coordinator.getNextConsumerItem()
 	var item = &Consumer{
 		ID:                   lastId,
@@ -195,9 +193,6 @@ func (coordinator *Coordinator) NewConsumer(
 		response:             newResponse(lookUpCommand(commandSubscribe)),
 		status:               open,
 		mutex:                &sync.Mutex{},
-		ctx:                  ctx,
-		wg:                   sync.WaitGroup{},
-		cancel:               cancel,
 		MessagesHandler:      messagesHandler,
 		currentOffset:        -1, // currentOffset has to equal lastStoredOffset as the currentOffset 0 may otherwise be flushed to the server when the consumer is closed and auto commit is enabled
 		lastStoredOffset:     -1, // because 0 is a valid value for the offset

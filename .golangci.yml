@@ -23,6 +23,9 @@ linters:
     - unconvert
     - unused
     - whitespace
+  exclusions:
+      paths:
+        - local_ex
   settings:
       gosec:
         excludes:
