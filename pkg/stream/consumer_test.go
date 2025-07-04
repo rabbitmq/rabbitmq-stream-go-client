@@ -472,6 +472,35 @@ var _ = Describe("Streaming Consumers", func() {
 
 	})
 
+	It("Not panics on close when the internal queue is full", func() {
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		err = producer.BatchSend(CreateArrayMessagesForTesting(10_000))
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func(producer *Producer) {
+			err := producer.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}(producer)
+
+		const credits = 2
+		consumer, err := env.NewConsumer(streamName,
+			func(_ ConsumerContext, _ *amqp.Message) {
+				// it usually happens with slow consumer that fulfill the internal queue
+				time.Sleep(time.Hour)
+			}, NewConsumerOptions().
+				SetInitialCredits(credits).
+				SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+
+		// waiting the internal queue to fulfill
+		time.Sleep(time.Second)
+		Expect(len(consumer.chunkForConsumer)).To(Equal(credits))
+
+		Expect(consumer.Close()).NotTo(HaveOccurred())
+	})
+
 	It("message Properties", func() {
 		producer, err := env.NewProducer(streamName, nil)
 
@@ -610,6 +639,51 @@ var _ = Describe("Streaming Consumers", func() {
 			Expect(messagesValue[i]).To(Equal("test_" + strconv.Itoa(i)))
 		}
 		mt.Unlock()
+		Expect(consumer.Close()).NotTo(HaveOccurred())
+	})
+
+	It("Should not skip chunks on slow consumer", func() {
+		// see: https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/412
+		const credits = 2
+		const numMessages = 10_000
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		err = producer.BatchSend(CreateArrayMessagesForTesting(numMessages))
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func(producer *Producer) {
+			err := producer.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}(producer)
+
+		lastOffset := atomic.Int64{}
+		lastOffset.Store(-1)
+		consumer, err := env.NewConsumer(streamName,
+			func(ctx ConsumerContext, _ *amqp.Message) {
+				offset := ctx.Consumer.GetOffset()
+				Expect(offset).To(Equal(lastOffset.Load() + 1))
+				lastOffset.Store(offset)
+
+				if offset%1_000 == 0 {
+					// simulating an intensive operation
+					time.Sleep(500 * time.Millisecond)
+				}
+			}, NewConsumerOptions().
+				SetInitialCredits(credits).
+				SetOffset(OffsetSpecification{}.First()).
+				SetConsumerName("consumer_test"))
+		Expect(err).NotTo(HaveOccurred())
+
+		// it subtract 1 because the offset starts at 0
+		//nolint:gocritic
+		Eventually(func() int64 { return lastOffset.Load() }, 10*time.Second).
+			Should(
+				Equal(int64(numMessages-1)),
+				"not all the messages has been consumed %d out of %d",
+				lastOffset.Load(),
+				numMessages-1,
+			)
+
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 
