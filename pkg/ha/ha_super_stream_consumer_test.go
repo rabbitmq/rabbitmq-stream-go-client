@@ -2,8 +2,11 @@ package ha
 
 import (
 	"fmt"
-	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+
+	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -12,7 +15,45 @@ import (
 	. "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
 )
 
-var _ = Describe("Reliable Super Stream Consumer", Focus, func() {
+func sendToSuperStream(env *Environment, superStream string) error {
+	signal := make(chan struct{})
+	superProducer, err := env.NewSuperStreamProducer(superStream,
+		&SuperStreamProducerOptions{
+			RoutingStrategy: NewHashRoutingStrategy(func(message message.StreamMessage) string {
+				return message.GetApplicationProperties()["routingKey"].(string)
+			})})
+	if err != nil {
+		return fmt.Errorf("error creating super stream producer: %w", err)
+	}
+
+	go func(ch <-chan PartitionPublishConfirm) {
+		recv := 0
+		for confirm := range ch {
+			recv += len(confirm.ConfirmationStatus)
+			if recv == 200 {
+				signal <- struct{}{}
+			}
+		}
+	}(superProducer.NotifyPublishConfirmation(1))
+
+	for i := range 200 {
+		msg := amqp.NewMessage(make([]byte, 0))
+		msg.ApplicationProperties = map[string]any{"routingKey": fmt.Sprintf("hello%d", i)}
+		err = superProducer.Send(msg)
+		if err != nil {
+			return fmt.Errorf("error sending message to super stream: %w", err)
+		}
+	}
+	<-signal
+	close(signal)
+	err = superProducer.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+var _ = Describe("Reliable Super Stream Consumer", func() {
 
 	var (
 		envForSuperStreamConsumer    *Environment
@@ -57,14 +98,18 @@ var _ = Describe("Reliable Super Stream Consumer", Focus, func() {
 	})
 
 	It("restart Reliable Consumer in case of killing connection", func() {
-
+		received := 0
 		clientProvidedName := uuid.New().String()
+		// signal := make(chan struct{})
 		consumer, err := NewReliableSuperStreamConsumer(envForSuperStreamConsumer, streamForSuperStreamConsumer,
-			func(_ ConsumerContext, _ *amqp.Message) {}, NewSuperStreamConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetClientProvidedName(clientProvidedName))
+			func(_ ConsumerContext, _ *amqp.Message) {
+				received += 1
+			}, NewSuperStreamConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetClientProvidedName(clientProvidedName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumer).NotTo(BeNil())
-		time.Sleep(1 * time.Second)
 		Expect(consumer.GetStatus()).To(Equal(StatusOpen))
+		Expect(sendToSuperStream(envForSuperStreamConsumer, streamForSuperStreamConsumer)).Should(Succeed())
+		time.Sleep(2 * time.Second)
 		connectionToDrop := ""
 		Eventually(func() bool {
 			connections, err := test_helper.Connections("15672")
@@ -86,9 +131,26 @@ var _ = Describe("Reliable Super Stream Consumer", Focus, func() {
 		errDrop := test_helper.DropConnection(connectionToDrop, "15672")
 		Expect(errDrop).NotTo(HaveOccurred())
 		/// just give some time to raise the event
-		time.Sleep(1200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		Eventually(func() int { return consumer.GetStatus() }, "15s").WithPolling(300 * time.Millisecond).Should(Equal(StatusOpen))
 		Expect(consumer.GetStatusAsString()).To(Equal("Open"))
+		time.Sleep(1000 * time.Millisecond)
+		// 79,57,64
+		offsetStored, errLoad := consumer.streamPositionMap.Load(fmt.Sprintf("%s-0", streamForSuperStreamConsumer))
+		Expect(errLoad).To(BeTrue())
+		Expect(offsetStored).NotTo(BeNil())
+		Expect(offsetStored).To(Equal(int64(78)))
+
+		offsetStored, errLoad = consumer.streamPositionMap.Load(fmt.Sprintf("%s-1", streamForSuperStreamConsumer))
+		Expect(errLoad).To(BeTrue())
+		Expect(offsetStored).NotTo(BeNil())
+		Expect(offsetStored).To(Equal(int64(56)))
+
+		offsetStored, errLoad = consumer.streamPositionMap.Load(fmt.Sprintf("%s-2", streamForSuperStreamConsumer))
+		Expect(errLoad).To(BeTrue())
+		Expect(offsetStored).NotTo(BeNil())
+		Expect(offsetStored).To(Equal(int64(63)))
+		Expect(received).To(Equal(200))
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.GetStatus()).To(Equal(StatusClosed))
 		Expect(consumer.GetStatusAsString()).To(Equal("Closed"))

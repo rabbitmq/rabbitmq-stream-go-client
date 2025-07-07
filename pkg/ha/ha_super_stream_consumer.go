@@ -2,11 +2,12 @@ package ha
 
 import (
 	"fmt"
-	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 
@@ -14,14 +15,14 @@ import (
 )
 
 type ReliableSuperStreamConsumer struct {
-	env             *stream.Environment
-	consumer        atomic.Pointer[stream.SuperStreamConsumer]
-	superStreamName string
-	consumerOptions *stream.SuperStreamConsumerOptions
-	mutexStatus     *sync.Mutex
-	messagesHandler stream.MessagesHandler
-	status          int
-	currentPosition int64 // the last offset consumed. It is needed in case of restart
+	env               *stream.Environment
+	consumer          atomic.Pointer[stream.SuperStreamConsumer]
+	superStreamName   string
+	consumerOptions   *stream.SuperStreamConsumerOptions
+	mutexStatus       *sync.Mutex
+	messagesHandler   stream.MessagesHandler
+	status            int
+	streamPositionMap sync.Map
 
 	//bootstrap: if true the consumer will start from the user offset.
 	// If false it will start from the last offset consumed (currentPosition)
@@ -47,7 +48,7 @@ func NewReliableSuperStreamConsumer(env *stream.Environment, superStream string,
 		status:          StatusClosed,
 	}
 	consumer, err := env.NewSuperStreamConsumer(superStream, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		atomic.StoreInt64(&res.currentPosition, consumerContext.Consumer.GetOffset())
+		res.streamPositionMap.Store(consumerContext.Consumer.GetStreamName(), consumerContext.Consumer.GetOffset())
 		messagesHandler(consumerContext, message)
 	}, consumerOptions)
 	if err != nil {
@@ -102,7 +103,17 @@ func (r *ReliableSuperStreamConsumer) getEnv() *stream.Environment {
 
 func (r *ReliableSuperStreamConsumer) getNewInstance(partition string) newEntityInstance {
 	return func() error {
-		return r.consumer.Load().ConnectPartition(partition, stream.OffsetSpecification{}.Offset(r.currentPosition+1))
+		// by default the consumer will start from the consumerOptions.Offset
+		off := r.consumerOptions.Offset
+		var restartOffset int64
+		// in case of there is an item for the partition in the streamPositionMap
+		// it will start from the last offset consumed
+		v, _ := r.streamPositionMap.Load(partition)
+		if v != nil {
+			restartOffset = v.(int64)
+			off = stream.OffsetSpecification{}.Offset(restartOffset + 1)
+		}
+		return r.consumer.Load().ConnectPartition(partition, off)
 	}
 }
 
@@ -131,5 +142,4 @@ func (r *ReliableSuperStreamConsumer) Close() error {
 		return err
 	}
 	return nil
-
 }
