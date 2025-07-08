@@ -84,7 +84,7 @@ func retry(backoff int, reliable IReliable) (error, bool) {
 }
 
 func randomWaitWithBackoff(attempt int) int {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	baseWait := 3_000 + r.Intn(8_000)
 
 	// Calculate the wait time considering the number of attempts

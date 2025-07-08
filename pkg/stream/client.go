@@ -743,7 +743,7 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 		brokers = append(brokers, replica)
 	}
 
-	r := rand.New(rand.NewSource(time.Now().Unix()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	n := r.Intn(len(brokers))
 	return brokers[n], nil
 }
