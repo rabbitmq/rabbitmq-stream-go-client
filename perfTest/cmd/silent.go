@@ -320,7 +320,7 @@ func buildMessages() []message.StreamMessage {
 		if fixedBody > 0 {
 			body = make([]byte, fixedBody)
 		} else if variableBody > 0 {
-			r := rand.New(rand.NewSource(time.Now().Unix()))
+			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			body = make([]byte, r.Intn(variableBody))
 		}
 		var buff = make([]byte, 8)
