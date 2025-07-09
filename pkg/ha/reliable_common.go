@@ -2,7 +2,9 @@ package ha
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
@@ -105,4 +107,41 @@ func getStatusAsString(c IReliable) string {
 	default:
 		return "Unknown"
 	}
+}
+
+/// ***** Publishers ***** ///
+
+func isReadyToSend(p IReliable, reconnectionSignal *sync.Cond) error {
+	if p.GetStatus() == StatusStreamDoesNotExist {
+		return stream.StreamDoesNotExist
+	}
+
+	if p.GetStatus() == StatusClosed {
+		return fmt.Errorf("%s is closed", p.getInfo())
+	}
+
+	if p.GetStatus() == StatusReconnecting {
+		logs.LogDebug("[Reliable] %s is reconnecting. The send is blocked", p.getInfo())
+		reconnectionSignal.L.Lock()
+		reconnectionSignal.Wait()
+		reconnectionSignal.L.Unlock()
+		logs.LogDebug("[Reliable] %s reconnected. The send is unlocked", p.getInfo())
+	}
+
+	return nil
+}
+
+func checkWriteError(p IReliable, errW error) error {
+	if errW != nil {
+		switch {
+		case errors.Is(errW, stream.FrameTooLarge):
+			{
+				return stream.FrameTooLarge
+			}
+		default:
+			time.Sleep(500 * time.Millisecond)
+			logs.LogError("[Reliable] %s - error during send %s", p.getInfo(), errW.Error())
+		}
+	}
+	return nil
 }
