@@ -29,3 +29,4 @@ dist/
 perfTest/perfTest
 go.dev/
 local_ex/
+compose/ha_tls/data*
