@@ -1,7 +1,6 @@
 package ha
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,7 +29,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 			waitTime := randomWaitWithBackoff(1)
 			logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting in %d milliseconds waiting pending messages", p.getInfo(), waitTime)
 			time.Sleep(time.Duration(waitTime) * time.Millisecond)
-			err, reconnected := retry(1, p)
+			err, reconnected := retry(1, p, p.GetStreamName())
 			if err != nil {
 				logs.LogInfo(
 					"[Reliable] - %s won't be reconnected. Error: %s", p.getInfo(), err)
@@ -113,54 +112,19 @@ func (p *ReliableProducer) newProducer() error {
 	return err
 }
 
-func (p *ReliableProducer) isReadyToSend() error {
-	if p.GetStatus() == StatusStreamDoesNotExist {
-		return stream.StreamDoesNotExist
-	}
-
-	if p.GetStatus() == StatusClosed {
-		return fmt.Errorf("%s is closed", p.getInfo())
-	}
-
-	if p.GetStatus() == StatusReconnecting {
-		logs.LogDebug("[Reliable] %s is reconnecting. The send is blocked", p.getInfo())
-		p.reconnectionSignal.L.Lock()
-		p.reconnectionSignal.Wait()
-		p.reconnectionSignal.L.Unlock()
-		logs.LogDebug("[Reliable] %s reconnected. The send is unlocked", p.getInfo())
-	}
-
-	return nil
-}
-
-func (p *ReliableProducer) checkWriteError(errW error) error {
-	if errW != nil {
-		switch {
-		case errors.Is(errW, stream.FrameTooLarge):
-			{
-				return stream.FrameTooLarge
-			}
-		default:
-			time.Sleep(500 * time.Millisecond)
-			logs.LogError("[Reliable] %s - error during send %s", p.getInfo(), errW.Error())
-		}
-	}
-	return nil
-}
-
 func (p *ReliableProducer) Send(message message.StreamMessage) error {
-	if err := p.isReadyToSend(); err != nil {
+	if err := isReadyToSend(p, p.reconnectionSignal); err != nil {
 		return err
 	}
 	p.mutex.Lock()
 	errW := p.producer.Send(message)
 	p.mutex.Unlock()
 
-	return p.checkWriteError(errW)
+	return checkWriteError(p, errW)
 }
 
 func (p *ReliableProducer) BatchSend(batchMessages []message.StreamMessage) error {
-	if err := p.isReadyToSend(); err != nil {
+	if err := isReadyToSend(p, p.reconnectionSignal); err != nil {
 		return err
 	}
 
@@ -168,7 +132,7 @@ func (p *ReliableProducer) BatchSend(batchMessages []message.StreamMessage) erro
 	errW := p.producer.BatchSend(batchMessages)
 	p.mutex.Unlock()
 
-	return p.checkWriteError(errW)
+	return checkWriteError(p, errW)
 }
 
 func (p *ReliableProducer) IsOpen() bool {
@@ -184,18 +148,7 @@ func (p *ReliableProducer) GetStatus() int {
 }
 
 func (p *ReliableProducer) GetStatusAsString() string {
-	switch p.GetStatus() {
-	case StatusOpen:
-		return "Open"
-	case StatusClosed:
-		return "Closed"
-	case StatusStreamDoesNotExist:
-		return "StreamDoesNotExist"
-	case StatusReconnecting:
-		return "Reconnecting"
-	default:
-		return "Unknown"
-	}
+	return getStatusAsString(p)
 }
 
 // IReliable interface
@@ -214,7 +167,7 @@ func (p *ReliableProducer) getEnv() *stream.Environment {
 	return p.env
 }
 
-func (p *ReliableProducer) getNewInstance() newEntityInstance {
+func (p *ReliableProducer) getNewInstance(_ string) newEntityInstance {
 	return p.newProducer
 }
 
