@@ -17,24 +17,28 @@ type Logger interface {
 	Warn(message string, v ...any)
 }
 
-var DefaultLogger Logger = defaultLogger{}
+func SetLogger(l Logger) {
+	logger = l
+}
+
+var logger Logger = defaultLogger{}
 
 var LogLevel int8
 
 func LogInfo(message string, v ...any) {
-	DefaultLogger.Info(message, v...)
+	logger.Info(message, v...)
 }
 
 func LogError(message string, v ...any) {
-	DefaultLogger.Error(message, v...)
+	logger.Error(message, v...)
 }
 
 func LogDebug(message string, v ...any) {
-	DefaultLogger.Debug(message, v...)
+	logger.Debug(message, v...)
 }
 
 func LogWarn(message string, v ...any) {
-	DefaultLogger.Warn(message, v...)
+	logger.Warn(message, v...)
 }
 
 type defaultLogger struct{}
