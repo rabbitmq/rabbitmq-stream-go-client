@@ -70,7 +70,11 @@ var _ = Describe("Reliable Super Stream Producer", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		<-signal
+		select {
+		case <-signal:
+		case <-time.After(5 * time.Second):
+			Fail("Timeout waiting messages")
+		}
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(superProducer.GetStatus()).To(Equal(StatusClosed))
 		Expect(superProducer.GetStreamName()).To(Equal(streamForSuperStreamProducer))
