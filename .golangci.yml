@@ -23,6 +23,9 @@ linters:
     - unconvert
     - unused
     - whitespace
+  exclusions:
+    paths:
+      - local_ex
   settings:
       gosec:
         excludes:
@@ -33,7 +36,6 @@ linters:
           - name: unexported-return
             disabled: true
           - name: unused-parameter
-
 formatters:
   enable:
     - gofmt

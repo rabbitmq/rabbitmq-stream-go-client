@@ -94,7 +94,8 @@ type SuperStreamConsumer struct {
 
 	SuperStream                string
 	SuperStreamConsumerOptions *SuperStreamConsumerOptions
-	MessagesHandler            MessagesHandler
+
+	MessagesHandler MessagesHandler
 }
 
 func newSuperStreamConsumer(env *Environment, superStream string, messagesHandler MessagesHandler, superStreamConsumerOptions *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {

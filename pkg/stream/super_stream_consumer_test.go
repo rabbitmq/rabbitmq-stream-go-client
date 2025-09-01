@@ -14,35 +14,6 @@ import (
 	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 )
 
-func Send(env *Environment, superStream string) {
-	signal := make(chan struct{})
-	superProducer, err := env.NewSuperStreamProducer(superStream,
-		&SuperStreamProducerOptions{
-			RoutingStrategy: NewHashRoutingStrategy(func(message message.StreamMessage) string {
-				return message.GetApplicationProperties()["routingKey"].(string)
-			})})
-	Expect(err).NotTo(HaveOccurred())
-
-	go func(ch <-chan PartitionPublishConfirm) {
-		recv := 0
-		for confirm := range ch {
-			recv += len(confirm.ConfirmationStatus)
-			if recv == 20 {
-				signal <- struct{}{}
-			}
-		}
-	}(superProducer.NotifyPublishConfirmation(1))
-
-	for i := range 20 {
-		msg := amqp.NewMessage(make([]byte, 0))
-		msg.ApplicationProperties = map[string]any{"routingKey": fmt.Sprintf("hello%d", i)}
-		Expect(superProducer.Send(msg)).NotTo(HaveOccurred())
-	}
-	<-signal
-	close(signal)
-	Expect(superProducer.Close()).NotTo(HaveOccurred())
-}
-
 var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func() {
 
 	It("Validate the Super Stream Consumer", func() {
@@ -146,7 +117,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(superStreamConsumer.init()).NotTo(HaveOccurred())
-		Send(env, superStream)
+		Expect(sendToSuperStream(env, superStream)).NotTo(HaveOccurred())
 		Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(20)))
 
 		Expect(receivedMap).To(HaveLen(3))
@@ -205,7 +176,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(secondSuperStreamConsumer.init()).NotTo(HaveOccurred())
 
-			Send(env, superStream)
+			Expect(sendToSuperStream(env, superStream)).NotTo(HaveOccurred())
 
 			time.Sleep(2 * time.Second)
 			Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }).WithPolling(300 * time.Millisecond).
@@ -320,7 +291,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		)))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(secondSuperStreamConsumer).NotTo(BeNil())
-		Send(env, superStream)
+		Expect(sendToSuperStream(env, superStream)).NotTo(HaveOccurred())
 		// both should consume the total 20 messages
 		Eventually(func() int32 { return atomic.LoadInt32(&receivedMessages) }, 300*time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(20)))
 		Expect(receivedMap).To(HaveLen(2))

@@ -17,6 +17,7 @@ services:
     volumes:
      - ./conf/:/etc/rabbitmq/
      - "./tls-gen/basic/result/:/certs"
+     - ./data0/:/var/lib/rabbitmq/
   rabbit_node1:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
@@ -34,6 +35,7 @@ services:
     volumes:
       - ./conf/:/etc/rabbitmq/
       - "./tls-gen/basic/result/:/certs"
+      - ./data1/:/var/lib/rabbitmq/
   rabbit_node2:
     environment:
       - RABBITMQ_ERLANG_COOKIE='secret_cookie'
@@ -51,6 +53,7 @@ services:
     volumes:
       - ./conf/:/etc/rabbitmq/
       - "./tls-gen/basic/result/:/certs"
+      - ./data2/:/var/lib/rabbitmq/
   haproxy:
     image: haproxy-rabbitmq-cluster
 #    container_name: haproxy
