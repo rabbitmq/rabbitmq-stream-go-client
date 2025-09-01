@@ -2,6 +2,7 @@ package ha
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
@@ -98,12 +99,12 @@ var _ = Describe("Reliable Super Stream Consumer", func() {
 	})
 
 	It("restart Reliable Consumer in case of killing connection", func() {
-		received := 0
+		var received atomic.Int32
 		clientProvidedName := uuid.New().String()
 		// signal := make(chan struct{})
 		consumer, err := NewReliableSuperStreamConsumer(envForSuperStreamConsumer, streamForSuperStreamConsumer,
 			func(_ ConsumerContext, _ *amqp.Message) {
-				received += 1
+				received.Add(1)
 			}, NewSuperStreamConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetClientProvidedName(clientProvidedName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumer).NotTo(BeNil())
@@ -150,7 +151,7 @@ var _ = Describe("Reliable Super Stream Consumer", func() {
 		Expect(errLoad).To(BeTrue())
 		Expect(offsetStored).NotTo(BeNil())
 		Expect(offsetStored).To(Equal(int64(63)))
-		Expect(received).To(Equal(200))
+		Expect(received.Load()).To(Equal(int32(200)))
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.GetStatus()).To(Equal(StatusClosed))
 		Expect(consumer.GetStatusAsString()).To(Equal("Closed"))

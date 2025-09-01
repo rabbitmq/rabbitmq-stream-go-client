@@ -95,7 +95,6 @@ type SuperStreamConsumer struct {
 	SuperStream                string
 	SuperStreamConsumerOptions *SuperStreamConsumerOptions
 
-	mutexHandler    sync.Mutex // mutex to protect the MessagesHandler
 	MessagesHandler MessagesHandler
 }
 
@@ -198,13 +197,11 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 	// and to handle the message in a different way
 	// s.MessagesHandler is not mandatory even if it is a good practice to set it
 	messagesHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
-		s.mutexHandler.Lock()
 		if s.MessagesHandler != nil {
 			s.MessagesHandler(consumerContext, message)
 		} else {
 			logs.LogWarn("[SuperStreamConsumer] No handler set for partition: %s", consumerContext.Consumer.GetStreamName())
 		}
-		s.mutexHandler.Unlock()
 	}
 	consumer, err := s.env.NewConsumer(partition, messagesHandler,
 		options.SetConsumerName(s.SuperStreamConsumerOptions.ConsumerName))
