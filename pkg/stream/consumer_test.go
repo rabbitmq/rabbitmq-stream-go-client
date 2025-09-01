@@ -832,4 +832,38 @@ var _ = Describe("Streaming Consumers", func() {
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
 
+	It("Manual Credit Strategy", func() {
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		err = producer.BatchSend(CreateArrayMessagesForTesting(30))
+		Expect(err).NotTo(HaveOccurred())
+		err = producer.BatchSend(CreateArrayMessagesForTesting(30))
+		Expect(err).NotTo(HaveOccurred())
+		err = producer.BatchSend(CreateArrayMessagesForTesting(30))
+		Expect(err).NotTo(HaveOccurred())
+
+		var messagesReceived int32
+		consumer, err := env.NewConsumer(streamName,
+			func(_ ConsumerContext, _ *amqp.Message) {
+				atomic.AddInt32(&messagesReceived, 1)
+			}, NewConsumerOptions().
+				SetOffset(OffsetSpecification{}.First()).
+				SetCreditStrategy(ManualCreditStrategy).
+				SetInitialCredits(1))
+		Expect(err).NotTo(HaveOccurred())
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesReceived)
+		}, 5*time.Second).Should(Equal(int32(30)))
+
+		Expect(consumer.Credit(2)).NotTo(HaveOccurred())
+
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&messagesReceived)
+		}, 5*time.Second).Should(Equal(int32(90)))
+
+		Expect(producer.Close()).NotTo(HaveOccurred())
+		Expect(consumer.Close()).NotTo(HaveOccurred())
+	})
+
 })
