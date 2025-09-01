@@ -693,11 +693,11 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 	streamMetadata.Leader.advPort = streamMetadata.Leader.Port
 	streamMetadata.Leader.advHost = streamMetadata.Leader.Host
 
+	res := net.Resolver{}
 	// see: https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/317
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_, err := res.LookupIPAddr(ctx, streamMetadata.Leader.Host)
-	_, err := res.LookupIPAddr(context.Background(), streamMetadata.Leader.Host)
 	if err != nil {
 		var dnsError *net.DNSError
 		if errors.As(err, &dnsError) {
