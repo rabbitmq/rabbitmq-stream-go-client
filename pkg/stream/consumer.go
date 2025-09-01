@@ -11,7 +11,7 @@ import (
 )
 
 type Consumer struct {
-	ID               uint8
+	ID               uint8 // also the SubscriptionId
 	response         *Response
 	options          *ConsumerOptions
 	onClose          func()
@@ -131,6 +131,17 @@ func (consumer *Consumer) NotifyClose() ChannelClose {
 	return ch
 }
 
+func (consumer *Consumer) Credit(credits int16) error {
+	if consumer.options.CreditStrategy != ManualCreditStrategy {
+		return fmt.Errorf("credit can only be called when CreditStrategy is ManualCreditStrategy")
+	}
+	if credits <= 0 {
+		return fmt.Errorf("credits must be a positive number")
+	}
+	consumer.options.client.credit(consumer.ID, credits)
+	return nil
+}
+
 type ConsumerContext struct {
 	Consumer  *Consumer
 	chunkInfo *chunkInfo
@@ -220,6 +231,14 @@ func (s *SingleActiveConsumer) SetEnabled(enabled bool) *SingleActiveConsumer {
 	return s
 }
 
+type CreditStrategy int
+
+const (
+	AutomaticCreditStrategy CreditStrategy = iota // Default, sends 1 credit per chunk
+	ManualCreditStrategy                          // User manages credits
+)
+
+// ConsumerOptions for a consumer
 type ConsumerOptions struct {
 	client               *Client
 	ConsumerName         string
@@ -232,14 +251,17 @@ type ConsumerOptions struct {
 	ClientProvidedName   string
 	Filter               *ConsumerFilter
 	SingleActiveConsumer *SingleActiveConsumer
+	CreditStrategy       CreditStrategy
 }
 
+// NewConsumerOptions returns a new ConsumerOptions instance
 func NewConsumerOptions() *ConsumerOptions {
 	return &ConsumerOptions{
 		Offset:             OffsetSpecification{}.Last(),
 		autocommit:         false,
 		autoCommitStrategy: NewAutoCommitStrategy(),
-		CRCCheck:           false,
+		CRCCheck:           true,
+		CreditStrategy:     AutomaticCreditStrategy,
 		initialCredits:     10,
 		ClientProvidedName: "go-stream-consumer",
 		Filter:             nil,
@@ -292,6 +314,11 @@ func (c *ConsumerOptions) SetFilter(filter *ConsumerFilter) *ConsumerOptions {
 
 func (c *ConsumerOptions) SetSingleActiveConsumer(singleActiveConsumer *SingleActiveConsumer) *ConsumerOptions {
 	c.SingleActiveConsumer = singleActiveConsumer
+	return c
+}
+
+func (c *ConsumerOptions) SetCreditStrategy(creditStrategy CreditStrategy) *ConsumerOptions {
+	c.CreditStrategy = creditStrategy
 	return c
 }
 

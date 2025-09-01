@@ -3,6 +3,7 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -693,7 +694,9 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 	streamMetadata.Leader.advHost = streamMetadata.Leader.Host
 
 	// see: https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/317
-	_, err := net.LookupIP(streamMetadata.Leader.Host)
+	ctx, cancel := context.WithTimeout(context.Background(), c.socketCallTimeout)
+	defer cancel()
+	_, err := net.DefaultResolver.LookupIPAddr(ctx, streamMetadata.Leader.Host)
 	if err != nil {
 		var dnsError *net.DNSError
 		if errors.As(err, &dnsError) {
