@@ -155,3 +155,24 @@ func (c *ReliableConsumer) Close() error {
 func (c *ReliableConsumer) GetInfo() string {
 	return c.getInfo()
 }
+
+func (c *ReliableConsumer) GetLastStoredOffset() int64 {
+	c.mutexConnection.Lock()
+	defer c.mutexConnection.Unlock()
+
+	return c.consumer.GetLastStoredOffset()
+}
+
+func (c *ReliableConsumer) StoreOffset() error {
+	c.mutexConnection.Lock()
+	defer c.mutexConnection.Unlock()
+
+	return c.consumer.StoreOffset()
+}
+
+func (c *ReliableConsumer) StoreCustomOffset(offset int64) error {
+	c.mutexConnection.Lock()
+	defer c.mutexConnection.Unlock()
+
+	return c.consumer.StoreCustomOffset(offset)
+}
