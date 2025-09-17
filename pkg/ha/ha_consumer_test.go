@@ -132,4 +132,84 @@ var _ = Describe("Reliable Consumer", func() {
 		}).WithPolling(300 * time.Millisecond).WithTimeout(20 * time.Second).Should(Equal(StatusClosed))
 
 	})
+
+	It("can commit a custom offset", func() {
+		signal := make(chan struct{})
+		var confirmed int32
+		const messageToSend = 100
+		producer, err := NewReliableProducer(envForRConsumer,
+			streamForRConsumer, NewProducerOptions(), func(messageConfirm []*ConfirmationStatus) {
+				for _, confirm := range messageConfirm {
+					Expect(confirm.IsConfirmed()).To(BeTrue())
+				}
+				if atomic.AddInt32(&confirmed, int32(len(messageConfirm))) == messageToSend {
+					signal <- struct{}{}
+				}
+			})
+		Expect(err).NotTo(HaveOccurred())
+		for range messageToSend {
+			msg := amqp.NewMessage([]byte("ha"))
+			err := producer.Send(msg)
+			Expect(err).NotTo(HaveOccurred())
+		}
+		<-signal
+		Expect(producer.Close()).NotTo(HaveOccurred())
+
+		dropSignal := make(chan struct{})
+		clientProvidedName := uuid.New().String()
+		consumer, err := NewReliableConsumer(
+			envForRConsumer,
+			streamForRConsumer,
+			NewConsumerOptions().
+				SetOffset(OffsetSpecification{}.First()).
+				SetManualCommit().
+				SetConsumerName(clientProvidedName).
+				SetClientProvidedName(clientProvidedName),
+			func(ctx ConsumerContext, _ *amqp.Message) {
+				// call on every message to test the re-connection.
+				offset := ctx.Consumer.GetOffset()
+				_ = ctx.Consumer.StoreCustomOffset(offset - 1) // commit all except the last one
+
+				// wait the connection drop to ensure correct offset tracking on re-connection
+				if offset == messageToSend/2 {
+					<-dropSignal
+				}
+			},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(consumer).NotTo(BeNil())
+
+		connectionToDrop := ""
+		Eventually(func() bool {
+			connections, err := test_helper.Connections("15672")
+			if err != nil {
+				return false
+			}
+			for _, connection := range connections {
+				if connection.ClientProperties.Connection_name == clientProvidedName {
+					connectionToDrop = connection.Name
+					return true
+				}
+			}
+			return false
+		}, time.Second*5).
+			Should(BeTrue())
+
+		Expect(connectionToDrop).NotTo(BeEmpty())
+		// kill the connection
+		errDrop := test_helper.DropConnection(connectionToDrop, "15672")
+		Expect(errDrop).NotTo(HaveOccurred())
+		dropSignal <- struct{}{}
+
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() int64 { return consumer.GetLastStoredOffset() }, 10*time.Second).
+			Should(Equal(int64(98)), "Offset should be 99")
+
+		// set a custom offset
+		Expect(consumer.StoreCustomOffset(99)).NotTo(HaveOccurred())
+		Eventually(func() int64 { return consumer.GetLastStoredOffset() }, 1*time.Second).
+			Should(Equal(int64(99)), "Offset should be 99")
+
+		Expect(consumer.Close()).NotTo(HaveOccurred())
+	})
 })

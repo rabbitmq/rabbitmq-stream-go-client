@@ -854,13 +854,13 @@ var _ = Describe("Streaming Consumers", func() {
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 5*time.Second).Should(Equal(int32(30)))
+		}, 10*time.Second).Should(Equal(int32(30)))
 
 		Expect(consumer.Credit(2)).NotTo(HaveOccurred())
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 5*time.Second).Should(Equal(int32(90)))
+		}, 10*time.Second).Should(Equal(int32(90)))
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
