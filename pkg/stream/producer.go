@@ -218,8 +218,6 @@ func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
 
 // NotifyClose returns a channel that receives the close event of the producer.
 func (producer *Producer) NotifyClose() ChannelClose {
-	// producer.mutex.Lock()
-	//defer producer.mutex.Unlock()
 	ch := make(chan Event, 1)
 	producer.closeHandler = ch
 	return ch
@@ -677,9 +675,6 @@ func (producer *Producer) close(reason Event) error {
 
 	reason.StreamName = producer.GetStreamName()
 	reason.Name = producer.GetName()
-
-	// producer.mutex.Lock()
-	//defer producer.mutex.Unlock()
 
 	if producer.closeHandler != nil {
 		producer.closeHandler <- reason
