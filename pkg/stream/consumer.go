@@ -151,6 +151,11 @@ func (cc ConsumerContext) GetEntriesCount() uint16 {
 	return cc.chunkInfo.numEntries
 }
 
+// MessagesHandler is the function that will be called when a message is received. This function
+// is used to process incoming messages. The consumer context allows access to the consumer handling
+// the message and some chunk information.
+//
+// When manual credit strategy is used, the consumer context allows to send credits to the broker.
 type MessagesHandler func(consumerContext ConsumerContext, message *amqp.Message)
 
 type AutoCommitStrategy struct {
@@ -317,6 +322,16 @@ func (c *ConsumerOptions) SetSingleActiveConsumer(singleActiveConsumer *SingleAc
 	return c
 }
 
+// SetCreditStrategy sets the credit strategy for the consumer. Available strategies are:
+//   - AutomaticCreditStrategy: 1 credit per chunk.
+//   - ManualCreditStrategy: the number of credits specified in the initialCredits field.
+//
+// The credit is a flow control mechanism that allows consumers to control how RabbitMQ sends messages to them.
+//
+// The AutomaticCreditStrategy delegates the credit management to the library. The library will send 1 credit after receiving a chunk.
+//
+// The ManualCreditStrategy lets the user send credits to the broker. When ManualCreditStrategy is used, it is critically important
+// to send credits to keep receiving messages. The consumer context in the message handler can be used to send credits.
 func (c *ConsumerOptions) SetCreditStrategy(creditStrategy CreditStrategy) *ConsumerOptions {
 	c.CreditStrategy = creditStrategy
 	return c
