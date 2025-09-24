@@ -835,11 +835,12 @@ var _ = Describe("Streaming Consumers", func() {
 	It("Manual Credit Strategy", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		err = producer.BatchSend(CreateArrayMessagesForTesting(30))
+		const batchSize = 32
+		err = producer.BatchSend(CreateArrayMessagesForTesting(batchSize))
 		Expect(err).NotTo(HaveOccurred())
-		err = producer.BatchSend(CreateArrayMessagesForTesting(30))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(batchSize))
 		Expect(err).NotTo(HaveOccurred())
-		err = producer.BatchSend(CreateArrayMessagesForTesting(30))
+		err = producer.BatchSend(CreateArrayMessagesForTesting(batchSize))
 		Expect(err).NotTo(HaveOccurred())
 
 		var messagesReceived int32
@@ -854,13 +855,13 @@ var _ = Describe("Streaming Consumers", func() {
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 10*time.Second).Should(Equal(int32(30)))
+		}, 10*time.Second).Should(Equal(int32(batchSize)))
 
 		Expect(consumer.Credit(2)).NotTo(HaveOccurred())
 
 		Eventually(func() int32 {
 			return atomic.LoadInt32(&messagesReceived)
-		}, 10*time.Second).Should(Equal(int32(90)))
+		}, 10*time.Second).Should(Equal(int32(batchSize * 3)))
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
