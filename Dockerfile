@@ -1,4 +1,4 @@
-FROM golang:1.23 as builder
+FROM golang:1.24 AS builder
 ENV GOPATH=/go GOOS=linux CGO_ENABLED=0
 WORKDIR /go/src/github.com/rabbitmq/rabbitmq-stream-go-client
 COPY go.mod go.sum VERSION ./
@@ -10,7 +10,7 @@ RUN mkdir /stream_perf_test
 RUN go get -d -v ./...
 RUN VERSION=$(cat VERSION) && go build -ldflags "-X main.Version=$VERSION" -o /stream_perf_test/stream-perf-test perfTest/perftest.go
 
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 RUN set -eux; \
 	apt-get update; \
