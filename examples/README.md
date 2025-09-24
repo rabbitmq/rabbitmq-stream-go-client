@@ -17,3 +17,4 @@ Stream examples
  - [Reliable](./reliable) - Reliable Producer and Reliable Consumer example
  - [Super Stream](./super_stream) - Super Stream example with Single Active Consumer
  - [Reliable Super Stream started](./reliable_super_stream_getting_started) - Reliable Super Stream getting started example
+ - [Manual Credit](./manual_credit) - Manual Credit strategy example
