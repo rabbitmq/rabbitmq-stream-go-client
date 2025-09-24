@@ -30,7 +30,9 @@ func main() {
 		l.Printf("Error creating environment: %s", err)
 		panic(err)
 	}
-	defer env.Close()
+	defer func() {
+		_ = env.Close()
+	}()
 
 	l.Println("Declaring stream")
 	const streamName = "manual_credit"
@@ -43,7 +45,9 @@ func main() {
 		l.Printf("Error declaring stream: %s", err)
 		panic(err)
 	}
-	defer env.DeleteStream(streamName)
+	defer func() {
+		_ = env.DeleteStream(streamName)
+	}()
 
 	// Get a new producer for a stream
 	l.Println("Creating producer")
@@ -76,7 +80,7 @@ func main() {
 	count := 0
 	receivedBatches := 0
 	lastBatchSize := -1
-	handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+	handleMessages := func(consumerContext stream.ConsumerContext, _ *amqp.Message) {
 		select {
 		case <-done:
 			return
@@ -119,6 +123,7 @@ func main() {
 	}
 
 	l.Println("Press any key to stop ")
+	//nolint:dogsled
 	_, _, _ = reader.ReadLine()
 	close(done)
 	time.Sleep(200 * time.Millisecond)
