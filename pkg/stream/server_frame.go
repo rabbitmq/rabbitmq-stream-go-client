@@ -409,10 +409,6 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	chunk.offsetMessages = batchConsumingMessages
 	if consumer.getStatus() == open {
 		consumer.chunkForConsumer <- chunk
-		// request a credit for the next chunk
-		if consumer.options.CreditStrategy == AutomaticCreditStrategy {
-			c.credit(subscriptionId, 1)
-		}
 	} else {
 		logs.LogDebug("The consumer %s for the stream %s is closed during the chunk dispatching. "+
 			"Messages won't dispatched", consumer.GetName(), consumer.GetStreamName())

@@ -497,7 +497,8 @@ var _ = Describe("Streaming Consumers", func() {
 
 		// waiting the internal queue to fulfill
 		time.Sleep(time.Second)
-		Expect(len(consumer.chunkForConsumer)).To(Equal(credits))
+		// - 1 because the first message was consumed by the handler
+		Expect(len(consumer.chunkForConsumer)).To(Equal(credits - 1))
 
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
