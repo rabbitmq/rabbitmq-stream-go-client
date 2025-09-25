@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 )
 
 var _ = Describe("Streaming Consumers", func() {
@@ -835,33 +836,32 @@ var _ = Describe("Streaming Consumers", func() {
 	It("Manual Credit Strategy", func() {
 		producer, err := env.NewProducer(streamName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		const batchSize = 32
-		err = producer.BatchSend(CreateArrayMessagesForTesting(batchSize))
-		Expect(err).NotTo(HaveOccurred())
-		err = producer.BatchSend(CreateArrayMessagesForTesting(batchSize))
-		Expect(err).NotTo(HaveOccurred())
+
+		const batchSize = 500
 		err = producer.BatchSend(CreateArrayMessagesForTesting(batchSize))
 		Expect(err).NotTo(HaveOccurred())
 
-		var messagesReceived int32
+		msgCh := make(chan *amqp.Message)
 		consumer, err := env.NewConsumer(streamName,
-			func(_ ConsumerContext, _ *amqp.Message) {
-				atomic.AddInt32(&messagesReceived, 1)
+			func(_ ConsumerContext, msg *amqp.Message) {
+				msgCh <- msg
 			}, NewConsumerOptions().
 				SetOffset(OffsetSpecification{}.First()).
 				SetCreditStrategy(ManualCreditStrategy).
 				SetInitialCredits(1))
 		Expect(err).NotTo(HaveOccurred())
 
-		Eventually(func() int32 {
-			return atomic.LoadInt32(&messagesReceived)
-		}, 10*time.Second).Should(Equal(int32(batchSize)))
+		// Sad workaround to avoid asserting too soon when there's nothing in the channel
+		<-time.After(time.Millisecond * 100)
 
-		Expect(consumer.Credit(2)).NotTo(HaveOccurred())
-
-		Eventually(func() int32 {
-			return atomic.LoadInt32(&messagesReceived)
-		}, 10*time.Second).Should(Equal(int32(batchSize * 3)))
+		// Eventually, it should exhaust the credits
+		Eventually(msgCh).Within(3*time.Second).ShouldNot(Receive(), "expected no messages after exhausting credits")
+		// Give more credits to consume the entire batch of 500 messages
+		Expect(consumer.Credit(20)).To(Succeed())
+		// Eventually, it should receive the last message
+		Eventually(msgCh).Within(10 * time.Second).Should(Receive(test_helper.HaveMatchingData("test_499")))
+		// It should not receive any more messages, because the entire batch of 500 messages has been consumed
+		Consistently(msgCh).ShouldNot(Receive())
 
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
