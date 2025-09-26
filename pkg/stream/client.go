@@ -998,11 +998,19 @@ func (c *Client) declareSubscriber(streamName string,
 				if !ok {
 					return
 				}
-				for _, offMessage := range chunk.offsetMessages {
+
+				halfChunkSize := len(chunk.offsetMessages) / 2
+				for i, offMessage := range chunk.offsetMessages {
 					consumer.setCurrentOffset(offMessage.offset)
 					if canDispatch(offMessage) {
 						consumer.MessagesHandler(ConsumerContext{Consumer: consumer, chunkInfo: &chunk}, offMessage.message)
 					}
+
+					// when half of the chunk is reached ask for a credit
+					if halfChunkSize == i && consumer.options.CreditStrategy == AutomaticCreditStrategy {
+						c.credit(consumer.ID, 1)
+					}
+
 					if consumer.options.autocommit {
 						messageCountBeforeStorage := consumer.increaseMessageCountBeforeStorage()
 						if messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage ||
