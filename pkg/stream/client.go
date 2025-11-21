@@ -677,6 +677,10 @@ func (c *Client) queryPublisherSequence(publisherReference string, stream string
 }
 
 func (c *Client) BrokerLeader(stream string) (*Broker, error) {
+	return c.BrokerLeaderWithResolver(stream, nil)
+}
+
+func (c *Client) BrokerLeaderWithResolver(stream string, resolver *AddressResolver) (*Broker, error) {
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
 		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
@@ -692,6 +696,13 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 
 	streamMetadata.Leader.advPort = streamMetadata.Leader.Port
 	streamMetadata.Leader.advHost = streamMetadata.Leader.Host
+
+	// If AddressResolver is configured, use it directly and skip DNS lookup
+	if resolver != nil {
+		streamMetadata.Leader.Host = resolver.Host
+		streamMetadata.Leader.Port = strconv.Itoa(resolver.Port)
+		return streamMetadata.Leader, nil
+	}
 
 	res := net.Resolver{}
 	// see: https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/317
@@ -723,6 +734,10 @@ func (c *Client) StreamExists(stream string) bool {
 	return streamMetadata.responseCode == responseCodeOk
 }
 func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
+	return c.BrokerForConsumerWithResolver(stream, nil)
+}
+
+func (c *Client) BrokerForConsumerWithResolver(stream string, resolver *AddressResolver) (*Broker, error) {
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
 		return nil, fmt.Errorf("leader error for stream: %s", stream)
@@ -735,6 +750,35 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 
 	if streamMetadata.Leader == nil {
 		return nil, LeaderNotReady
+	}
+
+	// If AddressResolver is configured, use it for all brokers and skip DNS lookup
+	if resolver != nil {
+		brokers := make([]*Broker, 0, 1+len(streamMetadata.Replicas))
+
+		// Add leader with resolver host/port
+		leaderBroker := &Broker{
+			Host: resolver.Host,
+			Port: strconv.Itoa(resolver.Port),
+		}
+		brokers = append(brokers, leaderBroker)
+
+		// Add replicas with resolver host/port
+		for idx, replica := range streamMetadata.Replicas {
+			if replica == nil {
+				logs.LogWarn("Stream %s replica not ready: %d", stream, idx)
+				continue
+			}
+			replicaBroker := &Broker{
+				Host: resolver.Host,
+				Port: strconv.Itoa(resolver.Port),
+			}
+			brokers = append(brokers, replicaBroker)
+		}
+
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		n := r.Intn(len(brokers))
+		return brokers[n], nil
 	}
 
 	brokers := make([]*Broker, 0, 1+len(streamMetadata.Replicas))

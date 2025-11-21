@@ -664,7 +664,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 	options *ProducerOptions, resolver *AddressResolver, rpcTimeOut time.Duration) (*Producer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
-	leader, err := clientLocator.BrokerLeader(streamName)
+	leader, err := clientLocator.BrokerLeaderWithResolver(streamName, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -728,7 +728,7 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 	consumerOptions *ConsumerOptions, resolver *AddressResolver, rpcTimeout time.Duration) (*Consumer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
-	consumerBroker, err := clientLocator.BrokerForConsumer(streamName)
+	consumerBroker, err := clientLocator.BrokerForConsumerWithResolver(streamName, resolver)
 	if err != nil {
 		return nil, err
 	}
