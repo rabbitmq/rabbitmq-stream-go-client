@@ -189,6 +189,13 @@ func (po *ProducerOptions) SetClientProvidedName(name string) *ProducerOptions {
 	return po
 }
 
+func (po *ProducerOptions) GetClientProvidedName(defaultClientProvidedName string) string {
+	if po == nil {
+		return defaultClientProvidedName
+	}
+	return po.ClientProvidedName
+}
+
 // SetFilter sets the filter for the producer. See ProducerOptions.Filter for more details
 func (po *ProducerOptions) SetFilter(filter *ProducerFilter) *ProducerOptions {
 	po.Filter = filter

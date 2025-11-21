@@ -457,6 +457,10 @@ func (envOptions *EnvironmentOptions) SetRPCTimeout(timeout time.Duration) *Envi
 	return envOptions
 }
 
+type clientOptions interface {
+	GetClientProvidedName(defaultClientProvidedName string) string
+}
+
 type environmentCoordinator struct {
 	mutex             *sync.Mutex
 	clientsPerContext sync.Map
@@ -535,26 +539,34 @@ func (c *Client) maybeCleanConsumers(streamName string) {
 	})
 }
 
-func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string, options *ProducerOptions, rpcTimeout time.Duration, cleanUp func()) (*Producer, error) {
+func (cc *environmentCoordinator) newClientEntity(
+	isListFull func(int) bool,
+	defaultClientName string,
+	leader *Broker,
+	tcpParameters *TCPParameters,
+	saslConfiguration *SaslConfiguration,
+	options clientOptions,
+	rpcTimeout time.Duration,
+) (*Client, error) {
 	cc.mutex.Lock()
 	defer cc.mutex.Unlock()
 	var clientResult *Client
 
 	cc.clientsPerContext.Range(func(key, value any) bool {
-		if !cc.isProducerListFull(key.(int)) {
+		if !isListFull(key.(int)) {
 			clientResult = value.(*Client)
 			return false
 		}
 		return true
 	})
 
-	clientProvidedName := "go-stream-producer"
-	if options != nil && options.ClientProvidedName != "" {
-		clientProvidedName = options.ClientProvidedName
+	clientProvidedName := defaultClientName
+	if options != nil {
+		clientProvidedName = options.GetClientProvidedName(defaultClientName)
 	}
 
 	if clientResult == nil {
-		clientResult = cc.newClientForProducer(clientProvidedName, leader, tcpParameters, saslConfiguration, rpcTimeout)
+		clientResult = cc.newClientForConnection(clientProvidedName, leader, tcpParameters, saslConfiguration, rpcTimeout)
 	}
 
 	err := clientResult.connect()
@@ -562,68 +574,53 @@ func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCP
 		return nil, err
 	}
 
-	for clientResult.connectionProperties.host != leader.advHost ||
-		clientResult.connectionProperties.port != leader.advPort {
+	return cc.validateBrokerConnection(clientResult, leader,
+		func() *Client {
+			return cc.newClientForConnection(clientProvidedName, leader, tcpParameters, saslConfiguration, rpcTimeout)
+		})
+}
+
+func (cc *environmentCoordinator) newProducer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, streamName string, options *ProducerOptions, rpcTimeout time.Duration, cleanUp func()) (*Producer, error) {
+	client, err := cc.newClientEntity(cc.isProducerListFull, "go-stream-producer", leader, tcpParameters, saslConfiguration, options, rpcTimeout)
+	if err != nil {
+		return nil, err
+	}
+	return client.declarePublisher(streamName, options, cleanUp)
+}
+
+func (cc *environmentCoordinator) newConsumer(leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration,
+	streamName string, messagesHandler MessagesHandler,
+	options *ConsumerOptions, rpcTimeout time.Duration, cleanUp func()) (*Consumer, error) {
+	client, err := cc.newClientEntity(cc.isConsumerListFull, "go-stream-consumer", leader, tcpParameters, saslConfiguration, options, rpcTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.declareSubscriber(streamName, messagesHandler, options, cleanUp)
+}
+
+func (cc *environmentCoordinator) validateBrokerConnection(client *Client, broker *Broker, newClientFunc func() *Client) (*Client, error) {
+	for client.connectionProperties.host != broker.advHost ||
+		client.connectionProperties.port != broker.advPort {
 		logs.LogDebug("connectionProperties host %s doesn't match with the advertised_host %s, advertised_port %s .. retry",
-			clientResult.connectionProperties.host,
-			leader.advHost, leader.advPort)
-		clientResult.Close()
-		clientResult = cc.newClientForProducer(clientProvidedName, leader, tcpParameters, saslConfiguration, rpcTimeout)
-		err = clientResult.connect()
+			client.connectionProperties.host,
+			broker.advHost, broker.advPort)
+		client.Close()
+		client = newClientFunc()
+		err := client.connect()
 		if err != nil {
 			return nil, err
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(time.Duration(500+rand.Intn(1000)) * time.Millisecond)
 	}
-
-	producer, err := clientResult.declarePublisher(streamName, options, cleanUp)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return producer, nil
+	return client, nil
 }
 
-func (cc *environmentCoordinator) newClientForProducer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, rpcTimeOut time.Duration) *Client {
-	clientResult := newClient(connectionName, leader, tcpParameters, saslConfiguration, rpcTimeOut)
+func (cc *environmentCoordinator) newClientForConnection(connectionName string, broker *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, rpcTimeout time.Duration) *Client {
+	clientResult := newClient(connectionName, broker, tcpParameters, saslConfiguration, rpcTimeout)
 	cc.nextId++
-
 	cc.clientsPerContext.Store(cc.nextId, clientResult)
 	return clientResult
-}
-
-func (cc *environmentCoordinator) newConsumer(connectionName string, leader *Broker, tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration,
-	streamName string, messagesHandler MessagesHandler,
-	options *ConsumerOptions, rpcTimeout time.Duration, cleanUp func()) (*Consumer, error) {
-	cc.mutex.Lock()
-	defer cc.mutex.Unlock()
-	var clientResult *Client
-
-	cc.clientsPerContext.Range(func(key, value any) bool {
-		if !cc.isConsumerListFull(key.(int)) {
-			clientResult = value.(*Client)
-			return false
-		}
-		return true
-	})
-
-	if clientResult == nil {
-		clientResult = newClient(connectionName, leader, tcpParameters, saslConfiguration, rpcTimeout)
-		cc.nextId++
-		cc.clientsPerContext.Store(cc.nextId, clientResult)
-	}
-	// try to reconnect in case the socket is closed
-	err := clientResult.connect()
-	if err != nil {
-		return nil, err
-	}
-
-	subscriber, err := clientResult.declareSubscriber(streamName, messagesHandler, options, cleanUp)
-	if err != nil {
-		return nil, err
-	}
-	return subscriber, nil
 }
 
 func (cc *environmentCoordinator) Close() error {
@@ -664,10 +661,12 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 	options *ProducerOptions, resolver *AddressResolver, rpcTimeOut time.Duration) (*Producer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
-	leader, err := clientLocator.BrokerLeader(streamName)
+
+	leader, err := clientLocator.BrokerLeaderWithResolver(streamName, resolver)
 	if err != nil {
 		return nil, err
 	}
+
 	coordinatorKey := leader.hostPort()
 	if ps.producersCoordinator[coordinatorKey] == nil {
 		ps.producersCoordinator[coordinatorKey] = &environmentCoordinator{
@@ -677,6 +676,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 			nextId:            0,
 		}
 	}
+
 	leader.cloneFrom(clientLocator.broker, resolver)
 
 	cleanUp := func() {
@@ -684,6 +684,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 			coordinator.maybeCleanClients()
 		}
 	}
+
 	producer, err := ps.producersCoordinator[coordinatorKey].newProducer(leader, clientLocator.tcpParameters,
 		clientLocator.saslConfiguration, streamName, options, rpcTimeOut, cleanUp)
 	if err != nil {
@@ -728,10 +729,12 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 	consumerOptions *ConsumerOptions, resolver *AddressResolver, rpcTimeout time.Duration) (*Consumer, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
+
 	consumerBroker, err := clientLocator.BrokerForConsumer(streamName)
 	if err != nil {
 		return nil, err
 	}
+
 	coordinatorKey := consumerBroker.hostPort()
 	if ps.consumersCoordinator[coordinatorKey] == nil {
 		ps.consumersCoordinator[coordinatorKey] = &environmentCoordinator{
@@ -741,11 +744,9 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 			nextId:            0,
 		}
 	}
+
 	consumerBroker.cloneFrom(clientLocator.broker, resolver)
-	clientProvidedName := "go-stream-consumer"
-	if consumerOptions != nil && consumerOptions.ClientProvidedName != "" {
-		clientProvidedName = consumerOptions.ClientProvidedName
-	}
+
 	cleanUp := func() {
 		for _, coordinator := range ps.consumersCoordinator {
 			coordinator.maybeCleanClients()
@@ -753,7 +754,7 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 	}
 
 	consumer, err := ps.consumersCoordinator[coordinatorKey].
-		newConsumer(clientProvidedName, consumerBroker, clientLocator.tcpParameters,
+		newConsumer(consumerBroker, clientLocator.tcpParameters,
 			clientLocator.saslConfiguration,
 			streamName, messagesHandler, consumerOptions, rpcTimeout, cleanUp)
 	if err != nil {

@@ -312,6 +312,13 @@ func (c *ConsumerOptions) SetClientProvidedName(clientProvidedName string) *Cons
 	return c
 }
 
+func (c *ConsumerOptions) GetClientProvidedName(defaultClientProvidedName string) string {
+	if c == nil {
+		return defaultClientProvidedName
+	}
+	return c.ClientProvidedName
+}
+
 func (c *ConsumerOptions) SetFilter(filter *ConsumerFilter) *ConsumerOptions {
 	c.Filter = filter
 	return c
