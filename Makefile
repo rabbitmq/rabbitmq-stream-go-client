@@ -17,11 +17,11 @@ fmt:
 	go fmt ./...
 
 check:
-	golangci-lint run --fix
+	golangci-lint run
 
 NUM_PROCS ?= 2
 TEST_TIMEOUT ?= 3m
-test: vet fmt check
+test: vet fmt
 	go run -mod=mod github.com/onsi/ginkgo/v2/ginkgo -r --procs=$(NUM_PROCS) --compilers=$(NUM_PROCS) \
 		--randomize-all --randomize-suites \
 		--cover --coverprofile=coverage.txt --covermode=atomic \
@@ -57,16 +57,15 @@ perf-test-docker-build: perf-test-build
 perf-test-docker-push: perf-test-docker-build
 	$(BUILDKIT) push pivotalrabbitmq/go-stream-perf-test:$(VERSION)
 
-RABBITMQ_OCI ?= rabbitmq:3-management
+RABBITMQ_OCI ?= rabbitmq:4-management
 BUILDKIT_RUN_ARGS ?= --pull always
 .PHONY: rabbitmq-server
 rabbitmq-server:
-	$(BUILDKIT) build -t rabbitmq-tls-test -f CiDockerfile .
+	$(BUILDKIT) build --tag rabbitmq-tls-test --file .ci/Dockerfile .
 	$(BUILDKIT) run -it --rm --name rabbitmq-tls-test \
 		-p 5552:5552 -p 5551:5551 -p 5672:5672 -p 15672:15672 \
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
 		rabbitmq-tls-test
-
 
 rabbitmq-ha-proxy:
 	cd compose/ha_tls; rm -rf tls-gen;
@@ -87,10 +86,7 @@ rabbitmq-server-tls:
 		-v  $(shell pwd)/compose/tls/conf/:/etc/rabbitmq/ -v $(shell pwd)/compose/tls/tls-gen/basic/result/:/certs \
 		-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbitmq_stream advertised_host localhost" \
 		--pull always \
-		docker.io/rabbitmq:3-management
+		docker.io/rabbitmq:4-management
 
 local-release:
 	goreleaser release --skip-publish --rm-dist --skip=validate
-
-
-
