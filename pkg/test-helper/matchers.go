@@ -18,7 +18,7 @@ func HaveMatchingData(expected string) types.GomegaMatcher {
 	}
 }
 
-func (matcher *MessageDataMatcher) Match(actual interface{}) (success bool, err error) {
+func (matcher *MessageDataMatcher) Match(actual any) (success bool, err error) {
 	msg, ok := actual.(*amqp.Message)
 	if !ok {
 		return false, fmt.Errorf("HaveMatchingData matcher expects a *amqp.Message")
@@ -37,7 +37,7 @@ func (matcher *MessageDataMatcher) Match(actual interface{}) (success bool, err 
 	return bytes.Equal(actualData, []byte(matcher.ExpectedData)), nil
 }
 
-func (matcher *MessageDataMatcher) FailureMessage(actual interface{}) (message string) {
+func (matcher *MessageDataMatcher) FailureMessage(actual any) (message string) {
 	msg := actual.(*amqp.Message)
 	var actualData []byte
 	for _, data := range msg.Data {
@@ -46,7 +46,7 @@ func (matcher *MessageDataMatcher) FailureMessage(actual interface{}) (message s
 	return fmt.Sprintf("Expected\n\t%#v\nto have data matching\n\t%#v\nbut it was\n\t%#v", actual, matcher.ExpectedData, string(actualData))
 }
 
-func (matcher *MessageDataMatcher) NegatedFailureMessage(actual interface{}) (message string) {
+func (matcher *MessageDataMatcher) NegatedFailureMessage(actual any) (message string) {
 	msg := actual.(*amqp.Message)
 	var actualData []byte
 	for _, data := range msg.Data {
