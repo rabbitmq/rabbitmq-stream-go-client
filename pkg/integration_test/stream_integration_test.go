@@ -20,7 +20,7 @@ var _ = Describe("StreamIntegration", func() {
 		var (
 			addresses = []string{
 				"rabbitmq-stream://guest:guest@localhost:5552/"}
-			streamName           = "test-next"
+			streamName           = fmt.Sprintf("test-next-%d", time.Now().UnixNano())
 			streamEnv            *stream.Environment
 			producer             *stream.Producer
 			totalInitialMessages int
@@ -83,7 +83,7 @@ var _ = Describe("StreamIntegration", func() {
 				))
 		})
 
-		It("consumes from an existing stream", func() {
+		It("consumes from an existing stream", Focus, func() {
 			By("attaching using Next strategy")
 			options := stream.NewConsumerOptions().
 				SetConsumerName("golang-client-issue-158-test").
