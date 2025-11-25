@@ -113,9 +113,10 @@ func (consumer *Consumer) setPromotedAsActive(promoted bool) {
 //		 ....
 //		 SetOffset(stream.OffsetSpecification{}.Offset(offset)).
 //
-// There is an edge case where the same consumer name is used by different clients
-// and the last stored offset in memory is not the one expected by the user.
-// So to avoid confusion it is better to use QueryOffset that always gets the value from the server.
+//There is an edge case in which multiple clients use the same consumer name,
+//and the last stored offset in memory is not the one the user expects.
+//So, to avoid confusion, it is better to use QueryOffset, which always gets the value from the server.
+
 func (consumer *Consumer) GetLastStoredOffset() int64 {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
