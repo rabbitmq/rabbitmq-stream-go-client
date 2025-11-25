@@ -200,8 +200,11 @@ var _ = Describe("Reliable Consumer", func() {
 		errDrop := test_helper.DropConnection(connectionToDrop, "15672")
 		Expect(errDrop).NotTo(HaveOccurred())
 		dropSignal <- struct{}{}
-
 		Expect(err).NotTo(HaveOccurred())
+
+		Eventually(func() (bool, error) { return test_helper.IsConnectionAlive(clientProvidedName, "15672") }, 10*time.Second).
+			Should(BeTrue(), "check if the connection is alive")
+
 		Eventually(func() int64 { return consumer.GetLastStoredOffset() }, 10*time.Second).
 			Should(Equal(int64(98)), "Offset should be 99")
 

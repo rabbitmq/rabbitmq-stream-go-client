@@ -33,6 +33,20 @@ func Connections(port string) ([]connection, error) {
 	return data, nil
 }
 
+// IsConnectionAlive check if a connection is alive given its client provided name
+func IsConnectionAlive(clientProvidedName string, port string) (bool, error) {
+	connections, err := Connections(port)
+	if err != nil {
+		return false, err
+	}
+	for _, connection := range connections {
+		if connection.ClientProperties.Connection_name == clientProvidedName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func DropConnectionClientProvidedName(clientProvidedName string, port string) error {
 	connections, err := Connections(port)
 	if err != nil {
