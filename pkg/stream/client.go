@@ -904,12 +904,16 @@ func (c *Client) declareSubscriber(streamName string,
 		return nil, fmt.Errorf("specify a valid Offset")
 	}
 
-	if options.autoCommitStrategy.flushInterval < 1*time.Second {
+	if (options.autoCommitStrategy != nil) && (options.autoCommitStrategy.flushInterval < 1*time.Second) && options.autocommit {
 		return nil, fmt.Errorf("flush internal must be bigger than one second")
 	}
 
-	if options.autoCommitStrategy.messageCountBeforeStorage < 1 {
+	if (options.autoCommitStrategy != nil) && options.autoCommitStrategy.messageCountBeforeStorage < 1 && options.autocommit {
 		return nil, fmt.Errorf("message count before storage must be bigger than one")
+	}
+
+	if (options.autoCommitStrategy != nil) && options.ConsumerName == "" && options.autocommit {
+		return nil, fmt.Errorf("consumer name must be set when autocommit is enabled")
 	}
 
 	if messagesHandler == nil {

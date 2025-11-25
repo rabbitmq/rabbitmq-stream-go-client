@@ -101,6 +101,21 @@ func (consumer *Consumer) setPromotedAsActive(promoted bool) {
 	consumer.isPromotedAsActive = promoted
 }
 
+// Deprecated: The method name may be misleading.
+// The method does not indicate the last message stored, but the last stored in memory.
+// The method was added to avoid to query the offset from the server, but it created confusion.
+// Use `QueryOffset` instead.:
+//
+//	     	offset, err := consumer.QueryOffset()
+//		// or:
+//			offset, err := env.QueryOffset(consumerName, streamName)
+//		 // check the error
+//		 ....
+//		 SetOffset(stream.OffsetSpecification{}.Offset(offset)).
+//
+// There is an edge case where the same consumer name is used by different clients
+// and the last stored offset in memory is not the one expected by the user.
+// So to avoid confusion it is better to use QueryOffset that always gets the value from the server.
 func (consumer *Consumer) GetLastStoredOffset() int64 {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
@@ -459,9 +474,12 @@ func (consumer *Consumer) getLastAutoCommitStored() time.Time {
 	return consumer.lastAutoCommitStored
 }
 
+// StoreOffset stores the current offset for this consumer given its name and stream
 func (consumer *Consumer) StoreOffset() error {
 	return consumer.internalStoreOffset()
 }
+
+// StoreCustomOffset stores a custom offset for this consumer given its name and stream
 func (consumer *Consumer) StoreCustomOffset(offset int64) error {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
@@ -517,7 +535,11 @@ func (consumer *Consumer) writeConsumeUpdateOffsetToSocket(correlationID uint32,
 	return consumer.options.client.socket.writeAndFlush(b.Bytes())
 }
 
+// QueryOffset returns the last stored offset for this consumer given its name and stream
 func (consumer *Consumer) QueryOffset() (int64, error) {
+	if (consumer.options == nil) || (consumer.options.client == nil) || (consumer.options.ConsumerName == "") || (consumer.options.streamName == "") {
+		return -1, fmt.Errorf("offset query error: consumer not properly initialized")
+	}
 	return consumer.options.client.queryOffset(consumer.options.ConsumerName, consumer.options.streamName)
 }
 

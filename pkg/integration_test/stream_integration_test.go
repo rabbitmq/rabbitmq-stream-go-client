@@ -83,7 +83,7 @@ var _ = Describe("StreamIntegration", func() {
 				))
 		})
 
-		It("consumes from an existing stream", Focus, func() {
+		It("consumes from an existing stream", func() {
 			By("attaching using Next strategy")
 			options := stream.NewConsumerOptions().
 				SetConsumerName("golang-client-issue-158-test").

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -67,6 +68,30 @@ func DropConnectionClientProvidedName(clientProvidedName string, port string) er
 	err = DropConnection(connectionToDrop, port)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// drop and wait for the connection to be dropped
+
+func DropConnectionAndWait(clientProvidedName string, port string, timeout time.Duration) error {
+	err := DropConnectionClientProvidedName(clientProvidedName, port)
+	if err != nil {
+		return err
+	}
+
+	// wait for the connection to be dropped until timeout
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		isAlive, err := IsConnectionAlive(clientProvidedName, port)
+		if err != nil {
+			return err
+		}
+		if !isAlive {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	return nil
