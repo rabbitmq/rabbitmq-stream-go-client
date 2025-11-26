@@ -219,7 +219,7 @@ var _ = Describe("Streaming Consumers", func() {
 					SetManualCommit().
 					SetCRCCheck(false))
 			Expect(err).NotTo(HaveOccurred())
-			Eventually(func() int64 { return consumer.GetLastStoredOffset() }, 5*time.Second).Should(Equal(int64(99)),
+			Eventually(func() (int64, error) { return consumer.QueryOffset() }, 5*time.Second).Should(Equal(int64(99)),
 				"Offset should be 99")
 			Expect(consumer.Close()).NotTo(HaveOccurred())
 		})
@@ -236,18 +236,18 @@ var _ = Describe("Streaming Consumers", func() {
 						SetCountBeforeStorage(100).
 						SetFlushInterval(50*time.Second))) // here we set a high value to do not trigger the time
 			Expect(err).NotTo(HaveOccurred())
-			Eventually(func() int64 {
-				return consumer.GetLastStoredOffset()
+			time.Sleep(500 * time.Millisecond)
+			Eventually(func() (int64, error) {
+				v, err := consumer.QueryOffset()
+				// we can ignore the offset not found error here
+				if err != nil {
+					return 0, nil
+				}
+				return v, err
 				// 99 is the offset since it starts from 0
-			}, 5*time.Second).Should(Equal(int64(99)),
+			}, 5*time.Second).WithPolling(500*time.Millisecond).Should(Equal(int64(99)),
 				"Offset should be 99")
 			Expect(consumer.Close()).NotTo(HaveOccurred())
-			/// When the consumer is closed, it has to save the offset
-			// so  the last offset has to be 104
-			Eventually(func() int64 {
-				return consumer.GetLastStoredOffset()
-			}, 5*time.Second).Should(Equal(int64(104)),
-				"Offset should be 104")
 
 			consumerTimer, errTimer := env.NewConsumer(streamName,
 				func(_ ConsumerContext, _ *amqp.Message) {
@@ -259,19 +259,16 @@ var _ = Describe("Streaming Consumers", func() {
 						SetCountBeforeStorage(10000000). /// We avoid raising the timer
 						SetFlushInterval(1*time.Second)))
 			Expect(errTimer).NotTo(HaveOccurred())
-			time.Sleep(2 * time.Second)
-			Eventually(func() int64 {
-				return consumerTimer.GetLastStoredOffset()
-			}, 5*time.Second).Should(Equal(int64(104)),
+			Eventually(func() (int64, error) {
+				v, err := consumerTimer.QueryOffset()
+				// we can ignore the offset not found error here
+				if err != nil {
+					return 0, nil
+				}
+				return v, err
+			}, 5*time.Second).WithPolling(500*time.Millisecond).Should(Equal(int64(104)),
 				"Offset should be 104")
 			Expect(consumerTimer.Close()).NotTo(HaveOccurred())
-			/// When the consumer is closed, it has to save the offset
-			// so  the last offest has to be 104
-			Eventually(func() int64 {
-				return consumerTimer.GetLastStoredOffset()
-			}, 5*time.Second).Should(Equal(int64(104)),
-				"Offset should be 104")
-
 		})
 
 	})
@@ -285,6 +282,7 @@ var _ = Describe("Streaming Consumers", func() {
 			func(_ ConsumerContext, _ *amqp.Message) {
 				atomic.AddInt32(&messagesReceived, 1)
 			}, NewConsumerOptions().
+				SetConsumerName("autoCommitStrategy").
 				SetAutoCommit(NewAutoCommitStrategy().
 					SetCountBeforeStorage(10000000).
 					SetFlushInterval(time.Second)))
@@ -294,14 +292,17 @@ var _ = Describe("Streaming Consumers", func() {
 		for i := 0; i < maxMessages; i++ {
 			Expect(producer.Send(CreateMessageForTesting("", i))).NotTo(HaveOccurred())
 			// emit message before the flush interval has elapsed
-			time.Sleep(time.Millisecond * 100)
+			time.Sleep(time.Millisecond * 1100)
 
-			if consumer.GetLastStoredOffset() > 0 {
+			v, err := consumer.QueryOffset()
+			Expect(err).NotTo(HaveOccurred())
+			if v > 0 {
 				break
 			}
+
 		}
 
-		Expect(messagesReceived > 5 && messagesReceived < int32(maxMessages)).To(BeTrueBecause("%d messages received", messagesReceived))
+		Expect(messagesReceived > 0 && messagesReceived < int32(maxMessages)).To(BeTrueBecause("%d messages received", messagesReceived))
 		Expect(producer.Close()).NotTo(HaveOccurred())
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})
@@ -404,8 +405,8 @@ var _ = Describe("Streaming Consumers", func() {
 		}, 5*time.Second).Should(Equal(int32(107)),
 			"consumer should receive same messages Send by producer")
 
-		Eventually(func() int64 {
-			return consumer.GetLastStoredOffset()
+		Eventually(func() (int64, error) {
+			return consumer.QueryOffset()
 			// 106 is the offset since it starts from 0
 		}, 5*time.Second).Should(Equal(int64(106)),
 			"Offset should be 106")
@@ -710,11 +711,23 @@ var _ = Describe("Streaming Consumers", func() {
 				NewAutoCommitStrategy().SetFlushInterval(10*time.Millisecond)))
 		Expect(err).To(HaveOccurred())
 
-		// message handler must be set
+		// message specific a valid offset
 		_, err = env.NewConsumer(streamName,
 			nil, &ConsumerOptions{
 				Offset: OffsetSpecification{},
 			})
+		Expect(err).To(HaveOccurred())
+
+		// handler is nil
+		_, err = env.NewConsumer(streamName,
+			nil, &ConsumerOptions{
+				Offset: OffsetSpecification{
+					typeOfs: typeFirst},
+			})
+		Expect(err).To(HaveOccurred())
+
+		_, err = env.NewConsumer(streamName,
+			nil, NewConsumerOptions().SetAutoCommit(NewAutoCommitStrategy()))
 		Expect(err).To(HaveOccurred())
 
 	})

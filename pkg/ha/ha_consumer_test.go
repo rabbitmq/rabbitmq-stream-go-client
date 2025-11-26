@@ -166,9 +166,10 @@ var _ = Describe("Reliable Consumer", func() {
 				SetConsumerName(clientProvidedName).
 				SetClientProvidedName(clientProvidedName),
 			func(ctx ConsumerContext, _ *amqp.Message) {
+				defer GinkgoRecover()
 				// call on every message to test the re-connection.
 				offset := ctx.Consumer.GetOffset()
-				_ = ctx.Consumer.StoreCustomOffset(offset - 1) // commit all except the last one
+				Expect(ctx.Consumer.StoreCustomOffset(offset - 1)).To(BeNil()) // commit all except the last one
 
 				// wait the connection drop to ensure correct offset tracking on re-connection
 				if offset == messageToSend/2 {
@@ -179,36 +180,26 @@ var _ = Describe("Reliable Consumer", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumer).NotTo(BeNil())
 
-		connectionToDrop := ""
-		Eventually(func() bool {
-			connections, err := test_helper.Connections("15672")
-			if err != nil {
-				return false
-			}
-			for _, connection := range connections {
-				if connection.ClientProperties.Connection_name == clientProvidedName {
-					connectionToDrop = connection.Name
-					return true
-				}
-			}
-			return false
-		}, time.Second*5).
-			Should(BeTrue())
-
-		Expect(connectionToDrop).NotTo(BeEmpty())
 		// kill the connection
-		errDrop := test_helper.DropConnection(connectionToDrop, "15672")
-		Expect(errDrop).NotTo(HaveOccurred())
 		dropSignal <- struct{}{}
+		Eventually(func() (bool, error) { return test_helper.IsConnectionAlive(clientProvidedName, "15672") }, 10*time.Second).WithPolling(500*time.Millisecond).
+			Should(BeTrue(), "check if the connection is alive")
 
+		errDrop := test_helper.DropConnectionAndWait(clientProvidedName, "15672", 10*time.Second)
+		Expect(errDrop).NotTo(HaveOccurred())
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(func() int64 { return consumer.GetLastStoredOffset() }, 10*time.Second).
-			Should(Equal(int64(98)), "Offset should be 99")
+
+		Eventually(func() (bool, error) { return test_helper.IsConnectionAlive(clientProvidedName, "15672") }, 20*time.Second).
+			WithPolling(500*time.Millisecond).
+			Should(BeTrue(), "check if the connection is alive")
+
+		Eventually(func() (int64, error) { return consumer.QueryOffset() }, 10*time.Second).WithPolling(500*time.Millisecond).
+			Should(Equal(int64(98)), "Offset should be 98")
 
 		// set a custom offset
-		Expect(consumer.StoreCustomOffset(99)).NotTo(HaveOccurred())
-		Eventually(func() int64 { return consumer.GetLastStoredOffset() }, 1*time.Second).
-			Should(Equal(int64(99)), "Offset should be 99")
+		Expect(consumer.StoreCustomOffset(33)).NotTo(HaveOccurred())
+		Eventually(func() (int64, error) { return consumer.QueryOffset() }, 1*time.Second).
+			Should(Equal(int64(33)), "Offset should be 33 due to custom commit")
 
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})

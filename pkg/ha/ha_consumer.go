@@ -156,6 +156,8 @@ func (c *ReliableConsumer) GetInfo() string {
 	return c.getInfo()
 }
 
+// Deprecated: see consumer.GetLastStoredOffset()
+// use QueryOffset() instead
 func (c *ReliableConsumer) GetLastStoredOffset() int64 {
 	c.mutexConnection.Lock()
 	defer c.mutexConnection.Unlock()
@@ -163,13 +165,21 @@ func (c *ReliableConsumer) GetLastStoredOffset() int64 {
 	return c.consumer.GetLastStoredOffset()
 }
 
+// QueryOffset returns the last stored offset for this consumer given its name and stream
+func (c *ReliableConsumer) QueryOffset() (int64, error) {
+	c.mutexConnection.Lock()
+	defer c.mutexConnection.Unlock()
+	return c.consumer.QueryOffset()
+}
+
+// StoreOffset stores the current offset for this consumer given its name and stream
 func (c *ReliableConsumer) StoreOffset() error {
 	c.mutexConnection.Lock()
 	defer c.mutexConnection.Unlock()
-
 	return c.consumer.StoreOffset()
 }
 
+// StoreCustomOffset stores a custom offset for this consumer given its name and stream
 func (c *ReliableConsumer) StoreCustomOffset(offset int64) error {
 	c.mutexConnection.Lock()
 	defer c.mutexConnection.Unlock()

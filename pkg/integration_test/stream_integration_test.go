@@ -20,7 +20,7 @@ var _ = Describe("StreamIntegration", func() {
 		var (
 			addresses = []string{
 				"rabbitmq-stream://guest:guest@localhost:5552/"}
-			streamName           = "test-next"
+			streamName           = fmt.Sprintf("test-next-%d", time.Now().UnixNano())
 			streamEnv            *stream.Environment
 			producer             *stream.Producer
 			totalInitialMessages int

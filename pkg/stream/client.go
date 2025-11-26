@@ -677,6 +677,10 @@ func (c *Client) queryPublisherSequence(publisherReference string, stream string
 }
 
 func (c *Client) BrokerLeader(stream string) (*Broker, error) {
+	return c.BrokerLeaderWithResolver(stream, nil)
+}
+
+func (c *Client) BrokerLeaderWithResolver(stream string, resolver *AddressResolver) (*Broker, error) {
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
 		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
@@ -692,6 +696,13 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 
 	streamMetadata.Leader.advPort = streamMetadata.Leader.Port
 	streamMetadata.Leader.advHost = streamMetadata.Leader.Host
+
+	// If AddressResolver is configured, use it directly and skip DNS lookup
+	if resolver != nil {
+		streamMetadata.Leader.Host = resolver.Host
+		streamMetadata.Leader.Port = strconv.Itoa(resolver.Port)
+		return streamMetadata.Leader, nil
+	}
 
 	res := net.Resolver{}
 	// see: https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/317
@@ -738,12 +749,30 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 	}
 
 	brokers := make([]*Broker, 0, 1+len(streamMetadata.Replicas))
-	brokers = append(brokers, streamMetadata.Leader)
+
+	// Count available replicas
+	availableReplicas := 0
+	for _, replica := range streamMetadata.Replicas {
+		if replica != nil {
+			availableReplicas++
+		}
+	}
+
+	// Only add leader if no replicas are available
+	if availableReplicas == 0 {
+		streamMetadata.Leader.advPort = streamMetadata.Leader.Port
+		streamMetadata.Leader.advHost = streamMetadata.Leader.Host
+		brokers = append(brokers, streamMetadata.Leader)
+	}
+
+	// Add all available replicas
 	for idx, replica := range streamMetadata.Replicas {
 		if replica == nil {
 			logs.LogWarn("Stream %s replica not ready: %d", stream, idx)
 			continue
 		}
+		replica.advPort = replica.Port
+		replica.advHost = replica.Host
 		brokers = append(brokers, replica)
 	}
 
@@ -875,12 +904,16 @@ func (c *Client) declareSubscriber(streamName string,
 		return nil, fmt.Errorf("specify a valid Offset")
 	}
 
-	if options.autoCommitStrategy.flushInterval < 1*time.Second {
+	if (options.autoCommitStrategy != nil) && (options.autoCommitStrategy.flushInterval < 1*time.Second) && options.autocommit {
 		return nil, fmt.Errorf("flush internal must be bigger than one second")
 	}
 
-	if options.autoCommitStrategy.messageCountBeforeStorage < 1 {
+	if (options.autoCommitStrategy != nil) && options.autoCommitStrategy.messageCountBeforeStorage < 1 && options.autocommit {
 		return nil, fmt.Errorf("message count before storage must be bigger than one")
+	}
+
+	if (options.autoCommitStrategy != nil) && options.ConsumerName == "" && options.autocommit {
+		return nil, fmt.Errorf("consumer name must be set when autocommit is enabled")
 	}
 
 	if messagesHandler == nil {

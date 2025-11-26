@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -33,6 +34,20 @@ func Connections(port string) ([]connection, error) {
 	return data, nil
 }
 
+// IsConnectionAlive check if a connection is alive given its client provided name
+func IsConnectionAlive(clientProvidedName string, port string) (bool, error) {
+	connections, err := Connections(port)
+	if err != nil {
+		return false, err
+	}
+	for _, connection := range connections {
+		if connection.ClientProperties.Connection_name == clientProvidedName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func DropConnectionClientProvidedName(clientProvidedName string, port string) error {
 	connections, err := Connections(port)
 	if err != nil {
@@ -53,6 +68,30 @@ func DropConnectionClientProvidedName(clientProvidedName string, port string) er
 	err = DropConnection(connectionToDrop, port)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// drop and wait for the connection to be dropped
+
+func DropConnectionAndWait(clientProvidedName string, port string, timeout time.Duration) error {
+	err := DropConnectionClientProvidedName(clientProvidedName, port)
+	if err != nil {
+		return err
+	}
+
+	// wait for the connection to be dropped until timeout
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		isAlive, err := IsConnectionAlive(clientProvidedName, port)
+		if err != nil {
+			return err
+		}
+		if !isAlive {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	return nil
