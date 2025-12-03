@@ -54,6 +54,7 @@ func main() {
 	consumerTail, err := env.NewConsumer(streamName,
 		handleMessages,
 		stream.NewConsumerOptions().
+			SetCRCCheck(true).
 			SetOffset(offsetSpec))
 	CheckErr(err)
 
