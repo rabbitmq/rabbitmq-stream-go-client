@@ -38,7 +38,7 @@ var _ = Describe("Streaming Filtering", func() {
 	It("Create Producer with Filtering", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, NewProducerOptions().SetFilter(
 			NewProducerFilter(func(message message.StreamMessage) string {
-				return fmt.Sprintf("%s", message.GetApplicationProperties()["ID"])
+				return fmt.Sprintf("%s", message.GetApplicationProperties()["id"])
 			}),
 		))
 		Expect(err).NotTo(HaveOccurred())
@@ -59,7 +59,7 @@ var _ = Describe("Streaming Filtering", func() {
 
 		_, err = testEnvironment.locator.client.DeclarePublisher(testProducerStream, NewProducerOptions().SetFilter(
 			NewProducerFilter(func(message message.StreamMessage) string {
-				return fmt.Sprintf("%s", message.GetApplicationProperties()["ID"])
+				return fmt.Sprintf("%s", message.GetApplicationProperties()["id"])
 			}),
 		))
 		Expect(err).To(Equal(FilterNotSupported))
@@ -79,13 +79,13 @@ var _ = Describe("Streaming Filtering", func() {
 	It("Send messages with Filtering", func() {
 		producer, err := testEnvironment.NewProducer(testProducerStream, NewProducerOptions().SetFilter(
 			NewProducerFilter(func(message message.StreamMessage) string {
-				return fmt.Sprintf("%s", message.GetApplicationProperties()["ID"])
+				return fmt.Sprintf("%s", message.GetApplicationProperties()["id"])
 			}),
 		))
 
 		for i := range 10 {
 			msg := amqp.NewMessage([]byte(strconv.Itoa(i)))
-			msg.ApplicationProperties = map[string]any{"ID": i}
+			msg.ApplicationProperties = map[string]any{"id": i}
 			Expect(producer.Send(msg)).NotTo(HaveOccurred())
 		}
 
@@ -118,7 +118,7 @@ var _ = Describe("Streaming Filtering", func() {
 		_, err = testEnvironment.NewProducer(testProducerStream,
 			NewProducerOptions().
 				SetFilter(NewProducerFilter(func(message message.StreamMessage) string {
-					return fmt.Sprintf("%s", message.GetApplicationProperties()["ID"])
+					return fmt.Sprintf("%s", message.GetApplicationProperties()["id"])
 				})).SetSubEntrySize(1000))
 		Expect(err).To(HaveOccurred())
 

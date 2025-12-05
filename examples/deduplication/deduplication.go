@@ -56,7 +56,7 @@ func main() {
 		}
 	}(chConfirm, producer)
 
-	// In case you need to know which is the last ID for the producer: GetLastPublishingId
+	// In case you need to know which is the last id for the producer: GetLastPublishingId
 	lastPublishingId, err := producer.GetLastPublishingId()
 	CheckErr(err)
 	fmt.Printf("lastPublishingId: %d\n",

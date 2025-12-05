@@ -486,7 +486,7 @@ func (c *Client) Close() {
 
 	c.coordinator.Consumers().Range(func(_, cs any) bool {
 		consumer := cs.(*Consumer)
-		err := c.coordinator.RemoveConsumerById(consumer.ID, Event{
+		err := c.coordinator.RemoveConsumerById(consumer.id, Event{
 			Command:    CommandClose,
 			StreamName: consumer.GetStreamName(),
 			Name:       consumer.GetName(),
@@ -991,7 +991,7 @@ func (c *Client) declareSubscriber(streamName string,
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandSubscribe,
 		correlationId)
-	writeByte(b, consumer.ID)
+	writeByte(b, consumer.id)
 
 	writeString(b, streamName)
 
@@ -1040,7 +1040,7 @@ func (c *Client) declareSubscriber(streamName string,
 
 					// when half of the chunk is reached ask for a credit
 					if halfChunkSize == i && consumer.options.CreditStrategy == AutomaticCreditStrategy {
-						c.credit(consumer.ID, 1)
+						c.credit(consumer.id, 1)
 					}
 
 					if consumer.options.autocommit {

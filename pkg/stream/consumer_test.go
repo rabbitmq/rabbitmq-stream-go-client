@@ -40,7 +40,7 @@ var _ = Describe("Streaming Consumers", func() {
 			consumer, err := env.NewConsumer(streamName,
 				func(_ ConsumerContext, _ *amqp.Message) {}, nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(consumer.ID).To(Equal(uint8(0)))
+			Expect(consumer.id).To(Equal(uint8(0)))
 			consumers = append(consumers, consumer)
 		}
 
@@ -76,7 +76,7 @@ var _ = Describe("Streaming Consumers", func() {
 			consumer, err := env.NewConsumer(streamName,
 				func(_ ConsumerContext, _ *amqp.Message) {}, nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(consumer.ID).To(Equal(uint8(i % 2)))
+			Expect(consumer.id).To(Equal(uint8(i % 2)))
 		}
 
 		Expect(env.DeleteStream(streamName)).

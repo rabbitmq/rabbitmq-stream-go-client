@@ -12,7 +12,7 @@ import (
 
 type Consumer struct {
 	client           *Client
-	ID               uint8 // also the SubscriptionId
+	id               uint8 // also the SubscriptionId
 	response         *Response
 	options          *ConsumerOptions
 	onClose          func()
@@ -74,6 +74,10 @@ func (consumer *Consumer) GetName() string {
 		return ""
 	}
 	return consumer.options.ConsumerName
+}
+
+func (consumer *Consumer) GetID() uint8 {
+	return consumer.id
 }
 
 func (consumer *Consumer) setCurrentOffset(offset int64) {
@@ -155,7 +159,7 @@ func (consumer *Consumer) Credit(credits int16) error {
 	if credits <= 0 {
 		return fmt.Errorf("credits must be a positive number")
 	}
-	consumer.client.credit(consumer.ID, credits)
+	consumer.client.credit(consumer.id, credits)
 	return nil
 }
 
@@ -427,7 +431,7 @@ func (consumer *Consumer) close(reason Event) {
 		writeProtocolHeader(b, length, CommandUnsubscribe,
 			correlationId)
 
-		writeByte(b, consumer.ID)
+		writeByte(b, consumer.id)
 		err := consumer.client.handleWrite(b.Bytes(), resp)
 		if err.Err != nil && err.isTimeout {
 			logs.LogWarn("error during consumer unsubscribe:%s", err.Err)
@@ -436,7 +440,7 @@ func (consumer *Consumer) close(reason Event) {
 
 	// it could be nil only during tests
 	if consumer.client != nil {
-		_, _ = consumer.client.coordinator.ExtractConsumerById(consumer.ID)
+		_, _ = consumer.client.coordinator.ExtractConsumerById(consumer.id)
 
 		if consumer.options != nil && consumer.client.coordinator.ConsumersCount() == 0 {
 			consumer.client.Close()

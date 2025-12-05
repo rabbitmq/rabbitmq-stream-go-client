@@ -582,7 +582,7 @@ var _ = Describe("Streaming Producers", func() {
 			messageBytes: messageBytes,
 		}
 
-		// 200 producer ID doesn't exist
+		// 200 producer id doesn't exist
 		Expect(producer.internalBatchSendProdId(messagesSequence, 200)).
 			NotTo(HaveOccurred())
 

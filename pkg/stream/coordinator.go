@@ -188,7 +188,7 @@ func (coordinator *Coordinator) NewConsumer(
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextConsumerItem()
 	var item = &Consumer{
-		ID:                   lastId,
+		id:                   lastId,
 		options:              parameters,
 		response:             newResponse(lookUpCommand(commandSubscribe)),
 		status:               open,

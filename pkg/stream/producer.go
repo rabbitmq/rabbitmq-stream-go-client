@@ -621,7 +621,7 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	}
 
 	if err := writeBByte(producer.client.socket.writer, producerID); err != nil {
-		return fmt.Errorf("failed to write producer ID: %w", err)
+		return fmt.Errorf("failed to write producer id: %w", err)
 	}
 
 	numberOfMessages := len(messagesSequence)
@@ -795,7 +795,7 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 	}
 
 	if err := writeBByte(producer.client.socket.writer, producerID); err != nil {
-		return fmt.Errorf("failed to write producer ID: %w", err)
+		return fmt.Errorf("failed to write producer id: %w", err)
 	}
 
 	numberOfMessages := len(messagesSequence)
@@ -805,7 +805,7 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 
 	for _, msg := range messagesSequence {
 		if err := writeBLong(producer.client.socket.writer, msg.publishingId); err != nil {
-			return fmt.Errorf("failed to write publishing ID for message: %w", err)
+			return fmt.Errorf("failed to write publishing id for message: %w", err)
 		}
 
 		if msg.filterValue != "" {

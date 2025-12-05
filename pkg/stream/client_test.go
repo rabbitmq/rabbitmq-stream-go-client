@@ -221,7 +221,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 		err := cli.coordinator.RemoveResponseById(res.correlationid)
 		Expect(err).To(BeNil())
 
-		// Simulate receiving a response for the removed correlation ID
+		// Simulate receiving a response for the removed correlation id
 		readerProtocol := &ReaderProtocol{
 			CorrelationId: uint32(res.correlationid),
 			ResponseCode:  responseCodeStreamNotAvailable,

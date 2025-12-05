@@ -165,7 +165,7 @@ var _ = Describe("Coordinator", func() {
 			var consumersId []uint8
 			for range 100 {
 				p := client.coordinator.NewConsumer(nil, NewConsumerOptions(), nil)
-				consumersId = append(consumersId, p.ID)
+				consumersId = append(consumersId, p.id)
 			}
 			Expect(client.coordinator.ConsumersCount()).To(Equal(100))
 			for _, pid := range consumersId {
