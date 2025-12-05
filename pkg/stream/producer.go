@@ -68,6 +68,7 @@ type messageSequence struct {
 }
 
 type Producer struct {
+	client      *Client
 	id          uint8
 	options     *ProducerOptions
 	onClose     func()
@@ -99,7 +100,6 @@ func NewProducerFilter(filterValue FilterValue) *ProducerFilter {
 }
 
 type ProducerOptions struct {
-	client     *Client
 	streamName string
 	// Producer name.  You need to set it to enable the deduplication feature.
 	//  Deduplication is a feature that allows the producer to avoid sending duplicate messages to the stream.
@@ -243,7 +243,7 @@ func (producer *Producer) GetOptions() *ProducerOptions {
 }
 
 func (producer *Producer) GetBroker() *Broker {
-	return producer.options.client.broker
+	return producer.client.broker
 }
 func (producer *Producer) setStatus(status int) {
 	producer.mutex.Lock()
@@ -300,7 +300,7 @@ func (producer *Producer) closeConfirmationStatus() {
 // processPendingSequencesQueue aggregates the messages sequence in the queue and sends them to the server
 // messages coming form the Send method through the pendingSequencesQueue
 func (producer *Producer) processPendingSequencesQueue() {
-	maxFrame := producer.options.client.getTuneState().requestedMaxFrameSize
+	maxFrame := producer.client.getTuneState().requestedMaxFrameSize
 	go func() {
 		sequenceToSend := make([]*messageSequence, 0)
 		totalBufferToSend := initBufferPublishSize
@@ -582,8 +582,8 @@ func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, c
 // / the producer id is always the producer.GetID(). This function is needed only for testing
 // some condition, like simulate publish error.
 func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSequence, producerID uint8) error {
-	producer.options.client.socket.mutex.Lock()
-	defer producer.options.client.socket.mutex.Unlock()
+	producer.client.socket.mutex.Lock()
+	defer producer.client.socket.mutex.Unlock()
 	if producer.getStatus() == closed {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
@@ -616,11 +616,11 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	frameHeaderLength := initBufferPublishSize
 	length := frameHeaderLength + msgLen
 
-	if err := writeBProtocolHeader(producer.options.client.socket.writer, length, commandPublish); err != nil {
+	if err := writeBProtocolHeader(producer.client.socket.writer, length, commandPublish); err != nil {
 		return fmt.Errorf("failed to write protocol header: %w", err)
 	}
 
-	if err := writeBByte(producer.options.client.socket.writer, producerID); err != nil {
+	if err := writeBByte(producer.client.socket.writer, producerID); err != nil {
 		return fmt.Errorf("failed to write producer ID: %w", err)
 	}
 
@@ -631,25 +631,25 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	}
 
 	// toExcluded - fromInclude
-	if err := writeBInt(producer.options.client.socket.writer, numberOfMessages); err != nil {
+	if err := writeBInt(producer.client.socket.writer, numberOfMessages); err != nil {
 		return fmt.Errorf("failed to write number of messages: %w", err)
 	}
 
 	if producer.options.isSubEntriesBatching() {
-		err := producer.subEntryAggregation(aggregation, producer.options.client.socket.writer, producer.options.Compression)
+		err := producer.subEntryAggregation(aggregation, producer.client.socket.writer, producer.options.Compression)
 		if err != nil {
 			return fmt.Errorf("failed to write sub entry aggregation: %w", err)
 		}
 	}
 
 	if !producer.options.isSubEntriesBatching() {
-		err := producer.simpleAggregation(messagesSequence, producer.options.client.socket.writer)
+		err := producer.simpleAggregation(messagesSequence, producer.client.socket.writer)
 		if err != nil {
 			return fmt.Errorf("failed to write simple aggregation: %w", err)
 		}
 	}
 
-	err := producer.options.client.socket.writer.Flush()
+	err := producer.client.socket.writer.Flush()
 	if err != nil {
 		return fmt.Errorf("producer BatchSend error during flush: %w", err)
 	}
@@ -668,7 +668,7 @@ func (producer *Producer) flushUnConfirmedMessages() {
 // this function is useful when you need to know the last message sent by the producer in case of
 // deduplication.
 func (producer *Producer) GetLastPublishingId() (int64, error) {
-	return producer.options.client.queryPublisherSequence(producer.GetName(), producer.GetStreamName())
+	return producer.client.queryPublisherSequence(producer.GetName(), producer.GetStreamName())
 }
 
 // Close closes the producer and returns an error if the producer could not be closed.
@@ -708,19 +708,19 @@ func (producer *Producer) close(reason Event) error {
 		return nil
 	}
 
-	if !producer.options.client.socket.isOpen() {
+	if !producer.client.socket.isOpen() {
 		return fmt.Errorf("tcp connection is closed")
 	}
 
 	// remove from the server only if the producer exists
 	if reason.Reason == DeletePublisher {
-		_ = producer.options.client.deletePublisher(producer.id)
+		_ = producer.client.deletePublisher(producer.id)
 	}
 
-	_, _ = producer.options.client.coordinator.ExtractProducerById(producer.id)
+	_, _ = producer.client.coordinator.ExtractProducerById(producer.id)
 
-	if producer.options.client.coordinator.ProducersCount() == 0 {
-		producer.options.client.Close()
+	if producer.client.coordinator.ProducersCount() == 0 {
+		producer.client.Close()
 	}
 
 	if producer.onClose != nil {
@@ -790,44 +790,44 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 	}
 	length := frameHeaderLength + msgLen
 
-	if err := writeBProtocolHeaderVersion(producer.options.client.socket.writer, length, commandPublish, version2); err != nil {
+	if err := writeBProtocolHeaderVersion(producer.client.socket.writer, length, commandPublish, version2); err != nil {
 		return fmt.Errorf("failed to write protocol header version: %w", err)
 	}
 
-	if err := writeBByte(producer.options.client.socket.writer, producerID); err != nil {
+	if err := writeBByte(producer.client.socket.writer, producerID); err != nil {
 		return fmt.Errorf("failed to write producer ID: %w", err)
 	}
 
 	numberOfMessages := len(messagesSequence)
-	if err := writeBInt(producer.options.client.socket.writer, numberOfMessages); err != nil {
+	if err := writeBInt(producer.client.socket.writer, numberOfMessages); err != nil {
 		return fmt.Errorf("failed to write number of messages: %w", err)
 	}
 
 	for _, msg := range messagesSequence {
-		if err := writeBLong(producer.options.client.socket.writer, msg.publishingId); err != nil {
+		if err := writeBLong(producer.client.socket.writer, msg.publishingId); err != nil {
 			return fmt.Errorf("failed to write publishing ID for message: %w", err)
 		}
 
 		if msg.filterValue != "" {
-			if err := writeBString(producer.options.client.socket.writer, msg.filterValue); err != nil {
+			if err := writeBString(producer.client.socket.writer, msg.filterValue); err != nil {
 				return fmt.Errorf("failed to write filter value for message: %w", err)
 			}
 		} else {
-			if err := writeBInt(producer.options.client.socket.writer, -1); err != nil {
+			if err := writeBInt(producer.client.socket.writer, -1); err != nil {
 				return fmt.Errorf("failed to write -1 for filter value: %w", err)
 			}
 		}
 
-		if err := writeBInt(producer.options.client.socket.writer, len(msg.messageBytes)); err != nil {
+		if err := writeBInt(producer.client.socket.writer, len(msg.messageBytes)); err != nil {
 			return fmt.Errorf("failed to write message length: %w", err)
 		}
 
-		if _, err := producer.options.client.socket.writer.Write(msg.messageBytes); err != nil {
+		if _, err := producer.client.socket.writer.Write(msg.messageBytes); err != nil {
 			return fmt.Errorf("failed to write message bytes: %w", err)
 		}
 	}
 
-	if err := producer.options.client.socket.writer.Flush(); err != nil {
+	if err := producer.client.socket.writer.Flush(); err != nil {
 		return fmt.Errorf("failed to flush writer: %w", err)
 	}
 

@@ -45,15 +45,22 @@ var _ = Describe("Streaming Consumers", func() {
 		}
 
 		Expect(len(env.consumers.getCoordinators())).To(Equal(1))
-		Expect(len(env.consumers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).To(Equal(10))
+		coordinator, ok := env.consumers.getCoordinators()["localhost:5552"]
+		Expect(ok).To(BeTrue())
+		Expect(coordinator).NotTo(BeNil())
+		Expect(len(coordinator.getClientsPerContext())).To(Equal(10))
 
 		for _, consumer := range consumers {
 			Expect(consumer.Close()).NotTo(HaveOccurred())
 		}
 		// time.Sleep(1 * time.Second)
-		Eventually(len(env.consumers.getCoordinators()["localhost:5552"].
-			getClientsPerContext())).ProbeEvery(100 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(0))
+		Eventually(func() int {
+			coordinator, ok := env.consumers.getCoordinators()["localhost:5552"]
+			if !ok || coordinator == nil {
+				return 0
+			}
+			return len(coordinator.getClientsPerContext())
+		}).ProbeEvery(100 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(0))
 
 	})
 
