@@ -567,7 +567,6 @@ func (c *Client) declarePublisher(streamName string, options *ProducerOptions, c
 	}
 
 	producer, err := c.coordinator.NewProducer(&ProducerOptions{
-		client:               c,
 		streamName:           streamName,
 		Name:                 options.Name,
 		QueueSize:            options.QueueSize,
@@ -583,6 +582,7 @@ func (c *Client) declarePublisher(streamName string, options *ProducerOptions, c
 	if err != nil {
 		return nil, err
 	}
+	producer.client = c
 	res := c.internalDeclarePublisher(streamName, producer)
 	if res.Err == nil {
 		producer.startUnconfirmedMessagesTimeOutTask()
@@ -938,10 +938,9 @@ func (c *Client) declareSubscriber(streamName string,
 		}
 	}
 
-	options.client = c
 	options.streamName = streamName
 	consumer := c.coordinator.NewConsumer(messagesHandler, options, cleanUp)
-
+	consumer.client = c
 	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
 	if options.Offset.isOffset() ||
 		options.Offset.isTimestamp() {

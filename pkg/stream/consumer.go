@@ -11,6 +11,7 @@ import (
 )
 
 type Consumer struct {
+	client           *Client
 	ID               uint8 // also the SubscriptionId
 	response         *Response
 	options          *ConsumerOptions
@@ -58,7 +59,7 @@ func (consumer *Consumer) getStatus() int {
 func (consumer *Consumer) isZombie() bool {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
-	return consumer.status == open && !consumer.options.client.socket.isOpen()
+	return consumer.status == open && !consumer.client.socket.isOpen()
 }
 
 func (consumer *Consumer) GetStreamName() string {
@@ -154,7 +155,7 @@ func (consumer *Consumer) Credit(credits int16) error {
 	if credits <= 0 {
 		return fmt.Errorf("credits must be a positive number")
 	}
-	consumer.options.client.credit(consumer.ID, credits)
+	consumer.client.credit(consumer.ID, credits)
 	return nil
 }
 
@@ -261,7 +262,6 @@ const (
 
 // ConsumerOptions for a consumer
 type ConsumerOptions struct {
-	client               *Client
 	ConsumerName         string
 	streamName           string
 	autocommit           bool
@@ -421,25 +421,25 @@ func (consumer *Consumer) close(reason Event) {
 
 	if reason.Reason == UnSubscribe {
 		length := 2 + 2 + 4 + 1
-		resp := consumer.options.client.coordinator.NewResponse(CommandUnsubscribe)
+		resp := consumer.client.coordinator.NewResponse(CommandUnsubscribe)
 		correlationId := resp.correlationid
 		var b = bytes.NewBuffer(make([]byte, 0, length+4))
 		writeProtocolHeader(b, length, CommandUnsubscribe,
 			correlationId)
 
 		writeByte(b, consumer.ID)
-		err := consumer.options.client.handleWrite(b.Bytes(), resp)
+		err := consumer.client.handleWrite(b.Bytes(), resp)
 		if err.Err != nil && err.isTimeout {
 			logs.LogWarn("error during consumer unsubscribe:%s", err.Err)
 		}
 	}
 
 	// it could be nil only during tests
-	if consumer.options.client != nil {
-		_, _ = consumer.options.client.coordinator.ExtractConsumerById(consumer.ID)
+	if consumer.client != nil {
+		_, _ = consumer.client.coordinator.ExtractConsumerById(consumer.ID)
 
-		if consumer.options != nil && consumer.options.client.coordinator.ConsumersCount() == 0 {
-			consumer.options.client.Close()
+		if consumer.options != nil && consumer.client.coordinator.ConsumersCount() == 0 {
+			consumer.client.Close()
 		}
 	}
 
@@ -511,7 +511,7 @@ func (consumer *Consumer) writeOffsetToSocket(offset int64) error {
 	writeString(b, consumer.options.streamName)
 
 	writeLong(b, offset)
-	return consumer.options.client.socket.writeAndFlush(b.Bytes())
+	return consumer.client.socket.writeAndFlush(b.Bytes())
 }
 
 func (consumer *Consumer) writeConsumeUpdateOffsetToSocket(correlationID uint32, offsetSpec OffsetSpecification) error {
@@ -533,15 +533,15 @@ func (consumer *Consumer) writeConsumeUpdateOffsetToSocket(correlationID uint32,
 		offsetSpec.isTimestamp() {
 		writeLong(b, offsetSpec.offset)
 	}
-	return consumer.options.client.socket.writeAndFlush(b.Bytes())
+	return consumer.client.socket.writeAndFlush(b.Bytes())
 }
 
 // QueryOffset returns the last stored offset for this consumer given its name and stream
 func (consumer *Consumer) QueryOffset() (int64, error) {
-	if (consumer.options == nil) || (consumer.options.client == nil) || (consumer.options.ConsumerName == "") || (consumer.options.streamName == "") {
+	if (consumer.options == nil) || (consumer.client == nil) || (consumer.options.ConsumerName == "") || (consumer.options.streamName == "") {
 		return -1, fmt.Errorf("offset query error: consumer not properly initialized")
 	}
-	return consumer.options.client.queryOffset(consumer.options.ConsumerName, consumer.options.streamName)
+	return consumer.client.queryOffset(consumer.options.ConsumerName, consumer.options.streamName)
 }
 
 /*

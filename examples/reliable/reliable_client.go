@@ -56,10 +56,10 @@ func main() {
 	// Your application code here
 
 	// Tune the parameters to test the reliability
-	const messagesToSend = 10_000_000
-	const numberOfProducers = 1
-	const concurrentProducers = 1
-	const numberOfConsumers = 1
+	const messagesToSend = 2_000_000
+	const numberOfProducers = 2
+	const concurrentProducers = 2
+	const numberOfConsumers = 2
 	const sendDelay = 1 * time.Millisecond
 	const delayEachMessages = 500
 	const maxProducersPerClient = 1
@@ -71,16 +71,23 @@ func main() {
 	fmt.Println("Reliable Producer/Consumer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
-	addresses := []string{
-		// "rabbitmq-stream://guest:guest@node1:5572/%2f",
-		// "rabbitmq-stream://guest:guest@node1:5572/%2f",
-		"rabbitmq-stream://guest:guest@localhost:5552/%2f"}
+	// in case of load-balancer you can use the AddressResolver
+	// var resolver = stream.AddressResolver{
+	//	Host: "localhost",
+	//	Port: 5552,
+	// }
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetMaxProducersPerClient(maxProducersPerClient).
 			SetMaxConsumersPerClient(maxConsumersPerClient).
-			SetUris(addresses))
+			SetHost("localhost").
+			SetUser("guest").
+			SetPassword("guest").
+			SetPort(5552))
+	// SetHost(resolver.Host).
+	// SetPort(resolver.Port).
+	// SetAddressResolver(resolver))
 
 	CheckErr(err)
 	fmt.Printf("Environment created with %d producers and %d consumers\n\n", maxProducersPerClient, maxConsumersPerClient)
