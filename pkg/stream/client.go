@@ -89,6 +89,10 @@ func newClient(parameters clientConnectionParameters) *Client {
 		parameters.saslConfiguration = newSaslConfigurationDefault()
 	}
 
+	if parameters.rpcTimeOut == 0 {
+		parameters.rpcTimeOut = defaultConfirmationTimeOut
+	}
+
 	c := &Client{
 		coordinator:          NewCoordinator(),
 		broker:               clientBroker,
@@ -527,11 +531,11 @@ func (c *Client) Entities() []IEntity {
 	return nil
 }
 
-func (c *Client) RemoveEntityById(id uint8) {
+func (c *Client) RemoveEntityById(_ uint8) {
 	// no-op
 }
 
-func (c *Client) AddEntity(e IEntity) {
+func (c *Client) AddEntity(_ IEntity) {
 	// no-op
 }
 

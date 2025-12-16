@@ -19,12 +19,13 @@ type IEntity interface {
 }
 
 type IClient interface {
-	//Close TODO: Maybe add error return value
+	// Close TODO: Maybe add error return value
 	Close()
 	Entities() []IEntity
 	AddEntity(IEntity)
 	RemoveEntityById(id uint8)
 	GetUniqueId() string
+	connect() error
 }
 
 type ClientPool struct {

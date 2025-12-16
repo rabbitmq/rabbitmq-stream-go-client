@@ -3,6 +3,7 @@ package stream
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -62,6 +63,7 @@ func (f *fakeClient) RemoveEntityById(id uint8) {
 }
 
 func (f *fakeClient) GetUniqueId() string { return f.uid }
+func (f *fakeClient) connect() error      { return nil }
 
 var _ = Describe("ClientPools with Fake client", func() {
 
@@ -244,9 +246,83 @@ var _ = Describe("ClientPools with the TCP client", Focus, func() {
 
 		c1, err := cp.AddEntityAndGetConnection("tcp-key", &fakeEntity{id: 1}, clientConnectionParameters{}, clientFactory)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(c1.connect()).To(Succeed())
 		c2, err := cp.AddEntityAndGetConnection("tcp-key", &fakeEntity{id: 2}, clientConnectionParameters{}, clientFactory)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(c2.connect()).To(Succeed())
 		Expect(c2.GetUniqueId()).To(Equal(c1.GetUniqueId()))
-
+		c2.Close()
 	})
+	It("creates and reuses TCP clients correctly in multi-threading", func() {
+		cp := NewClientPools(5)
+		clientFactory := func(parameters clientConnectionParameters) (IClient, error) {
+			return newClient(parameters), nil
+		}
+
+		var wg sync.WaitGroup
+		const goroutines = 20
+		const addsPerG = 10
+
+		for g := 0; g < goroutines; g++ {
+			wg.Add(1)
+			go func(gid int) {
+				defer wg.Done()
+				for i := 0; i < addsPerG; i++ {
+					key := "tcp-multi-key"
+					client, err := cp.AddEntityAndGetConnection(key, &fakeEntity{id: uint8(i % 255)},
+						clientConnectionParameters{
+							connectionName: fmt.Sprintf("client-%d-%d", gid, i),
+							rpcTimeOut:     time.Duration(10) * time.Second,
+						}, clientFactory)
+					Expect(err).NotTo(HaveOccurred())
+					err = client.connect()
+					Expect(err).NotTo(HaveOccurred())
+				}
+			}(g)
+		}
+		wg.Wait()
+
+		total := 0
+		cp.mutex.Lock()
+		for _, p := range cp.pools {
+			total += len(p.client.Entities())
+		}
+		cp.mutex.Unlock()
+	})
+
+	It("creates and reuses TCP clients correctly with multiple keys", func() {
+		cp := NewClientPools(4)
+		clientFactory := func(parameters clientConnectionParameters) (IClient, error) {
+			return newClient(parameters), nil
+		}
+
+		keys := []string{"tcp-key-1", "tcp-key-2", "tcp-key-3"}
+
+		for _, key := range keys {
+			for i := 0; i < 4; i++ {
+				client, err := cp.AddEntityAndGetConnection(key, &fakeEntity{id: uint8(i)},
+					clientConnectionParameters{
+						connectionName: fmt.Sprintf("client-%s-%d", key, i),
+						rpcTimeOut:     time.Duration(10) * time.Second,
+					}, clientFactory)
+				Expect(err).NotTo(HaveOccurred())
+				err = client.connect()
+				Expect(err).NotTo(HaveOccurred())
+			}
+		}
+
+		Expect(cp.Count()).To(Equal(len(keys)))
+
+		for _, key := range keys {
+			found := false
+			for _, pool := range cp.pools {
+				if pool.key == key {
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), fmt.Sprintf("Expected to find pool for key %s", key))
+		}
+	})
+
 })
