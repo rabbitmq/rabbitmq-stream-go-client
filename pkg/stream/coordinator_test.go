@@ -15,7 +15,10 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
+			client = newClient(clientConnectionParameters{
+				connectionName: "test-client",
+				rpcTimeOut:     defaultSocketCallTimeout,
+			})
 
 		})
 		AfterEach(func() {
@@ -132,7 +135,10 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
+			client = newClient(clientConnectionParameters{
+				connectionName: "test-client",
+				rpcTimeOut:     defaultSocketCallTimeout,
+			})
 
 		})
 		AfterEach(func() {
@@ -187,7 +193,11 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
+			//client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
+			client = newClient(clientConnectionParameters{
+				connectionName: "test-client",
+				rpcTimeOut:     defaultSocketCallTimeout,
+			})
 
 		})
 		AfterEach(func() {

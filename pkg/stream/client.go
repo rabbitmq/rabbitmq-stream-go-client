@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 )
 
@@ -72,27 +73,27 @@ type Client struct {
 	serverProperties  map[string]string
 
 	doneTimeoutTicker chan struct{}
+	uniqueId          string
 }
 
-func newClient(connectionName string, broker *Broker,
-	tcpParameters *TCPParameters, saslConfiguration *SaslConfiguration, rpcTimeOut time.Duration) *Client {
-	var clientBroker = broker
-	if broker == nil {
+func newClient(parameters clientConnectionParameters) *Client {
+	var clientBroker = parameters.broker
+	if parameters.broker == nil {
 		clientBroker = newBrokerDefault()
 	}
-	if tcpParameters == nil {
-		tcpParameters = newTCPParameterDefault()
+	if parameters.tcpParameters == nil {
+		parameters.tcpParameters = newTCPParameterDefault()
 	}
 
-	if saslConfiguration == nil {
-		saslConfiguration = newSaslConfigurationDefault()
+	if parameters.saslConfiguration == nil {
+		parameters.saslConfiguration = newSaslConfigurationDefault()
 	}
 
 	c := &Client{
 		coordinator:          NewCoordinator(),
 		broker:               clientBroker,
-		tcpParameters:        tcpParameters,
-		saslConfiguration:    saslConfiguration,
+		tcpParameters:        parameters.tcpParameters,
+		saslConfiguration:    parameters.saslConfiguration,
 		destructor:           &sync.Once{},
 		mutex:                &sync.Mutex{},
 		clientProperties:     ClientProperties{items: make(map[string]string)},
@@ -104,11 +105,12 @@ func newClient(connectionName string, broker *Broker,
 			mutex:      &sync.Mutex{},
 			destructor: &sync.Once{},
 		},
-		socketCallTimeout: rpcTimeOut,
+		socketCallTimeout: parameters.rpcTimeOut,
 		availableFeatures: newAvailableFeatures(),
 		doneTimeoutTicker: make(chan struct{}, 1),
+		uniqueId:          uuid.New().String(),
 	}
-	c.setConnectionName(connectionName)
+	c.setConnectionName(parameters.connectionName)
 	return c
 }
 
@@ -465,6 +467,9 @@ func (c *Client) closeHartBeat() {
 	})
 }
 
+// *** interface IClient implementation ***
+
+// Close the client and all the associated producers and consumers
 func (c *Client) Close() {
 	c.closeHartBeat()
 	c.coordinator.Producers().Range(func(_, p any) bool {
@@ -517,6 +522,24 @@ func (c *Client) Close() {
 	}
 	c.getSocket().shutdown(nil)
 }
+
+func (c *Client) Entities() []IEntity {
+	return nil
+}
+
+func (c *Client) RemoveEntityById(id uint8) {
+	// no-op
+}
+
+func (c *Client) AddEntity(e IEntity) {
+	// no-op
+}
+
+func (c *Client) GetUniqueId() string {
+	return c.uniqueId
+}
+
+// **** end of interface IClient implementation ****
 
 func (c *Client) DeclarePublisher(streamName string, options *ProducerOptions) (*Producer, error) {
 	return c.declarePublisher(streamName, options, nil)

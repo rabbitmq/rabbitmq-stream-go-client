@@ -47,8 +47,15 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		options.TCPParameters = newTCPParameterDefault()
 	}
 
-	client := newClient("go-stream-locator", nil,
-		options.TCPParameters, options.SaslConfiguration, options.RPCTimeout)
+	client := newClient(clientConnectionParameters{
+
+		connectionName:    "go-stream-locator",
+		broker:            nil,
+		tcpParameters:     options.TCPParameters,
+		saslConfiguration: options.SaslConfiguration,
+		rpcTimeOut:        options.RPCTimeout,
+	})
+
 	defer client.Close()
 
 	// we put a limit to the heartbeat.
@@ -125,8 +132,13 @@ func (env *Environment) maybeReconnectLocator() error {
 	}
 
 	broker := env.options.ConnectionParameters[0]
-	c := newClient("go-stream-locator", broker, env.options.TCPParameters,
-		env.options.SaslConfiguration, env.options.RPCTimeout)
+	c := newClient(clientConnectionParameters{
+		connectionName:    "go-stream-locator",
+		broker:            broker,
+		tcpParameters:     env.options.TCPParameters,
+		saslConfiguration: env.options.SaslConfiguration,
+		rpcTimeOut:        env.options.RPCTimeout,
+	})
 
 	env.locator.client = c
 	err := c.connect()
@@ -140,8 +152,14 @@ func (env *Environment) maybeReconnectLocator() error {
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		n := r.Intn(len(env.options.ConnectionParameters))
-		c1 := newClient("stream-locator", env.options.ConnectionParameters[n], env.options.TCPParameters,
-			env.options.SaslConfiguration, env.options.RPCTimeout)
+		c1 := newClient(clientConnectionParameters{
+			connectionName:    "go-stream-locator",
+			broker:            env.options.ConnectionParameters[n],
+			tcpParameters:     env.options.TCPParameters,
+			saslConfiguration: env.options.SaslConfiguration,
+			rpcTimeOut:        env.options.RPCTimeout,
+		})
+
 		tentatives++
 		env.locator.client = c1
 		err = c1.connect()
@@ -175,6 +193,11 @@ func (env *Environment) NewProducer(streamName string, producerOptions *Producer
 	if err != nil {
 		return nil, err
 	}
+
+	// leader, err := env.locator.client.BrokerLeaderWithResolver(streamName, env.options.AddressResolver)
+	// if err != nil {
+	//	return nil, err
+	// }
 
 	return env.producers.newProducer(env.locator.client, streamName, producerOptions, env.options)
 }
@@ -617,7 +640,13 @@ func (cc *environmentCoordinator) validateBrokerConnection(client *Client, broke
 }
 
 func (cc *environmentCoordinator) newClientForConnection(connectionName string, broker *Broker, client *Client, rpcTimeout time.Duration) *Client {
-	clientResult := newClient(connectionName, broker, client.tcpParameters, client.saslConfiguration, rpcTimeout)
+	clientResult := newClient(clientConnectionParameters{
+		connectionName:    connectionName,
+		broker:            broker,
+		tcpParameters:     client.tcpParameters,
+		saslConfiguration: client.saslConfiguration,
+		rpcTimeOut:        rpcTimeout,
+	})
 	cc.nextId++
 	cc.clientsPerContext.Store(cc.nextId, clientResult)
 	return clientResult
