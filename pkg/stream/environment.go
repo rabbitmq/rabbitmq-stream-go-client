@@ -47,7 +47,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		options.TCPParameters = newTCPParameterDefault()
 	}
 
-	client := newClient(clientConnectionParameters{
+	client := newClient(connectionParameters{
 
 		connectionName:    "go-stream-locator",
 		broker:            nil,
@@ -132,7 +132,7 @@ func (env *Environment) maybeReconnectLocator() error {
 	}
 
 	broker := env.options.ConnectionParameters[0]
-	c := newClient(clientConnectionParameters{
+	c := newClient(connectionParameters{
 		connectionName:    "go-stream-locator",
 		broker:            broker,
 		tcpParameters:     env.options.TCPParameters,
@@ -152,7 +152,7 @@ func (env *Environment) maybeReconnectLocator() error {
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		n := r.Intn(len(env.options.ConnectionParameters))
-		c1 := newClient(clientConnectionParameters{
+		c1 := newClient(connectionParameters{
 			connectionName:    "go-stream-locator",
 			broker:            env.options.ConnectionParameters[n],
 			tcpParameters:     env.options.TCPParameters,
@@ -640,7 +640,7 @@ func (cc *environmentCoordinator) validateBrokerConnection(client *Client, broke
 }
 
 func (cc *environmentCoordinator) newClientForConnection(connectionName string, broker *Broker, client *Client, rpcTimeout time.Duration) *Client {
-	clientResult := newClient(clientConnectionParameters{
+	clientResult := newClient(connectionParameters{
 		connectionName:    connectionName,
 		broker:            broker,
 		tcpParameters:     client.tcpParameters,

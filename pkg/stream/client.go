@@ -74,9 +74,10 @@ type Client struct {
 
 	doneTimeoutTicker chan struct{}
 	uniqueId          string
+	entities          []IEntity
 }
 
-func newClient(parameters clientConnectionParameters) *Client {
+func newClient(parameters connectionParameters) *Client {
 	var clientBroker = parameters.broker
 	if parameters.broker == nil {
 		clientBroker = newBrokerDefault()
@@ -113,6 +114,7 @@ func newClient(parameters clientConnectionParameters) *Client {
 		availableFeatures: newAvailableFeatures(),
 		doneTimeoutTicker: make(chan struct{}, 1),
 		uniqueId:          uuid.New().String(),
+		entities:          make([]IEntity, 0),
 	}
 	c.setConnectionName(parameters.connectionName)
 	return c
@@ -528,15 +530,25 @@ func (c *Client) Close() {
 }
 
 func (c *Client) Entities() []IEntity {
-	return nil
+	return c.entities
 }
 
-func (c *Client) RemoveEntityById(_ uint8) {
-	// no-op
+func (c *Client) RemoveEntityById(id uint8) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	activeEntities := make([]IEntity, 0)
+	for _, entity := range c.entities {
+		if entity.GetID() != id {
+			activeEntities = append(activeEntities, entity)
+		}
+	}
+	c.entities = activeEntities
 }
 
-func (c *Client) AddEntity(_ IEntity) {
-	// no-op
+func (c *Client) AddEntity(e IEntity) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.entities = append(c.entities, e)
 }
 
 func (c *Client) GetUniqueId() string {

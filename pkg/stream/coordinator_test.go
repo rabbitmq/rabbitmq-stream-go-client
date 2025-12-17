@@ -15,7 +15,7 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient(clientConnectionParameters{
+			client = newClient(connectionParameters{
 				connectionName: "test-client",
 				rpcTimeOut:     defaultSocketCallTimeout,
 			})
@@ -135,7 +135,7 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient(clientConnectionParameters{
+			client = newClient(connectionParameters{
 				connectionName: "test-client",
 				rpcTimeOut:     defaultSocketCallTimeout,
 			})
@@ -193,7 +193,7 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient(clientConnectionParameters{
+			client = newClient(connectionParameters{
 				connectionName: "test-client",
 				rpcTimeOut:     defaultSocketCallTimeout,
 			})

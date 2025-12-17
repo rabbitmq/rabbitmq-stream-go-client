@@ -68,6 +68,11 @@ type messageSequence struct {
 }
 
 type Producer struct {
+	// pool
+	poolRef *ClientPools
+	// end pool
+
+	// eventually the client will be removed
 	client      *Client
 	id          uint8
 	options     *ProducerOptions
@@ -717,15 +722,7 @@ func (producer *Producer) close(reason Event) error {
 		_ = producer.client.deletePublisher(producer.id)
 	}
 
-	_, _ = producer.client.coordinator.ExtractProducerById(producer.id)
-
-	if producer.client.coordinator.ProducersCount() == 0 {
-		producer.client.Close()
-	}
-
-	if producer.onClose != nil {
-		producer.onClose()
-	}
+	producer.poolRef.RemoveEntityIdFromClientId(producer.client.uniqueId, producer.id)
 
 	return nil
 }
@@ -833,6 +830,48 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 
 	return nil
 }
+
+// *** producer pool
+
+// newProducer creates a new producer with the given options.
+func newProducerStruct(id uint8, options *ProducerOptions) *Producer {
+	return &Producer{
+		id:                        id,
+		options:                   options,
+		unConfirmed:               newUnConfirmed(defaultQueuePublisherSize),
+		mutex:                     &sync.RWMutex{},
+		status:                    closed,
+		confirmationTimeoutTicker: time.NewTicker(options.ConfirmationTimeOut),
+		doneTimeoutTicker:         make(chan struct{}),
+		confirmMutex:              &sync.Mutex{},
+		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](options.QueueSize),
+	}
+}
+
+// set clientPools ref
+func (producer *Producer) setPoolReference(pool *ClientPools, client IClient) {
+	producer.poolRef = pool
+	producer.client = client.(*Client)
+}
+
+// Open the producer
+func (producer *Producer) Open() error {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	// cast IClient to Client
+
+	resp := producer.client.internalDeclarePublisher(producer.options.streamName, producer)
+	if resp.Err != nil {
+		return resp.Err
+	}
+	producer.startUnconfirmedMessagesTimeOutTask()
+	producer.processPendingSequencesQueue()
+	producer.status = open
+
+	return nil
+}
+
+// ** end producer pool
 
 func (c *Client) deletePublisher(publisherId byte) error {
 	length := 2 + 2 + 4 + 1

@@ -5,7 +5,9 @@ import (
 	"time"
 )
 
-type clientConnectionParameters struct {
+// connectionParameters holds the parameters needed to establish a connection
+// to a broker
+type connectionParameters struct {
 	connectionName    string
 	broker            *Broker
 	tcpParameters     *TCPParameters
@@ -13,9 +15,12 @@ type clientConnectionParameters struct {
 	rpcTimeOut        time.Duration
 }
 
+// IEntity represents an entity that can be managed by a client pool
 type IEntity interface {
-	GetId() uint8
+	GetID() uint8
 	Close() error
+	Open() error
+	setPoolReference(*ClientPools, IClient)
 }
 
 type IClient interface {
@@ -49,18 +54,23 @@ func NewClientPools(maxItems int) *ClientPools {
 
 // AddEntityAndGetConnection adds a new client pool if the key does not already exist
 // or if the client reached the maximum number of entities
-func (cp *ClientPools) AddEntityAndGetConnection(key string, entity IEntity, parameters clientConnectionParameters, fn func(clientConnectionParameters) (IClient, error)) (IClient, error) {
+func (cp *ClientPools) AddEntityAndGetConnection(key string, entity IEntity, parameters connectionParameters, fn func(connectionParameters) (IClient, error)) (IClient, error) {
 	cp.mutex.Lock()
 	defer cp.mutex.Unlock()
 
 	for _, pool := range cp.pools {
 		if pool.key == key && len(pool.client.Entities()) < cp.maxItems {
+			entity.setPoolReference(cp, pool.client)
+			err := entity.Open()
+			if err != nil {
+				return nil, err
+			}
 			pool.client.AddEntity(entity)
 			return pool.client, nil
 		}
 	}
 
-	client, err := fn(clientConnectionParameters{
+	client, err := fn(connectionParameters{
 
 		connectionName:    parameters.connectionName,
 		broker:            parameters.broker,
@@ -71,12 +81,22 @@ func (cp *ClientPools) AddEntityAndGetConnection(key string, entity IEntity, par
 	if err != nil {
 		return nil, err
 	}
+	err = client.connect()
+	if err != nil {
+		return nil, err
+	}
+
 	cp.pools = append(cp.pools, &ClientPool{
 		key:    key,
 		client: client,
 	})
 
 	// Subscribe to close events
+	entity.setPoolReference(cp, client)
+	err = entity.Open()
+	if err != nil {
+		return nil, err
+	}
 	client.AddEntity(entity)
 	return client, nil
 }
@@ -109,6 +129,16 @@ func (cp *ClientPools) RemoveClient(uniqueId string) {
 		}
 	}
 	cp.pools = activePools
+}
+
+// GetClientById returns the client with the given id
+func (cp *ClientPools) GetClientById(uniqueId string) IClient {
+	for _, pool := range cp.pools {
+		if pool.client.GetUniqueId() == uniqueId {
+			return pool.client
+		}
+	}
+	return nil
 }
 
 // GarbageCollect closes clients that have no more entities
@@ -152,4 +182,19 @@ func NewEntitiesPool(maxProducersPerClient int, maxConsumersPerClient int) *Enti
 		producers: NewClientPools(maxProducersPerClient),
 		consumers: NewClientPools(maxConsumersPerClient),
 	}
+}
+
+// add producer with a cast
+// func (ep *EntitiesPool) addProducerAndGetConnection(key string, producer *Producer, parameters connectionParameters, fn func(connectionParameters) (IClient, error)) (IClient, error) {
+//	return ep.producers.AddEntityAndGetConnection(key, producer, parameters, fn)
+// }
+
+// add consumer with a cast
+// func (ep *EntitiesPool) addConsumerAndGetConnection(key string, consumer *Consumer, parameters connectionParameters, fn func(connectionParameters) (IClient, error)) (IClient, error) {
+//	return ep.consumers.AddEntityAndGetConnection(key, consumer, parameters, fn)
+//}
+
+func (ep *EntitiesPool) Close() {
+	ep.producers.Close()
+	ep.consumers.Close()
 }

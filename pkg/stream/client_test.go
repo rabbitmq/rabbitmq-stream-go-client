@@ -184,7 +184,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.queryOffset won't hang if timeout happens", func() {
-		cli := newClient(clientConnectionParameters{
+		cli := newClient(connectionParameters{
 			connectionName: "connName",
 			rpcTimeOut:     defaultSocketCallTimeout,
 		})
@@ -197,7 +197,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.queryPublisherSequence won't hang if timeout happens", func() {
-		cli := newClient(clientConnectionParameters{
+		cli := newClient(connectionParameters{
 			connectionName: "connName",
 			rpcTimeOut:     defaultSocketCallTimeout,
 		})
@@ -210,7 +210,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.StreamStats won't hang if timeout happens", func() {
-		cli := newClient(clientConnectionParameters{
+		cli := newClient(connectionParameters{
 			connectionName: "connName",
 			rpcTimeOut:     defaultSocketCallTimeout,
 		})
@@ -223,7 +223,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.handleGenericResponse handles timeout and missing response gracefully", func() {
-		cli := newClient(clientConnectionParameters{
+		cli := newClient(connectionParameters{
 			connectionName: "connName",
 			rpcTimeOut:     defaultSocketCallTimeout,
 		})
