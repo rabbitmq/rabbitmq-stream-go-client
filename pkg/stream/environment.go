@@ -637,7 +637,7 @@ func (cc *environmentCoordinator) newClientForConnection(connectionName string, 
 		broker:            broker,
 		tcpParameters:     tcpParameters,
 		saslConfiguration: saslConfiguration,
-		rpcTimeOut:        rpcTimeout,
+		rpcTimeout:        rpcTimeout,
 	})
 	cc.nextId++
 	cc.clientsPerContext.Store(cc.nextId, clientResult)
