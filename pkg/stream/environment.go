@@ -52,7 +52,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		broker:            nil,
 		tcpParameters:     options.TCPParameters,
 		saslConfiguration: options.SaslConfiguration,
-		rpcTimeOut:        options.RPCTimeout,
+		rpcTimeout:        options.RPCTimeout,
 	})
 	defer client.Close()
 
