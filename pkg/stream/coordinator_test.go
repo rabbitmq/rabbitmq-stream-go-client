@@ -20,7 +20,7 @@ var _ = Describe("Coordinator", func() {
 				broker:            nil,
 				tcpParameters:     nil,
 				saslConfiguration: nil,
-				rpcTimeOut:        defaultSocketCallTimeout,
+				rpcTimeout:        defaultSocketCallTimeout,
 			})
 
 		})

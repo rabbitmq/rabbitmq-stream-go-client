@@ -103,7 +103,7 @@ func newClient(parameters connectionParameters) *Client {
 			mutex:      &sync.Mutex{},
 			destructor: &sync.Once{},
 		},
-		socketCallTimeout: parameters.rpcTimeOut,
+		socketCallTimeout: parameters.rpcTimeout,
 		availableFeatures: newAvailableFeatures(),
 		doneTimeoutTicker: make(chan struct{}, 1),
 	}

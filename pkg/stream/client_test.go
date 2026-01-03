@@ -189,7 +189,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 			broker:            nil,
 			tcpParameters:     nil,
 			saslConfiguration: nil,
-			rpcTimeOut:        defaultSocketCallTimeout,
+			rpcTimeout:        defaultSocketCallTimeout,
 		})
 		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
 		cli.socketCallTimeout = time.Millisecond
@@ -205,7 +205,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 			broker:            nil,
 			tcpParameters:     nil,
 			saslConfiguration: nil,
-			rpcTimeOut:        defaultSocketCallTimeout,
+			rpcTimeout:        defaultSocketCallTimeout,
 		})
 		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
 		cli.socketCallTimeout = time.Millisecond
@@ -221,7 +221,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 			broker:            nil,
 			tcpParameters:     nil,
 			saslConfiguration: nil,
-			rpcTimeOut:        defaultSocketCallTimeout,
+			rpcTimeout:        defaultSocketCallTimeout,
 		})
 		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
 		cli.socketCallTimeout = time.Millisecond
@@ -237,7 +237,7 @@ var _ = Describe("Streaming testEnvironment", func() {
 			broker:            nil,
 			tcpParameters:     nil,
 			saslConfiguration: nil,
-			rpcTimeOut:        defaultSocketCallTimeout,
+			rpcTimeout:        defaultSocketCallTimeout,
 		})
 		// Simulate timeout: create a response and remove it immediately
 		res := cli.coordinator.NewResponse(commandDeclarePublisher, "Simulated Test")

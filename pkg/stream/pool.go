@@ -9,5 +9,5 @@ type connectionParameters struct {
 	broker            *Broker
 	tcpParameters     *TCPParameters
 	saslConfiguration *SaslConfiguration
-	rpcTimeOut        time.Duration
+	rpcTimeout        time.Duration
 }

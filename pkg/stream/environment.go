@@ -135,7 +135,7 @@ func (env *Environment) maybeReconnectLocator() error {
 		broker:            broker,
 		tcpParameters:     env.options.TCPParameters,
 		saslConfiguration: env.options.SaslConfiguration,
-		rpcTimeOut:        env.options.RPCTimeout,
+		rpcTimeout:        env.options.RPCTimeout,
 	})
 
 	env.locator.client = c
@@ -155,7 +155,7 @@ func (env *Environment) maybeReconnectLocator() error {
 			broker:            env.options.ConnectionParameters[n],
 			tcpParameters:     env.options.TCPParameters,
 			saslConfiguration: env.options.SaslConfiguration,
-			rpcTimeOut:        env.options.RPCTimeout,
+			rpcTimeout:        env.options.RPCTimeout,
 		})
 		tentatives++
 		env.locator.client = c1
