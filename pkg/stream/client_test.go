@@ -184,7 +184,13 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.queryOffset won't hang if timeout happens", func() {
-		cli := newClient("connName", nil, nil, nil, defaultSocketCallTimeout)
+		cli := newClient(connectionParameters{
+			connectionName:    "connName",
+			broker:            nil,
+			tcpParameters:     nil,
+			saslConfiguration: nil,
+			rpcTimeOut:        defaultSocketCallTimeout,
+		})
 		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
 		cli.socketCallTimeout = time.Millisecond
 
@@ -194,7 +200,13 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.queryPublisherSequence won't hang if timeout happens", func() {
-		cli := newClient("connName", nil, nil, nil, defaultSocketCallTimeout)
+		cli := newClient(connectionParameters{
+			connectionName:    "connName",
+			broker:            nil,
+			tcpParameters:     nil,
+			saslConfiguration: nil,
+			rpcTimeOut:        defaultSocketCallTimeout,
+		})
 		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
 		cli.socketCallTimeout = time.Millisecond
 
@@ -204,7 +216,13 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.StreamStats won't hang if timeout happens", func() {
-		cli := newClient("connName", nil, nil, nil, defaultSocketCallTimeout)
+		cli := newClient(connectionParameters{
+			connectionName:    "connName",
+			broker:            nil,
+			tcpParameters:     nil,
+			saslConfiguration: nil,
+			rpcTimeOut:        defaultSocketCallTimeout,
+		})
 		cli.socket.writer = bufio.NewWriter(bytes.NewBuffer([]byte{}))
 		cli.socketCallTimeout = time.Millisecond
 
@@ -214,8 +232,13 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 	It("Client.handleGenericResponse handles timeout and missing response gracefully", func() {
-		cli := newClient("connName", nil, nil, nil, defaultSocketCallTimeout)
-
+		cli := newClient(connectionParameters{
+			connectionName:    "connName",
+			broker:            nil,
+			tcpParameters:     nil,
+			saslConfiguration: nil,
+			rpcTimeOut:        defaultSocketCallTimeout,
+		})
 		// Simulate timeout: create a response and remove it immediately
 		res := cli.coordinator.NewResponse(commandDeclarePublisher, "Simulated Test")
 		err := cli.coordinator.RemoveResponseById(res.correlationid)
