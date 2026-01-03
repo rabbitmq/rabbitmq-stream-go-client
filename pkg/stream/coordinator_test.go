@@ -15,7 +15,13 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
+			client = newClient(connectionParameters{
+				connectionName:    "test-client",
+				broker:            nil,
+				tcpParameters:     nil,
+				saslConfiguration: nil,
+				rpcTimeout:        defaultSocketCallTimeout,
+			})
 
 		})
 		AfterEach(func() {
@@ -132,7 +138,13 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
+			client = newClient(connectionParameters{
+				connectionName:    "test-client",
+				broker:            nil,
+				tcpParameters:     nil,
+				saslConfiguration: nil,
+				rpcTimeout:        defaultSocketCallTimeout,
+			})
 
 		})
 		AfterEach(func() {
@@ -187,7 +199,13 @@ var _ = Describe("Coordinator", func() {
 			client *Client
 		)
 		BeforeEach(func() {
-			client = newClient("test-client", nil, nil, nil, defaultSocketCallTimeout)
+			client = newClient(connectionParameters{
+				connectionName:    "test-client",
+				broker:            nil,
+				tcpParameters:     nil,
+				saslConfiguration: nil,
+				rpcTimeout:        defaultSocketCallTimeout,
+			})
 
 		})
 		AfterEach(func() {
