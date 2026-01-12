@@ -172,9 +172,12 @@ type SuperStreamProducer struct {
 	// since the producer is in reconnection
 	partitions []string
 
-	env                         *Environment
-	mutex                       sync.Mutex
+	env   *Environment
+	mutex sync.Mutex
+
 	chNotifyPublishConfirmation chan PartitionPublishConfirm
+
+	chSuperStreamPartitionMutex sync.Mutex
 	chSuperStreamPartitionClose chan PPartitionClose
 
 	// public
@@ -285,6 +288,7 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		}
 		s.mutex.Unlock()
 
+		s.chSuperStreamPartitionMutex.Lock()
 		if s.chSuperStreamPartitionClose != nil {
 			s.chSuperStreamPartitionClose <- PPartitionClose{
 				Partition: gpartion,
@@ -292,6 +296,7 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 				Context:   s,
 			}
 		}
+		s.chSuperStreamPartitionMutex.Unlock()
 		logs.LogDebug("[SuperStreamProducer] chSuperStreamPartitionClose for partition: %s", gpartion)
 	}(partition, closedEvent)
 
@@ -404,11 +409,14 @@ func (s *SuperStreamProducer) Close() error {
 			close(s.chNotifyPublishConfirmation)
 			s.chNotifyPublishConfirmation = nil
 		}
+		s.mutex.Unlock()
+
+		s.chSuperStreamPartitionMutex.Lock()
 		if s.chSuperStreamPartitionClose != nil {
 			close(s.chSuperStreamPartitionClose)
 			s.chSuperStreamPartitionClose = nil
 		}
-		s.mutex.Unlock()
+		s.chSuperStreamPartitionMutex.Unlock()
 	}()
 	logs.LogDebug("[SuperStreamProducer] Closed SuperStreamProducer for: %s", s.SuperStream)
 	return nil
