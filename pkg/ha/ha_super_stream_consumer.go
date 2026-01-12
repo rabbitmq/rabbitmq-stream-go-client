@@ -64,25 +64,29 @@ func NewReliableSuperStreamConsumer(env *stream.Environment, superStream string,
 
 func (r *ReliableSuperStreamConsumer) handleNotifyClose(channelClose chan stream.CPartitionClose) {
 	go func() {
-		cPartitionClose := <-channelClose
-		if strings.EqualFold(cPartitionClose.Event.Reason, stream.SocketClosed) || strings.EqualFold(cPartitionClose.Event.Reason, stream.MetaDataUpdate) || strings.EqualFold(cPartitionClose.Event.Reason, stream.ZombieConsumer) {
-			r.setStatus(StatusReconnecting)
-			logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", r.getInfo(), cPartitionClose.Event.Reason)
-			r.bootstrap = false
-			err, reconnected := retry(1, r, cPartitionClose.Partition)
-			if err != nil {
-				logs.LogInfo(""+
-					"[Reliable] - %s won't be reconnected. Error: %s", r.getInfo(), err)
-			}
-			if reconnected {
-				r.setStatus(StatusOpen)
+		// for channelClose until closed
+		for cPartitionClose := range channelClose {
+			if strings.EqualFold(cPartitionClose.Event.Reason, stream.SocketClosed) || strings.EqualFold(cPartitionClose.Event.Reason, stream.MetaDataUpdate) || strings.EqualFold(cPartitionClose.Event.Reason, stream.ZombieConsumer) {
+				r.setStatus(StatusReconnecting)
+				logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", r.getInfo(), cPartitionClose.Event.Reason)
+				r.bootstrap = false
+				err, reconnected := retry(1, r, cPartitionClose.Partition)
+				if err != nil {
+					logs.LogInfo(""+
+						"[Reliable] - %s won't be reconnected. Error: %s", r.getInfo(), err)
+				}
+				if reconnected {
+					r.setStatus(StatusOpen)
+				} else {
+					r.setStatus(StatusClosed)
+				}
 			} else {
+				logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", r.getInfo(), cPartitionClose.Event.Reason)
 				r.setStatus(StatusClosed)
+				break
 			}
-		} else {
-			logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", r.getInfo(), cPartitionClose.Event.Reason)
-			r.setStatus(StatusClosed)
 		}
+		logs.LogDebug("[ReliableSuperStreamConsumer] - cPartitionClose closed %s", r.getInfo())
 	}()
 }
 
@@ -103,6 +107,7 @@ func (r *ReliableSuperStreamConsumer) getEnv() *stream.Environment {
 
 func (r *ReliableSuperStreamConsumer) getNewInstance(partition string) newEntityInstance {
 	return func() error {
+		c := r.consumer.Load()
 		// by default the consumer will start from the consumerOptions.Offset
 		off := r.consumerOptions.Offset
 		var restartOffset int64
@@ -113,7 +118,8 @@ func (r *ReliableSuperStreamConsumer) getNewInstance(partition string) newEntity
 			restartOffset = v.(int64)
 			off = stream.OffsetSpecification{}.Offset(restartOffset + 1)
 		}
-		return r.consumer.Load().ConnectPartition(partition, off)
+
+		return c.ConnectPartition(partition, off)
 	}
 }
 

@@ -277,13 +277,13 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		event := <-_closedEvent
 
 		s.mutex.Lock()
-		defer s.mutex.Unlock()
 		for i := range s.activeProducers {
 			if s.activeProducers[i].GetStreamName() == gpartion {
 				s.activeProducers = append(s.activeProducers[:i], s.activeProducers[i+1:]...)
 				break
 			}
 		}
+		s.mutex.Unlock()
 
 		if s.chSuperStreamPartitionClose != nil {
 			s.chSuperStreamPartitionClose <- PPartitionClose{

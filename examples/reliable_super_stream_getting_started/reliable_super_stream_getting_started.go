@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/ha"
@@ -27,7 +28,7 @@ func main() {
 	// Create a super stream
 	streamName := "my-super-stream"
 	// It is highly recommended to define the stream retention policy
-	err = env.DeclareSuperStream(streamName, stream.NewPartitionsOptions(3).
+	err = env.DeclareSuperStream(streamName, stream.NewPartitionsOptions(1).
 		SetMaxLengthBytes(stream.ByteCapacity{}.GB(2)))
 
 	// ignore the error if the stream already exists
@@ -75,8 +76,8 @@ func main() {
 		return
 	}
 
-	// Send a message
-	for i := range 10 {
+	// Send a messages
+	for i := range 10000 {
 		msg := amqp.NewMessage([]byte(fmt.Sprintf("Hello stream:%d", i)))
 		msg.Properties = &amqp.MessageProperties{
 			MessageID: fmt.Sprintf("msg-%d", i),
@@ -84,8 +85,13 @@ func main() {
 		err = producer.Send(msg)
 		if err != nil {
 			fmt.Printf("Error sending message: %v\n", err)
-			return
+			time.Sleep(1 * time.Second)
 		}
+		if i%1000 == 0 {
+			fmt.Printf("Sent %d messages\n", i)
+		}
+		// add a small delay in case you want to kill connection to see the reliable reconnection in action
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	// press any key to exit

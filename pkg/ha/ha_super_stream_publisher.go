@@ -71,27 +71,30 @@ func (r *ReliableSuperStreamProducer) handlePublishConfirm(confirm chan stream.P
 
 func (r *ReliableSuperStreamProducer) handleNotifyClose(channelClose chan stream.PPartitionClose) {
 	go func() {
-		cPartitionClose := <-channelClose
-		if strings.EqualFold(cPartitionClose.Event.Reason, stream.SocketClosed) || strings.EqualFold(cPartitionClose.Event.Reason, stream.MetaDataUpdate) || strings.EqualFold(cPartitionClose.Event.Reason, stream.ZombieConsumer) {
-			r.setStatus(StatusReconnecting)
-			logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", r.getInfo(), cPartitionClose.Event.Reason)
-			err, reconnected := retry(1, r, cPartitionClose.Partition)
-			if err != nil {
-				logs.LogInfo(""+
-					"[Reliable] - %s won't be reconnected. Error: %s", r.getInfo(), err)
-			}
-			if reconnected {
-				r.setStatus(StatusOpen)
+		for cPartitionClose := range channelClose {
+			if strings.EqualFold(cPartitionClose.Event.Reason, stream.SocketClosed) || strings.EqualFold(cPartitionClose.Event.Reason, stream.MetaDataUpdate) || strings.EqualFold(cPartitionClose.Event.Reason, stream.ZombieConsumer) {
+				r.setStatus(StatusReconnecting)
+				logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", r.getInfo(), cPartitionClose.Event.Reason)
+				err, reconnected := retry(1, r, cPartitionClose.Partition)
+				if err != nil {
+					logs.LogInfo(""+
+						"[Reliable] - %s won't be reconnected. Error: %s", r.getInfo(), err)
+				}
+				if reconnected {
+					r.setStatus(StatusOpen)
+				} else {
+					r.setStatus(StatusClosed)
+				}
 			} else {
+				logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", r.getInfo(), cPartitionClose.Event.Reason)
 				r.setStatus(StatusClosed)
+				break
 			}
-		} else {
-			logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", r.getInfo(), cPartitionClose.Event.Reason)
-			r.setStatus(StatusClosed)
+			r.reconnectionSignal.L.Lock()
+			r.reconnectionSignal.Broadcast()
+			r.reconnectionSignal.L.Unlock()
 		}
-		r.reconnectionSignal.L.Lock()
-		r.reconnectionSignal.Broadcast()
-		r.reconnectionSignal.L.Unlock()
+		logs.LogDebug("[ReliableSuperStreamProducer] - closed %s", r.getInfo())
 	}()
 }
 
@@ -112,7 +115,8 @@ func (r *ReliableSuperStreamProducer) getEnv() *stream.Environment {
 
 func (r *ReliableSuperStreamProducer) getNewInstance(streamName string) newEntityInstance {
 	return func() error {
-		return r.producer.Load().ConnectPartition(streamName)
+		p := r.producer.Load()
+		return p.ConnectPartition(streamName)
 	}
 }
 

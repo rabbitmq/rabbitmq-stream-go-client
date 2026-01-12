@@ -226,13 +226,11 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 		}
 		s.mutex.Unlock()
 		if s.chSuperStreamPartitionClose != nil {
-			s.mutex.Lock()
 			s.chSuperStreamPartitionClose <- CPartitionClose{
 				Partition: gpartion,
 				Event:     event,
 				Context:   s,
 			}
-			s.mutex.Unlock()
 		}
 		logs.LogDebug("[SuperStreamConsumer] chSuperStreamPartitionClose for partition: %s", gpartion)
 	}(partition, closedEvent)
