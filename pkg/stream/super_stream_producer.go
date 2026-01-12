@@ -229,7 +229,6 @@ func (s *SuperStreamProducer) init() error {
 			logs.LogError("Failed to connect partition: %s", p)
 			return err
 		}
-
 	}
 	return nil
 }
