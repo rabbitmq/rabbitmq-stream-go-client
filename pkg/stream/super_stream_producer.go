@@ -223,10 +223,13 @@ func (s *SuperStreamProducer) init() error {
 		return err
 	}
 	for _, p := range partitions {
+		logs.LogDebug("Producing partition: %s", p)
 		err = s.ConnectPartition(p)
 		if err != nil {
+			logs.LogError("Failed to connect partition: %s", p)
 			return err
 		}
+
 	}
 	return nil
 }
@@ -236,6 +239,10 @@ func (s *SuperStreamProducer) init() error {
 // that are hidden to the user.
 // with the ConnectPartition the user can re-connect a partition to the SuperStreamProducer
 // that should be used only in case of disconnection
+//
+// Note on mutex usage: The mutex is held while checking partition validity and activeProducers,
+// but is released before calling NewProducer() to avoid potential deadlocks. The mutex is
+// re-acquired after NewProducer() returns to safely update the activeProducers slice.
 func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 	logs.LogDebug("[SuperStreamProducer] ConnectPartition for partition: %s", partition)
 
@@ -258,17 +265,25 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		}
 	}
 
-	s.mutex.Unlock()
 	var options = NewProducerOptions()
 	if s.SuperStreamProducerOptions.ClientProvidedName != "" {
 		options.ClientProvidedName = s.SuperStreamProducerOptions.ClientProvidedName
 	}
 	options = options.SetFilter(s.SuperStreamProducerOptions.Filter)
 
+	// Unlock mutex before calling NewProducer() to avoid potential deadlocks.
+	// NewProducer() may perform network I/O and could block, and it may also
+	// need to acquire other locks internally. Holding this mutex during that
+	// call could cause deadlocks if other goroutines are waiting on this mutex
+	// or if NewProducer() needs to acquire locks that conflict with this one.
+	s.mutex.Unlock()
+
 	producer, err := s.env.NewProducer(partition, options)
 	if err != nil {
 		return err
 	}
+
+	// Re-acquire mutex to safely update activeProducers slice
 	s.mutex.Lock()
 	s.activeProducers = append(s.activeProducers, producer)
 	chSingleStreamPublishConfirmation := producer.NotifyPublishConfirmation()
@@ -373,11 +388,12 @@ func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
 	for _, p := range ps {
 		producer := s.getProducer(p)
 		if producer == nil {
-			// the producer is not. It can happen if the tcp connection for the partition is dropped
+			// the producer is not in the list. It can happen if the tcp connection for the partition is dropped
 			// the user can reconnect the partition using the ConnectPartition
 			// The client returns an error. Even there could be other partitions where the message can be sent.
 			// but won't to that to break the expectation of the user. The routing should be always the same
 			// for the same message. The user has to handle the error and decide to send the message again
+
 			return ErrProducerNotFound
 		}
 

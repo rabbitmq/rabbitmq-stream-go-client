@@ -502,8 +502,13 @@ func (cc *environmentCoordinator) isConsumerListFull(clientsPerContextId int) bo
 }
 
 func (cc *environmentCoordinator) maybeCleanClients() {
-	cc.mutex.Lock()
-	defer cc.mutex.Unlock()
+	// Note: Mutex is not needed here because:
+	// 1. sync.Map operations (Range, Delete) are thread-safe and can be called concurrently
+	// 2. Deleting the current entry during Range iteration is safe per Go's sync.Map documentation
+	// 3. This function is called from cleanup callbacks which may run concurrently, but
+	//    sync.Map handles concurrent access safely without requiring external synchronization
+	// 4. We only delete entries for clients that are already closed (socket.isOpen() == false),
+	//    so there's no risk of deleting active clients that are being used elsewhere
 
 	cc.clientsPerContext.Range(func(key, value any) bool {
 		client := value.(*Client)
@@ -620,7 +625,13 @@ func (cc *environmentCoordinator) validateBrokerConnection(client *Client, broke
 		logs.LogDebug("connectionProperties host %s doesn't match with the advertised_host %s, advertised_port %s .. retry",
 			client.connectionProperties.host,
 			broker.advHost, broker.advPort)
-		client.Close()
+		// Safety check: Only close the client if there are no active consumers or producers.
+		// This prevents premature disconnection during active operations, which could cause
+		// message loss or connection errors. If there are active producers/consumers, we
+		// create a new client without closing the old one, allowing graceful migration.
+		if client.coordinator.ConsumersCount() == 0 && client.coordinator.ProducersCount() == 0 {
+			client.Close()
+		}
 		client = newClientFunc()
 		err := client.connect()
 		if err != nil {
