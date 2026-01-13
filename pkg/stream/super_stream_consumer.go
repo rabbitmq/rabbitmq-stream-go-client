@@ -87,9 +87,11 @@ type SuperStreamConsumer struct {
 	// in a normal situation len(partitions) == len(consumers)
 	// but in case of disconnection the len(partitions) can be > len(consumers)
 	// since the consumer is in reconnection
-	partitions                  []string
-	env                         *Environment
-	mutex                       sync.Mutex
+	partitions []string
+	env        *Environment
+	mutex      sync.Mutex
+
+	chSuperStreamPartitionMutex sync.Mutex
 	chSuperStreamPartitionClose chan CPartitionClose
 
 	SuperStream                string
@@ -225,15 +227,15 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 			}
 		}
 		s.mutex.Unlock()
+		s.chSuperStreamPartitionMutex.Lock()
 		if s.chSuperStreamPartitionClose != nil {
-			s.mutex.Lock()
 			s.chSuperStreamPartitionClose <- CPartitionClose{
 				Partition: gpartion,
 				Event:     event,
 				Context:   s,
 			}
-			s.mutex.Unlock()
 		}
+		s.chSuperStreamPartitionMutex.Unlock()
 		logs.LogDebug("[SuperStreamConsumer] chSuperStreamPartitionClose for partition: %s", gpartion)
 	}(partition, closedEvent)
 
@@ -255,11 +257,11 @@ func (s *SuperStreamConsumer) Close() error {
 	// give the time to raise the close event
 	go func() {
 		time.Sleep(2 * time.Second)
-		s.mutex.Lock()
+		s.chSuperStreamPartitionMutex.Lock()
 		if s.chSuperStreamPartitionClose != nil {
 			close(s.chSuperStreamPartitionClose)
 		}
-		s.mutex.Unlock()
+		s.chSuperStreamPartitionMutex.Unlock()
 	}()
 
 	logs.LogDebug("[SuperStreamConsumer] Closed SuperStreamConsumer for: %s", s.SuperStream)
