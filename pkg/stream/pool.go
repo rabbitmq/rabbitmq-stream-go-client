@@ -10,4 +10,5 @@ type connectionParameters struct {
 	tcpParameters     *TCPParameters
 	saslConfiguration *SaslConfiguration
 	rpcTimeout        time.Duration
+	metrics           *streamMetrics
 }

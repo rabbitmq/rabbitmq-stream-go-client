@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 )
 
 type locator struct {
@@ -27,11 +29,18 @@ func newLocator(client *Client) *locator {
 }
 
 type Environment struct {
+	// TODO: it's not clear where to define the metrics, because Environment is not accessible down below the stack
+	// e.g. in Client.
+	// (1) Perhaps one option is to keep a reference to a "singleton" struct with metrics in each component from Environment
+	// down to Client.
+	// (2) Another option is to have a package level variable to "Stream Metrics", and initialise them lazily and only once;
+	// then all subcomponents can access this package level variable.
 	producers *producersEnvironment
 	consumers *consumersEnvironment
 	options   *EnvironmentOptions
 	locator   *locator
 	closed    bool
+	metrics   *streamMetrics
 }
 
 func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
@@ -47,12 +56,18 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		options.TCPParameters = newTCPParameterDefault()
 	}
 
+	metrics, err := newStreamMetrics(options.meterProvider)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialise metrics: %w", err)
+	}
+
 	client := newClient(connectionParameters{
 		connectionName:    "go-stream-locator",
 		broker:            nil,
 		tcpParameters:     options.TCPParameters,
 		saslConfiguration: options.SaslConfiguration,
 		rpcTimeout:        options.RPCTimeout,
+		metrics:           metrics,
 	})
 	defer client.Close()
 
@@ -116,12 +131,14 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	return &Environment{
 		options:   options,
-		producers: newProducers(options.MaxProducersPerClient),
-		consumers: newConsumerEnvironment(options.MaxConsumersPerClient),
+		producers: newProducers(options.MaxProducersPerClient, metrics),
+		consumers: newConsumerEnvironment(options.MaxConsumersPerClient, metrics),
 		closed:    false,
 		locator:   newLocator(client),
+		metrics:   metrics,
 	}, connectionError
 }
+
 func (env *Environment) maybeReconnectLocator() error {
 	env.locator.mutex.Lock()
 	defer env.locator.mutex.Unlock()
@@ -136,6 +153,7 @@ func (env *Environment) maybeReconnectLocator() error {
 		tcpParameters:     env.options.TCPParameters,
 		saslConfiguration: env.options.SaslConfiguration,
 		rpcTimeout:        env.options.RPCTimeout,
+		metrics:           env.metrics,
 	})
 
 	env.locator.client = c
@@ -156,6 +174,7 @@ func (env *Environment) maybeReconnectLocator() error {
 			tcpParameters:     env.options.TCPParameters,
 			saslConfiguration: env.options.SaslConfiguration,
 			rpcTimeout:        env.options.RPCTimeout,
+			metrics:           env.metrics,
 		})
 		tentatives++
 		env.locator.client = c1
@@ -298,6 +317,11 @@ type EnvironmentOptions struct {
 	MaxConsumersPerClient int
 	AddressResolver       *AddressResolver
 	RPCTimeout            time.Duration
+	meterProvider         metric.MeterProvider
+	// TODO: EnvironmentOptions should not export all fields, because the
+	// 		the caller should initialize the struct with NewEnvironmentOptions() and
+	// 		and then use the Set* methods to configure the options.
+	// 		The TODO is a breaking change.
 }
 
 func NewEnvironmentOptions() *EnvironmentOptions {
@@ -308,6 +332,7 @@ func NewEnvironmentOptions() *EnvironmentOptions {
 		TCPParameters:         newTCPParameterDefault(),
 		SaslConfiguration:     newSaslConfigurationDefault(),
 		RPCTimeout:            defaultSocketCallTimeout,
+		meterProvider:         noop.NewMeterProvider(),
 	}
 }
 
@@ -326,6 +351,11 @@ func (envOptions *EnvironmentOptions) SetMaxProducersPerClient(maxProducersPerCl
 
 func (envOptions *EnvironmentOptions) SetMaxConsumersPerClient(maxConsumersPerClient int) *EnvironmentOptions {
 	envOptions.MaxConsumersPerClient = maxConsumersPerClient
+	return envOptions
+}
+
+func (envOptions *EnvironmentOptions) SetMeterProvider(meterProvider metric.MeterProvider) *EnvironmentOptions {
+	envOptions.meterProvider = meterProvider
 	return envOptions
 }
 
@@ -481,6 +511,7 @@ type environmentCoordinator struct {
 	clientsPerContext sync.Map
 	maxItemsForClient int
 	nextId            int
+	metrics           *streamMetrics
 }
 
 func (cc *environmentCoordinator) isProducerListFull(clientsPerContextId int) bool {
@@ -649,6 +680,7 @@ func (cc *environmentCoordinator) newClientForConnection(connectionName string, 
 		tcpParameters:     tcpParameters,
 		saslConfiguration: saslConfiguration,
 		rpcTimeout:        rpcTimeout,
+		metrics:           cc.metrics,
 	})
 	cc.nextId++
 	cc.clientsPerContext.Store(cc.nextId, clientResult)
@@ -678,13 +710,15 @@ type producersEnvironment struct {
 	mutex                *sync.Mutex
 	producersCoordinator map[string]*environmentCoordinator
 	maxItemsForClient    int
+	metrics              *streamMetrics
 }
 
-func newProducers(maxItemsForClient int) *producersEnvironment {
+func newProducers(maxItemsForClient int, metrics *streamMetrics) *producersEnvironment {
 	producers := &producersEnvironment{
 		mutex:                &sync.Mutex{},
 		producersCoordinator: map[string]*environmentCoordinator{},
 		maxItemsForClient:    maxItemsForClient,
+		metrics:              metrics,
 	}
 	return producers
 }
@@ -706,6 +740,7 @@ func (ps *producersEnvironment) newProducer(clientLocator *Client, streamName st
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
 			nextId:            0,
+			metrics:           ps.metrics,
 		}
 	}
 
@@ -745,13 +780,15 @@ type consumersEnvironment struct {
 	mutex                *sync.Mutex
 	consumersCoordinator map[string]*environmentCoordinator
 	maxItemsForClient    int
+	metrics              *streamMetrics
 }
 
-func newConsumerEnvironment(maxItemsForClient int) *consumersEnvironment {
+func newConsumerEnvironment(maxItemsForClient int, metrics *streamMetrics) *consumersEnvironment {
 	producers := &consumersEnvironment{
 		mutex:                &sync.Mutex{},
 		consumersCoordinator: map[string]*environmentCoordinator{},
 		maxItemsForClient:    maxItemsForClient,
+		metrics:              metrics,
 	}
 	return producers
 }
@@ -774,6 +811,7 @@ func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName 
 			mutex:             &sync.Mutex{},
 			maxItemsForClient: ps.maxItemsForClient,
 			nextId:            0,
+			metrics:           ps.metrics,
 		}
 	}
 

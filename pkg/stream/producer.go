@@ -3,6 +3,7 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 )
 
 type ConfirmationStatus struct {
@@ -298,7 +301,7 @@ func (producer *Producer) closeConfirmationStatus() {
 }
 
 // processPendingSequencesQueue aggregates the messages sequence in the queue and sends them to the server
-// messages coming form the Send method through the pendingSequencesQueue
+// messages coming from the Send method through the pendingSequencesQueue
 func (producer *Producer) processPendingSequencesQueue() {
 	maxFrame := producer.client.getTuneState().requestedMaxFrameSize
 	go func() {
@@ -579,8 +582,9 @@ func (producer *Producer) aggregateEntities(msgs []*messageSequence, size int, c
 	return subEntries, nil
 }
 
-// / the producer id is always the producer.GetID(). This function is needed only for testing
-// some condition, like simulate publish error.
+// the producer id is always producer.GetID()
+// Prefer to use producer.internalBatchSend() instead of this function.
+// The producerID argument is only for testing e.g. to simulate publish error
 func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSequence, producerID uint8) error {
 	producer.client.socket.mutex.Lock()
 	defer producer.client.socket.mutex.Unlock()
@@ -653,6 +657,7 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	if err != nil {
 		return fmt.Errorf("producer BatchSend error during flush: %w", err)
 	}
+	producer.client.metrics.published(context.Background(), int64(len(messagesSequence)), producer.otelAttributesForProducer())
 
 	return nil
 }
@@ -830,7 +835,11 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 	if err := producer.client.socket.writer.Flush(); err != nil {
 		return fmt.Errorf("failed to flush writer: %w", err)
 	}
-
+	// Increase the counter only after a successful Flush() because bufio.Writer does not guarantee
+	// that data is written until Flush() returns successfully. In fact, if  any Write operation fails,
+	// subsequent calls to Write() and Flush() will fail.
+	// see: https://pkg.go.dev/bufio#Writer
+	producer.client.metrics.published(context.Background(), int64(len(messagesSequence)), producer.otelAttributesForProducer())
 	return nil
 }
 
@@ -846,4 +855,10 @@ func (c *Client) deletePublisher(publisherId byte) error {
 	errWrite := c.handleWrite(b.Bytes(), resp)
 
 	return errWrite.Err
+}
+
+func (producer *Producer) otelAttributesForProducer() attribute.Set {
+	base := producer.client.otelBaseAttributes()
+	base = append(base, semconv.MessagingOperationTypeSend, semconv.MessagingDestinationName(producer.GetStreamName()))
+	return attribute.NewSet(base...)
 }
