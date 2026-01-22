@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/noop"
 )
 
 type locator struct {
@@ -56,7 +56,13 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		options.TCPParameters = newTCPParameterDefault()
 	}
 
-	metrics, err := newStreamMetrics(options.meterProvider)
+	var mp metric.MeterProvider
+	if options.meterProvider == nil {
+		mp = otel.GetMeterProvider()
+	} else {
+		mp = options.meterProvider
+	}
+	metrics, err := newStreamMetrics(mp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialise metrics: %w", err)
 	}
@@ -332,7 +338,7 @@ func NewEnvironmentOptions() *EnvironmentOptions {
 		TCPParameters:         newTCPParameterDefault(),
 		SaslConfiguration:     newSaslConfigurationDefault(),
 		RPCTimeout:            defaultSocketCallTimeout,
-		meterProvider:         noop.NewMeterProvider(),
+		meterProvider:         otel.GetMeterProvider(),
 	}
 }
 
