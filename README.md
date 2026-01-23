@@ -41,6 +41,7 @@ Go client for [RabbitMQ Stream Queues](https://github.com/rabbitmq/rabbitmq-serv
     * [Handle Close](#handle-close)
     * [Reliable Producer and Reliable Consumer](#reliable-producer-and-reliable-consumer)
     * [Super Stream](#super-stream)
+    * [OpenTelemetry Metrics](#opentelemetry-metrics)
 - [Performance test tool](#performance-test-tool)
     * [Performance test tool Docker](#performance-test-tool-docker)
 - [Build form source](#build-form-source)
@@ -671,6 +672,133 @@ Manual tracking API:
 - `consumerContext.Consumer.StoreCustomOffset(xxx)` stores a custom offset.
 
 Like the standard stream, you should avoid to store the offset for each single message: it will reduce the performances.
+
+### OpenTelemetry Metrics
+
+The client provides built-in support for [OpenTelemetry](https://opentelemetry.io/) metrics to enable observability of RabbitMQ Stream operations. This allows you to monitor and analyze the performance and behavior of your producers and consumers using standard OpenTelemetry tooling.
+
+#### Available Metrics
+
+The client tracks the following metrics:
+
+| Metric Name | Type | Description | Unit |
+|-------------|------|-------------|------|
+| `rabbitmq.stream.connections` | UpDownCounter | Number of active connections | `{connection}` |
+| `rabbitmq.stream.published` | Counter | Number of messages published | `{message}` |
+| `rabbitmq.stream.confirmed` | Counter | Number of messages confirmed by the server | `{message}` |
+| `rabbitmq.stream.errored` | Counter | Number of messages that failed to publish | `{message}` |
+| `rabbitmq.stream.consumed` | Counter | Number of messages consumed | `{message}` |
+| `rabbitmq.stream.chunks` | Counter | Number of chunks received from the server | `{chunk}` |
+| `rabbitmq.stream.chunk_size` | Histogram | Distribution of chunk sizes (number of entries per chunk) | `{entries}` |
+| `rabbitmq.stream.outstanding_publish_confirmations` | UpDownCounter | Number of messages awaiting confirmation | `{confirmation}` |
+
+All metrics include relevant attributes following [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/messaging/), such as:
+- `messaging.system` - Always set to "rabbitmq"
+- `server.address` - The RabbitMQ server hostname
+- `server.port` - The RabbitMQ server port
+- `messaging.destination.name` - The stream name (for producer/consumer operations)
+- `messaging.operation.type` - The operation type (send, receive, settle)
+
+#### Basic Usage
+
+To enable metrics, provide a `MeterProvider` when creating the environment:
+
+<details>
+<summary>Click to display the code</summary>
+
+```golang
+import (
+    "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/sdk/metric"
+)
+
+// Create your OTEL meter provider (example with stdout exporter)
+meterProvider := metric.NewMeterProvider(
+    metric.WithReader(/* your reader */),
+)
+
+// Register globally (optional)
+otel.SetMeterProvider(meterProvider)
+
+// Create environment with metrics enabled
+env, err := stream.NewEnvironment(
+    stream.NewEnvironmentOptions().
+        SetHost("localhost").
+        SetPort(5552).
+        SetMeterProvider(meterProvider),
+)
+```
+
+</details>
+
+If no `MeterProvider` is configured, the client uses a no-op provider by default, which has no performance impact.
+
+#### Example with Prometheus
+
+Here's a complete example using the Prometheus exporter:
+
+<details>
+<summary>Click to display the code</summary>
+
+```golang
+import (
+    "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/exporters/prometheus"
+    "go.opentelemetry.io/otel/sdk/metric"
+)
+
+// Create Prometheus exporter
+exporter, err := prometheus.New()
+if err != nil {
+    log.Fatal(err)
+}
+
+// Create meter provider
+meterProvider := metric.NewMeterProvider(
+    metric.WithReader(exporter),
+)
+otel.SetMeterProvider(meterProvider)
+
+// Create environment with metrics
+env, err := stream.NewEnvironment(
+    stream.NewEnvironmentOptions().
+        SetHost("localhost").
+        SetPort(5552).
+        SetMeterProvider(meterProvider),
+)
+```
+
+</details>
+
+You can find a complete working example with stdout exporter in the [examples/metrics](./examples/metrics/metrics.go) directory.
+
+#### Monitoring Producer Performance
+
+The metrics allow you to monitor:
+- **Throughput**: Track `rabbitmq.stream.published` rate
+- **Confirmation lag**: Monitor `rabbitmq.stream.outstanding_publish_confirmations` to detect when confirmations are delayed
+- **Error rate**: Track `rabbitmq.stream.errored` to identify failed publishes
+- **Success rate**: Compare `rabbitmq.stream.confirmed` vs `rabbitmq.stream.published`
+
+#### Monitoring Consumer Performance
+
+The metrics allow you to monitor:
+- **Message rate**: Track `rabbitmq.stream.consumed` rate
+- **Batch sizes**: Analyze `rabbitmq.stream.chunk_size` histogram to understand how messages are delivered
+- **Chunk frequency**: Monitor `rabbitmq.stream.chunks` to understand delivery patterns
+
+#### Integration with Observability Platforms
+
+The OTEL metrics can be exported to various backends:
+- **Prometheus**: Using `go.opentelemetry.io/otel/exporters/prometheus`
+- **Grafana**: Via Prometheus or direct OTLP
+- **Datadog**: Using `go.opentelemetry.io/otel/exporters/otlp/otlpmetric`
+- **New Relic**: Using OTLP exporter
+- **Any OTLP-compatible backend**: Using the standard OTLP exporter
+
+For more information about OpenTelemetry and available exporters, see the [OpenTelemetry Go documentation](https://opentelemetry.io/docs/languages/go/).
 
 ### Performance test tool
 

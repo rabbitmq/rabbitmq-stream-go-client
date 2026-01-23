@@ -29,12 +29,6 @@ func newLocator(client *Client) *locator {
 }
 
 type Environment struct {
-	// TODO: it's not clear where to define the metrics, because Environment is not accessible down below the stack
-	// e.g. in Client.
-	// (1) Perhaps one option is to keep a reference to a "singleton" struct with metrics in each component from Environment
-	// down to Client.
-	// (2) Another option is to have a package level variable to "Stream Metrics", and initialise them lazily and only once;
-	// then all subcomponents can access this package level variable.
 	producers *producersEnvironment
 	consumers *consumersEnvironment
 	options   *EnvironmentOptions
@@ -324,10 +318,6 @@ type EnvironmentOptions struct {
 	AddressResolver       *AddressResolver
 	RPCTimeout            time.Duration
 	meterProvider         metric.MeterProvider
-	// TODO: EnvironmentOptions should not export all fields, because the
-	// 		the caller should initialize the struct with NewEnvironmentOptions() and
-	// 		and then use the Set* methods to configure the options.
-	// 		The TODO is a breaking change.
 }
 
 func NewEnvironmentOptions() *EnvironmentOptions {
