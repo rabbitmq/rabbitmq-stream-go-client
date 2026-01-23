@@ -30,3 +30,10 @@ perfTest/perfTest
 go.dev/
 local_ex/
 compose/ha_tls/data*
+
+# VS Code / Cursor
+.vscode/
+
+# Go
+go.work
+go.work.sum

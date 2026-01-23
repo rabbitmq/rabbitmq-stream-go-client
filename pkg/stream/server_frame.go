@@ -3,6 +3,7 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"hash/crc32"
 	"io"
 	"time"
@@ -262,7 +263,9 @@ func (c *Client) handleConfirm(readProtocol *ReaderProtocol, r *bufio.Reader) an
 	}
 
 	if producerFound {
-		producer.sendConfirmationStatus(producer.unConfirmed.extractWithConfirms(arraySeq))
+		confirms := producer.unConfirmed.extractWithConfirms(arraySeq)
+		c.metrics.confirmed(context.Background(), int64(len(confirms)), c.otelAttributesForConfirm())
+		producer.sendConfirmationStatus(confirms)
 	}
 
 	return 0
@@ -358,7 +361,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	bufferReader := bytes.NewReader(bytesBuffer)
 	dataReader := bufio.NewReader(bufferReader)
 
-	for numRecords != 0 {
+	remainingRecords := numRecords
+	for remainingRecords != 0 {
 		entryType, err := peekByte(dataReader)
 
 		if err != nil {
@@ -375,7 +379,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 				offset,
 				offsetLimit,
 				batchConsumingMessages)
-			numRecords--
+			remainingRecords -= 1
 			offset++
 		} else {
 			entryType, _ := readByteError(dataReader)
@@ -383,7 +387,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			numRecordsInBatch := readUShort(dataReader)
 			uncompressedDataSize, _ := readUInt(dataReader) // uncompressedDataSize
 			dataSize, _ := readUInt(dataReader)
-			numRecords -= uint32(numRecordsInBatch)
+			remainingRecords -= uint32(numRecordsInBatch)
 			compression := (entryType & 0x70) >> 4 // compression
 			uncompressedReader, err := compressByValue(compression).UnCompress(dataReader,
 				dataSize,
@@ -408,6 +412,8 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	// dispatch the messages with offset to the consumer
 	chunk.offsetMessages = batchConsumingMessages
 	if consumer.getStatus() == open {
+		c.metrics.consumed(context.Background(), int64(numRecords), c.otelAttributesForConsumer(consumer.GetStreamName()))
+		c.metrics.chunkReceived(context.Background(), int64(numRecords), c.otelAttributesForConsumer(consumer.GetStreamName()))
 		consumer.chunkForConsumer <- chunk
 	} else {
 		logs.LogDebug("The consumer %s for the stream %s is closed during the chunk dispatching. "+
@@ -463,6 +469,9 @@ func (c *Client) handlePublishError(buffer *bufio.Reader) {
 	publisherId := readByte(buffer)
 
 	publishingErrorCount, _ := readUInt(buffer)
+	// setting error to nil because we emit the metric once, and the error code is specific to each message.
+	// the error value will use the default fallback value in OTEL "_OTHER".
+	c.metrics.errored(context.Background(), int64(publishingErrorCount), c.otelAttributesWithError(nil))
 	var publishingId int64
 	var code uint16
 	for publishingErrorCount != 0 {

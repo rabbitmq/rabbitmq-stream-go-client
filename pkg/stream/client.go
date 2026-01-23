@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 )
 
 // SaslConfiguration see
@@ -72,6 +74,7 @@ type Client struct {
 	serverProperties  map[string]string
 
 	doneTimeoutTicker chan struct{}
+	metrics           *streamMetrics
 }
 
 func newClient(parameters connectionParameters) *Client {
@@ -106,6 +109,7 @@ func newClient(parameters connectionParameters) *Client {
 		socketCallTimeout: parameters.rpcTimeout,
 		availableFeatures: newAvailableFeatures(),
 		doneTimeoutTicker: make(chan struct{}, 1),
+		metrics:           parameters.metrics,
 	}
 	c.setConnectionName(parameters.connectionName)
 	return c
@@ -217,6 +221,9 @@ func (c *Client) connect() error {
 			logs.LogDebug("%s", err2)
 			return err2
 		}
+
+		// Increase the connection counter
+		c.metrics.connectionOpened(context.Background(), c.otelAttributesForClient())
 
 		err = c.availableFeatures.SetVersion(serverProperties["version"])
 		if err != nil {
@@ -513,6 +520,8 @@ func (c *Client) Close() {
 			logs.LogWarn("error during Send client close %s", errW)
 		}
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
+		// Decrease connection counter
+		c.metrics.connectionClosed(context.Background(), c.otelAttributesForClient())
 	}
 	c.getSocket().shutdown(nil)
 }
@@ -1059,7 +1068,7 @@ func (c *Client) declareSubscriber(streamName string,
 				// This is a very edge case where the consumer is not active anymore
 				// but the consumer is still in the list of consumers
 				// It can happen during the reconnection with load-balancing
-				// found this problem with a caos test where random killing the load-balancer and node where
+				// found this problem with a chaos test where random killing the load-balancer and node where
 				// the client should be connected
 				if consumer.isZombie() {
 					logs.LogWarn("Detected zombie consumer for stream %s, closing", streamName)
@@ -1204,4 +1213,36 @@ func (c *Client) queryRoute(superStream string, routingKey string) ([]string, er
 	data := <-resp.data
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return data.([]string), nil
+}
+
+func (c *Client) otelBaseAttributes() []attribute.KeyValue {
+	attrs := []attribute.KeyValue{}
+	attrs = append(attrs, semconv.ServerAddress(c.broker.Host))
+	if p, err := strconv.Atoi(c.broker.Port); err == nil {
+		attrs = append(attrs, semconv.ServerPort(p))
+	}
+	return attrs
+}
+
+func (c *Client) otelAttributesForClient() attribute.Set {
+	return attribute.NewSet(c.otelBaseAttributes()...)
+}
+
+func (c *Client) otelAttributesWithError(err error) attribute.Set {
+	attrs := c.otelBaseAttributes()
+	errAtt := semconv.ErrorType(err)
+	attrs = append(attrs, errAtt)
+	return attribute.NewSet(attrs...)
+}
+
+func (c *Client) otelAttributesForConfirm() attribute.Set {
+	attrs := c.otelBaseAttributes()
+	attrs = append(attrs, semconv.MessagingOperationTypeSettle, semconv.MessagingOperationName("confirm"))
+	return attribute.NewSet(attrs...)
+}
+
+func (c *Client) otelAttributesForConsumer(streamName string) attribute.Set {
+	attrs := c.otelBaseAttributes()
+	attrs = append(attrs, semconv.MessagingOperationTypeReceive, semconv.MessagingOperationName("deliver"), semconv.MessagingDestinationName(streamName))
+	return attribute.NewSet(attrs...)
 }
