@@ -40,7 +40,9 @@ var _ = Describe("Metrics Integration Tests", func() {
 		It("should record published and confirmed messages", func() {
 			producer, err := testEnvironment.NewProducer(testStream, nil)
 			Expect(err).NotTo(HaveOccurred())
-			defer producer.Close()
+			defer func() {
+				_ = producer.Close()
+			}()
 
 			ch := producer.NotifyPublishConfirmation()
 			var confirmedCount int32
@@ -88,7 +90,9 @@ var _ = Describe("Metrics Integration Tests", func() {
 		It("should track outstanding confirmations", func() {
 			producer, err := testEnvironment.NewProducer(testStream, nil)
 			Expect(err).NotTo(HaveOccurred())
-			defer producer.Close()
+			defer func() {
+				_ = producer.Close()
+			}()
 
 			ch := producer.NotifyPublishConfirmation()
 			go func() {
@@ -142,7 +146,9 @@ var _ = Describe("Metrics Integration Tests", func() {
 		It("should record metrics with BatchSend", func() {
 			producer, err := testEnvironment.NewProducer(testStream, nil)
 			Expect(err).NotTo(HaveOccurred())
-			defer producer.Close()
+			defer func() {
+				_ = producer.Close()
+			}()
 
 			ch := producer.NotifyPublishConfirmation()
 			var confirmedCount int32
@@ -187,11 +193,11 @@ var _ = Describe("Metrics Integration Tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 			time.Sleep(500 * time.Millisecond) // Wait for messages to be stored
-			producer.Close()
+			_ = producer.Close()
 
 			// Now consume
 			var consumedCount int32
-			messageHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
+			messageHandler := func(_ ConsumerContext, _ *amqp.Message) {
 				atomic.AddInt32(&consumedCount, 1)
 			}
 
@@ -200,7 +206,9 @@ var _ = Describe("Metrics Integration Tests", func() {
 					SetOffset(OffsetSpecification{}.First()).
 					SetConsumerName("metrics-test-consumer"))
 			Expect(err).NotTo(HaveOccurred())
-			defer consumer.Close()
+			defer func() {
+				_ = consumer.Close()
+			}()
 
 			// Wait for messages to be consumed
 			Eventually(func() int32 {
@@ -249,10 +257,10 @@ var _ = Describe("Metrics Integration Tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 			time.Sleep(500 * time.Millisecond)
-			producer.Close()
+			_ = producer.Close()
 
 			var consumedCount int32
-			messageHandler := func(consumerContext ConsumerContext, message *amqp.Message) {
+			messageHandler := func(_ ConsumerContext, _ *amqp.Message) {
 				atomic.AddInt32(&consumedCount, 1)
 			}
 
@@ -261,7 +269,9 @@ var _ = Describe("Metrics Integration Tests", func() {
 					SetOffset(OffsetSpecification{}.First()).
 					SetConsumerName("multi-chunk-consumer"))
 			Expect(err).NotTo(HaveOccurred())
-			defer consumer.Close()
+			defer func() {
+				_ = consumer.Close()
+			}()
 
 			Eventually(func() int32 {
 				return atomic.LoadInt32(&consumedCount)
@@ -380,7 +390,7 @@ var _ = Describe("Metrics Integration Tests", func() {
 				return atomic.LoadInt32(&errorCount)
 			}, 10*time.Second, 200*time.Millisecond).Should(BeNumerically(">", 0), "Should have received error confirmations")
 
-			producer.Close()
+			_ = producer.Close()
 
 			// Check if errored metrics counter was incremented
 			// Note: The errored counter is only incremented when the server sends publish errors,
@@ -400,16 +410,22 @@ var _ = Describe("Metrics Integration Tests", func() {
 			// Create environment without custom meter provider (uses noop by default)
 			env, err := NewEnvironment(nil)
 			Expect(err).NotTo(HaveOccurred())
-			defer env.Close()
+			defer func() {
+				_ = env.Close()
+			}()
 
 			stream := uuid.New().String()
 			Expect(env.DeclareStream(stream, nil)).NotTo(HaveOccurred())
-			defer env.DeleteStream(stream)
+			defer func() {
+				_ = env.DeleteStream(stream)
+			}()
 
 			// Create producer and send messages
 			producer, err := env.NewProducer(stream, nil)
 			Expect(err).NotTo(HaveOccurred())
-			defer producer.Close()
+			defer func() {
+				_ = producer.Close()
+			}()
 
 			ch := producer.NotifyPublishConfirmation()
 			var confirmedCount int32

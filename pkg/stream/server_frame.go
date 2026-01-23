@@ -361,7 +361,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 	bufferReader := bytes.NewReader(bytesBuffer)
 	dataReader := bufio.NewReader(bufferReader)
 
-	var remainingRecords uint32 = numRecords
+	remainingRecords := numRecords
 	for remainingRecords != 0 {
 		entryType, err := peekByte(dataReader)
 

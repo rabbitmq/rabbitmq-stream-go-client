@@ -101,7 +101,7 @@ func newStreamMetrics(mp metric.MeterProvider) (*streamMetrics, error) {
 }
 
 func (s *streamMetrics) connectionOpened(ctx context.Context, attributes attribute.Set) {
-	// TODO: consider the second paramter attribute.Set; perhaps it should be optional. The current idea is to
+	// TODO: consider the second parameter attribute.Set; perhaps it should be optional. The current idea is to
 	// pre-configure an attribute set for each component (environment, consumer, producer, coordinator)
 	// and pass it to the metrics functions.
 	s.connections.Add(ctx, 1, metric.WithAttributeSet(attributes))

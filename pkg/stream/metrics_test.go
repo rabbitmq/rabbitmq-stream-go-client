@@ -26,7 +26,7 @@ type mockInt64Counter struct {
 	mu      sync.Mutex
 }
 
-func (m *mockInt64Counter) Add(ctx context.Context, incr int64, options ...metric.AddOption) {
+func (m *mockInt64Counter) Add(_ context.Context, incr int64, options ...metric.AddOption) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -61,7 +61,7 @@ type mockInt64UpDownCounter struct {
 	mu      sync.Mutex
 }
 
-func (m *mockInt64UpDownCounter) Add(ctx context.Context, incr int64, options ...metric.AddOption) {
+func (m *mockInt64UpDownCounter) Add(_ context.Context, incr int64, options ...metric.AddOption) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -96,7 +96,7 @@ type mockInt64Histogram struct {
 	mu      sync.Mutex
 }
 
-func (m *mockInt64Histogram) Record(ctx context.Context, incr int64, options ...metric.RecordOption) {
+func (m *mockInt64Histogram) Record(_ context.Context, incr int64, options ...metric.RecordOption) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -131,7 +131,7 @@ func newMockMeter() *mockMeter {
 	}
 }
 
-func (m *mockMeter) Int64Counter(name string, options ...metric.Int64CounterOption) (metric.Int64Counter, error) {
+func (m *mockMeter) Int64Counter(name string, _ ...metric.Int64CounterOption) (metric.Int64Counter, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -144,7 +144,7 @@ func (m *mockMeter) Int64Counter(name string, options ...metric.Int64CounterOpti
 	return counter, nil
 }
 
-func (m *mockMeter) Int64UpDownCounter(name string, options ...metric.Int64UpDownCounterOption) (metric.Int64UpDownCounter, error) {
+func (m *mockMeter) Int64UpDownCounter(name string, _ ...metric.Int64UpDownCounterOption) (metric.Int64UpDownCounter, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -157,7 +157,7 @@ func (m *mockMeter) Int64UpDownCounter(name string, options ...metric.Int64UpDow
 	return counter, nil
 }
 
-func (m *mockMeter) Int64Histogram(name string, options ...metric.Int64HistogramOption) (metric.Int64Histogram, error) {
+func (m *mockMeter) Int64Histogram(name string, _ ...metric.Int64HistogramOption) (metric.Int64Histogram, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -200,7 +200,7 @@ func newMockMeterProvider() *mockMeterProvider {
 	}
 }
 
-func (m *mockMeterProvider) Meter(name string, opts ...metric.MeterOption) metric.Meter {
+func (m *mockMeterProvider) Meter(_ string, _ ...metric.MeterOption) metric.Meter {
 	return m.meter
 }
 
