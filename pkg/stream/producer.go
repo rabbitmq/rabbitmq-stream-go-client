@@ -12,7 +12,7 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 )
 
 type ConfirmationStatus struct {
