@@ -18,7 +18,7 @@ import (
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 )
 
 // SaslConfiguration see
