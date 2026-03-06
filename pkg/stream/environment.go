@@ -131,8 +131,8 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	return &Environment{
 		options:   options,
-		producers: newProducers(options.MaxProducersPerClient, metrics),
-		consumers: newConsumerEnvironment(options.MaxConsumersPerClient, metrics),
+		producers: newProducersEnvironment(options.MaxProducersPerClient, metrics),
+		consumers: newConsumersEnvironment(options.MaxConsumersPerClient, metrics),
 		closed:    false,
 		locator:   newLocator(client),
 		metrics:   metrics,
@@ -709,7 +709,7 @@ type producersEnvironment struct {
 	metrics              *streamMetrics
 }
 
-func newProducers(maxItemsForClient int, metrics *streamMetrics) *producersEnvironment {
+func newProducersEnvironment(maxItemsForClient int, metrics *streamMetrics) *producersEnvironment {
 	producers := &producersEnvironment{
 		mutex:                &sync.Mutex{},
 		producersCoordinator: map[string]*environmentCoordinator{},
@@ -779,7 +779,7 @@ type consumersEnvironment struct {
 	metrics              *streamMetrics
 }
 
-func newConsumerEnvironment(maxItemsForClient int, metrics *streamMetrics) *consumersEnvironment {
+func newConsumersEnvironment(maxItemsForClient int, metrics *streamMetrics) *consumersEnvironment {
 	producers := &consumersEnvironment{
 		mutex:                &sync.Mutex{},
 		consumersCoordinator: map[string]*environmentCoordinator{},
