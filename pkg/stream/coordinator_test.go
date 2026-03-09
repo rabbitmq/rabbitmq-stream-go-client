@@ -51,14 +51,14 @@ var _ = Describe("Coordinator", func() {
 		})
 
 		It("massive insert/delete coordinator ", func() {
-			var producersId []uint8
+			producerIDs := make([]uint8, 0, 100)
 			for range 100 {
 				p, err := client.coordinator.NewProducer(nil, nil)
-				producersId = append(producersId, p.id)
+				producerIDs = append(producerIDs, p.id)
 				Expect(err).NotTo(HaveOccurred())
 			}
 			Expect(client.coordinator.ProducersCount()).To(Equal(100))
-			for _, pid := range producersId {
+			for _, pid := range producerIDs {
 				err := client.coordinator.RemoveProducerById(pid, Event{
 					Command: 0,
 					Reason:  "UNIT_TEST",
@@ -174,13 +174,13 @@ var _ = Describe("Coordinator", func() {
 		})
 
 		It("massive insert/delete consumers ", func() {
-			var consumersId []uint8
+			consumerIDs := make([]uint8, 0, 100)
 			for range 100 {
 				p := client.coordinator.NewConsumer(nil, NewConsumerOptions(), nil)
-				consumersId = append(consumersId, p.ID)
+				consumerIDs = append(consumerIDs, p.ID)
 			}
 			Expect(client.coordinator.ConsumersCount()).To(Equal(100))
-			for _, pid := range consumersId {
+			for _, pid := range consumerIDs {
 				err := client.coordinator.RemoveConsumerById(pid, Event{
 					Command:    0,
 					StreamName: "UNIT_TESTS",
@@ -231,13 +231,13 @@ var _ = Describe("Coordinator", func() {
 
 		})
 		It("massive insert/delete Responses ", func() {
-			var responsesId []int
+			responseIDs := make([]int, 0, 100)
 			for range 100 {
 				r := client.coordinator.NewResponse(commandUnitTest)
-				responsesId = append(responsesId, r.correlationid)
+				responseIDs = append(responseIDs, r.correlationid)
 			}
 
-			for _, pid := range responsesId {
+			for _, pid := range responseIDs {
 				err := client.coordinator.RemoveResponseById(pid)
 				Expect(err).NotTo(HaveOccurred())
 			}

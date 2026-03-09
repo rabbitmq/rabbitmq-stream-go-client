@@ -11,12 +11,13 @@ import (
 )
 
 type Consumer struct {
-	client           *Client
+	client *Client
+	// Deprecated: ConsumerID is deprecated. Use GetID() instead.
 	ID               uint8 // also the SubscriptionId
 	response         *Response
 	options          *ConsumerOptions
 	onClose          func()
-	mutex            *sync.Mutex
+	mutex            *sync.RWMutex
 	chunkForConsumer chan chunkInfo
 	MessagesHandler  MessagesHandler
 	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
@@ -86,6 +87,18 @@ func (consumer *Consumer) GetOffset() int64 {
 	consumer.mutex.Lock()
 	defer consumer.mutex.Unlock()
 	return consumer.currentOffset
+}
+
+func (consumer *Consumer) GetID() uint8 {
+	consumer.mutex.RLock()
+	defer consumer.mutex.RUnlock()
+	return consumer.ID
+}
+
+func (consumer *Consumer) setID(id uint8) {
+	consumer.mutex.Lock()
+	defer consumer.mutex.Unlock()
+	consumer.ID = id
 }
 
 // isActive returns true if the consumer is promoted as active

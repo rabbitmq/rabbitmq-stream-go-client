@@ -35,7 +35,7 @@ var _ = Describe("Streaming Consumers", func() {
 	})
 
 	It("Multi Consumers", func() {
-		var consumers []*Consumer
+		consumers := make([]*Consumer, 0, 10)
 		for range 10 {
 			consumer, err := env.NewConsumer(streamName,
 				func(_ ConsumerContext, _ *amqp.Message) {}, nil)

@@ -35,7 +35,6 @@ linters:
         rules:
           - name: unexported-return
             disabled: true
-          - name: unused-parameter
 formatters:
   enable:
     - gofmt

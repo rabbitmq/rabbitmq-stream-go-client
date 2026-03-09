@@ -67,7 +67,7 @@ func (coordinator *Coordinator) NewProducer(
 	if err != nil {
 		return nil, err
 	}
-	var producer = &Producer{id: lastId,
+	var producer = &Producer{
 		options:                   parameters,
 		mutex:                     &sync.RWMutex{},
 		unConfirmed:               newUnConfirmed(queueSize),
@@ -78,6 +78,7 @@ func (coordinator *Coordinator) NewProducer(
 		confirmMutex:              &sync.Mutex{},
 		onClose:                   cleanUp,
 	}
+	producer.setID(lastId)
 	coordinator.producers.Store(lastId, producer)
 	return producer, err
 }
@@ -187,12 +188,11 @@ func (coordinator *Coordinator) NewConsumer(
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	var lastId, _ = coordinator.getNextConsumerItem()
-	var item = &Consumer{
-		ID:                   lastId,
+	var consumer = &Consumer{
 		options:              parameters,
 		response:             newResponse(lookUpCommand(commandSubscribe)),
 		status:               open,
-		mutex:                &sync.Mutex{},
+		mutex:                &sync.RWMutex{},
 		MessagesHandler:      messagesHandler,
 		currentOffset:        -1, // currentOffset has to equal lastStoredOffset as the currentOffset 0 may otherwise be flushed to the server when the consumer is closed and auto commit is enabled
 		lastStoredOffset:     -1, // because 0 is a valid value for the offset
@@ -202,10 +202,9 @@ func (coordinator *Coordinator) NewConsumer(
 		chunkForConsumer: make(chan chunkInfo, parameters.initialCredits+5),
 		onClose:          cleanUp,
 	}
-
-	coordinator.consumers.Store(lastId, item)
-
-	return item
+	consumer.setID(lastId)
+	coordinator.consumers.Store(lastId, consumer)
+	return consumer
 }
 
 func (coordinator *Coordinator) GetConsumerById(id any) (*Consumer, error) {

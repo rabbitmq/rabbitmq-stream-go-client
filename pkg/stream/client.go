@@ -186,8 +186,9 @@ func (c *Client) connect() error {
 		}
 
 		if c.broker.isTLS() {
-			//nolint:gosec
-			conf := &tls.Config{}
+			conf := &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			}
 			if c.tcpParameters.tlsConfig != nil {
 				conf = c.tcpParameters.tlsConfig
 			}

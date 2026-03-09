@@ -478,7 +478,15 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 }
 
 func (producer *Producer) GetID() uint8 {
+	producer.mutex.RLock()
+	defer producer.mutex.RUnlock()
 	return producer.id
+}
+
+func (producer *Producer) setID(id uint8) {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	producer.id = id
 }
 
 func (producer *Producer) internalBatchSend(messagesSequence []*messageSequence) error {
