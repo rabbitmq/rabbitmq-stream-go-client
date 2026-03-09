@@ -7,4 +7,6 @@ type IEntity interface {
 	NotifyClose() ChannelClose
 	GetStreamName() string
 	GetName() string
+	GetID() uint8
+	setID(id uint8)
 }

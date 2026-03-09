@@ -481,6 +481,12 @@ func (producer *Producer) GetID() uint8 {
 	return producer.id
 }
 
+func (producer *Producer) setID(id uint8) {
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	producer.id = id
+}
+
 func (producer *Producer) internalBatchSend(messagesSequence []*messageSequence) error {
 	return producer.internalBatchSendProdId(messagesSequence, producer.GetID())
 }
