@@ -323,7 +323,7 @@ func buildMessages() []message.StreamMessage {
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			body = make([]byte, r.Intn(variableBody))
 		}
-		var buff = make([]byte, 8)
+		var buff = make([]byte, 8) //nolint:all
 		sentTime := time.Now().UnixMilli()
 		binary.BigEndian.PutUint64(buff, uint64(sentTime))
 		/// added to calculate the latency

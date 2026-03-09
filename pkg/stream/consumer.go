@@ -12,7 +12,6 @@ import (
 
 type Consumer struct {
 	client *Client
-	// mark as deprecated; use GetID instead.
 	// Deprecated: ConsumerID is deprecated. Use GetID() instead.
 	ID               uint8 // also the SubscriptionId
 	response         *Response

@@ -186,7 +186,6 @@ func (c *Client) connect() error {
 		}
 
 		if c.broker.isTLS() {
-			//nolint:gosec
 			conf := &tls.Config{}
 			if c.tcpParameters.tlsConfig != nil {
 				conf = c.tcpParameters.tlsConfig

@@ -51,7 +51,7 @@ var _ = Describe("Coordinator", func() {
 		})
 
 		It("massive insert/delete coordinator ", func() {
-			var producersId []uint8
+			var producersId []uint8 //nolint:all
 			for range 100 {
 				p, err := client.coordinator.NewProducer(nil, nil)
 				producersId = append(producersId, p.id)
@@ -174,7 +174,7 @@ var _ = Describe("Coordinator", func() {
 		})
 
 		It("massive insert/delete consumers ", func() {
-			var consumersId []uint8
+			var consumersId []uint8 //nolint:all
 			for range 100 {
 				p := client.coordinator.NewConsumer(nil, NewConsumerOptions(), nil)
 				consumersId = append(consumersId, p.ID)
@@ -231,7 +231,7 @@ var _ = Describe("Coordinator", func() {
 
 		})
 		It("massive insert/delete Responses ", func() {
-			var responsesId []int
+			var responsesId []int //nolint:all
 			for range 100 {
 				r := client.coordinator.NewResponse(commandUnitTest)
 				responsesId = append(responsesId, r.correlationid)
