@@ -192,7 +192,7 @@ func (coordinator *Coordinator) NewConsumer(
 		options:              parameters,
 		response:             newResponse(lookUpCommand(commandSubscribe)),
 		status:               open,
-		mutex:                &sync.Mutex{},
+		mutex:                &sync.RWMutex{},
 		MessagesHandler:      messagesHandler,
 		currentOffset:        -1, // currentOffset has to equal lastStoredOffset as the currentOffset 0 may otherwise be flushed to the server when the consumer is closed and auto commit is enabled
 		lastStoredOffset:     -1, // because 0 is a valid value for the offset

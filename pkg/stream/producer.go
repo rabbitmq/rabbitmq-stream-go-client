@@ -478,6 +478,8 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 }
 
 func (producer *Producer) GetID() uint8 {
+	producer.mutex.RLock()
+	defer producer.mutex.RUnlock()
 	return producer.id
 }
 

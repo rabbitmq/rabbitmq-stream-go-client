@@ -1,8 +1,8 @@
 package stream
 
-// IEntity represents the common operations shared by Producer and Consumer.
+// iEntity represents the common operations shared by Producer and Consumer.
 // Both *Producer and *Consumer implement this interface.
-type IEntity interface {
+type iEntity interface {
 	Close() error
 	NotifyClose() ChannelClose
 	GetStreamName() string

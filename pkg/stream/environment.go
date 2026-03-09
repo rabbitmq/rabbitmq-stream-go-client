@@ -780,13 +780,13 @@ type consumersEnvironment struct {
 }
 
 func newConsumersEnvironment(maxItemsForClient int, metrics *streamMetrics) *consumersEnvironment {
-	producers := &consumersEnvironment{
+	consumersEnv := &consumersEnvironment{
 		mutex:                &sync.Mutex{},
 		consumersCoordinator: map[string]*environmentCoordinator{},
 		maxItemsForClient:    maxItemsForClient,
 		metrics:              metrics,
 	}
-	return producers
+	return consumersEnv
 }
 
 func (ps *consumersEnvironment) NewSubscriber(clientLocator *Client, streamName string,

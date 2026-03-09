@@ -17,7 +17,7 @@ type Consumer struct {
 	response         *Response
 	options          *ConsumerOptions
 	onClose          func()
-	mutex            *sync.Mutex
+	mutex            *sync.RWMutex
 	chunkForConsumer chan chunkInfo
 	MessagesHandler  MessagesHandler
 	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
@@ -90,8 +90,8 @@ func (consumer *Consumer) GetOffset() int64 {
 }
 
 func (consumer *Consumer) GetID() uint8 {
-	consumer.mutex.Lock()
-	defer consumer.mutex.Unlock()
+	consumer.mutex.RLock()
+	defer consumer.mutex.RUnlock()
 	return consumer.ID
 }
 
