@@ -323,11 +323,11 @@ func buildMessages() []message.StreamMessage {
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			body = make([]byte, r.Intn(variableBody))
 		}
-		var buff = make([]byte, 8) //nolint:all
+		buf := make([]byte, 8, 8+len(body))
 		sentTime := time.Now().UnixMilli()
-		binary.BigEndian.PutUint64(buff, uint64(sentTime))
+		binary.BigEndian.PutUint64(buf, uint64(sentTime))
 		/// added to calculate the latency
-		msg := amqp.NewMessage(append(buff, body...))
+		msg := amqp.NewMessage(append(buf, body...))
 		arr = append(arr, msg)
 	}
 	return arr
