@@ -73,11 +73,11 @@ func (coordinator *Coordinator) NewProducer(
 		unConfirmed:               newUnConfirmed(queueSize),
 		confirmationTimeoutTicker: time.NewTicker(tickerTime),
 		doneTimeoutTicker:         make(chan struct{}, 1),
-		status:                    open,
 		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](dynSize),
 		confirmMutex:              &sync.Mutex{},
 		onClose:                   cleanUp,
 	}
+	producer.status.Store(int32(open))
 	producer.setID(lastId)
 	coordinator.producers.Store(lastId, producer)
 	return producer, err

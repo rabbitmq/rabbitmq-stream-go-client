@@ -80,7 +80,7 @@ type Producer struct {
 	mutex       *sync.RWMutex
 
 	closeHandler              chan Event
-	status                    int
+	status                    atomic.Int32
 	confirmationTimeoutTicker *time.Ticker
 	doneTimeoutTicker         chan struct{}
 
@@ -251,15 +251,11 @@ func (producer *Producer) GetBroker() *Broker {
 	return producer.client.broker
 }
 func (producer *Producer) setStatus(status int) {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
-	producer.status = status
+	producer.status.Store(int32(status))
 }
 
 func (producer *Producer) getStatus() int {
-	producer.mutex.Lock()
-	defer producer.mutex.Unlock()
-	return producer.status
+	return int(producer.status.Load())
 }
 
 func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
@@ -306,8 +302,12 @@ func (producer *Producer) closeConfirmationStatus() {
 // messages coming from the Send method through the pendingSequencesQueue
 func (producer *Producer) processPendingSequencesQueue() {
 	maxFrame := producer.client.getTuneState().requestedMaxFrameSize
+	batchSize := producer.options.BatchSize
+	if batchSize <= 0 {
+		batchSize = 1
+	}
 	go func() {
-		sequenceToSend := make([]*messageSequence, 0)
+		sequenceToSend := make([]*messageSequence, 0, batchSize)
 		totalBufferToSend := initBufferPublishSize
 		for msg := range producer.pendingSequencesQueue.GetChannel() {
 			var lastError error
