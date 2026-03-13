@@ -306,8 +306,12 @@ func (producer *Producer) closeConfirmationStatus() {
 // messages coming from the Send method through the pendingSequencesQueue
 func (producer *Producer) processPendingSequencesQueue() {
 	maxFrame := producer.client.getTuneState().requestedMaxFrameSize
+	batchSize := producer.options.BatchSize
+	if batchSize <= 0 {
+		batchSize = defaultBatchSize
+	}
 	go func() {
-		sequenceToSend := make([]*messageSequence, 0)
+		sequenceToSend := make([]*messageSequence, 0, batchSize)
 		totalBufferToSend := initBufferPublishSize
 		for msg := range producer.pendingSequencesQueue.GetChannel() {
 			var lastError error
