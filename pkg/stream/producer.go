@@ -308,7 +308,7 @@ func (producer *Producer) processPendingSequencesQueue() {
 	maxFrame := producer.client.getTuneState().requestedMaxFrameSize
 	batchSize := producer.options.BatchSize
 	if batchSize <= 0 {
-		batchSize = 1
+		batchSize = defaultBatchSize
 	}
 	go func() {
 		sequenceToSend := make([]*messageSequence, 0, batchSize)
