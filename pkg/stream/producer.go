@@ -80,7 +80,7 @@ type Producer struct {
 	mutex       *sync.RWMutex
 
 	closeHandler              chan Event
-	status                    atomic.Int32
+	status                    int
 	confirmationTimeoutTicker *time.Ticker
 	doneTimeoutTicker         chan struct{}
 
@@ -251,11 +251,15 @@ func (producer *Producer) GetBroker() *Broker {
 	return producer.client.broker
 }
 func (producer *Producer) setStatus(status int) {
-	producer.status.Store(int32(status))
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	producer.status = status
 }
 
 func (producer *Producer) getStatus() int {
-	return int(producer.status.Load())
+	producer.mutex.Lock()
+	defer producer.mutex.Unlock()
+	return producer.status
 }
 
 func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {

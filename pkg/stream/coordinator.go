@@ -75,9 +75,10 @@ func (coordinator *Coordinator) NewProducer(
 		doneTimeoutTicker:         make(chan struct{}, 1),
 		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](dynSize),
 		confirmMutex:              &sync.Mutex{},
+		status:                    open,
 		onClose:                   cleanUp,
 	}
-	producer.status.Store(int32(open))
+
 	producer.setID(lastId)
 	coordinator.producers.Store(lastId, producer)
 	return producer, err
