@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [[1.7.1](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.7.1)]
+
+## 1.7.1 - 2026-03-17
+- [Release 1.7.1](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.7.1)
+
+### Enhancements
+- Add IClient interface by @Gsantomaggio in [#470](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/470)
+- Add IEntity interface for Producer and Consumer struct by @Gsantomaggio in [#471](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/471)
+- Improve send by @Gsantomaggio in [#476](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/476)
+
+### Dependency Updates
+- Bump go.opentelemetry.io/otel/metric from 1.40.0 to 1.41.0 by @dependabot[bot] in [#468](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/468)
+
+### Bug Fix
+- Fix data race on Producer.closeHandler between close() and NotifyClose() by @Gsantomaggio in [#474](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/474)
+
 ## [[1.7.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.7.0)]
 
 ## 1.7.0 - 2026-02-16
