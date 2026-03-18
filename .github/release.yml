@@ -1,5 +1,4 @@
 # .github/release.yml
-# Based on https://github.com/rabbitmq/rabbitmq-stream-dotnet-client/blob/main/.github/release.yml
 
 changelog:
   exclude:
