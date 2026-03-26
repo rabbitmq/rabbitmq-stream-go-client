@@ -19,6 +19,8 @@ type Consumer struct {
 	onClose          func()
 	mutex            *sync.RWMutex
 	chunkForConsumer chan chunkInfo
+	// closeCh is closed when the consumer is shutting down.
+	closeCh   chan struct{}
 	MessagesHandler  MessagesHandler
 	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
 	// and won't change. currentOffset is the status of the offset
@@ -409,9 +411,24 @@ func (consumer *Consumer) Close() error {
 	return nil
 }
 
+// sendChunk delivers a chunk to the dispatch goroutine. It returns false
+// (dropping the chunk) if the consumer is concurrently closing, avoiding a
+// panic from sending on a closed channel.
+func (consumer *Consumer) sendChunk(chunk chunkInfo) bool {
+	select {
+	case consumer.chunkForConsumer <- chunk:
+		return true
+	case <-consumer.closeCh:
+		return false
+	}
+}
+
 func (consumer *Consumer) close(reason Event) {
 	consumer.cacheStoreOffset()
 	consumer.setStatus(closed)
+	// Signal closeCh first so that any concurrent sendChunk call and the
+	// dispatch goroutine in client.go both unblock cleanly.
+	close(consumer.closeCh)
 
 	if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
 		closeHandler <- reason
@@ -420,14 +437,6 @@ func (consumer *Consumer) close(reason Event) {
 	}
 
 	if consumer.response.data != nil {
-		// drain the queue to avoid race condition
-		for len(consumer.chunkForConsumer) > 0 {
-			select {
-			case <-consumer.chunkForConsumer:
-			default:
-			}
-		}
-		close(consumer.chunkForConsumer)
 		close(consumer.response.data)
 		consumer.response.data = nil
 	}
