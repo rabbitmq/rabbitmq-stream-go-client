@@ -1035,10 +1035,9 @@ func (c *Client) declareSubscriber(streamName string,
 	go func() {
 		for {
 			select {
-			case chunk, ok := <-consumer.chunkForConsumer:
-				if !ok {
-					return
-				}
+			case <-consumer.closeCh:
+				return
+			case chunk := <-consumer.chunkForConsumer:
 
 				halfChunkSize := len(chunk.offsetMessages) / 2
 				for i, offMessage := range chunk.offsetMessages {

@@ -411,14 +411,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	// dispatch the messages with offset to the consumer
 	chunk.offsetMessages = batchConsumingMessages
-	if consumer.getStatus() == open {
-		c.metrics.consumed(context.Background(), int64(numRecords), c.otelAttributesForConsumer(consumer.GetStreamName()))
-		c.metrics.chunkReceived(context.Background(), int64(numRecords), c.otelAttributesForConsumer(consumer.GetStreamName()))
-		consumer.chunkForConsumer <- chunk
-	} else {
-		logs.LogDebug("The consumer %s for the stream %s is closed during the chunk dispatching. "+
-			"Messages won't dispatched", consumer.GetName(), consumer.GetStreamName())
+	if !consumer.sendChunk(chunk) {
+		logs.LogDebug("The consumer %s for the stream %s was closed during chunk dispatch. "+
+			"Messages won't be dispatched", consumer.GetName(), consumer.GetStreamName())
+		return
 	}
+	c.metrics.consumed(context.Background(), int64(numRecords), c.otelAttributesForConsumer(consumer.GetStreamName()))
+	c.metrics.chunkReceived(context.Background(), int64(numRecords), c.otelAttributesForConsumer(consumer.GetStreamName()))
 }
 
 func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offsetLimit int64, batchConsumingMessages offsetMessages) offsetMessages {
