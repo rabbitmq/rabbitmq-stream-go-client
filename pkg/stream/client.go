@@ -1034,6 +1034,13 @@ func (c *Client) declareSubscriber(streamName string,
 	}
 	go func() {
 		for {
+			// Prioritised shutdown check: if closeCh is already closed, exit
+			// immediately without racing against buffered chunks in the select below.
+			select {
+			case <-consumer.closeCh:
+				return
+			default:
+			}
 			select {
 			case <-consumer.closeCh:
 				return
