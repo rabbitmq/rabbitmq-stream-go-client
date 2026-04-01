@@ -19,7 +19,11 @@ type Consumer struct {
 	onClose          func()
 	mutex            *sync.RWMutex
 	chunkForConsumer chan chunkInfo
-	MessagesHandler  MessagesHandler
+	// closeCh is closed when the consumer is shutting down.
+	closeCh chan struct{}
+	// closeOnce ensures close() is idempotent even if called concurrently.
+	closeOnce       sync.Once
+	MessagesHandler MessagesHandler
 	// different form ConsumerOptions.offset. ConsumerOptions.offset is just the configuration
 	// and won't change. currentOffset is the status of the offset
 	currentOffset int64
@@ -409,56 +413,76 @@ func (consumer *Consumer) Close() error {
 	return nil
 }
 
-func (consumer *Consumer) close(reason Event) {
-	consumer.cacheStoreOffset()
-	consumer.setStatus(closed)
-
-	if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
-		closeHandler <- reason
-		close(consumer.closeHandler)
-		consumer.closeHandler = nil
+// sendChunk delivers a chunk to the dispatch goroutine. It returns false
+// (dropping the chunk) if the consumer is concurrently closing, avoiding a
+// panic from sending on a closed channel.
+func (consumer *Consumer) sendChunk(chunk chunkInfo) bool {
+	select {
+	case <-consumer.closeCh:
+		return false
+	default:
 	}
+	select {
+	case consumer.chunkForConsumer <- chunk:
+		return true
+	case <-consumer.closeCh:
+		return false
+	}
+}
 
-	if consumer.response.data != nil {
-		// drain the queue to avoid race condition
+func (consumer *Consumer) close(reason Event) {
+	consumer.closeOnce.Do(func() {
+		consumer.cacheStoreOffset()
+		consumer.setStatus(closed)
+		// Signal closeCh first so that any concurrent sendChunk call and the
+		// dispatch goroutine in client.go both unblock cleanly.
+		close(consumer.closeCh)
+
+		// Drain any chunks that were buffered before closeCh was signalled.
+		// sendChunk can no longer enqueue new items at this point
 		for len(consumer.chunkForConsumer) > 0 {
-			select {
-			case <-consumer.chunkForConsumer:
-			default:
+			<-consumer.chunkForConsumer
+		}
+
+		if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
+			closeHandler <- reason
+			close(consumer.closeHandler)
+			consumer.closeHandler = nil
+		}
+
+		if consumer.response.data != nil {
+			close(consumer.response.data)
+			consumer.response.data = nil
+		}
+
+		if reason.Reason == UnSubscribe {
+			length := 2 + 2 + 4 + 1
+			resp := consumer.client.coordinator.NewResponse(CommandUnsubscribe)
+			correlationId := resp.correlationid
+			var b = bytes.NewBuffer(make([]byte, 0, length+4))
+			writeProtocolHeader(b, length, CommandUnsubscribe,
+				correlationId)
+
+			writeByte(b, consumer.ID)
+			err := consumer.client.handleWrite(b.Bytes(), resp)
+			if err.Err != nil && err.isTimeout {
+				logs.LogWarn("error during consumer unsubscribe:%s", err.Err)
 			}
 		}
-		close(consumer.chunkForConsumer)
-		close(consumer.response.data)
-		consumer.response.data = nil
-	}
 
-	if reason.Reason == UnSubscribe {
-		length := 2 + 2 + 4 + 1
-		resp := consumer.client.coordinator.NewResponse(CommandUnsubscribe)
-		correlationId := resp.correlationid
-		var b = bytes.NewBuffer(make([]byte, 0, length+4))
-		writeProtocolHeader(b, length, CommandUnsubscribe,
-			correlationId)
+		// it could be nil only during tests
+		if consumer.client != nil {
+			_, _ = consumer.client.coordinator.ExtractConsumerById(consumer.ID)
 
-		writeByte(b, consumer.ID)
-		err := consumer.client.handleWrite(b.Bytes(), resp)
-		if err.Err != nil && err.isTimeout {
-			logs.LogWarn("error during consumer unsubscribe:%s", err.Err)
+			if consumer.options != nil && consumer.client.coordinator.ConsumersCount() == 0 {
+				consumer.client.Close()
+			}
 		}
-	}
 
-	// it could be nil only during tests
-	if consumer.client != nil {
-		_, _ = consumer.client.coordinator.ExtractConsumerById(consumer.ID)
-
-		if consumer.options != nil && consumer.client.coordinator.ConsumersCount() == 0 {
-			consumer.client.Close()
+		if consumer.onClose != nil {
+			consumer.onClose()
 		}
-	}
-
-	if consumer.onClose != nil {
-		consumer.onClose()
-	}
+	})
 }
 
 func (consumer *Consumer) cacheStoreOffset() {

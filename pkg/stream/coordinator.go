@@ -201,6 +201,7 @@ func (coordinator *Coordinator) NewConsumer(
 		lastAutoCommitStored: time.Now(),
 		// The +5 provides a small buffer to prevent the consumer loop from blocking.
 		chunkForConsumer: make(chan chunkInfo, parameters.initialCredits+5),
+		closeCh:          make(chan struct{}),
 		onClose:          cleanUp,
 	}
 	consumer.setID(lastId)
