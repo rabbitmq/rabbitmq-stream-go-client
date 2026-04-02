@@ -325,12 +325,6 @@ func (coordinator *Coordinator) Close() {
 	})
 
 	coordinator.mutex.Lock()
-	for _, v := range coordinator.responses {
-		if resp, ok := v.(*Response); ok {
-			close(resp.code)
-			close(resp.data)
-		}
-	}
 	coordinator.responses = make(map[any]any)
 	coordinator.mutex.Unlock()
 }
