@@ -56,14 +56,14 @@ func main() {
 	// Your application code here
 
 	// Tune the parameters to test the reliability
-	const messagesToSend = 2_000_000
-	const numberOfProducers = 2
+	const messagesToSend = 1_000_000
+	const numberOfProducers = 3
 	const concurrentProducers = 2
 	const numberOfConsumers = 2
-	const sendDelay = 1 * time.Millisecond
-	const delayEachMessages = 500
-	const maxProducersPerClient = 1
-	const maxConsumersPerClient = 1
+	const sendDelay = 10 * time.Millisecond
+	const delayEachMessages = 5000
+	const maxProducersPerClient = 2
+	const maxConsumersPerClient = 2
 	//
 
 	reader := bufio.NewReader(os.Stdin)
@@ -71,23 +71,23 @@ func main() {
 	fmt.Println("Reliable Producer/Consumer example")
 	fmt.Println("Connecting to RabbitMQ streaming ...")
 
-	// in case of load-balancer you can use the AddressResolver
-	// var resolver = stream.AddressResolver{
-	//	Host: "localhost",
-	//	Port: 5552,
-	// }
+	//in case of load-balancer you can use the AddressResolver
+	var resolver = stream.AddressResolver{
+		Host: "192.168.1.52",
+		Port: 5552,
+	}
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
 			SetMaxProducersPerClient(maxProducersPerClient).
 			SetMaxConsumersPerClient(maxConsumersPerClient).
-			SetHost("localhost").
-			SetUser("guest").
-			SetPassword("guest").
-			SetPort(5552))
-	// SetHost(resolver.Host).
-	// SetPort(resolver.Port).
-	// SetAddressResolver(resolver))
+			//SetHost("localhost").
+			SetUser("test").
+			SetPassword("test").
+			//SetPort(5552))
+			SetHost(resolver.Host).
+			SetPort(resolver.Port).
+			SetAddressResolver(resolver))
 
 	CheckErr(err)
 	fmt.Printf("Environment created with %d producers and %d consumers\n\n", maxProducersPerClient, maxConsumersPerClient)

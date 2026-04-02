@@ -94,7 +94,7 @@ var _ = Describe("Coordinator", func() {
 				p, err := client.coordinator.NewProducer(nil, nil)
 				if i >= int(^uint8(0)) {
 					Expect(fmt.Sprintf("%s", err)).
-						To(ContainSubstring("No more items available"))
+						To(ContainSubstring("no more items available"))
 				} else {
 					Expect(err).NotTo(HaveOccurred())
 					producersId = append(producersId, p.id)
@@ -176,7 +176,8 @@ var _ = Describe("Coordinator", func() {
 		It("massive insert/delete consumers ", func() {
 			consumerIDs := make([]uint8, 0, 100)
 			for range 100 {
-				p := client.coordinator.NewConsumer(nil, NewConsumerOptions(), nil)
+				p, err := client.coordinator.NewConsumer(nil, NewConsumerOptions(), nil)
+				Expect(err).NotTo(HaveOccurred())
 				consumerIDs = append(consumerIDs, p.ID)
 			}
 			Expect(client.coordinator.ConsumersCount()).To(Equal(100))

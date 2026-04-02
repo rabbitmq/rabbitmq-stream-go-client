@@ -333,7 +333,7 @@ func (c *Client) getSaslMechanisms() ([]string, error) {
 func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []byte) error {
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
 	resp := c.coordinator.NewResponse(commandSaslAuthenticate)
-	respTune := c.coordinator.NewResponseWitName("tune")
+	respTune := c.coordinator.NewResponseWithName("tune")
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandSaslAuthenticate,
@@ -948,7 +948,10 @@ func (c *Client) declareSubscriber(streamName string,
 	}
 
 	options.streamName = streamName
-	consumer := c.coordinator.NewConsumer(messagesHandler, options, cleanUp)
+	consumer, consumerErr := c.coordinator.NewConsumer(messagesHandler, options, cleanUp)
+	if consumerErr != nil {
+		return nil, consumerErr
+	}
 	consumer.client = c
 	length := 2 + 2 + 4 + 1 + 2 + len(streamName) + 2 + 2
 	if options.Offset.isOffset() ||

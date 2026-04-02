@@ -23,7 +23,8 @@ func makeCloseTestConsumer() (*Consumer, *Client) {
 		saslConfiguration: nil,
 		rpcTimeout:        defaultSocketCallTimeout,
 	})
-	consumer := client.coordinator.NewConsumer(nil, NewConsumerOptions(), nil)
+	consumer, err := client.coordinator.NewConsumer(nil, NewConsumerOptions(), nil)
+	Expect(err).NotTo(HaveOccurred())
 	consumer.client = client
 	return consumer, client
 }
