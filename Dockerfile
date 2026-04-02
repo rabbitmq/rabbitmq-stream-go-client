@@ -1,4 +1,4 @@
-FROM golang:1.24 AS builder
+FROM golang:1.26 AS builder
 ENV GOPATH=/go GOOS=linux CGO_ENABLED=0
 WORKDIR /go/src/github.com/rabbitmq/rabbitmq-stream-go-client
 COPY go.mod go.sum VERSION ./
