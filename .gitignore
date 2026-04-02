@@ -37,3 +37,4 @@ compose/ha_tls/data*
 # Go
 go.work
 go.work.sum
+pkg/stream/coverage.txt.*
