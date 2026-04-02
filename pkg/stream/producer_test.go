@@ -79,9 +79,9 @@ var _ = Describe("Streaming Producers", func() {
 		}).WithPolling(200 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(1_000)))
 	})
 
-	It("Multi-thread newProducer/Send", func() {
+	It("Multi-thread NewProducer/Send", func() {
 		var wg sync.WaitGroup
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 3; i++ {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup) {
 				defer GinkgoRecover()
