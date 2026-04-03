@@ -117,8 +117,8 @@ func main() {
 	fmt.Printf("\n%s%s  RabbitMQ Stream  ·  Reliable Client%s\n\n", ansiBold, ansiMagenta, ansiReset)
 	fmt.Printf("  Connecting to RabbitMQ streaming...\n\n")
 
-	// in case of load-balancer you can use the AddressResolver
-	//var resolver = stream.AddressResolver{
+	//  in case of load-balancer you can use the AddressResolver
+	//  var resolver = stream.AddressResolver{
 	//	Host: "localhost",
 	//	Port: 5552,
 	//}
@@ -131,9 +131,9 @@ func main() {
 			SetUser("guest").
 			SetPassword("guest").
 			SetPort(5552))
-	//SetHost(resolver.Host).
-	//SetPort(resolver.Port).
-	//SetAddressResolver(resolver))
+	//  SetHost(resolver.Host).
+	//  SetPort(resolver.Port).
+	//  SetAddressResolver(resolver))
 
 	CheckErr(err)
 	fmt.Printf("  %sConnected%s  (max %d producers / %d consumers per client)\n\n",
