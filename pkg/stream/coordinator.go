@@ -13,7 +13,7 @@ type Coordinator struct {
 	counter          int
 	producers        *sync.Map
 	consumers        *sync.Map
-	responses        map[any]any
+	responses        map[any]*Response
 	nextItemProducer uint8
 	nextItemConsumer uint8
 	mutex            *sync.Mutex
@@ -45,7 +45,7 @@ func NewCoordinator() *Coordinator {
 	return &Coordinator{mutex: &sync.Mutex{},
 		producers: &sync.Map{},
 		consumers: &sync.Map{},
-		responses: make(map[any]any)}
+		responses: make(map[any]*Response)}
 }
 
 // producersEnvironment
@@ -114,7 +114,7 @@ func (coordinator *Coordinator) RemoveResponseById(id any) error {
 	delete(coordinator.responses, key)
 	coordinator.mutex.Unlock()
 
-	resp := entry.(*Response)
+	resp := entry
 	close(resp.code)
 	close(resp.data)
 	return nil
@@ -166,11 +166,7 @@ func (coordinator *Coordinator) GetResponseByName(id string) (*Response, error) 
 		return nil, fmt.Errorf("response %q not found", id)
 	}
 
-	if resp, ok := c.(*Response); ok {
-		return resp, nil
-	}
-
-	return nil, nil
+	return c, nil
 }
 
 func (coordinator *Coordinator) RemoveResponseByName(id string) error {
@@ -260,7 +256,7 @@ func (coordinator *Coordinator) ExtractProducerById(id any) (*Producer, error) {
 }
 
 // general functions
-func (coordinator *Coordinator) getById(id any, refmap map[any]any) (any, error) {
+func (coordinator *Coordinator) getById(id any, refmap map[any]*Response) (any, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
 	v, ok := refmap[id]
@@ -325,6 +321,10 @@ func (coordinator *Coordinator) Close() {
 	})
 
 	coordinator.mutex.Lock()
-	coordinator.responses = make(map[any]any)
+	for _, v := range coordinator.responses {
+		close(v.code)
+		close(v.data)
+	}
+	coordinator.responses = make(map[any]*Response)
 	coordinator.mutex.Unlock()
 }
