@@ -2,7 +2,6 @@ package stream
 
 import (
 	"bufio"
-	"fmt"
 	"net"
 	"sync"
 
@@ -75,8 +74,7 @@ func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, remo
 	}
 
 	if result != nil {
-		// we just log
-		fmt.Printf("Error handleWrite %s", result)
+		logs.LogWarn("Error handleWrite %s", result)
 	}
 
 	return resultCode
