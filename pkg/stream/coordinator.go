@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 )
 
@@ -14,7 +13,7 @@ type Coordinator struct {
 	counter          int
 	producers        *sync.Map
 	consumers        *sync.Map
-	responses        map[any]any
+	responses        map[any]*Response
 	nextItemProducer uint8
 	nextItemConsumer uint8
 	mutex            *sync.Mutex
@@ -46,7 +45,7 @@ func NewCoordinator() *Coordinator {
 	return &Coordinator{mutex: &sync.Mutex{},
 		producers: &sync.Map{},
 		consumers: &sync.Map{},
-		responses: make(map[any]any)}
+		responses: make(map[any]*Response)}
 }
 
 // producersEnvironment
@@ -105,15 +104,20 @@ func (coordinator *Coordinator) RemoveProducerById(id uint8, reason Event) error
 }
 
 func (coordinator *Coordinator) RemoveResponseById(id any) error {
-	resp, err := coordinator.GetResponseByName(fmt.Sprintf("%d", id))
-	if err != nil {
-		return err
+	key := fmt.Sprintf("%d", id)
+	coordinator.mutex.Lock()
+	entry, ok := coordinator.responses[key]
+	if !ok {
+		coordinator.mutex.Unlock()
+		return fmt.Errorf("response %q not found", key)
 	}
+	delete(coordinator.responses, key)
+	coordinator.mutex.Unlock()
 
-	err = coordinator.removeById(fmt.Sprintf("%d", id), coordinator.responses)
+	resp := entry
 	close(resp.code)
 	close(resp.data)
-	return err
+	return nil
 }
 
 func (coordinator *Coordinator) ProducersCount() int {
@@ -129,7 +133,7 @@ func newResponse(commandDescription string) *Response {
 	return res
 }
 
-func (coordinator *Coordinator) NewResponseWitName(id string) *Response {
+func (coordinator *Coordinator) NewResponseWithName(id string) *Response {
 	coordinator.mutex.Lock()
 	coordinator.counter++
 	res := newResponse(id)
@@ -157,25 +161,20 @@ func (coordinator *Coordinator) NewResponse(commandId uint16, info ...string) *R
 func (coordinator *Coordinator) GetResponseByName(id string) (*Response, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	c := coordinator.responses[id]
-	if c == nil {
-		return nil, fmt.Errorf("Response %s not found", id)
+	c, ok := coordinator.responses[id]
+	if !ok {
+		return nil, fmt.Errorf("response %q not found", id)
 	}
 
-	if resp, ok := c.(*Response); ok {
-		return resp, nil
-	}
-
-	return nil, nil
+	return c, nil
 }
 
 func (coordinator *Coordinator) RemoveResponseByName(id string) error {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	if coordinator.responses[id] == nil {
-		return errors.New("Response #{id} not found ")
+	if _, ok := coordinator.responses[id]; !ok {
+		return fmt.Errorf("response %q not found", id)
 	}
-	coordinator.responses[id] = nil
 	delete(coordinator.responses, id)
 	return nil
 }
@@ -185,10 +184,13 @@ func (coordinator *Coordinator) NewConsumer(
 	messagesHandler MessagesHandler,
 	parameters *ConsumerOptions,
 	cleanUp func(),
-) *Consumer {
+) (*Consumer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	var lastId, _ = coordinator.getNextConsumerItem()
+	lastId, err := coordinator.getNextConsumerItem()
+	if err != nil {
+		return nil, err
+	}
 	var consumer = &Consumer{
 		options:              parameters,
 		response:             newResponse(lookUpCommand(commandSubscribe)),
@@ -206,7 +208,7 @@ func (coordinator *Coordinator) NewConsumer(
 	}
 	consumer.setID(lastId)
 	coordinator.consumers.Store(lastId, consumer)
-	return consumer
+	return consumer, nil
 }
 
 func (coordinator *Coordinator) GetConsumerById(id any) (*Consumer, error) {
@@ -214,7 +216,7 @@ func (coordinator *Coordinator) GetConsumerById(id any) (*Consumer, error) {
 		return consumer.(*Consumer), nil
 	}
 
-	return nil, errors.New("item #{id} not found ")
+	return nil, fmt.Errorf("consumer %v not found", id)
 }
 
 func (coordinator *Coordinator) ExtractConsumerById(id any) (*Consumer, error) {
@@ -222,7 +224,7 @@ func (coordinator *Coordinator) ExtractConsumerById(id any) (*Consumer, error) {
 		return consumer.(*Consumer), nil
 	}
 
-	return nil, errors.New("item #{id} not found ")
+	return nil, fmt.Errorf("consumer %v not found", id)
 }
 
 func (coordinator *Coordinator) GetResponseById(id uint32) (*Response, error) {
@@ -242,7 +244,7 @@ func (coordinator *Coordinator) GetProducerById(id any) (*Producer, error) {
 		return producer.(*Producer), nil
 	}
 
-	return nil, errors.New("item #{id} not found ")
+	return nil, fmt.Errorf("producer %v not found", id)
 }
 
 func (coordinator *Coordinator) ExtractProducerById(id any) (*Producer, error) {
@@ -250,28 +252,18 @@ func (coordinator *Coordinator) ExtractProducerById(id any) (*Producer, error) {
 		return producer.(*Producer), nil
 	}
 
-	return nil, errors.New("item #{id} not found ")
+	return nil, fmt.Errorf("producer %v not found", id)
 }
 
 // general functions
-func (coordinator *Coordinator) getById(id any, refmap map[any]any) (any, error) {
+func (coordinator *Coordinator) getById(id any, refmap map[any]*Response) (any, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	if refmap[id] == nil {
-		return nil, errors.New("item #{id} not found ")
+	v, ok := refmap[id]
+	if !ok {
+		return nil, fmt.Errorf("item %v not found", id)
 	}
-	return refmap[id], nil
-}
-
-func (coordinator *Coordinator) removeById(id any, refmap map[any]any) error {
-	coordinator.mutex.Lock()
-	defer coordinator.mutex.Unlock()
-	if refmap[id] == nil {
-		return fmt.Errorf("remove failed, id %d not found", id)
-	}
-	refmap[id] = nil
-	delete(refmap, id)
-	return nil
+	return v, nil
 }
 
 func (coordinator *Coordinator) countSyncMap(refmap *sync.Map) int {
@@ -303,18 +295,12 @@ func (coordinator *Coordinator) getNextConsumerItem() (uint8, error) {
 }
 
 func (coordinator *Coordinator) reuseFreeId(refMap *sync.Map) (byte, error) {
-	maxValue := int(^uint8(0))
-	var result byte
-	for i := range maxValue {
+	for i := range int(^uint8(0)) {
 		if _, exists := refMap.Load(byte(i)); !exists {
 			return byte(i), nil
 		}
-		result++
 	}
-	if result >= ^uint8(0) {
-		return 0, errors.New("No more items available")
-	}
-	return result, nil
+	return 0, fmt.Errorf("no more items available")
 }
 
 func (coordinator *Coordinator) Producers() *sync.Map {
@@ -333,4 +319,12 @@ func (coordinator *Coordinator) Close() {
 
 		return true
 	})
+
+	coordinator.mutex.Lock()
+	for _, v := range coordinator.responses {
+		close(v.code)
+		close(v.data)
+	}
+	coordinator.responses = make(map[any]*Response)
+	coordinator.mutex.Unlock()
 }
