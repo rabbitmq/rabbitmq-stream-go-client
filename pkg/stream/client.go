@@ -181,7 +181,7 @@ func (c *Client) connect() error {
 		}
 
 		if err = connection.SetNoDelay(c.tcpParameters.NoDelay); err != nil {
-			logs.LogError("Failed to SetNoDelay to %b due to %v", c.tcpParameters.NoDelay, err)
+			logs.LogError("Failed to SetNoDelay to %v due to %v", c.tcpParameters.NoDelay, err)
 			return err
 		}
 
@@ -318,14 +318,13 @@ func (c *Client) getSaslMechanisms() ([]string, error) {
 	writeProtocolHeader(b, length, commandSaslHandshake,
 		correlationId)
 
-	errWrite := c.socket.writeAndFlush(b.Bytes())
-	data := <-resp.data
-	err := c.coordinator.RemoveResponseById(correlationId)
-	if err != nil {
-		return nil, err
-	}
-	if errWrite != nil {
+	if errWrite := c.socket.writeAndFlush(b.Bytes()); errWrite != nil {
+		_ = c.coordinator.RemoveResponseById(correlationId)
 		return nil, errWrite
+	}
+	data := <-resp.data
+	if err := c.coordinator.RemoveResponseById(correlationId); err != nil {
+		return nil, err
 	}
 	return data.([]string), nil
 }
@@ -465,7 +464,7 @@ func (c *Client) sendHeartbeat() {
 	_ = c.socket.writeAndFlush(b.Bytes())
 }
 
-func (c *Client) closeHartBeat() {
+func (c *Client) closeHeartBeat() {
 	c.destructor.Do(func() {
 		c.doneTimeoutTicker <- struct{}{}
 		close(c.doneTimeoutTicker)
@@ -473,7 +472,7 @@ func (c *Client) closeHartBeat() {
 }
 
 func (c *Client) Close() {
-	c.closeHartBeat()
+	c.closeHeartBeat()
 	c.coordinator.Producers().Range(func(_, p any) bool {
 		producer := p.(*Producer)
 		err := c.coordinator.RemoveProducerById(producer.id, Event{
@@ -785,9 +784,7 @@ func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 		brokers = append(brokers, replica)
 	}
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	n := r.Intn(len(brokers))
-	return brokers[n], nil
+	return brokers[rand.Intn(len(brokers))], nil
 }
 
 func (c *Client) DeclareStream(streamName string, options *StreamOptions) error {
@@ -1023,6 +1020,9 @@ func (c *Client) declareSubscriber(streamName string,
 	}
 
 	err := c.handleWrite(b.Bytes(), resp)
+	if err.Err != nil {
+		return nil, err.Err
+	}
 
 	canDispatch := func(offsetMessage *offsetMessage) bool {
 		if !consumer.isActive() {
@@ -1035,7 +1035,10 @@ func (c *Client) declareSubscriber(streamName string,
 		}
 		return true
 	}
+
+	autoCommitTicker := time.NewTicker(1_000 * time.Millisecond)
 	go func() {
+		defer autoCommitTicker.Stop()
 		for {
 			// Prioritised shutdown check: if closeCh is already closed, exit
 			// immediately without racing against buffered chunks in the select below.
@@ -1070,7 +1073,7 @@ func (c *Client) declareSubscriber(streamName string,
 					}
 				}
 
-			case <-time.After(1_000 * time.Millisecond):
+			case <-autoCommitTicker.C:
 				if consumer.options.autocommit && time.Since(consumer.getLastAutoCommitStored()) >= consumer.options.autoCommitStrategy.flushInterval {
 					consumer.cacheStoreOffset()
 				}
@@ -1094,7 +1097,7 @@ func (c *Client) declareSubscriber(streamName string,
 			}
 		}
 	}()
-	return consumer, err.Err
+	return consumer, nil
 }
 
 func (c *Client) StreamStats(streamName string) (*StreamStats, error) {

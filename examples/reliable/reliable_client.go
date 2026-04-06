@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,9 +24,21 @@ import (
 
 // The ha producer and consumer provide a way to auto-reconnect in case of connection problems
 
+const (
+	ansiReset   = "\033[0m"
+	ansiRed     = "\033[31m"
+	ansiGreen   = "\033[32m"
+	ansiYellow  = "\033[33m"
+	ansiMagenta = "\033[35m"
+	ansiCyan    = "\033[36m"
+	ansiBold    = "\033[1m"
+	ansiDim     = "\033[2m"
+	clearScreen = "\033[2J\033[H"
+)
+
 func CheckErr(err error) {
 	if err != nil {
-		fmt.Printf("%s ", err)
+		fmt.Printf("%s%s%s\n", ansiRed, err, ansiReset)
 		os.Exit(1)
 	}
 }
@@ -40,7 +53,7 @@ const enableResend = false
 
 func formatCommas(num int32) string {
 	str := fmt.Sprintf("%d", num)
-	re := regexp.MustCompile(`(\\d+)(\\d{3})`)
+	re := regexp.MustCompile(`(\d+)(\d{3})`)
 	for n := ""; n != str; {
 		n = str
 		str = re.ReplaceAllString(str, "$1,$2")
@@ -48,34 +61,67 @@ func formatCommas(num int32) string {
 	return str
 }
 
+func colorStatus(s string) string {
+	switch s {
+	case "Open":
+		return ansiGreen + s + ansiReset
+	case "Closed":
+		return ansiRed + s + ansiReset
+	case "Reconnecting":
+		return ansiYellow + s + ansiReset
+	default:
+		return ansiDim + s + ansiReset
+	}
+}
+
+func progressBar(percent float64, width int) string {
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	filled := int(percent / 100.0 * float64(width))
+	empty := width - filled
+	return ansiGreen + strings.Repeat("█", filled) + ansiDim + strings.Repeat("░", empty) + ansiReset
+}
+
+func sep() {
+	fmt.Printf("%s%s%s\n", ansiDim, strings.Repeat("─", 66), ansiReset)
+}
+
+func sectionTitle(title string) {
+	fmt.Printf("\n  %s%s%s\n", ansiBold+ansiCyan, title, ansiReset)
+}
+
 func main() {
 	go func() {
 		//nolint:gosec
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
-	// Your application code here
 
 	// Tune the parameters to test the reliability
-	const messagesToSend = 2_000_000
-	const numberOfProducers = 2
+	const messagesToSend = 3_000_000
+	const numberOfProducers = 5
 	const concurrentProducers = 2
 	const numberOfConsumers = 2
-	const sendDelay = 1 * time.Millisecond
+	const sendDelay = 100 * time.Microsecond
 	const delayEachMessages = 500
-	const maxProducersPerClient = 1
-	const maxConsumersPerClient = 1
+	const maxProducersPerClient = 2
+	const maxConsumersPerClient = 2
 	//
 
 	reader := bufio.NewReader(os.Stdin)
 	stream.SetLevelInfo(logs.INFO)
-	fmt.Println("Reliable Producer/Consumer example")
-	fmt.Println("Connecting to RabbitMQ streaming ...")
 
-	// in case of load-balancer you can use the AddressResolver
-	// var resolver = stream.AddressResolver{
+	fmt.Printf("\n%s%s  RabbitMQ Stream  ·  Reliable Client%s\n\n", ansiBold, ansiMagenta, ansiReset)
+	fmt.Printf("  Connecting to RabbitMQ streaming...\n\n")
+
+	//  in case of load-balancer you can use the AddressResolver
+	//  var resolver = stream.AddressResolver{
 	//	Host: "localhost",
 	//	Port: 5552,
-	// }
+	//}
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
@@ -85,12 +131,13 @@ func main() {
 			SetUser("guest").
 			SetPassword("guest").
 			SetPort(5552))
-	// SetHost(resolver.Host).
-	// SetPort(resolver.Port).
-	// SetAddressResolver(resolver))
+	//  SetHost(resolver.Host).
+	//  SetPort(resolver.Port).
+	//  SetAddressResolver(resolver))
 
 	CheckErr(err)
-	fmt.Printf("Environment created with %d producers and %d consumers\n\n", maxProducersPerClient, maxConsumersPerClient)
+	fmt.Printf("  %sConnected%s  (max %d producers / %d consumers per client)\n\n",
+		ansiGreen, ansiReset, maxProducersPerClient, maxConsumersPerClient)
 
 	streamName := "golang-reliable-Test"
 
@@ -113,25 +160,73 @@ func main() {
 	go func() {
 		for isRunning {
 			totalConfirmed := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
-			expectedMessages := messagesToSend * numberOfProducers * concurrentProducers * 2
-			fmt.Printf("********************************************\n")
-			fmt.Printf("%s - ToSend: %s - nProducers: %d - concurrentProducers: %d - nConsumers %d \n", time.Now().Format(time.RFC850),
-				formatCommas(int32(expectedMessages)), numberOfProducers, concurrentProducers, numberOfConsumers)
-			fmt.Printf("Sent:%s - ReSent:%s - Confirmed:%s  - Not confirmed:%s - Fail+Confirmed:%s \n",
-				formatCommas(sent), formatCommas(atomic.LoadInt32(&reSent)), formatCommas(atomic.LoadInt32(&confirmed)), formatCommas(atomic.LoadInt32(&fail)), formatCommas(totalConfirmed))
-			fmt.Printf("Total Consumed:%s - Per consumer:%s  \n", formatCommas(atomic.LoadInt32(&consumed)),
-				formatCommas(atomic.LoadInt32(&consumed)/numberOfConsumers))
+			expectedMessages := int32(messagesToSend * numberOfProducers * concurrentProducers * 2)
+			cfmd := atomic.LoadInt32(&confirmed)
+			failed := atomic.LoadInt32(&fail)
+			cons := atomic.LoadInt32(&consumed)
 
-			for _, producer := range producers {
-				fmt.Printf("%s, status: %s \n",
-					producer.GetInfo(), producer.GetStatusAsString())
+			var confirmRate float64
+			if totalConfirmed > 0 {
+				confirmRate = float64(cfmd) / float64(totalConfirmed) * 100
 			}
-			for _, consumer := range consumers {
-				fmt.Printf("%s, status: %s \n",
-					consumer.GetInfo(), consumer.GetStatusAsString())
+
+			perConsumer := int32(0)
+			if numberOfConsumers > 0 {
+				perConsumer = cons / numberOfConsumers
 			}
-			fmt.Printf("go-routine: %d\n", runtime.NumGoroutine())
-			fmt.Printf("********************************************\n")
+
+			fmt.Print(clearScreen)
+
+			sep()
+			fmt.Printf("  %s%s  RabbitMQ Stream  ·  Reliable Client  %s\n", ansiBold, ansiMagenta, ansiReset)
+			sep()
+
+			fmt.Printf("\n  %-12s%s%s%s\n", "Stream", ansiBold, streamName, ansiReset)
+			fmt.Printf("  %-12s%s\n", "Time", time.Now().Format("Mon, 02 Jan 06 15:04:05 MST"))
+
+			sectionTitle("CONFIGURATION")
+			fmt.Printf("  Producers: %s%d%s   Concurrent: %s%d%s   Consumers: %s%d%s   Goroutines: %s%d%s\n",
+				ansiBold, numberOfProducers, ansiReset,
+				ansiBold, concurrentProducers, ansiReset,
+				ansiBold, numberOfConsumers, ansiReset,
+				ansiBold, runtime.NumGoroutine(), ansiReset,
+			)
+
+			sectionTitle("MESSAGES")
+			fmt.Printf("  Target  %s%-14s%s  Sent  %s%-14s%s  ReSent  %s%s%s\n",
+				ansiYellow, formatCommas(expectedMessages), ansiReset,
+				ansiGreen, formatCommas(sent), ansiReset,
+				ansiCyan, formatCommas(atomic.LoadInt32(&reSent)), ansiReset,
+			)
+
+			sectionTitle("CONFIRMATIONS")
+			fmt.Printf("  Confirmed  %s%-12s%s  Failed  %s%-12s%s  Total  %s%s%s\n",
+				ansiGreen, formatCommas(cfmd), ansiReset,
+				ansiRed, formatCommas(failed), ansiReset,
+				ansiDim, formatCommas(totalConfirmed), ansiReset,
+			)
+			fmt.Printf("  Rate  %s%.1f%%%s  %s\n",
+				ansiBold, confirmRate, ansiReset, progressBar(confirmRate, 30))
+
+			sectionTitle("CONSUMPTION")
+			fmt.Printf("  Total  %s%-14s%s  Per Consumer  %s%s%s\n",
+				ansiGreen, formatCommas(cons), ansiReset,
+				ansiBold, formatCommas(perConsumer), ansiReset,
+			)
+
+			sectionTitle(fmt.Sprintf("PRODUCERS (%d)", len(producers)))
+			for i, producer := range producers {
+				fmt.Printf("  [%d] %-40s  %s\n", i+1, producer.GetInfo(), colorStatus(producer.GetStatusAsString()))
+			}
+
+			sectionTitle(fmt.Sprintf("CONSUMERS (%d)", len(consumers)))
+			for i, consumer := range consumers {
+				fmt.Printf("  [%d] %-40s  %s\n", i+1, consumer.GetInfo(), colorStatus(consumer.GetStatusAsString()))
+			}
+
+			fmt.Println()
+			sep()
+
 			time.Sleep(5 * time.Second)
 		}
 	}()
@@ -205,7 +300,7 @@ func main() {
 		}()
 	}
 
-	fmt.Println("Press enter to close the connections.")
+	fmt.Printf("\n  %sPress enter to close the connections.%s\n", ansiDim, ansiReset)
 	_, _ = reader.ReadString('\n')
 	for _, producer := range producers {
 		err := producer.Close()
@@ -220,7 +315,7 @@ func main() {
 		}
 	}
 	isRunning = false
-	fmt.Println("Connections Closed. Press enter to close the environment.")
+	fmt.Printf("  %sConnections closed.%s  Press enter to close the environment.\n", ansiGreen, ansiReset)
 	_, _ = reader.ReadString('\n')
 
 	err = env.Close()
