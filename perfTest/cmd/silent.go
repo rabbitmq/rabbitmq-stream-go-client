@@ -4,7 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,6 +52,28 @@ var (
 	// connections           []*stream.Client
 	simulEnvironment *stream.Environment
 )
+
+func addressResolverFromURI(uri string) (stream.AddressResolver, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return stream.AddressResolver{}, err
+	}
+	host := u.Hostname()
+	if host == "" {
+		return stream.AddressResolver{}, fmt.Errorf("no host in URI")
+	}
+	port, err := strconv.Atoi(stream.StreamTcpPort)
+	if err != nil {
+		return stream.AddressResolver{}, err
+	}
+	if p := u.Port(); p != "" {
+		port, err = strconv.Atoi(p)
+		if err != nil {
+			return stream.AddressResolver{}, fmt.Errorf("invalid port in URI: %w", err)
+		}
+	}
+	return stream.AddressResolver{Host: host, Port: port}, nil
+}
 
 func checkRunDuration() {
 	if runDuration > 0 {
@@ -180,11 +204,19 @@ func startSimulation() error {
 	err := initStreams()
 	checkErr(err)
 
-	//
-	simulEnvironment, err = stream.NewEnvironment(stream.NewEnvironmentOptions().
+	envOpts := stream.NewEnvironmentOptions().
 		SetUri(rabbitmqBrokerUrl[0]).
 		SetMaxProducersPerClient(publishersPerClient).
-		SetMaxConsumersPerClient(consumersPerClient))
+		SetMaxConsumersPerClient(consumersPerClient)
+	if loadBalancer {
+		resolver, resErr := addressResolverFromURI(rabbitmqBrokerUrl[0])
+		if resErr != nil {
+			logError("load-balancer: %s", resErr)
+			os.Exit(1)
+		}
+		envOpts = envOpts.SetAddressResolver(resolver)
+	}
+	simulEnvironment, err = stream.NewEnvironment(envOpts)
 	checkErr(err)
 	if consumers > 0 {
 		err = startConsumers()
@@ -215,11 +247,16 @@ func randomSleep() {
 
 func initStreams() error {
 	logInfo("%s Declaring streams: %v", opTag("stream", ansiBlue), streams)
-	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUris(
-		rabbitmqBrokerUrl).SetAddressResolver(stream.AddressResolver{
-		Host: rabbitmqBrokerUrl[0],
-		Port: 5552,
-	}))
+	initOpts := stream.NewEnvironmentOptions().SetUris(rabbitmqBrokerUrl)
+	if loadBalancer {
+		resolver, resErr := addressResolverFromURI(rabbitmqBrokerUrl[0])
+		if resErr != nil {
+			logError("load-balancer: %s", resErr)
+			return resErr
+		}
+		initOpts = initOpts.SetAddressResolver(resolver)
+	}
+	env, err := stream.NewEnvironment(initOpts)
 	if err != nil {
 		logError("Error init stream connection: %s", err)
 		return err
