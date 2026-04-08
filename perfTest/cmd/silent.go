@@ -59,7 +59,7 @@ func checkRunDuration() {
 			for range ticker.C {
 				v := time.Since(start).Seconds()
 				if v >= float64(runDuration) {
-					logInfo("Stopping after %d seconds", runDuration)
+					logInfo("%s stopping after %ds", style(ansiBold+ansiYellow, "time"), runDuration)
 					os.Exit(0)
 				}
 			}
@@ -91,15 +91,33 @@ func printStats() {
 					ConfirmedMessagesPerSecond = float64(atomic.LoadInt32(&confirmedMessageCount)) / float64(v) * 1000
 				}
 				p := gomsg.NewPrinter(language.English)
-				logInfo(p.Sprintf("Published %8.1f msg/s | Confirmed %8.1f msg/s |  Consumed %8.1f msg/s |  %2v | %2v | latency: %d ms",
-					PMessagesPerSecond, ConfirmedMessagesPerSecond, CMessagesPerSecond, decodeRate(), decodeBody(), averageLatency))
+				pub := p.Sprintf("%8.1f", PMessagesPerSecond)
+				conf := p.Sprintf("%8.1f", ConfirmedMessagesPerSecond)
+				cons := p.Sprintf("%8.1f", CMessagesPerSecond)
+				rateStr := decodeRate()
+				bodyStr := decodeBody()
+				lat := p.Sprintf("%d", averageLatency)
+				line := fmt.Sprintf(
+					"%s %s msg/s | %s %s msg/s | %s %s msg/s |  %s | %s | %s %s ms",
+					style(ansiBold+ansiCyan, "publish"),
+					style(ansiBold+ansiCyan, pub),
+					style(ansiBold+ansiGreen, "confirm"),
+					style(ansiBold+ansiGreen, conf),
+					style(ansiBold+ansiMagenta, "consume"),
+					style(ansiBold+ansiMagenta, cons),
+					style(ansiDim+ansiHiGreen, rateStr),
+					style(ansiDim+ansiHiGreen, bodyStr),
+					style(ansiBold+ansiYellow, "latency"),
+					style(ansiBold+ansiYellow, lat),
+				)
+				logInfo("%s", line)
 			}
 		}()
 
 		tickerReset := time.NewTicker(1 * time.Minute)
 		go func() {
 			for range tickerReset.C {
-				logInfo("***********Resetting counters***********")
+				logInfo("%s", style(ansiBold+ansiYellow, "---------- resetting throughput counters ----------"))
 				atomic.SwapInt32(&consumerMessageCount, 0)
 				atomic.SwapInt32(&notConfirmedMessageCount, 0)
 				atomic.SwapInt32(&confirmedMessageCount, 0)
@@ -151,10 +169,13 @@ func startSimulation() error {
 
 	if rate > 0 && rate < batchSize {
 		batchSize = rate
-		logInfo("Rate lower than batch size, move batch size: %d", batchSize)
+		logInfo("%s rate < batch size; batch size set to %d", opTag("publish", ansiCyan), batchSize)
 	}
 
-	logInfo("Silent (%s) Simulation, url: %s publishers: %d consumers: %d streams: %s ", stream.ClientVersion, rabbitmqBrokerUrl, publishers, consumers, streams)
+	logInfo("%s Silent %s | brokers: %v | publishers: %d | consumers: %d | streams: %v",
+		style(ansiBold+ansiHiCyan, ">>"),
+		style(ansiBold+ansiWhite, stream.ClientVersion),
+		rabbitmqBrokerUrl, publishers, consumers, streams)
 
 	err := initStreams()
 	checkErr(err)
@@ -193,7 +214,7 @@ func randomSleep() {
 }
 
 func initStreams() error {
-	logInfo("Declaring streams: %s", streams)
+	logInfo("%s Declaring streams: %v", opTag("stream", ansiBlue), streams)
 	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions().SetUris(
 		rabbitmqBrokerUrl).SetAddressResolver(stream.AddressResolver{
 		Host: rabbitmqBrokerUrl[0],
@@ -227,9 +248,9 @@ func initStreams() error {
 
 		streamMetadata, err := env.StreamMetaData(streamName)
 		checkErr(err)
-		logInfo("stream %s, meta data: %s", streamName, streamMetadata)
+		logInfo("%s stream %s meta: %s", opTag("stream", ansiBlue), streamName, streamMetadata)
 	}
-	logInfo("End Init streams :%s\n", streams)
+	logInfo("%s Streams ready: %v", opTag("stream", ansiBlue), streams)
 	return env.Close()
 }
 
@@ -264,7 +285,7 @@ func startPublisher(streamName string) error {
 			cp = stream.Compression{}.Zstd()
 		}
 		producerOptions.SetSubEntrySize(subEntrySize).SetCompression(cp)
-		logInfo("Enable SubEntrySize: %d, compression: %s", subEntrySize, cp)
+		logInfo("%s sub-entry batch: size=%d compression=%s", opTag("batch", ansiYellow), subEntrySize, cp)
 	}
 
 	producerOptions.SetClientProvidedName(clientProvidedName).SetBatchSize(batchSize)
@@ -334,11 +355,11 @@ func buildMessages() []message.StreamMessage {
 }
 
 func startPublishers() error {
-	logInfo("Starting %d publishers...", publishers)
+	logInfo("%s Starting %d publisher(s)...", opTag("publish", ansiCyan), publishers)
 
 	for _, streamName := range streams {
 		for i := 1; i <= publishers; i++ {
-			logInfo("Starting publisher number: %d", i)
+			logInfo("%s publisher #%d on stream %s", opTag("publish", ansiCyan), i, streamName)
 			err := startPublisher(streamName)
 			checkErr(err)
 		}
@@ -349,7 +370,7 @@ func startPublishers() error {
 func handleConsumerClose(channelClose stream.ChannelClose) {
 	go func() {
 		event := <-channelClose
-		logInfo("Consumer %s closed on stream %s, cause: %s", event.Name, event.StreamName, event.Reason)
+		logInfo("%s consumer %s closed on %s: %s", opTag("consume", ansiMagenta), event.Name, event.StreamName, event.Reason)
 		if exitOnError {
 			os.Exit(1)
 		}
@@ -390,7 +411,7 @@ func startConsumer(consumerName string, streamName string) error {
 		}
 	}
 
-	logInfo("Starting consumer number: %s, form %s", consumerName, offsetSpec)
+	logInfo("%s consumer %s offset %s", opTag("consume", ansiMagenta), consumerName, offsetSpec)
 
 	consumer, err := simulEnvironment.NewConsumer(
 		streamName,
@@ -411,7 +432,7 @@ func startConsumer(consumerName string, streamName string) error {
 }
 
 func startConsumers() error {
-	logInfo("Starting %d consumers...", consumers)
+	logInfo("%s Starting %d consumer(s)...", opTag("consume", ansiMagenta), consumers)
 
 	for _, streamName := range streams {
 		for i := 0; i < consumers; i++ {

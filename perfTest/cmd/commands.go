@@ -10,10 +10,13 @@ import (
 )
 
 func logInfo(message string, v ...any) {
-	log.Printf(fmt.Sprintf("[info] - %s", message), v...)
+	msg := fmt.Sprintf(message, v...)
+	log.Printf("%s %s", opTag("info", ansiHiCyan), msg)
 }
+
 func logError(message string, v ...any) {
-	log.Printf(fmt.Sprintf("[error] - %s", message), v...)
+	msg := fmt.Sprintf(message, v...)
+	log.Printf("%s %s", opTag("error", ansiRed), msg)
 }
 
 var rootCmd = &cobra.Command{
@@ -50,6 +53,7 @@ var (
 	initialCredits      int
 	isAsyncSend         bool
 	clientProvidedName  string
+	noColor             bool
 )
 
 func init() {
@@ -83,6 +87,7 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.PersistentFlags().IntVarP(&initialCredits, "initial-credits", "", 10, "Consumer initial credits")
 	baseCmd.PersistentFlags().BoolVarP(&isAsyncSend, "async-send", "", false, "Enable the async send. By default it uses batchSend in this case is faster")
 	baseCmd.PersistentFlags().StringVarP(&clientProvidedName, "client-provided-name", "", "", "Client provided name")
+	baseCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable ANSI colors in output (see also NO_COLOR env)")
 	baseCmd.AddCommand(versionCmd)
 	baseCmd.AddCommand(newSilent())
 }
@@ -96,7 +101,7 @@ func Execute() {
 	}
 
 	if err := rootCmd.Execute(); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, style(ansiBold+ansiRed, err.Error()))
 		os.Exit(1)
 	}
 }
