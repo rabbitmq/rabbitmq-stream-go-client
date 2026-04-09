@@ -54,6 +54,7 @@ var (
 	isAsyncSend         bool
 	clientProvidedName  string
 	noColor             bool
+	loadBalancer        bool
 )
 
 func init() {
@@ -88,6 +89,7 @@ func setupCli(baseCmd *cobra.Command) {
 	baseCmd.PersistentFlags().BoolVarP(&isAsyncSend, "async-send", "", false, "Enable the async send. By default it uses batchSend in this case is faster")
 	baseCmd.PersistentFlags().StringVarP(&clientProvidedName, "client-provided-name", "", "", "Client provided name")
 	baseCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable ANSI colors in output (see also NO_COLOR env)")
+	baseCmd.PersistentFlags().BoolVar(&loadBalancer, "load-balancer", false, "Use stream.AddressResolver (e.g. behind a load balancer); URI host/port is the LB entrypoint")
 	baseCmd.AddCommand(versionCmd)
 	baseCmd.AddCommand(newSilent())
 }
