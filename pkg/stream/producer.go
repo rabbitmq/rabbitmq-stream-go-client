@@ -124,7 +124,7 @@ type ProducerOptions struct {
 	// Deprecated: starting from 1.5.0 the SetBatchPublishingDelay is deprecated, and it will be removed in the next releases
 	// It is not used anymore given the dynamic batching.
 	//
-	// Timout within the aggregation sent a batch of messages. Valid only for the method Send()
+	// Timeout within the aggregation sent a batch of messages. Valid only for the method Send()
 	BatchPublishingDelay int
 	// Size of sub Entry, to aggregate more subEntry using one publishing id
 	SubEntrySize int

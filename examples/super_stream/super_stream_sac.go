@@ -68,7 +68,7 @@ func main() {
 				restart = stream.OffsetSpecification{}.Offset(offset + 1)
 			}
 
-			addInfo := fmt.Sprintf("The cosumer is now active ....Restarting from offset: %s", restart)
+			addInfo := fmt.Sprintf("The consumer is now active ....Restarting from offset: %s", restart)
 			if !isActive {
 				addInfo = "The consumer is not active anymore for this partition."
 			}
