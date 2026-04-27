@@ -113,7 +113,7 @@ func (es compressGZIP) Compress(subEntries *subEntries) error {
 		w := gzip.NewWriter(&tmp)
 
 		for _, msg := range entry.messages {
-			prefixedMsg := bytesLenghPrefixed(msg.messageBytes)
+			prefixedMsg := bytesLengthPrefixed(msg.messageBytes)
 			if _, err := w.Write(prefixedMsg); err != nil {
 				return fmt.Errorf("failed to write message size to gzip writer: %w", err)
 			}
@@ -170,7 +170,7 @@ func (es compressSnappy) Compress(subEntries *subEntries) error {
 		var tmp bytes.Buffer
 		w := snappy.NewBufferedWriter(&tmp)
 		for _, msg := range entry.messages {
-			prefixedMsg := bytesLenghPrefixed(msg.messageBytes)
+			prefixedMsg := bytesLengthPrefixed(msg.messageBytes)
 			if _, err := w.Write(prefixedMsg); err != nil {
 				return fmt.Errorf("failed to write message size to snappy writer: %w", err)
 			}
@@ -225,7 +225,7 @@ func (es compressLZ4) Compress(subEntries *subEntries) error {
 		w := lz4.NewWriter(&tmp)
 
 		for _, msg := range entry.messages {
-			prefixedMsg := bytesLenghPrefixed(msg.messageBytes)
+			prefixedMsg := bytesLengthPrefixed(msg.messageBytes)
 			if _, err := w.Write(prefixedMsg); err != nil {
 				return fmt.Errorf("failed to write message size to LZ4 writer: %w", err)
 			}
@@ -283,7 +283,7 @@ func (es compressZSTD) Compress(subEntries *subEntries) error {
 		}
 
 		for _, msg := range entry.messages {
-			prefixedMsg := bytesLenghPrefixed(msg.messageBytes)
+			prefixedMsg := bytesLengthPrefixed(msg.messageBytes)
 			if _, err := w.Write(prefixedMsg); err != nil {
 				return fmt.Errorf("failed to write message size to ZSTD writer: %w", err)
 			}
