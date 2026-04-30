@@ -34,12 +34,12 @@ var _ = Describe("Consumer shutdown", func() {
 	// -----------------------------------------------------------------------
 	// 1. Original panic: "send on closed channel".
 	//    Goroutines replicate server_frame.go's TOCTOU pattern:
-	//      if consumer.getStatus() == open { consumer.chunkForConsumer <- chunk }
-	//    close() closes chunkForConsumer while senders may be blocked on it.
+	//      if consumer.getStatus() == open { client.enqueueConsumerChunk(...) }
+	//    close() closes closeCh while senders may be blocked on the connection queue.
 	//    Expected: no panics. FAILS on unpatched main, PASSES after fix.
 	// -----------------------------------------------------------------------
 	It("concurrent chunk dispatch and close does not panic", func() {
-		consumer, _ := makeCloseTestConsumer()
+		consumer, client := makeCloseTestConsumer()
 
 		const senders = 50
 		var panicCount atomic.Int32
@@ -59,11 +59,9 @@ var _ = Describe("Consumer shutdown", func() {
 				}()
 				<-start
 				for range 200 {
-					// Replicate server_frame.go: status check then channel send.
-					// The race: close() can close the channel between the check
-					// and the send → "send on closed channel" panic.
+					// Replicate server_frame.go: status check then enqueue on the client.
 					if consumer.getStatus() == open {
-						consumer.chunkForConsumer <- chunkInfo{}
+						_ = client.enqueueConsumerChunk(consumer.GetID(), chunkInfo{})
 					}
 				}
 			}()
@@ -79,7 +77,7 @@ var _ = Describe("Consumer shutdown", func() {
 	// -----------------------------------------------------------------------
 	// 2. Original panic: "close of closed channel".
 	//    Without idempotency, concurrent calls to close() both reach
-	//    close(chunkForConsumer) / close(response.data) → double-close panic.
+	//    close(response.data) → double-close panic.
 	//    Expected: no panics. FAILS on unpatched main, PASSES after fix.
 	// -----------------------------------------------------------------------
 	It("concurrent close calls are idempotent and do not panic", func() {
@@ -120,20 +118,11 @@ var _ = Describe("Consumer shutdown", func() {
 	})
 
 	// -----------------------------------------------------------------------
-	// 4. close() drains buffered chunks so allocations are released promptly.
+	// 4. After close, the client must reject further chunk enqueues for the subscription.
 	// -----------------------------------------------------------------------
-	It("close drains buffered chunks", func() {
-		consumer, _ := makeCloseTestConsumer()
-
-		// Fill the buffer completely before closing.
-		bufSize := cap(consumer.chunkForConsumer)
-		for range bufSize {
-			consumer.chunkForConsumer <- chunkInfo{numEntries: 1}
-		}
-		Expect(len(consumer.chunkForConsumer)).To(Equal(bufSize))
-
+	It("enqueue after consumer close returns false", func() {
+		consumer, client := makeCloseTestConsumer()
 		consumer.close(Event{Reason: SocketClosed})
-
-		Expect(len(consumer.chunkForConsumer)).To(Equal(0))
+		Expect(client.enqueueConsumerChunk(consumer.GetID(), chunkInfo{})).To(BeFalse())
 	})
 })

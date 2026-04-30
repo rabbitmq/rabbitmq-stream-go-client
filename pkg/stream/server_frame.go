@@ -411,7 +411,7 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	// dispatch the messages with offset to the consumer
 	chunk.offsetMessages = batchConsumingMessages
-	if !consumer.sendChunk(chunk) {
+	if !c.enqueueConsumerChunk(subscriptionId, chunk) {
 		logs.LogDebug("The consumer %s for the stream %s was closed during chunk dispatch. "+
 			"Messages won't be dispatched", consumer.GetName(), consumer.GetStreamName())
 		return

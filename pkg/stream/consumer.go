@@ -13,12 +13,11 @@ import (
 type Consumer struct {
 	client *Client
 	// Deprecated: ConsumerID is deprecated. Use GetID() instead.
-	ID               uint8 // also the SubscriptionId
-	response         *Response
-	options          *ConsumerOptions
-	onClose          func()
-	mutex            *sync.RWMutex
-	chunkForConsumer chan chunkInfo
+	ID       uint8 // also the SubscriptionId
+	response *Response
+	options  *ConsumerOptions
+	onClose  func()
+	mutex    *sync.RWMutex
 	// closeCh is closed when the consumer is shutting down.
 	closeCh chan struct{}
 	// closeOnce ensures close() is idempotent even if called concurrently.
@@ -413,36 +412,13 @@ func (consumer *Consumer) Close() error {
 	return nil
 }
 
-// sendChunk delivers a chunk to the dispatch goroutine. It returns false
-// (dropping the chunk) if the consumer is concurrently closing, avoiding a
-// panic from sending on a closed channel.
-func (consumer *Consumer) sendChunk(chunk chunkInfo) bool {
-	select {
-	case <-consumer.closeCh:
-		return false
-	default:
-	}
-	select {
-	case consumer.chunkForConsumer <- chunk:
-		return true
-	case <-consumer.closeCh:
-		return false
-	}
-}
-
 func (consumer *Consumer) close(reason Event) {
 	consumer.closeOnce.Do(func() {
 		consumer.cacheStoreOffset()
 		consumer.setStatus(closed)
-		// Signal closeCh first so that any concurrent sendChunk call and the
-		// dispatch goroutine in client.go both unblock cleanly.
+		// Signal closeCh first so that any concurrent enqueue on the client's
+		// chunk queue and the per-consumer ticker goroutine both unblock cleanly.
 		close(consumer.closeCh)
-
-		// Drain any chunks that were buffered before closeCh was signalled.
-		// sendChunk can no longer enqueue new items at this point
-		for len(consumer.chunkForConsumer) > 0 {
-			<-consumer.chunkForConsumer
-		}
 
 		if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
 			closeHandler <- reason
