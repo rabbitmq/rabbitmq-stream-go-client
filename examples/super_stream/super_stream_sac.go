@@ -32,7 +32,7 @@ func main() {
 
 	// Connect to the broker ( or brokers )
 	env, err := stream.NewEnvironment(
-		stream.NewEnvironmentOptions())
+		stream.NewEnvironmentOptions().SetMaxConsumersPerClient(10))
 	CheckErr(err)
 	superStreamName := "invoices"
 

@@ -426,7 +426,7 @@ func (c *Client) authenticate(user string, password string) error {
 
 func (c *Client) getSaslMechanisms() ([]string, error) {
 	length := 2 + 2 + 4
-	resp := c.coordinator.NewResponse(commandSaslHandshake) //18
+	resp := c.coordinator.NewResponse(commandSaslHandshake)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandSaslHandshake,
@@ -449,7 +449,7 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	respTune := c.coordinator.NewResponseWithName("tune")
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandSaslAuthenticate, //19
+	writeProtocolHeader(b, length, commandSaslAuthenticate,
 		correlationId)
 
 	writeString(b, saslMechanism)
