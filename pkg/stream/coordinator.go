@@ -201,10 +201,8 @@ func (coordinator *Coordinator) NewConsumer(
 		lastStoredOffset:     -1, // because 0 is a valid value for the offset
 		isPromotedAsActive:   true,
 		lastAutoCommitStored: time.Now(),
-		// The +5 provides a small buffer to prevent the consumer loop from blocking.
-		chunkForConsumer: make(chan chunkInfo, parameters.initialCredits+5),
-		closeCh:          make(chan struct{}),
-		onClose:          cleanUp,
+		closeCh:              make(chan struct{}),
+		onClose:              cleanUp,
 	}
 	consumer.setID(lastId)
 	coordinator.consumers.Store(lastId, consumer)

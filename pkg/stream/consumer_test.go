@@ -503,10 +503,10 @@ var _ = Describe("Streaming Consumers", func() {
 				SetConsumerName("consumer_test"))
 		Expect(err).NotTo(HaveOccurred())
 
-		// waiting the internal queue to fulfill
+		// waiting the internal queue to fulfill (connection-level deliver queue)
 		time.Sleep(time.Second)
 		// - 1 because the first message was consumed by the handler
-		Expect(len(consumer.chunkForConsumer)).To(Equal(credits - 1))
+		Expect(len(consumer.client.consumerChunkQueue)).To(Equal(credits - 1))
 
 		Expect(consumer.Close()).NotTo(HaveOccurred())
 	})

@@ -21,6 +21,17 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 )
 
+// defaultConsumerChunkQueueBuffer is the shared deliver queue depth for all
+// consumers on one connection (replaces per-consumer chunk channels).
+const defaultConsumerChunkQueueBuffer = 16384
+
+// deliveredChunk routes a decoded chunk from the connection read loop to the
+// subscription identified by subscriptionID.
+type deliveredChunk struct {
+	subscriptionID uint8
+	info           chunkInfo
+}
+
 // SaslConfiguration see
 //
 //	SaslConfigurationPlain    = "PLAIN"
@@ -75,6 +86,10 @@ type Client struct {
 
 	doneTimeoutTicker chan struct{}
 	metrics           *streamMetrics
+
+	consumerChunkQueue     chan deliveredChunk
+	chunkDeliveryStop      chan struct{}
+	chunkDeliveryCloseOnce sync.Once
 }
 
 func newClient(parameters connectionParameters) *Client {
@@ -106,13 +121,112 @@ func newClient(parameters connectionParameters) *Client {
 			mutex:      &sync.Mutex{},
 			destructor: &sync.Once{},
 		},
-		socketCallTimeout: parameters.rpcTimeout,
-		availableFeatures: newAvailableFeatures(),
-		doneTimeoutTicker: make(chan struct{}, 1),
-		metrics:           parameters.metrics,
+		socketCallTimeout:  parameters.rpcTimeout,
+		availableFeatures:  newAvailableFeatures(),
+		doneTimeoutTicker:  make(chan struct{}, 1),
+		metrics:            parameters.metrics,
+		consumerChunkQueue: make(chan deliveredChunk, defaultConsumerChunkQueueBuffer),
+		chunkDeliveryStop:  make(chan struct{}),
 	}
 	c.setConnectionName(parameters.connectionName)
+	go c.deliverConsumerChunks()
 	return c
+}
+
+func (c *Client) stopChunkDelivery() {
+	c.chunkDeliveryCloseOnce.Do(func() {
+		close(c.chunkDeliveryStop)
+	})
+}
+
+func (c *Client) deliverConsumerChunks() {
+	for {
+		select {
+		case item := <-c.consumerChunkQueue:
+			c.dispatchConsumerChunk(item)
+		case <-c.chunkDeliveryStop:
+			for {
+				select {
+				case item := <-c.consumerChunkQueue:
+					c.dispatchConsumerChunk(item)
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+// enqueueConsumerChunk queues a chunk for the subscription. It returns false if
+// the consumer is closing, the client is shutting down, or the consumer is gone.
+func (c *Client) enqueueConsumerChunk(subscriptionID uint8, chunk chunkInfo) bool {
+	select {
+	case <-c.chunkDeliveryStop:
+		return false
+	default:
+	}
+	consumer, err := c.coordinator.GetConsumerById(subscriptionID)
+	if err != nil {
+		return false
+	}
+	select {
+	case <-consumer.closeCh:
+		return false
+	default:
+	}
+	item := deliveredChunk{subscriptionID: subscriptionID, info: chunk}
+	select {
+	case c.consumerChunkQueue <- item:
+		return true
+	case <-consumer.closeCh:
+		return false
+	case <-c.chunkDeliveryStop:
+		return false
+	}
+}
+
+func (c *Client) dispatchConsumerChunk(item deliveredChunk) {
+	consumer, err := c.coordinator.GetConsumerById(item.subscriptionID)
+	if err != nil || consumer.getStatus() == closed {
+		return
+	}
+	chunk := item.info
+	options := consumer.options
+	streamName := options.streamName
+
+	canDispatch := func(offsetMessage *offsetMessage) bool {
+		if !consumer.isActive() {
+			logs.LogDebug("The consumer is not active anymore the message will be skipped, partition %s", streamName)
+			return false
+		}
+
+		if options.IsFilterEnabled() && options.Filter.PostFilter != nil {
+			return options.Filter.PostFilter(offsetMessage.message)
+		}
+		return true
+	}
+
+	halfChunkSize := len(chunk.offsetMessages) / 2
+	for i, offMessage := range chunk.offsetMessages {
+		consumer.setCurrentOffset(offMessage.offset)
+		if canDispatch(offMessage) {
+			if consumer.MessagesHandler != nil {
+				consumer.MessagesHandler(ConsumerContext{Consumer: consumer, chunkInfo: &chunk}, offMessage.message)
+			}
+		}
+
+		if halfChunkSize == i && consumer.options.CreditStrategy == AutomaticCreditStrategy {
+			c.credit(consumer.ID, 1)
+		}
+
+		if consumer.options.autocommit {
+			messageCountBeforeStorage := consumer.increaseMessageCountBeforeStorage()
+			if messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage ||
+				time.Since(consumer.getLastAutoCommitStored()) >= consumer.options.autoCommitStrategy.flushInterval {
+				consumer.cacheStoreOffset()
+			}
+		}
+	}
 }
 
 func (c *Client) getSocket() *socket {
@@ -312,7 +426,7 @@ func (c *Client) authenticate(user string, password string) error {
 
 func (c *Client) getSaslMechanisms() ([]string, error) {
 	length := 2 + 2 + 4
-	resp := c.coordinator.NewResponse(commandSaslHandshake)
+	resp := c.coordinator.NewResponse(commandSaslHandshake) //18
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandSaslHandshake,
@@ -335,7 +449,7 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	respTune := c.coordinator.NewResponseWithName("tune")
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
-	writeProtocolHeader(b, length, commandSaslAuthenticate,
+	writeProtocolHeader(b, length, commandSaslAuthenticate, //19
 		correlationId)
 
 	writeString(b, saslMechanism)
@@ -506,6 +620,8 @@ func (c *Client) Close() {
 
 		return true
 	})
+
+	c.stopChunkDelivery()
 
 	if c.getSocket().isOpen() {
 		res := c.coordinator.NewResponse(CommandClose)
@@ -1024,55 +1140,13 @@ func (c *Client) declareSubscriber(streamName string,
 		return nil, err.Err
 	}
 
-	canDispatch := func(offsetMessage *offsetMessage) bool {
-		if !consumer.isActive() {
-			logs.LogDebug("The consumer is not active anymore the message will be skipped, partition %s", streamName)
-			return false
-		}
-
-		if options.IsFilterEnabled() && options.Filter.PostFilter != nil {
-			return options.Filter.PostFilter(offsetMessage.message)
-		}
-		return true
-	}
-
 	autoCommitTicker := time.NewTicker(1_000 * time.Millisecond)
 	go func() {
 		defer autoCommitTicker.Stop()
 		for {
-			// Prioritised shutdown check: if closeCh is already closed, exit
-			// immediately without racing against buffered chunks in the select below.
 			select {
 			case <-consumer.closeCh:
 				return
-			default:
-			}
-			select {
-			case <-consumer.closeCh:
-				return
-			case chunk := <-consumer.chunkForConsumer:
-
-				halfChunkSize := len(chunk.offsetMessages) / 2
-				for i, offMessage := range chunk.offsetMessages {
-					consumer.setCurrentOffset(offMessage.offset)
-					if canDispatch(offMessage) {
-						consumer.MessagesHandler(ConsumerContext{Consumer: consumer, chunkInfo: &chunk}, offMessage.message)
-					}
-
-					// when half of the chunk is reached ask for a credit
-					if halfChunkSize == i && consumer.options.CreditStrategy == AutomaticCreditStrategy {
-						c.credit(consumer.ID, 1)
-					}
-
-					if consumer.options.autocommit {
-						messageCountBeforeStorage := consumer.increaseMessageCountBeforeStorage()
-						if messageCountBeforeStorage >= consumer.options.autoCommitStrategy.messageCountBeforeStorage ||
-							time.Since(consumer.getLastAutoCommitStored()) >= consumer.options.autoCommitStrategy.flushInterval {
-							consumer.cacheStoreOffset()
-						}
-					}
-				}
-
 			case <-autoCommitTicker.C:
 				if consumer.options.autocommit && time.Since(consumer.getLastAutoCommitStored()) >= consumer.options.autoCommitStrategy.flushInterval {
 					consumer.cacheStoreOffset()
