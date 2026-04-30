@@ -169,7 +169,7 @@ func sizeOfMapStringString(mapString map[string]string) int {
 	return size
 }
 
-func bytesLenghPrefixed(msg []byte) []byte {
+func bytesLengthPrefixed(msg []byte) []byte {
 	size := len(msg)
 	buff := make([]byte, 4+size)
 

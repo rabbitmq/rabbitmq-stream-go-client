@@ -34,7 +34,7 @@ and you should see the following output:
  ```
 
 ```bash
-[15:19:29] - Consumer update for: invoices-1. The cosumer is now active ....Restarting from offset: offset, value: 8628
+[15:19:29] - Consumer update for: invoices-1. The consumer is now active ....Restarting from offset: offset, value: 8628
 [15:19:37] - [ partition: invoices-1] consumer name: MyApplication, data: [hello_super_stream_1], message offset 8638,
 [15:19:41] - [ partition: invoices-1] consumer name: MyApplication, data: [hello_super_stream_8], message offset 8640,
 [15:19:41] - [ partition: invoices-1] consumer name: MyApplication, data: [hello_super_stream_9], message offset 8642,
