@@ -118,10 +118,10 @@ func main() {
 	fmt.Printf("  Connecting to RabbitMQ streaming...\n\n")
 
 	//  in case of load-balancer you can use the AddressResolver
-	//var resolver = stream.AddressResolver{
+	// var resolver = stream.AddressResolver{
 	//	Host: "192.168.1.54",
 	//	Port: 5552,
-	//}
+	// }
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
@@ -131,9 +131,9 @@ func main() {
 			SetPassword("guest").
 			SetHost("localhost").
 			SetPort(5552))
-	//SetHost(resolver.Host).
-	//SetPort(resolver.Port).
-	//SetAddressResolver(resolver))
+	// SetHost(resolver.Host).
+	// SetPort(resolver.Port).
+	// SetAddressResolver(resolver))
 
 	CheckErr(err)
 	fmt.Printf("  %sConnected%s  (max %d producers / %d consumers per client)\n\n",
