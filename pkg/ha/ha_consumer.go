@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
@@ -22,7 +23,12 @@ type ReliableConsumer struct {
 	mutexConnection *sync.Mutex
 	status          int
 	messagesHandler stream.MessagesHandler
-	currentPosition int64 // the last offset consumed. It is needed in case of restart
+	// currentPosition is updated atomically on every message delivery and read
+	// without a lock in newConsumer(), so it must not be moved into mutexConnection's
+	// critical section. See Issue-1 analysis: holding mutexConnection across the
+	// blocking env.NewConsumer() call while the handler closure also needed that
+	// same lock was the source of the stall.
+	currentPosition atomic.Int64
 
 	//bootstrap: if true the consumer will start from the user offset.
 	// If false it will start from the last offset consumed (currentPosition)
@@ -46,7 +52,26 @@ func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 					"[Reliable] - %s won't be reconnected. Error: %s", c.getInfo(), err)
 			}
 			if reconnected {
-				c.setStatus(StatusOpen)
+				// Close() may have been called while retry() was running (backoff
+				// can be many seconds). Use mutexStatus to atomically decide:
+				// if the user already closed us, keep StatusClosed and clean up
+				// the new consumer that newConsumer() just created.
+				c.mutexStatus.Lock()
+				alreadyClosed := c.status == StatusClosed
+				if !alreadyClosed {
+					c.status = StatusOpen
+				}
+				c.mutexStatus.Unlock()
+
+				if alreadyClosed {
+					c.mutexConnection.Lock()
+					consumer := c.consumer
+					c.mutexConnection.Unlock()
+					if consumer != nil {
+						_ = consumer.Close()
+					}
+					logs.LogInfo("[Reliable] - %s reconnected but was explicitly closed during reconnection. Closing new consumer.", c.getInfo())
+				}
 			} else {
 				c.setStatus(StatusClosed)
 			}
@@ -66,7 +91,6 @@ func NewReliableConsumer(env *stream.Environment, streamName string,
 		mutexStatus:     &sync.Mutex{},
 		mutexConnection: &sync.Mutex{},
 		messagesHandler: messagesHandler,
-		currentPosition: 0,
 		bootstrap:       true,
 	}
 	if messagesHandler == nil {
@@ -118,19 +142,22 @@ func (c *ReliableConsumer) getTimeOut() time.Duration {
 }
 
 func (c *ReliableConsumer) newConsumer() error {
-	c.mutexConnection.Lock()
-	defer c.mutexConnection.Unlock()
-	offset := stream.OffsetSpecification{}.Offset(c.currentPosition + 1)
+	// Read the current position atomically before the blocking subscribe call.
+	// mutexConnection is NOT held here: env.NewConsumer() is a blocking network
+	// operation (subscribe frame + server ack), and the message handler closure
+	// registered below also needs mutexConnection for c.consumer access.
+	// Holding the lock across that call created a stall where the consumer
+	// dispatch goroutine (which runs the handler) was blocked on mutexConnection
+	// while the read loop's sendChunk() could fill chunkForConsumer and block too.
+	offset := stream.OffsetSpecification{}.Offset(c.currentPosition.Load() + 1)
 	if c.bootstrap {
 		offset = c.consumerOptions.Offset
 	}
 	logs.LogDebug("[Reliable] - creating %s. Boot: %s. StartOffset: %s", c.getInfo(),
 		c.bootstrap, offset)
 	consumer, err := c.env.NewConsumer(c.streamName, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		c.mutexConnection.Lock()
-		c.currentPosition = consumerContext.Consumer.GetOffset()
-		c.mutexConnection.Unlock()
-
+		// currentPosition is an atomic.Int64; no mutex required here.
+		c.currentPosition.Store(consumerContext.Consumer.GetOffset())
 		c.messagesHandler(consumerContext, message)
 	}, c.consumerOptions.SetOffset(offset))
 	if err != nil {
@@ -139,17 +166,25 @@ func (c *ReliableConsumer) newConsumer() error {
 
 	channelNotifyClose := consumer.NotifyClose()
 	c.handleNotifyClose(channelNotifyClose)
+	// Only lock briefly to publish the new consumer reference.
+	c.mutexConnection.Lock()
 	c.consumer = consumer
-	return err
+	c.mutexConnection.Unlock()
+	return nil
 }
 
 func (c *ReliableConsumer) Close() error {
 	c.setStatus(StatusClosed)
-	err := c.consumer.Close()
-	if err != nil {
-		return err
+	// Snapshot the pointer under the lock to avoid a data race with newConsumer(),
+	// which writes c.consumer under mutexConnection. The Close() call itself is
+	// made outside the lock so we don't hold it across a blocking network operation.
+	c.mutexConnection.Lock()
+	consumer := c.consumer
+	c.mutexConnection.Unlock()
+	if consumer == nil {
+		return nil
 	}
-	return nil
+	return consumer.Close()
 }
 
 func (c *ReliableConsumer) GetInfo() string {
