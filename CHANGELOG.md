@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [[1.8.1](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.1)]
+
+## 1.8.1 - 2026-05-18
+- [Release 1.8.1](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.1)
+
+### Bug Fixes
+- fix(ha): fix mutex stall, data race consumer in ReliablConsumer by @Gsantomaggio in [#496](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/496)
+
+### Dependency Updates
+- Bump github.com/klauspost/compress from 1.18.5 to 1.18.6 by @dependabot[bot] in [#495](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/495)
+- Bump golang.org/x/text from 0.36.0 to 0.37.0 by @dependabot[bot] in [#497](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/497)
+
+### Other Changes
+- fix typos in README, code comments and functions by @alexandear in [#493](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/493)
+
 ## [[1.8.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.0)]
 
 ## 1.8.0 - 2026-04-20
