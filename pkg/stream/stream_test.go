@@ -7,8 +7,13 @@ import (
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/message"
 )
 
-const MessageBufferTooBig = 1148001
-const MessageBufferBigButLessTheFrame = 1048400
+const (
+	MessageBufferTooBig             = 1148001
+	MessageBufferBigButLessTheFrame = 1048400
+	LoweredFrameSizeBytes           = 512 * 1024
+	MessageBufferAboveLoweredFrame  = 768 * 1024 // > LoweredFrameSizeBytes but < broker DEFAULT_FRAME_MAX
+	MessageBufferBelowLoweredFrame  = 64 * 1024
+)
 
 func CreateArrayMessagesForTesting(numberOfMessages int) []message.StreamMessage {
 	return CreateArrayMessagesForTestingWithPrefix("test_", numberOfMessages)

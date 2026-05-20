@@ -425,7 +425,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
-	if len(messageSeq.messageBytes) > defaultMaxFrameSize {
+	if len(messageSeq.messageBytes) > producer.client.getTuneState().requestedMaxFrameSize {
 		producer.unConfirmed.addFromSequences([]*messageSequence{messageSeq}, producer.GetID())
 		tooLarge := producer.unConfirmed.extractWithError(messageSeq.publishingId, responseCodeFrameTooLarge)
 		producer.sendConfirmationStatus([]*ConfirmationStatus{tooLarge})
@@ -446,7 +446,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 // BatchSend is not affected by the BatchSize and BatchPublishingDelay options.
 // returns an error if the message could not be sent for marshal problems or if the buffer is too large
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
-	maxFrame := defaultMaxFrameSize
+	maxFrame := producer.client.getTuneState().requestedMaxFrameSize
 	var messagesSequences = make([]*messageSequence, 0, len(batchMessages))
 	totalBufferToSend := 0
 

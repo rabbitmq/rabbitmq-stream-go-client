@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Bug Fixes
+- `Producer.Send` and `Producer.BatchSend` now respect the `RequestedMaxFrameSize` configured through `EnvironmentOptions.SetRequestedMaxFrameSize` instead of a hardcoded constant. Previously the single-message size check used a separate internal constant that ignored the user's configuration; this aligns the documented behaviour with the implementation (README §`Send` vs `BatchSend`). Default behaviour is unchanged for callers that don't opt in.
+
 ## [[1.8.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.0)]
 
 ## 1.8.0 - 2026-04-20

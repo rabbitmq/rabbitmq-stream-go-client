@@ -211,7 +211,7 @@ var _ = Describe("Environment test", func() {
 				TCPParameters: &TCPParameters{
 					tlsConfig:             nil,
 					RequestedHeartbeat:    defaultHeartbeat,
-					RequestedMaxFrameSize: defaultMaxFrameSize,
+					RequestedMaxFrameSize: 1048576,
 					WriteBuffer:           100,
 					ReadBuffer:            200,
 					NoDelay:               false,
