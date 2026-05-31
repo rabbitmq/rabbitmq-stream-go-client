@@ -254,3 +254,31 @@ var _ = Describe("Streaming testEnvironment", func() {
 	})
 
 })
+
+var _ = Describe("Tune negotiation", func() {
+	It("negotiatedMaxValue takes the smaller bound, or the larger when either side is unlimited (0)", func() {
+		Expect(negotiatedMaxValue(512*1024, 1048576)).To(Equal(512 * 1024))
+		Expect(negotiatedMaxValue(1048576, 512*1024)).To(Equal(512 * 1024))
+		Expect(negotiatedMaxValue(1048576, 1048576)).To(Equal(1048576))
+		Expect(negotiatedMaxValue(0, 1048576)).To(Equal(1048576))
+		Expect(negotiatedMaxValue(1048576, 0)).To(Equal(1048576))
+		Expect(negotiatedMaxValue(0, 0)).To(Equal(0))
+	})
+
+	It("handleTune negotiates the minimum frame size instead of echoing the broker's value", func() {
+		const requested = 512 * 1024
+
+		cli := &Client{coordinator: NewCoordinator()}
+		cli.tuneState.requestedMaxFrameSize = requested
+		resp := cli.coordinator.NewResponseWithName("tune")
+
+		var body bytes.Buffer
+		writeUInt(&body, 1048576) // broker frame max advertised in the TUNE frame
+		writeUInt(&body, 60)      // broker heartbeat
+		cli.handleTune(bufio.NewReader(&body))
+
+		tr, ok := (<-resp.data).(tuneResponse)
+		Expect(ok).To(BeTrue())
+		Expect(tr.maxFrameSize).To(Equal(requested))
+	})
+})

@@ -40,6 +40,25 @@ func newSaslConfigurationDefault() *SaslConfiguration {
 type TuneState struct {
 	requestedMaxFrameSize int
 	requestedHeartbeat    int
+	// maxFrameSize is the frame size negotiated with the broker during TUNE
+	// (0 means no limit). The broker rejects frames larger than this.
+	maxFrameSize int
+}
+
+// tuneResponse carries the TUNE negotiation result from the response goroutine
+// back to the connect goroutine, which owns tuneState.
+type tuneResponse struct {
+	frame        []byte
+	maxFrameSize int
+}
+
+// negotiatedMaxValue returns the effective TUNE value: the smaller of the two,
+// or the larger when either side is 0 ("no limit").
+func negotiatedMaxValue(clientValue, serverValue int) int {
+	if clientValue == 0 || serverValue == 0 {
+		return max(clientValue, serverValue)
+	}
+	return min(clientValue, serverValue)
 }
 
 type ClientProperties struct {
@@ -153,6 +172,7 @@ func (c *Client) connect() error {
 		host, port := u.Hostname(), u.Port()
 		c.tuneState.requestedMaxFrameSize = c.tcpParameters.RequestedMaxFrameSize
 		c.tuneState.requestedHeartbeat = int(c.tcpParameters.RequestedHeartbeat.Seconds())
+		c.tuneState.maxFrameSize = c.tcpParameters.RequestedMaxFrameSize // until TUNE completes
 
 		servAddr := net.JoinHostPort(host, port)
 		tcpAddr, errorResolve := net.ResolveTCPAddr("tcp", servAddr)
@@ -352,7 +372,12 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 		return errR
 	}
 
-	return c.socket.writeAndFlush(tuneData.([]byte))
+	// Stored on the connect goroutine (under c.mutex), not in handleTune, which
+	// cannot take the lock while the handshake holds it.
+	tuneResp := tuneData.(tuneResponse)
+	c.tuneState.maxFrameSize = tuneResp.maxFrameSize
+
+	return c.socket.writeAndFlush(tuneResp.frame)
 }
 
 func (c *Client) exchangeVersion(serverVersion string) error {
