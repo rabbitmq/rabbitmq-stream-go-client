@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -280,5 +281,86 @@ var _ = Describe("Tune negotiation", func() {
 		tr, ok := (<-resp.data).(tuneResponse)
 		Expect(ok).To(BeTrue())
 		Expect(tr.maxFrameSize).To(Equal(requested))
+	})
+})
+
+var _ = Describe("Frame size enforcement", func() {
+	// A command frame larger than the negotiated max must fail fast on the
+	// client instead of being sent (the broker would reject it, send a Close,
+	// and the connection would block until timeout and become unusable).
+	It("fails fast on an over-sized command frame and keeps the connection usable", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(100))
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(env.Close()).To(Succeed()) }()
+
+		// CreateStream for this stream + option is ~117 bytes > 100.
+		declareDone := make(chan error, 1)
+		go func() {
+			defer GinkgoRecover()
+			declareDone <- env.DeclareStream(uuid.New().String(),
+				&StreamOptions{MaxLengthBytes: ByteCapacity{}.GB(2)})
+		}()
+		var declErr error
+		Eventually(declareDone, 3*time.Second).Should(Receive(&declErr),
+			"DeclareStream must return fast, not hang on the 10s broker timeout")
+		Expect(declErr).To(HaveOccurred())
+
+		// The connection must still be usable after the rejection.
+		healthy := make(chan error, 1)
+		go func() {
+			defer GinkgoRecover()
+			_, e := env.StreamExists(uuid.New().String())
+			healthy <- e
+		}()
+		var hErr error
+		Eventually(healthy, 3*time.Second).Should(Receive(&hErr),
+			"a valid operation after the rejection must not hang")
+		Expect(hErr).NotTo(HaveOccurred())
+	})
+
+	// Nails the byte counting against the real broker: the CreateStream frame is
+	// 55 + len(streamName) bytes (incl. the 4-byte length prefix and the default
+	// queue-leader-locator arg). At exactly the negotiated max the broker accepts
+	// it; one byte over, the guard rejects it before it reaches the broker.
+	It("accepts a command frame at exactly the negotiated max and rejects one byte over", func() {
+		const fm = 100
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(fm))
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(env.Close()).To(Succeed()) }()
+
+		atLimit := strings.Repeat("a", fm-55)   // frame == 100
+		overLimit := strings.Repeat("b", fm-54) // frame == 101
+
+		Expect(env.DeclareStream(atLimit, nil)).NotTo(HaveOccurred(), "a frame of exactly the negotiated max must be accepted")
+		Expect(env.DeleteStream(atLimit)).NotTo(HaveOccurred())
+
+		err = env.DeclareStream(overLimit, nil)
+		Expect(err).To(MatchError(FrameTooLarge), "a frame one byte over the max must be rejected by the client")
+	})
+
+	It("re-negotiates the frame max and re-arms the guard after a locator reconnect", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(100))
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(env.Close()).To(Succeed()) }()
+
+		// Force the locator's connection closed so the next operation reconnects.
+		env.locator.client.socket.shutdown(fmt.Errorf("forced close for reconnect test"))
+		Expect(env.locator.client.socket.isOpen()).To(BeFalse())
+
+		// A valid operation transparently reconnects (fresh client, fresh TUNE).
+		_, err = env.StreamExists(uuid.New().String())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
+		Expect(env.locator.client.maxFrameSize()).To(Equal(100), "frame max must be re-negotiated on the reconnected client")
+
+		// The guard must still be armed on the reconnected client.
+		declErr := make(chan error, 1)
+		go func() {
+			defer GinkgoRecover()
+			declErr <- env.DeclareStream(uuid.New().String(), &StreamOptions{MaxLengthBytes: ByteCapacity{}.GB(2)})
+		}()
+		var e error
+		Eventually(declErr, 3*time.Second).Should(Receive(&e), "DeclareStream must not hang after reconnect")
+		Expect(e).To(MatchError(FrameTooLarge))
 	})
 })

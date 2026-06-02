@@ -40,9 +40,6 @@ func newSaslConfigurationDefault() *SaslConfiguration {
 type TuneState struct {
 	requestedMaxFrameSize int
 	requestedHeartbeat    int
-	// maxFrameSize is the frame size negotiated with the broker during TUNE
-	// (0 means no limit). The broker rejects frames larger than this.
-	maxFrameSize int
 }
 
 // tuneResponse carries the TUNE negotiation result from the response goroutine
@@ -81,10 +78,15 @@ type Client struct {
 	clientProperties     ClientProperties
 	connectionProperties ConnectionProperties
 	tuneState            TuneState
-	coordinator          *Coordinator
-	broker               *Broker
-	tcpParameters        *TCPParameters
-	saslConfiguration    *SaslConfiguration
+	// frameMax is the frame size negotiated with the broker during TUNE
+	// (0 = no limit). Read lock-free on the write path; the connect goroutine
+	// holds c.mutex while it sends handshake frames, so it cannot use the
+	// mutex-guarded tuneState here without deadlocking.
+	frameMax          atomic.Int64
+	coordinator       *Coordinator
+	broker            *Broker
+	tcpParameters     *TCPParameters
+	saslConfiguration *SaslConfiguration
 
 	mutex             *sync.Mutex
 	lastHeartBeat     HeartBeat
@@ -143,10 +145,10 @@ func (c *Client) setSocketConnection(connection net.Conn) {
 	c.socket.writer = bufio.NewWriter(connection)
 }
 
-func (c *Client) getTuneState() TuneState {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	return c.tuneState
+// maxFrameSize returns the frame size negotiated with the broker during TUNE,
+// or 0 ("no limit") before negotiation completes. Lock-free.
+func (c *Client) maxFrameSize() int {
+	return int(c.frameMax.Load())
 }
 
 func (c *Client) getLastHeartBeat() time.Time {
@@ -172,7 +174,6 @@ func (c *Client) connect() error {
 		host, port := u.Hostname(), u.Port()
 		c.tuneState.requestedMaxFrameSize = c.tcpParameters.RequestedMaxFrameSize
 		c.tuneState.requestedHeartbeat = int(c.tcpParameters.RequestedHeartbeat.Seconds())
-		c.tuneState.maxFrameSize = c.tcpParameters.RequestedMaxFrameSize // until TUNE completes
 
 		servAddr := net.JoinHostPort(host, port)
 		tcpAddr, errorResolve := net.ResolveTCPAddr("tcp", servAddr)
@@ -372,10 +373,11 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 		return errR
 	}
 
-	// Stored on the connect goroutine (under c.mutex), not in handleTune, which
-	// cannot take the lock while the handshake holds it.
+	// Store the negotiated value (computed in handleTune on the response
+	// goroutine) here on the connect goroutine. frameMax is atomic so the write
+	// path can read it lock-free.
 	tuneResp := tuneData.(tuneResponse)
-	c.tuneState.maxFrameSize = tuneResp.maxFrameSize
+	c.frameMax.Store(int64(tuneResp.maxFrameSize))
 
 	return c.socket.writeAndFlush(tuneResp.frame)
 }
