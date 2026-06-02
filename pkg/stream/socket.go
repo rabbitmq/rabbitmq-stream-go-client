@@ -66,10 +66,8 @@ func (c *Client) handleWrite(buffer []byte, response *Response) responseError {
 }
 
 func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, removeResponse bool) responseError {
-	// Fail fast if the frame exceeds the size negotiated with the broker.
-	// Otherwise the broker rejects the frame, sends a Close, and we block on the
-	// response until timeout while the connection is torn down. 0 means
-	// "no limit". Mirrors the Java client's outbound frame-size check.
+	// Fail fast: an over-sized frame makes the broker close the connection and we
+	// would block until timeout. 0 = no limit.
 	if fm := c.maxFrameSize(); fm > 0 && len(buffer) > fm {
 		_ = c.coordinator.RemoveResponseById(response.correlationid)
 		return newResponseError(

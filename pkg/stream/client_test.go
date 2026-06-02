@@ -285,9 +285,7 @@ var _ = Describe("Tune negotiation", func() {
 })
 
 var _ = Describe("Frame size enforcement", func() {
-	// A command frame larger than the negotiated max must fail fast on the
-	// client instead of being sent (the broker would reject it, send a Close,
-	// and the connection would block until timeout and become unusable).
+	// An over-sized command frame must fail fast, not be sent and block until timeout.
 	It("fails fast on an over-sized command frame and keeps the connection usable", func() {
 		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(100))
 		Expect(err).NotTo(HaveOccurred())
@@ -318,10 +316,7 @@ var _ = Describe("Frame size enforcement", func() {
 		Expect(hErr).NotTo(HaveOccurred())
 	})
 
-	// Nails the byte counting against the real broker: the CreateStream frame is
-	// 55 + len(streamName) bytes (incl. the 4-byte length prefix and the default
-	// queue-leader-locator arg). At exactly the negotiated max the broker accepts
-	// it; one byte over, the guard rejects it before it reaches the broker.
+	// CreateStream frame = 55 + len(streamName); land exactly at and one byte over the limit.
 	It("accepts a command frame at exactly the negotiated max and rejects one byte over", func() {
 		const fm = 100
 		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(fm))
@@ -347,13 +342,11 @@ var _ = Describe("Frame size enforcement", func() {
 		env.locator.client.socket.shutdown(fmt.Errorf("forced close for reconnect test"))
 		Expect(env.locator.client.socket.isOpen()).To(BeFalse())
 
-		// A valid operation transparently reconnects (fresh client, fresh TUNE).
 		_, err = env.StreamExists(uuid.New().String())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
 		Expect(env.locator.client.maxFrameSize()).To(Equal(100), "frame max must be re-negotiated on the reconnected client")
 
-		// The guard must still be armed on the reconnected client.
 		declErr := make(chan error, 1)
 		go func() {
 			defer GinkgoRecover()

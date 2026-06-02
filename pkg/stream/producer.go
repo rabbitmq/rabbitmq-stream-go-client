@@ -323,7 +323,6 @@ func (producer *Producer) processPendingSequencesQueue() {
 				break
 			}
 			// There is something in the queue. Checks the buffer is still less than the maxFrame
-			// (maxFrame == 0 means "no limit").
 			totalBufferToSend += len(msg.messageBytes)
 			if maxFrame > 0 && totalBufferToSend > maxFrame {
 				// if the totalBufferToSend is greater than the negotiated maxFrameSize
@@ -472,7 +471,7 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 
 	if maxFrame > 0 && totalBufferToSend+initBufferPublishSize > maxFrame {
 		// if the totalBufferToSend is greater than the negotiated maxFrameSize
-		// (maxFrame == 0 means "no limit") all the messages are unconfirmed
+		// all the messages are unconfirmed
 
 		for _, msg := range messagesSequences {
 			m := producer.unConfirmed.extractWithError(msg.publishingId, responseCodeFrameTooLarge)

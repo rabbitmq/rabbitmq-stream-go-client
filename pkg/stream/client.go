@@ -42,15 +42,13 @@ type TuneState struct {
 	requestedHeartbeat    int
 }
 
-// tuneResponse carries the TUNE negotiation result from the response goroutine
-// back to the connect goroutine, which owns tuneState.
+// tuneResponse carries the TUNE negotiation result back to the connect goroutine.
 type tuneResponse struct {
 	frame        []byte
 	maxFrameSize int
 }
 
-// negotiatedMaxValue returns the effective TUNE value: the smaller of the two,
-// or the larger when either side is 0 ("no limit").
+// negotiatedMaxValue picks the smaller value, or the larger when either is 0 ("no limit").
 func negotiatedMaxValue(clientValue, serverValue int) int {
 	if clientValue == 0 || serverValue == 0 {
 		return max(clientValue, serverValue)
@@ -78,10 +76,8 @@ type Client struct {
 	clientProperties     ClientProperties
 	connectionProperties ConnectionProperties
 	tuneState            TuneState
-	// frameMax is the frame size negotiated with the broker during TUNE
-	// (0 = no limit). Read lock-free on the write path; the connect goroutine
-	// holds c.mutex while it sends handshake frames, so it cannot use the
-	// mutex-guarded tuneState here without deadlocking.
+	// frameMax is the negotiated frame size (0 = no limit), atomic so the write
+	// path reads it lock-free (connect holds c.mutex during the handshake).
 	frameMax          atomic.Int64
 	coordinator       *Coordinator
 	broker            *Broker
@@ -145,8 +141,7 @@ func (c *Client) setSocketConnection(connection net.Conn) {
 	c.socket.writer = bufio.NewWriter(connection)
 }
 
-// maxFrameSize returns the frame size negotiated with the broker during TUNE,
-// or 0 ("no limit") before negotiation completes. Lock-free.
+// maxFrameSize returns the negotiated frame size, or 0 ("no limit") before TUNE.
 func (c *Client) maxFrameSize() int {
 	return int(c.frameMax.Load())
 }
@@ -373,9 +368,6 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 		return errR
 	}
 
-	// Store the negotiated value (computed in handleTune on the response
-	// goroutine) here on the connect goroutine. frameMax is atomic so the write
-	// path can read it lock-free.
 	tuneResp := tuneData.(tuneResponse)
 	c.frameMax.Store(int64(tuneResp.maxFrameSize))
 
