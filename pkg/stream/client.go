@@ -46,6 +46,7 @@ type TuneState struct {
 type tuneResponse struct {
 	frame        []byte
 	maxFrameSize int
+	heartbeat    int
 }
 
 // negotiatedMaxValue picks the smaller value, or the larger when either is 0 ("no limit").
@@ -370,6 +371,9 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 
 	tuneResp := tuneData.(tuneResponse)
 	c.frameMax.Store(int64(tuneResp.maxFrameSize))
+	// Store the negotiated heartbeat so the ticker uses min(requested, broker)
+	// rather than the originally configured value (0 = no limit).
+	c.tuneState.requestedHeartbeat = tuneResp.heartbeat
 
 	return c.socket.writeAndFlush(tuneResp.frame)
 }
@@ -442,6 +446,11 @@ func (c *Client) DeleteStream(streamName string) error {
 }
 
 func (c *Client) heartBeat() {
+	// A negotiated heartbeat of 0 means "no limit": heartbeats are disabled.
+	// time.NewTicker also panics on a non-positive duration, so guard here.
+	if c.tuneState.requestedHeartbeat <= 0 {
+		return
+	}
 	tickerHeartbeat := time.NewTicker(time.Duration(c.tuneState.requestedHeartbeat) * time.Second)
 
 	var heartBeatMissed int32

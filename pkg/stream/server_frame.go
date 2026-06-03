@@ -185,7 +185,7 @@ func (c *Client) handleTune(r *bufio.Reader) any {
 	serverHeartbeat, _ := readUInt(r)
 
 	maxFrameSize := negotiatedMaxValue(c.tuneState.requestedMaxFrameSize, int(serverMaxFrameSize))
-	heartbeat := serverHeartbeat // heartbeat negotiation unchanged for now
+	heartbeat := negotiatedMaxValue(c.tuneState.requestedHeartbeat, int(serverHeartbeat))
 
 	length := 2 + 2 + 4 + 4
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
@@ -193,10 +193,10 @@ func (c *Client) handleTune(r *bufio.Reader) any {
 	writeUShort(b, uShortEncodeResponseCode(commandTune))
 	writeShort(b, version1)
 	writeUInt(b, uint32(maxFrameSize))
-	writeUInt(b, heartbeat)
+	writeUInt(b, uint32(heartbeat))
 	res, err := c.coordinator.GetResponseByName("tune")
 	logErrorCommand(err, "handleTune")
-	resp := tuneResponse{frame: b.Bytes(), maxFrameSize: maxFrameSize}
+	resp := tuneResponse{frame: b.Bytes(), maxFrameSize: maxFrameSize, heartbeat: heartbeat}
 	res.data <- resp
 	return resp
 }

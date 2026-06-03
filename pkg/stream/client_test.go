@@ -266,11 +266,12 @@ var _ = Describe("Tune negotiation", func() {
 		Expect(negotiatedMaxValue(0, 0)).To(Equal(0))
 	})
 
-	It("handleTune negotiates the minimum frame size instead of echoing the broker's value", func() {
+	It("handleTune negotiates the minimum frame size and heartbeat instead of echoing the broker's values", func() {
 		const requested = 512 * 1024
 
 		cli := &Client{coordinator: NewCoordinator()}
 		cli.tuneState.requestedMaxFrameSize = requested
+		cli.tuneState.requestedHeartbeat = 30
 		resp := cli.coordinator.NewResponseWithName("tune")
 
 		var body bytes.Buffer
@@ -281,6 +282,8 @@ var _ = Describe("Tune negotiation", func() {
 		tr, ok := (<-resp.data).(tuneResponse)
 		Expect(ok).To(BeTrue())
 		Expect(tr.maxFrameSize).To(Equal(requested))
+		// Heartbeat is negotiated the same way: min(requested, broker).
+		Expect(tr.heartbeat).To(Equal(30))
 	})
 })
 
