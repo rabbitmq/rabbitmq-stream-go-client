@@ -2,6 +2,7 @@ package stream
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"sync"
 
@@ -65,6 +66,15 @@ func (c *Client) handleWrite(buffer []byte, response *Response) responseError {
 }
 
 func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, removeResponse bool) responseError {
+	// Fail fast: an over-sized frame makes the broker close the connection and we
+	// would block until timeout. 0 = no limit.
+	if fm := c.maxFrameSize(); fm > 0 && len(buffer) > fm {
+		_ = c.coordinator.RemoveResponseById(response.correlationid)
+		return newResponseError(
+			fmt.Errorf("%w: frame size %d exceeds the maximum %d negotiated with the server, operation: %s",
+				FrameTooLarge, len(buffer), fm, response.commandDescription), false)
+	}
+
 	result := c.socket.writeAndFlush(buffer)
 	resultCode := waitCodeWithTimeOut(response, c.socketCallTimeout)
 	/// we need to remove the response before evaluate the

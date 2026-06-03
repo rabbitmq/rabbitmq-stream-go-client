@@ -42,6 +42,20 @@ type TuneState struct {
 	requestedHeartbeat    int
 }
 
+// tuneResponse carries the TUNE negotiation result back to the connect goroutine.
+type tuneResponse struct {
+	frame        []byte
+	maxFrameSize int
+}
+
+// negotiatedMaxValue picks the smaller value, or the larger when either is 0 ("no limit").
+func negotiatedMaxValue(clientValue, serverValue int) int {
+	if clientValue == 0 || serverValue == 0 {
+		return max(clientValue, serverValue)
+	}
+	return min(clientValue, serverValue)
+}
+
 type ClientProperties struct {
 	items map[string]string
 }
@@ -62,10 +76,13 @@ type Client struct {
 	clientProperties     ClientProperties
 	connectionProperties ConnectionProperties
 	tuneState            TuneState
-	coordinator          *Coordinator
-	broker               *Broker
-	tcpParameters        *TCPParameters
-	saslConfiguration    *SaslConfiguration
+	// frameMax is the negotiated frame size (0 = no limit), atomic so the write
+	// path reads it lock-free (connect holds c.mutex during the handshake).
+	frameMax          atomic.Int64
+	coordinator       *Coordinator
+	broker            *Broker
+	tcpParameters     *TCPParameters
+	saslConfiguration *SaslConfiguration
 
 	mutex             *sync.Mutex
 	lastHeartBeat     HeartBeat
@@ -124,10 +141,9 @@ func (c *Client) setSocketConnection(connection net.Conn) {
 	c.socket.writer = bufio.NewWriter(connection)
 }
 
-func (c *Client) getTuneState() TuneState {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	return c.tuneState
+// maxFrameSize returns the negotiated frame size, or 0 ("no limit") before TUNE.
+func (c *Client) maxFrameSize() int {
+	return int(c.frameMax.Load())
 }
 
 func (c *Client) getLastHeartBeat() time.Time {
@@ -352,7 +368,10 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 		return errR
 	}
 
-	return c.socket.writeAndFlush(tuneData.([]byte))
+	tuneResp := tuneData.(tuneResponse)
+	c.frameMax.Store(int64(tuneResp.maxFrameSize))
+
+	return c.socket.writeAndFlush(tuneResp.frame)
 }
 
 func (c *Client) exchangeVersion(serverVersion string) error {

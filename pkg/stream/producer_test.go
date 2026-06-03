@@ -482,6 +482,150 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(producer.Close()).NotTo(HaveOccurred())
 	})
 
+	It("Send rejects a message above a lowered RequestedMaxFrameSize", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(LoweredFrameSizeBytes))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() {
+			Expect(producer.Close()).NotTo(HaveOccurred())
+		}()
+
+		var notConfirmedTooLarge int32
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range ch {
+				for _, conf := range ids {
+					if !conf.IsConfirmed() {
+						Expect(conf.GetError()).To(Equal(FrameTooLarge))
+						atomic.AddInt32(&notConfirmedTooLarge, 1)
+					}
+				}
+			}
+		}(chConfirm)
+
+		err = producer.Send(amqp.NewMessage(make([]byte, MessageBufferAboveLoweredFrame)))
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(Equal(FrameTooLarge))
+		Eventually(func() int32 { return atomic.LoadInt32(&notConfirmedTooLarge) }, 5*time.Second).
+			Should(Equal(int32(1)))
+	})
+
+	It("Send accepts a message below a lowered RequestedMaxFrameSize", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(LoweredFrameSizeBytes))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() {
+			Expect(producer.Close()).NotTo(HaveOccurred())
+		}()
+
+		var confirmed int32
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range ch {
+				for _, conf := range ids {
+					if conf.IsConfirmed() {
+						atomic.AddInt32(&confirmed, 1)
+					}
+				}
+			}
+		}(chConfirm)
+
+		err = producer.Send(amqp.NewMessage(make([]byte, MessageBufferBelowLoweredFrame)))
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() int32 { return atomic.LoadInt32(&confirmed) }, 5*time.Second).
+			Should(Equal(int32(1)))
+	})
+
+	It("BatchSend rejects a message above a lowered RequestedMaxFrameSize", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(LoweredFrameSizeBytes))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() {
+			Expect(producer.Close()).NotTo(HaveOccurred())
+		}()
+
+		var notConfirmedTooLarge int32
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range ch {
+				for _, conf := range ids {
+					if !conf.IsConfirmed() {
+						Expect(conf.GetError()).To(Equal(FrameTooLarge))
+						atomic.AddInt32(&notConfirmedTooLarge, 1)
+					}
+				}
+			}
+		}(chConfirm)
+
+		err = producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, MessageBufferAboveLoweredFrame))})
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(Equal(FrameTooLarge))
+		Eventually(func() int32 { return atomic.LoadInt32(&notConfirmedTooLarge) }, 5*time.Second).
+			Should(Equal(int32(1)))
+	})
+
+	It("BatchSend accepts a message below a lowered RequestedMaxFrameSize", func() {
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(LoweredFrameSizeBytes))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() {
+			Expect(producer.Close()).NotTo(HaveOccurred())
+		}()
+
+		var confirmed int32
+		chConfirm := producer.NotifyPublishConfirmation()
+		go func(ch ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range ch {
+				for _, conf := range ids {
+					if conf.IsConfirmed() {
+						atomic.AddInt32(&confirmed, 1)
+					}
+				}
+			}
+		}(chConfirm)
+
+		err = producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, MessageBufferBelowLoweredFrame))})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() int32 { return atomic.LoadInt32(&confirmed) }, 5*time.Second).
+			Should(Equal(int32(1)))
+	})
+
 	It("Already Closed/Limits", func() {
 		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(5))
 		Expect(err).NotTo(HaveOccurred())

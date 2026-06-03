@@ -305,7 +305,7 @@ func (producer *Producer) closeConfirmationStatus() {
 // processPendingSequencesQueue aggregates the messages sequence in the queue and sends them to the server
 // messages coming from the Send method through the pendingSequencesQueue
 func (producer *Producer) processPendingSequencesQueue() {
-	maxFrame := producer.client.getTuneState().requestedMaxFrameSize
+	maxFrame := producer.client.maxFrameSize()
 	batchSize := producer.options.BatchSize
 	if batchSize <= 0 {
 		batchSize = defaultBatchSize
@@ -324,8 +324,8 @@ func (producer *Producer) processPendingSequencesQueue() {
 			}
 			// There is something in the queue. Checks the buffer is still less than the maxFrame
 			totalBufferToSend += len(msg.messageBytes)
-			if totalBufferToSend > maxFrame {
-				// if the totalBufferToSend is greater than the requestedMaxFrameSize
+			if maxFrame > 0 && totalBufferToSend > maxFrame {
+				// if the totalBufferToSend is greater than the negotiated maxFrameSize
 				// the producer sends the messages and reset the buffer
 				producer.unConfirmed.addFromSequences(sequenceToSend, producer.GetID())
 				lastError = producer.internalBatchSend(sequenceToSend)
@@ -425,7 +425,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
-	if len(messageSeq.messageBytes) > defaultMaxFrameSize {
+	if fm := producer.client.maxFrameSize(); fm > 0 && len(messageSeq.messageBytes) > fm {
 		producer.unConfirmed.addFromSequences([]*messageSequence{messageSeq}, producer.GetID())
 		tooLarge := producer.unConfirmed.extractWithError(messageSeq.publishingId, responseCodeFrameTooLarge)
 		producer.sendConfirmationStatus([]*ConfirmationStatus{tooLarge})
@@ -446,7 +446,7 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 // BatchSend is not affected by the BatchSize and BatchPublishingDelay options.
 // returns an error if the message could not be sent for marshal problems or if the buffer is too large
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
-	maxFrame := defaultMaxFrameSize
+	maxFrame := producer.client.maxFrameSize()
 	var messagesSequences = make([]*messageSequence, 0, len(batchMessages))
 	totalBufferToSend := 0
 
@@ -469,8 +469,8 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		producer.unConfirmed.addFromSequences(messagesSequences, producer.GetID())
 	}
 
-	if totalBufferToSend+initBufferPublishSize > maxFrame {
-		// if the totalBufferToSend is greater than the requestedMaxFrameSize
+	if maxFrame > 0 && totalBufferToSend+initBufferPublishSize > maxFrame {
+		// if the totalBufferToSend is greater than the negotiated maxFrameSize
 		// all the messages are unconfirmed
 
 		for _, msg := range messagesSequences {
