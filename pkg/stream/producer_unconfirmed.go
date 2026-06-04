@@ -87,6 +87,22 @@ func (u *unConfirmed) extractWithError(id int64, errorCode uint16) *Confirmation
 	return cs
 }
 
+// extractWithErrors removes the ids and returns their failed confirmations
+// (including linked sub-entry messages); already-removed ids are skipped (no nil).
+func (u *unConfirmed) extractWithErrors(ids []int64, errorCode uint16) []*ConfirmationStatus {
+	u.mutexMessageMap.Lock()
+	defer u.mutexMessageMap.Unlock()
+	res := make([]*ConfirmationStatus, 0, len(ids))
+	for _, id := range ids {
+		if m := u.extract(id, errorCode, false); m != nil {
+			res = append(res, m)
+			res = append(res, m.linkedTo...)
+		}
+	}
+	u.maybeUnLock()
+	return res
+}
+
 func (u *unConfirmed) extract(id int64, errorCode uint16, confirmed bool) *ConfirmationStatus {
 	rootMessage := u.messages[id]
 	if rootMessage != nil {
