@@ -1271,5 +1271,7 @@ var _ = Describe("Producer frame sizing", func() {
 			NewProducerFilter(func(message.StreamMessage) string { return "k" }))}
 		// 13 + (10 + 8 + 4) + (2 + len("k"))
 		Expect(p.framedSize([]*messageSequence{{messageBytes: make([]byte, 10), filterValue: "k"}})).To(Equal(38))
+		// empty filter value uses the 4-byte -1 marker: 13 + (10 + 8 + 4) + 4
+		Expect(p.framedSize([]*messageSequence{{messageBytes: make([]byte, 10), filterValue: ""}})).To(Equal(39))
 	})
 })

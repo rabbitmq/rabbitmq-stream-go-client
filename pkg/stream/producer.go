@@ -859,11 +859,6 @@ func (producer *Producer) sendWithFilter(messagesSequence []*messageSequence, pr
 	}
 	length := frameHeaderLength + msgLen
 
-	// Exact backstop (see internalBatchSendProdId). Sentinel only.
-	if fm := producer.client.maxFrameSize(); fm > 0 && length+4 > fm {
-		return FrameTooLarge
-	}
-
 	if err := writeBProtocolHeaderVersion(producer.client.socket.writer, length, commandPublish, version2); err != nil {
 		return fmt.Errorf("failed to write protocol header version: %w", err)
 	}
