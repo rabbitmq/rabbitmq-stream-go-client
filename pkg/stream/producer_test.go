@@ -729,10 +729,52 @@ var _ = Describe("Streaming Producers", func() {
 		Expect(atomic.LoadInt32(&failed)).To(BeZero())
 	})
 
-	It("sub-entry BatchSend whose frame exceeds the max is rejected at the write-point guard, connection alive", func() {
-		// Payload sum is under 1024, but with sub-entry per-entry overhead and no
-		// compression the frame exceeds it. The pre-check can't size this, so the
-		// write-point guard rejects it and the messages are reported promptly.
+	It("sub-entry BatchSend over the max is split at entry boundaries and all messages confirm", func() {
+		// Payload sum is under 1024, but with sub-entry per-entry overhead the
+		// single frame would exceed it. Entries are compressed before framing, so
+		// their exact sizes are known and the writer splits them across frames
+		// (like the Java client's publishInternal) instead of failing the batch.
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(1024))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName,
+			NewProducerOptions().SetSubEntrySize(2).SetCompression(Compression{}.None()))
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(producer.Close()).NotTo(HaveOccurred()) }()
+
+		var confirmed, failed int32
+		ch := producer.NotifyPublishConfirmation()
+		go func(c ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range c {
+				for _, s := range ids {
+					if s.IsConfirmed() {
+						atomic.AddInt32(&confirmed, 1)
+					} else {
+						atomic.AddInt32(&failed, 1)
+					}
+				}
+			}
+		}(ch)
+
+		over := make([]message.StreamMessage, 80)
+		for i := range over {
+			over[i] = amqp.NewMessage(make([]byte, 1))
+		}
+		Expect(producer.BatchSend(over)).NotTo(HaveOccurred())
+		Eventually(func() int32 { return atomic.LoadInt32(&confirmed) }, 5*time.Second).Should(Equal(int32(80)))
+		Expect(atomic.LoadInt32(&failed)).To(BeZero())
+	})
+
+	It("sub-entry whose single entry can never fit the max is rejected with FrameTooLarge before any write", func() {
+		// One entry alone exceeds the frame: no split can help, so the whole
+		// batch is rejected before any byte is written, connection alive.
 		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(1024))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
@@ -760,12 +802,13 @@ var _ = Describe("Streaming Producers", func() {
 			}
 		}(ch)
 
-		over := make([]message.StreamMessage, 80)
-		for i := range over {
-			over[i] = amqp.NewMessage(make([]byte, 1))
+		batch := []message.StreamMessage{
+			amqp.NewMessage(make([]byte, 1)),
+			amqp.NewMessage(make([]byte, 1200)), // its entry can never fit 1024
+			amqp.NewMessage(make([]byte, 1)),
 		}
-		Expect(producer.BatchSend(over)).To(Equal(FrameTooLarge))
-		Eventually(func() int32 { return atomic.LoadInt32(&tooLarge) }, 5*time.Second).Should(Equal(int32(80)))
+		Expect(producer.BatchSend(batch)).To(Equal(FrameTooLarge))
+		Eventually(func() int32 { return atomic.LoadInt32(&tooLarge) }, 5*time.Second).Should(Equal(int32(3)))
 
 		// connection still usable
 		Expect(producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, 1))})).NotTo(HaveOccurred())

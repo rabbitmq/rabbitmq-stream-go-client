@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 - Respect the configured `RequestedMaxFrameSize` by negotiating it with the broker during the `TUNE` handshake by @gurkanguray in [#499](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/499)
-- Account for the publish-frame overhead so the producer never sends a frame larger than the negotiated max frame size by @gurkanguray in [#505](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/505)
+- Account for the publish-frame overhead so the producer never sends a frame larger than the negotiated max frame size; sub-entry batches are split across frames at entry boundaries using their exact compressed sizes by @gurkanguray in [#505](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/505)
 
 ## [[1.8.1](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.1)]
 

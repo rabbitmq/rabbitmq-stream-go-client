@@ -653,27 +653,25 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 		return producer.sendWithFilter(messagesSequence, producerID)
 	}
 
-	var msgLen int
-	var aggregation subEntries
-
 	if producer.options.isSubEntriesBatching() {
-		var err error
-		aggregation, err = producer.aggregateEntities(messagesSequence, producer.options.SubEntrySize,
+		aggregation, err := producer.aggregateEntities(messagesSequence, producer.options.SubEntrySize,
 			producer.options.Compression)
 		if err != nil {
 			return err
 		}
-		msgLen += ((8 + 1 + 2 + 4 + 4) * len(aggregation.items)) + aggregation.totalSizeInBytes
-	}
-
-	if !producer.options.isSubEntriesBatching() {
-		for _, msg := range messagesSequence {
-			msgLen += len(msg.messageBytes) + 8 + 4
+		if err := producer.sendSubEntriesFrames(aggregation, producerID); err != nil {
+			return err
 		}
+		producer.client.metrics.published(context.Background(), int64(len(messagesSequence)), producer.otelAttributesForProducer())
+		return nil
 	}
 
-	frameHeaderLength := initBufferPublishSize
-	length := frameHeaderLength + msgLen
+	var msgLen int
+	for _, msg := range messagesSequence {
+		msgLen += len(msg.messageBytes) + 8 + 4
+	}
+
+	length := initBufferPublishSize + msgLen
 
 	// Never write a frame over the negotiated max (the broker would close the
 	// connection). Sentinel only; the caller reports FrameTooLarge off-lock.
@@ -689,29 +687,13 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 		return fmt.Errorf("failed to write producer ID: %w", err)
 	}
 
-	numberOfMessages := len(messagesSequence)
-	numberOfMessages /= producer.options.SubEntrySize
-	if len(messagesSequence)%producer.options.SubEntrySize != 0 {
-		numberOfMessages += 1
-	}
-
 	// toExcluded - fromInclude
-	if err := writeBInt(producer.client.socket.writer, numberOfMessages); err != nil {
+	if err := writeBInt(producer.client.socket.writer, len(messagesSequence)); err != nil {
 		return fmt.Errorf("failed to write number of messages: %w", err)
 	}
 
-	if producer.options.isSubEntriesBatching() {
-		err := producer.subEntryAggregation(aggregation, producer.client.socket.writer, producer.options.Compression)
-		if err != nil {
-			return fmt.Errorf("failed to write sub entry aggregation: %w", err)
-		}
-	}
-
-	if !producer.options.isSubEntriesBatching() {
-		err := producer.simpleAggregation(messagesSequence, producer.client.socket.writer)
-		if err != nil {
-			return fmt.Errorf("failed to write simple aggregation: %w", err)
-		}
+	if err := producer.simpleAggregation(messagesSequence, producer.client.socket.writer); err != nil {
+		return fmt.Errorf("failed to write simple aggregation: %w", err)
 	}
 
 	err := producer.client.socket.writer.Flush()
@@ -720,6 +702,64 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	}
 	producer.client.metrics.published(context.Background(), int64(len(messagesSequence)), producer.otelAttributesForProducer())
 
+	return nil
+}
+
+// publishingId(8) + type/compression(1) + message count(2) + uncompressed size(4) + compressed size(4)
+const subEntryFragmentHeader = 8 + 1 + 2 + 4 + 4
+
+// sendSubEntriesFrames writes the compressed entries into as many publish
+// frames as needed so no frame exceeds the negotiated max, splitting at entry
+// boundaries like the Java client's publishInternal. Entries carry their exact
+// compressed sizes, so no size estimation is involved. The caller holds
+// socket.mutex; when FrameTooLarge is returned nothing has been written.
+func (producer *Producer) sendSubEntriesFrames(aggregation subEntries, producerID uint8) error {
+	fm := producer.client.maxFrameSize()
+	if fm > 0 {
+		for _, entry := range aggregation.items {
+			// an entry that alone exceeds the max can never be framed
+			if 4+initBufferPublishSize+subEntryFragmentHeader+len(entry.dataInBytes) > fm {
+				return FrameTooLarge
+			}
+		}
+	}
+
+	start := 0
+	length := initBufferPublishSize
+	for i, entry := range aggregation.items {
+		fragment := subEntryFragmentHeader + len(entry.dataInBytes)
+		if fm > 0 && i > start && length+fragment+4 > fm {
+			if err := producer.writeSubEntriesFrame(aggregation.items[start:i], length, producerID); err != nil {
+				return err
+			}
+			start = i
+			length = initBufferPublishSize
+		}
+		length += fragment
+	}
+	return producer.writeSubEntriesFrame(aggregation.items[start:], length, producerID)
+}
+
+func (producer *Producer) writeSubEntriesFrame(items []*subEntry, length int, producerID uint8) error {
+	if err := writeBProtocolHeader(producer.client.socket.writer, length, commandPublish); err != nil {
+		return fmt.Errorf("failed to write protocol header: %w", err)
+	}
+
+	if err := writeBByte(producer.client.socket.writer, producerID); err != nil {
+		return fmt.Errorf("failed to write producer ID: %w", err)
+	}
+
+	if err := writeBInt(producer.client.socket.writer, len(items)); err != nil {
+		return fmt.Errorf("failed to write number of messages: %w", err)
+	}
+
+	if err := producer.subEntryAggregation(subEntries{items: items}, producer.client.socket.writer, producer.options.Compression); err != nil {
+		return fmt.Errorf("failed to write sub entry aggregation: %w", err)
+	}
+
+	if err := producer.client.socket.writer.Flush(); err != nil {
+		return fmt.Errorf("producer BatchSend error during flush: %w", err)
+	}
 	return nil
 }
 
