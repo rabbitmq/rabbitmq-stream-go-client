@@ -730,10 +730,8 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("sub-entry BatchSend over the max is split at entry boundaries and all messages confirm", func() {
-		// Payload sum is under 1024, but with sub-entry per-entry overhead the
-		// single frame would exceed it. Entries are compressed before framing, so
-		// their exact sizes are known and the writer splits them across frames
-		// (like the Java client's publishInternal) instead of failing the batch.
+		// The payload sum fits 1024, but the per-entry overhead pushes a single
+		// frame over it; the writer must split at entry boundaries, not fail.
 		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(1024))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()
@@ -773,8 +771,8 @@ var _ = Describe("Streaming Producers", func() {
 	})
 
 	It("sub-entry whose single entry can never fit the max is rejected with FrameTooLarge before any write", func() {
-		// One entry alone exceeds the frame: no split can help, so the whole
-		// batch is rejected before any byte is written, connection alive.
+		// An entry that can never fit is rejected before any write,
+		// and the connection stays usable.
 		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(1024))
 		Expect(err).NotTo(HaveOccurred())
 		streamName := uuid.New().String()

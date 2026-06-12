@@ -705,14 +705,12 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	return nil
 }
 
-// publishingId(8) + type/compression(1) + message count(2) + uncompressed size(4) + compressed size(4)
+// publishingId(8) + type/compression(1) + count(2) + uncompressed(4) + compressed(4)
 const subEntryFragmentHeader = 8 + 1 + 2 + 4 + 4
 
-// sendSubEntriesFrames writes the compressed entries into as many publish
-// frames as needed so no frame exceeds the negotiated max, splitting at entry
-// boundaries like the Java client's publishInternal. Entries carry their exact
-// compressed sizes, so no size estimation is involved. The caller holds
-// socket.mutex; when FrameTooLarge is returned nothing has been written.
+// sendSubEntriesFrames splits the compressed entries across publish frames so
+// none exceeds the negotiated max (like Java's publishInternal). Caller holds
+// socket.mutex; on FrameTooLarge nothing has been written.
 func (producer *Producer) sendSubEntriesFrames(aggregation subEntries, producerID uint8) error {
 	fm := producer.client.maxFrameSize()
 	if fm > 0 {
