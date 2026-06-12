@@ -328,7 +328,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		superStream := fmt.Sprintf("filtering-super-stream-should-consume-only-one-country-%d", time.Now().Unix())
+		superStream := fmt.Sprintf("filtering-super-stream-should-consume-only-one-country-%d", time.Now().UnixNano())
 		Expect(env.DeclareSuperStream(superStream,
 			NewPartitionsOptions(2))).NotTo(HaveOccurred())
 
@@ -366,13 +366,19 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 
 		// we don't need to apply any post filter here
 		// the server side filter is enough
-		var consumerItaly int32
+		// dedupe by partition/offset: a reconnect re-delivers the same offsets
+		// (restarting from First) and must not inflate the count
+		delivered := map[string]struct{}{}
+		var deliveredMutex sync.Mutex
 		filter := NewConsumerFilter([]string{"italy"}, false, func(_ *amqp.Message) bool {
 			return true
 		})
 
-		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {
-			atomic.AddInt32(&consumerItaly, 1)
+		handleMessages := func(consumerContext ConsumerContext, _ *amqp.Message) {
+			deliveredMutex.Lock()
+			delivered[fmt.Sprintf("%s/%d", consumerContext.Consumer.GetStreamName(),
+				consumerContext.Consumer.GetOffset())] = struct{}{}
+			deliveredMutex.Unlock()
 		}
 
 		superStreamConsumer, err := env.NewSuperStreamConsumer(superStream, handleMessages,
@@ -380,7 +386,11 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		Expect(err).NotTo(HaveOccurred())
 
 		time.Sleep(500 * time.Millisecond)
-		Eventually(func() int32 { return atomic.LoadInt32(&consumerItaly) }).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(7)))
+		Eventually(func() int {
+			deliveredMutex.Lock()
+			defer deliveredMutex.Unlock()
+			return len(delivered)
+		}).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(7))
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
@@ -396,7 +406,7 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		env, err := NewEnvironment(nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		superStream := fmt.Sprintf("filtering-super-stream-should-consume-only-one-country-%d", time.Now().Unix())
+		superStream := fmt.Sprintf("filtering-super-stream-should-consume-only-one-country-%d", time.Now().UnixNano())
 		Expect(env.DeclareSuperStream(superStream,
 			NewPartitionsOptions(2))).NotTo(HaveOccurred())
 
@@ -450,15 +460,21 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 
 		// we don't need to apply any post filter here
 		// the server side filter is enough
-		var consumerItaly int32
+		// dedupe by partition/offset: a reconnect re-delivers the same offsets
+		// (restarting from First) and must not inflate the count
+		delivered := map[string]struct{}{}
+		var deliveredMutex sync.Mutex
 		filter := NewConsumerFilter([]string{"italy"}, false,
 			func(message *amqp.Message) bool {
 
 				return message.ApplicationProperties["county"] == "italy"
 			})
 
-		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {
-			atomic.AddInt32(&consumerItaly, 1)
+		handleMessages := func(consumerContext ConsumerContext, _ *amqp.Message) {
+			deliveredMutex.Lock()
+			delivered[fmt.Sprintf("%s/%d", consumerContext.Consumer.GetStreamName(),
+				consumerContext.Consumer.GetOffset())] = struct{}{}
+			deliveredMutex.Unlock()
 		}
 
 		superStreamConsumer, err := env.NewSuperStreamConsumer(superStream, handleMessages,
@@ -470,8 +486,11 @@ var _ = Describe("Super Stream Consumer", Label("super-stream-consumer"), func()
 		// The first chunk is filter with the post filter function
 		// the second chuck won't send ( even in this test there is no evidence about that there is the test above about that)
 
-		Eventually(func() int32 { return atomic.LoadInt32(&consumerItaly) }).
-			WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(int32(5)))
+		Eventually(func() int {
+			deliveredMutex.Lock()
+			defer deliveredMutex.Unlock()
+			return len(delivered)
+		}).WithPolling(300 * time.Millisecond).WithTimeout(5 * time.Second).Should(Equal(5))
 
 		Expect(superProducer.Close()).NotTo(HaveOccurred())
 		Expect(superStreamConsumer.Close()).NotTo(HaveOccurred())
