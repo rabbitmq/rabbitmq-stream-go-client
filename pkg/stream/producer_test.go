@@ -626,6 +626,232 @@ var _ = Describe("Streaming Producers", func() {
 			Should(Equal(int32(1)))
 	})
 
+	It("BatchSend reports FrameTooLarge for an over-frame batch (per-message overhead) and keeps the producer usable", func() {
+		// 70 one-byte messages: total payload is well under a 1024-byte frame, but
+		// the per-message overhead (8+4 each) pushes the on-wire frame over it.
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(1024))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(producer.Close()).NotTo(HaveOccurred()) }()
+
+		var tooLarge, confirmed int32
+		ch := producer.NotifyPublishConfirmation()
+		go func(c ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range c {
+				for _, s := range ids {
+					if s.IsConfirmed() {
+						atomic.AddInt32(&confirmed, 1)
+					} else if s.GetError() == FrameTooLarge {
+						atomic.AddInt32(&tooLarge, 1)
+					}
+				}
+			}
+		}(ch)
+
+		over := make([]message.StreamMessage, 70)
+		for i := range over {
+			over[i] = amqp.NewMessage(make([]byte, 1))
+		}
+		Expect(producer.BatchSend(over)).To(Equal(FrameTooLarge))
+		Eventually(func() int32 { return atomic.LoadInt32(&tooLarge) }, 5*time.Second).Should(Equal(int32(70)))
+
+		// The over-sized frame must never reach the broker, so the producer's
+		// connection stays alive and a normal send still confirms.
+		Expect(producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, 1))})).NotTo(HaveOccurred())
+		Eventually(func() int32 { return atomic.LoadInt32(&confirmed) }, 5*time.Second).Should(Equal(int32(1)))
+	})
+
+	It("Send rejects a single message whose framed size exceeds the negotiated max", func() {
+		// body 1010 -> marshalled ~1018 bytes: under 1024 as raw payload, but the
+		// framed size (header + per-message overhead) exceeds 1024.
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(1024))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(producer.Close()).NotTo(HaveOccurred()) }()
+
+		Expect(producer.Send(amqp.NewMessage(make([]byte, 1010)))).To(Equal(FrameTooLarge))
+	})
+
+	It("Send splits an over-frame stream of small messages into fitting frames and confirms all", func() {
+		// Each message fits, but the total far exceeds the 2048-byte frame: the
+		// auto-batch must split (reserving per-message overhead) so every frame
+		// fits and all messages are confirmed — none rejected, connection alive.
+		const total = 200
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(2048))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(producer.Close()).NotTo(HaveOccurred()) }()
+
+		var confirmed, failed int32
+		ch := producer.NotifyPublishConfirmation()
+		go func(c ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range c {
+				for _, s := range ids {
+					if s.IsConfirmed() {
+						atomic.AddInt32(&confirmed, 1)
+					} else {
+						atomic.AddInt32(&failed, 1)
+					}
+				}
+			}
+		}(ch)
+
+		for i := 0; i < total; i++ {
+			Expect(producer.Send(amqp.NewMessage(make([]byte, 40)))).NotTo(HaveOccurred())
+		}
+		Eventually(func() int32 { return atomic.LoadInt32(&confirmed) }, 10*time.Second).Should(Equal(int32(total)))
+		Expect(atomic.LoadInt32(&failed)).To(BeZero())
+	})
+
+	It("sub-entry BatchSend over the max is split at entry boundaries and all messages confirm", func() {
+		// The payload sum fits 1024, but the per-entry overhead pushes a single
+		// frame over it; the writer must split at entry boundaries, not fail.
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(1024))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName,
+			NewProducerOptions().SetSubEntrySize(2).SetCompression(Compression{}.None()))
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(producer.Close()).NotTo(HaveOccurred()) }()
+
+		var confirmed, failed int32
+		ch := producer.NotifyPublishConfirmation()
+		go func(c ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range c {
+				for _, s := range ids {
+					if s.IsConfirmed() {
+						atomic.AddInt32(&confirmed, 1)
+					} else {
+						atomic.AddInt32(&failed, 1)
+					}
+				}
+			}
+		}(ch)
+
+		over := make([]message.StreamMessage, 80)
+		for i := range over {
+			over[i] = amqp.NewMessage(make([]byte, 1))
+		}
+		Expect(producer.BatchSend(over)).NotTo(HaveOccurred())
+		Eventually(func() int32 { return atomic.LoadInt32(&confirmed) }, 5*time.Second).Should(Equal(int32(80)))
+		Expect(atomic.LoadInt32(&failed)).To(BeZero())
+	})
+
+	It("sub-entry whose single entry can never fit the max is rejected with FrameTooLarge before any write", func() {
+		// An entry that can never fit is rejected before any write,
+		// and the connection stays usable.
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(1024))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName,
+			NewProducerOptions().SetSubEntrySize(2).SetCompression(Compression{}.None()))
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(producer.Close()).NotTo(HaveOccurred()) }()
+
+		var tooLarge int32
+		ch := producer.NotifyPublishConfirmation()
+		go func(c ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range c {
+				for _, s := range ids {
+					if !s.IsConfirmed() && s.GetError() == FrameTooLarge {
+						atomic.AddInt32(&tooLarge, 1)
+					}
+				}
+			}
+		}(ch)
+
+		batch := []message.StreamMessage{
+			amqp.NewMessage(make([]byte, 1)),
+			amqp.NewMessage(make([]byte, 1200)), // its entry can never fit 1024
+			amqp.NewMessage(make([]byte, 1)),
+		}
+		Expect(producer.BatchSend(batch)).To(Equal(FrameTooLarge))
+		Eventually(func() int32 { return atomic.LoadInt32(&tooLarge) }, 5*time.Second).Should(Equal(int32(3)))
+
+		// connection still usable
+		Expect(producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, 1))})).NotTo(HaveOccurred())
+	})
+
+	It("filter-producer BatchSend over the max is reported FrameTooLarge, connection alive", func() {
+		// The filter path adds per-message filter bytes; framedSize accounts for
+		// them, so the over-frame batch is rejected before it reaches the broker.
+		env, err := NewEnvironment(NewEnvironmentOptions().SetRequestedMaxFrameSize(1024))
+		Expect(err).NotTo(HaveOccurred())
+		streamName := uuid.New().String()
+		Expect(env.DeclareStream(streamName, nil)).NotTo(HaveOccurred())
+		defer func() {
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
+		}()
+
+		producer, err := env.NewProducer(streamName, NewProducerOptions().SetFilter(
+			NewProducerFilter(func(message.StreamMessage) string { return "k" })))
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { Expect(producer.Close()).NotTo(HaveOccurred()) }()
+
+		var tooLarge int32
+		ch := producer.NotifyPublishConfirmation()
+		go func(c ChannelPublishConfirm) {
+			defer GinkgoRecover()
+			for ids := range c {
+				for _, s := range ids {
+					if !s.IsConfirmed() && s.GetError() == FrameTooLarge {
+						atomic.AddInt32(&tooLarge, 1)
+					}
+				}
+			}
+		}(ch)
+
+		over := make([]message.StreamMessage, 60)
+		for i := range over {
+			over[i] = amqp.NewMessage(make([]byte, 1))
+		}
+		Expect(producer.BatchSend(over)).To(Equal(FrameTooLarge))
+		Eventually(func() int32 { return atomic.LoadInt32(&tooLarge) }, 5*time.Second).Should(Equal(int32(60)))
+
+		Expect(producer.BatchSend([]message.StreamMessage{amqp.NewMessage(make([]byte, 1))})).NotTo(HaveOccurred())
+	})
+
 	It("Already Closed/Limits", func() {
 		env, err := NewEnvironment(NewEnvironmentOptions().SetMaxProducersPerClient(5))
 		Expect(err).NotTo(HaveOccurred())
@@ -1068,3 +1294,25 @@ func runConcurrentlyAndWaitTillAllDone(threadCount int, wg *sync.WaitGroup, runn
 	wg.Wait()
 	// fmt.Printf("Finished running concurrently with %d threads\n", threadCount)
 }
+
+var _ = Describe("Producer frame sizing", func() {
+	It("framedSize accounts for the per-message publish overhead", func() {
+		p := &Producer{options: NewProducerOptions()}
+		// 4 (length prefix) + 9 (publish header) + (100 + 8 + 4)
+		Expect(p.framedSize([]*messageSequence{{messageBytes: make([]byte, 100)}})).To(Equal(125))
+		// two messages: 13 + (10+12) + (20+12)
+		Expect(p.framedSize([]*messageSequence{
+			{messageBytes: make([]byte, 10)},
+			{messageBytes: make([]byte, 20)},
+		})).To(Equal(67))
+	})
+
+	It("framedSize includes the filter field for filter producers", func() {
+		p := &Producer{options: NewProducerOptions().SetFilter(
+			NewProducerFilter(func(message.StreamMessage) string { return "k" }))}
+		// 13 + (10 + 8 + 4) + (2 + len("k"))
+		Expect(p.framedSize([]*messageSequence{{messageBytes: make([]byte, 10), filterValue: "k"}})).To(Equal(38))
+		// empty filter value uses the 4-byte -1 marker: 13 + (10 + 8 + 4) + 4
+		Expect(p.framedSize([]*messageSequence{{messageBytes: make([]byte, 10), filterValue: ""}})).To(Equal(39))
+	})
+})
