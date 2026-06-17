@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -310,48 +311,59 @@ func (producer *Producer) processPendingSequencesQueue() {
 	if batchSize <= 0 {
 		batchSize = defaultBatchSize
 	}
+	filter := producer.options.IsFilterEnabled() && !producer.options.isSubEntriesBatching()
+	// frameOverhead is a message's contribution to the publish frame.
+	frameOverhead := func(msg *messageSequence) int {
+		c := len(msg.messageBytes) + 8 + 4
+		if filter {
+			if msg.filterValue != "" {
+				c += 2 + len(msg.filterValue)
+			} else {
+				c += 4
+			}
+		}
+		return c
+	}
 	go func() {
+		const baseFrame = 4 + initBufferPublishSize // length prefix + publish header
 		sequenceToSend := make([]*messageSequence, 0, batchSize)
-		totalBufferToSend := initBufferPublishSize
+		frameSize := baseFrame
+		flush := func() {
+			if len(sequenceToSend) == 0 {
+				return
+			}
+			batch := sequenceToSend
+			producer.unConfirmed.addFromSequences(batch, producer.GetID())
+			if err := producer.internalBatchSend(batch); err != nil {
+				if errors.Is(err, FrameTooLarge) {
+					producer.reportFrameTooLarge(batch) // off-lock
+				} else {
+					logs.LogError("error during sending messages: %s", err)
+				}
+			}
+			sequenceToSend = make([]*messageSequence, 0, batchSize)
+			frameSize = baseFrame
+		}
 		for msg := range producer.pendingSequencesQueue.GetChannel() {
-			var lastError error
-
 			if producer.pendingSequencesQueue.IsStopped() {
-				// add also the last message to sequenceToSend
-				// otherwise it will be lost
+				// add also the last message to sequenceToSend otherwise it will be lost
 				sequenceToSend = append(sequenceToSend, msg)
 				break
 			}
-			// There is something in the queue. Checks the buffer is still less than the maxFrame
-			totalBufferToSend += len(msg.messageBytes)
-			if maxFrame > 0 && totalBufferToSend > maxFrame {
-				// if the totalBufferToSend is greater than the negotiated maxFrameSize
-				// the producer sends the messages and reset the buffer
-				producer.unConfirmed.addFromSequences(sequenceToSend, producer.GetID())
-				lastError = producer.internalBatchSend(sequenceToSend)
-				sequenceToSend = sequenceToSend[:0]
-				totalBufferToSend = initBufferPublishSize
+			// Flush the pending batch before a message would push the frame over the max.
+			c := frameOverhead(msg)
+			if maxFrame > 0 && len(sequenceToSend) > 0 && frameSize+c > maxFrame {
+				flush()
 			}
-
 			sequenceToSend = append(sequenceToSend, msg)
+			frameSize += c
 
-			// if producer.pendingSequencesQueue.IsEmpty() means that the queue is empty so the producer is not sending
-			// the messages during the checks of the buffer. In this case
 			if producer.pendingSequencesQueue.IsEmpty() || len(sequenceToSend) >= producer.options.BatchSize {
-				if len(sequenceToSend) > 0 {
-					producer.unConfirmed.addFromSequences(sequenceToSend, producer.GetID())
-					lastError = producer.internalBatchSend(sequenceToSend)
-					sequenceToSend = sequenceToSend[:0]
-					totalBufferToSend += initBufferPublishSize
-				}
-			}
-			if lastError != nil {
-				logs.LogError("error during sending messages: %s", lastError)
+				flush()
 			}
 		}
 
-		// just in case there are messages in the buffer
-		// not matter is sent or not the messages will be timed out
+		// whatever is left was never sent; time it out
 		if len(sequenceToSend) > 0 {
 			producer.markUnsentAsUnconfirmed(sequenceToSend)
 		}
@@ -410,6 +422,37 @@ func (producer *Producer) fromMessageToMessageSequence(streamMessage message.Str
 	return msqSeq, nil
 }
 
+// framedSize is the on-wire publish-frame size for seqs (length prefix + header
+// + per-message publishingId/length, plus the filter field). For sub-entry
+// producers it is only an estimate; internalBatchSendProdId is the exact guard.
+func (producer *Producer) framedSize(seqs []*messageSequence) int {
+	filter := producer.options.IsFilterEnabled() && !producer.options.isSubEntriesBatching()
+	size := 4 + initBufferPublishSize
+	for _, s := range seqs {
+		size += len(s.messageBytes) + 8 + 4
+		if filter {
+			if s.filterValue != "" {
+				size += 2 + len(s.filterValue)
+			} else {
+				size += 4
+			}
+		}
+	}
+	return size
+}
+
+// reportFrameTooLarge marks the given sequences as failed with FrameTooLarge and
+// delivers the confirmations. It must be called OUTSIDE socket.mutex.
+func (producer *Producer) reportFrameTooLarge(seqs []*messageSequence) {
+	ids := make([]int64, 0, len(seqs))
+	for _, s := range seqs {
+		ids = append(ids, s.publishingId)
+	}
+	if confirms := producer.unConfirmed.extractWithErrors(ids, responseCodeFrameTooLarge); len(confirms) > 0 {
+		producer.sendConfirmationStatus(confirms)
+	}
+}
+
 // Send sends a message to the stream and returns an error if the message could not be sent.
 // The Send is asynchronous. The message is sent to a channel ant then other goroutines aggregate and sent the messages
 // The Send is dynamic so the number of messages sent decided internally based on the BatchSize
@@ -425,10 +468,9 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 		return fmt.Errorf("producer id: %d closed", producer.id)
 	}
 
-	if fm := producer.client.maxFrameSize(); fm > 0 && len(messageSeq.messageBytes) > fm {
+	if fm := producer.client.maxFrameSize(); fm > 0 && producer.framedSize([]*messageSequence{messageSeq}) > fm {
 		producer.unConfirmed.addFromSequences([]*messageSequence{messageSeq}, producer.GetID())
-		tooLarge := producer.unConfirmed.extractWithError(messageSeq.publishingId, responseCodeFrameTooLarge)
-		producer.sendConfirmationStatus([]*ConfirmationStatus{tooLarge})
+		producer.reportFrameTooLarge([]*messageSequence{messageSeq})
 		return FrameTooLarge
 	}
 
@@ -446,17 +488,13 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 // BatchSend is not affected by the BatchSize and BatchPublishingDelay options.
 // returns an error if the message could not be sent for marshal problems or if the buffer is too large
 func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error {
-	maxFrame := producer.client.maxFrameSize()
 	var messagesSequences = make([]*messageSequence, 0, len(batchMessages))
-	totalBufferToSend := 0
 
 	for _, batchMessage := range batchMessages {
 		messageSeq, err := producer.fromMessageToMessageSequence(batchMessage)
 		if err != nil {
 			return err
 		}
-
-		totalBufferToSend += len(messageSeq.messageBytes)
 		messagesSequences = append(messagesSequences, messageSeq)
 	}
 
@@ -469,18 +507,21 @@ func (producer *Producer) BatchSend(batchMessages []message.StreamMessage) error
 		producer.unConfirmed.addFromSequences(messagesSequences, producer.GetID())
 	}
 
-	if maxFrame > 0 && totalBufferToSend+initBufferPublishSize > maxFrame {
-		// if the totalBufferToSend is greater than the negotiated maxFrameSize
-		// all the messages are unconfirmed
-
-		for _, msg := range messagesSequences {
-			m := producer.unConfirmed.extractWithError(msg.publishingId, responseCodeFrameTooLarge)
-			producer.sendConfirmationStatus([]*ConfirmationStatus{m})
-		}
+	// Reject up front when the frame exceeds the max. Sub-entry size is only known
+	// after aggregation, so internalBatchSendProdId is the backstop (below).
+	fm := producer.client.maxFrameSize()
+	if fm > 0 && !producer.options.isSubEntriesBatching() && producer.framedSize(messagesSequences) > fm {
+		producer.reportFrameTooLarge(messagesSequences)
 		return FrameTooLarge
 	}
 
-	return producer.internalBatchSend(messagesSequences)
+	if err := producer.internalBatchSend(messagesSequences); err != nil {
+		if errors.Is(err, FrameTooLarge) {
+			producer.reportFrameTooLarge(messagesSequences)
+		}
+		return err
+	}
+	return nil
 }
 
 func (producer *Producer) GetID() uint8 {
@@ -612,27 +653,31 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 		return producer.sendWithFilter(messagesSequence, producerID)
 	}
 
-	var msgLen int
-	var aggregation subEntries
-
 	if producer.options.isSubEntriesBatching() {
-		var err error
-		aggregation, err = producer.aggregateEntities(messagesSequence, producer.options.SubEntrySize,
+		aggregation, err := producer.aggregateEntities(messagesSequence, producer.options.SubEntrySize,
 			producer.options.Compression)
 		if err != nil {
 			return err
 		}
-		msgLen += ((8 + 1 + 2 + 4 + 4) * len(aggregation.items)) + aggregation.totalSizeInBytes
-	}
-
-	if !producer.options.isSubEntriesBatching() {
-		for _, msg := range messagesSequence {
-			msgLen += len(msg.messageBytes) + 8 + 4
+		if err := producer.sendSubEntriesFrames(aggregation, producerID); err != nil {
+			return err
 		}
+		producer.client.metrics.published(context.Background(), int64(len(messagesSequence)), producer.otelAttributesForProducer())
+		return nil
 	}
 
-	frameHeaderLength := initBufferPublishSize
-	length := frameHeaderLength + msgLen
+	var msgLen int
+	for _, msg := range messagesSequence {
+		msgLen += len(msg.messageBytes) + 8 + 4
+	}
+
+	length := initBufferPublishSize + msgLen
+
+	// Never write a frame over the negotiated max (the broker would close the
+	// connection). Sentinel only; the caller reports FrameTooLarge off-lock.
+	if fm := producer.client.maxFrameSize(); fm > 0 && length+4 > fm {
+		return FrameTooLarge
+	}
 
 	if err := writeBProtocolHeader(producer.client.socket.writer, length, commandPublish); err != nil {
 		return fmt.Errorf("failed to write protocol header: %w", err)
@@ -642,29 +687,13 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 		return fmt.Errorf("failed to write producer ID: %w", err)
 	}
 
-	numberOfMessages := len(messagesSequence)
-	numberOfMessages /= producer.options.SubEntrySize
-	if len(messagesSequence)%producer.options.SubEntrySize != 0 {
-		numberOfMessages += 1
-	}
-
 	// toExcluded - fromInclude
-	if err := writeBInt(producer.client.socket.writer, numberOfMessages); err != nil {
+	if err := writeBInt(producer.client.socket.writer, len(messagesSequence)); err != nil {
 		return fmt.Errorf("failed to write number of messages: %w", err)
 	}
 
-	if producer.options.isSubEntriesBatching() {
-		err := producer.subEntryAggregation(aggregation, producer.client.socket.writer, producer.options.Compression)
-		if err != nil {
-			return fmt.Errorf("failed to write sub entry aggregation: %w", err)
-		}
-	}
-
-	if !producer.options.isSubEntriesBatching() {
-		err := producer.simpleAggregation(messagesSequence, producer.client.socket.writer)
-		if err != nil {
-			return fmt.Errorf("failed to write simple aggregation: %w", err)
-		}
+	if err := producer.simpleAggregation(messagesSequence, producer.client.socket.writer); err != nil {
+		return fmt.Errorf("failed to write simple aggregation: %w", err)
 	}
 
 	err := producer.client.socket.writer.Flush()
@@ -673,6 +702,62 @@ func (producer *Producer) internalBatchSendProdId(messagesSequence []*messageSeq
 	}
 	producer.client.metrics.published(context.Background(), int64(len(messagesSequence)), producer.otelAttributesForProducer())
 
+	return nil
+}
+
+// publishingId(8) + type/compression(1) + count(2) + uncompressed(4) + compressed(4)
+const subEntryFragmentHeader = 8 + 1 + 2 + 4 + 4
+
+// sendSubEntriesFrames splits the compressed entries across publish frames so
+// none exceeds the negotiated max (like Java's publishInternal). Caller holds
+// socket.mutex; on FrameTooLarge nothing has been written.
+func (producer *Producer) sendSubEntriesFrames(aggregation subEntries, producerID uint8) error {
+	fm := producer.client.maxFrameSize()
+	if fm > 0 {
+		for _, entry := range aggregation.items {
+			// an entry that alone exceeds the max can never be framed
+			if 4+initBufferPublishSize+subEntryFragmentHeader+len(entry.dataInBytes) > fm {
+				return FrameTooLarge
+			}
+		}
+	}
+
+	start := 0
+	length := initBufferPublishSize
+	for i, entry := range aggregation.items {
+		fragment := subEntryFragmentHeader + len(entry.dataInBytes)
+		if fm > 0 && i > start && length+fragment+4 > fm {
+			if err := producer.writeSubEntriesFrame(aggregation.items[start:i], length, producerID); err != nil {
+				return err
+			}
+			start = i
+			length = initBufferPublishSize
+		}
+		length += fragment
+	}
+	return producer.writeSubEntriesFrame(aggregation.items[start:], length, producerID)
+}
+
+func (producer *Producer) writeSubEntriesFrame(items []*subEntry, length int, producerID uint8) error {
+	if err := writeBProtocolHeader(producer.client.socket.writer, length, commandPublish); err != nil {
+		return fmt.Errorf("failed to write protocol header: %w", err)
+	}
+
+	if err := writeBByte(producer.client.socket.writer, producerID); err != nil {
+		return fmt.Errorf("failed to write producer ID: %w", err)
+	}
+
+	if err := writeBInt(producer.client.socket.writer, len(items)); err != nil {
+		return fmt.Errorf("failed to write number of messages: %w", err)
+	}
+
+	if err := producer.subEntryAggregation(subEntries{items: items}, producer.client.socket.writer, producer.options.Compression); err != nil {
+		return fmt.Errorf("failed to write sub entry aggregation: %w", err)
+	}
+
+	if err := producer.client.socket.writer.Flush(); err != nil {
+		return fmt.Errorf("producer BatchSend error during flush: %w", err)
+	}
 	return nil
 }
 

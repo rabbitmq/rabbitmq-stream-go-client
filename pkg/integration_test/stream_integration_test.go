@@ -90,15 +90,19 @@ var _ = Describe("StreamIntegration", func() {
 				SetOffset(stream.OffsetSpecification{}.Next()).
 				SetManualCommit()
 
-			receivedOffsets := make([]int64, 0)
+			type receivedMessage struct {
+				offset int64
+				body   string
+			}
+			received := make([]receivedMessage, 0)
 			m := sync.Mutex{} // To avoid races in the handler and test assertions
-			handleMessages := func(consumerContext stream.ConsumerContext, _ *amqp.Message) {
+			handleMessages := func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 				defer GinkgoRecover()
 				m.Lock()
-				receivedOffsets = append(
-					receivedOffsets,
-					consumerContext.Consumer.GetOffset(),
-				)
+				received = append(received, receivedMessage{
+					offset: consumerContext.Consumer.GetOffset(),
+					body:   string(message.GetData()),
+				})
 				m.Unlock()
 				Expect(consumerContext.Consumer.StoreOffset()).To(Succeed())
 			}
@@ -123,26 +127,34 @@ var _ = Describe("StreamIntegration", func() {
 			Eventually(func() int {
 				m.Lock()
 				defer m.Unlock()
-				return len(receivedOffsets)
+				return len(received)
 			}).
 				WithTimeout(time.Second * 3).
 				WithPolling(time.Millisecond * 500).
 				Should(BeNumerically("==", 100))
 
-			firstExpectedOffset := 100
-			for i := 0; i < len(receivedOffsets); i++ {
-				m.Lock()
-				Expect(receivedOffsets[i]).To(BeNumerically("==", firstExpectedOffset+i),
-					"Offset in [%d] is %d, expected %d",
-					i, receivedOffsets[i], firstExpectedOffset+i)
-				m.Unlock()
+			// "Message offsets may not be contiguous. [...] storing an offset
+			// creates an offset tracking entry, which has its own offset."
+			// https://rabbitmq.github.io/rabbitmq-stream-java-client/stable/htmlsingle/#considerations-on-offset-tracking
+			// The handler stores per message while publishing, so tracking
+			// entries interleave: assert the content arrives in publish order
+			// with strictly increasing offsets instead of contiguous ones.
+			m.Lock()
+			defer m.Unlock()
+			Expect(received[0].offset).To(BeNumerically("==", totalInitialMessages))
+			for i := range received {
+				expectedBody := fmt.Sprintf(`{"name": "item-%d", "age": %d}`,
+					totalInitialMessages+i, totalInitialMessages+i)
+				Expect(received[i].body).To(Equal(expectedBody),
+					"message [%d] is %q, expected %q", i, received[i].body, expectedBody)
+				if i > 0 {
+					Expect(received[i].offset).To(BeNumerically(">", received[i-1].offset),
+						"offsets must increase: [%d]=%d, [%d]=%d",
+						i-1, received[i-1].offset, i, received[i].offset)
+				}
 			}
-			// Current offset is initial (first) + total received msg - 1
-			// -1 because the first offset is 100 (it's not 101)
-			// e.g. 100, 101 ... 199. NOT 200
-			// Similar when 0, 1...99 (not 100)
-			expectedCurrentOffset := firstExpectedOffset + newMessagesExpected - 1
-			Expect(consumer.GetOffset()).To(BeNumerically("==", expectedCurrentOffset))
+			// The current offset is the offset of the last delivered message.
+			Expect(consumer.GetOffset()).To(BeNumerically("==", received[len(received)-1].offset))
 		})
 	})
 
