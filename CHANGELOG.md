@@ -2,11 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [[1.8.2](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.2)]
+
+## 1.8.2 - 2026-07-20
+- [Release 1.8.2](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.2)
+
+### Enhancements
+- Remove redundant test for golang 1.25 by @Gsantomaggio in [#498](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/498)
+- Negotiate heartbeat during the TUNE handshake (min(requested, broker)) by @mvanhorn in [#503](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/503)
 
 ### Bug Fixes
 - Respect the configured `RequestedMaxFrameSize` by negotiating it with the broker during the `TUNE` handshake by @gurkanguray in [#499](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/499)
 - Account for the publish-frame overhead so the producer never sends a frame larger than the negotiated max frame size; sub-entry batches are split across frames at entry boundaries using their exact compressed sizes by @gurkanguray in [#505](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/505)
+
+### Dependency Updates
+- Bump go.opentelemetry.io/otel/metric from 1.43.0 to 1.44.0 by @dependabot[bot] in [#500](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/500)
+- Bump golang.org/x/text from 0.37.0 to 0.38.0 by @dependabot[bot] in [#506](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/506)
+- Bump golang.org/x/text from 0.38.0 to 0.40.0 by @dependabot[bot] in [#510](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/510)
+- Bump github.com/klauspost/compress from 1.18.6 to 1.19.0 by @dependabot[bot] in [#508](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/508)
 
 ## [[1.8.1](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.1)]
 
