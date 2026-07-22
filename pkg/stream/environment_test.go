@@ -348,6 +348,28 @@ var _ = Describe("Environment test", func() {
 		Expect(errWrong).To(HaveOccurred())
 	})
 
+	It("Multi Uris parses all parameters even if the first succeeds", func() {
+		options := NewEnvironmentOptions().
+			SetUris([]string{
+				"rabbitmq-stream://guest:guest@localhost:5552/%2f",
+				"rabbitmq-stream://u2:p2@host2:5552/vhost2",
+			})
+		env, err := NewEnvironment(options)
+		Expect(err).NotTo(HaveOccurred())
+		if env != nil {
+			Expect(env.Close()).NotTo(HaveOccurred())
+		}
+
+		Expect(options.ConnectionParameters).To(HaveLen(2))
+
+		// Second parameter should be parsed even though the first one succeeded
+		Expect(options.ConnectionParameters[1].User).To(Equal("u2"))
+		Expect(options.ConnectionParameters[1].Password).To(Equal("p2"))
+		Expect(options.ConnectionParameters[1].Host).To(Equal("host2"))
+		Expect(options.ConnectionParameters[1].Port).To(Equal("5552"))
+		Expect(options.ConnectionParameters[1].Vhost).To(Equal("vhost2"))
+	})
+
 	It("Multi Uris/Multi with some not reachable end-points ", func() {
 		// To connect the client is enough to have one valid endpoint
 		// even the other endpoints are not reachable
