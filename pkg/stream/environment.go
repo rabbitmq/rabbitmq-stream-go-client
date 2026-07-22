@@ -117,7 +117,6 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	var connectionError error
 	for idx, parameter := range options.ConnectionParameters {
-
 		client.broker = parameter
 
 		connectionError = client.connect()
