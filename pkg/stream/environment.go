@@ -101,7 +101,7 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 				parameter.Scheme = u.Scheme
 				parameter.User = u.User.Username()
 				parameter.Password, _ = u.User.Password()
-				parameter.Host = u.Host
+				parameter.Host = u.Hostname()
 				parameter.Port = u.Port()
 
 				if vhost := strings.TrimPrefix(u.Path, "/"); len(vhost) > 0 {
