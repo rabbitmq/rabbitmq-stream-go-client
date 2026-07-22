@@ -99,8 +99,10 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 					return nil, err
 				}
 				parameter.Scheme = u.Scheme
-				parameter.User = u.User.Username()
-				parameter.Password, _ = u.User.Password()
+				if u.User != nil {
+					parameter.User = u.User.Username()
+					parameter.Password, _ = u.User.Password()
+				}
 				parameter.Host = u.Hostname()
 				parameter.Port = u.Port()
 
