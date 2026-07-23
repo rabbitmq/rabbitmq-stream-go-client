@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
+
+## 1.8.3 - 2026-07-23
+- [Release 1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)
+
+### Bug Fixes
+- Fix multi uris parameters by @Gsantomaggio in [#512](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/512)
+
+### Dependency Updates
+- Bump github.com/klauspost/compress from 1.19.0 to 1.19.1 by @Gsantomaggio in [e56918b](https://github.com/rabbitmq/rabbitmq-stream-go-client/commit/e56918b)
+
 ## [[1.8.2](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.2)]
 
 ## 1.8.2 - 2026-07-20
