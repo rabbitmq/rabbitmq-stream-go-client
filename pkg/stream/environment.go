@@ -90,30 +90,35 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 
 	if len(options.ConnectionParameters) == 0 {
 		options.ConnectionParameters = []*Broker{newBrokerDefault()}
+	} else {
+		// fill the missing field for the connection parameters
+		for _, parameter := range options.ConnectionParameters {
+			if parameter.Uri != "" {
+				u, err := url.Parse(parameter.Uri)
+				if err != nil {
+					return nil, err
+				}
+				parameter.Scheme = u.Scheme
+				if u.User != nil {
+					parameter.User = u.User.Username()
+					parameter.Password, _ = u.User.Password()
+				}
+				parameter.Host = u.Hostname()
+				parameter.Port = u.Port()
+
+				if vhost := strings.TrimPrefix(u.Path, "/"); len(vhost) > 0 {
+					if vhost != "/" && strings.Contains(vhost, "/") {
+						return nil, errors.New("multiple segments in URI path: " + u.Path)
+					}
+					parameter.Vhost = vhost
+				}
+			}
+			parameter.mergeWithDefault()
+		}
 	}
+
 	var connectionError error
 	for idx, parameter := range options.ConnectionParameters {
-		if parameter.Uri != "" {
-			u, err := url.Parse(parameter.Uri)
-			if err != nil {
-				return nil, err
-			}
-			parameter.Scheme = u.Scheme
-			parameter.User = u.User.Username()
-			parameter.Password, _ = u.User.Password()
-			parameter.Host = u.Host
-			parameter.Port = u.Port()
-
-			if vhost := strings.TrimPrefix(u.Path, "/"); len(vhost) > 0 {
-				if vhost != "/" && strings.Contains(vhost, "/") {
-					return nil, errors.New("multiple segments in URI path: " + u.Path)
-				}
-				parameter.Vhost = vhost
-			}
-		}
-
-		parameter.mergeWithDefault()
-
 		client.broker = parameter
 
 		connectionError = client.connect()
