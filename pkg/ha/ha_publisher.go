@@ -91,9 +91,11 @@ func NewReliableProducer(env *stream.Environment, streamName string,
 		return nil, fmt.Errorf("the producer options is mandatory")
 	}
 
+	// Publish initial state before newProducer starts its close listener.
+	res.setStatus(StatusOpen)
 	err := res.newProducer()
-	if err == nil {
-		res.setStatus(StatusOpen)
+	if err != nil {
+		res.setStatus(StatusClosed)
 	}
 	return res, err
 }
@@ -107,8 +109,8 @@ func (p *ReliableProducer) newProducer() error {
 	}
 	p.handlePublishConfirm(producer.NotifyPublishConfirmation())
 	channelNotifyClose := producer.NotifyClose()
-	p.handleNotifyClose(channelNotifyClose)
 	p.producer = producer
+	p.handleNotifyClose(channelNotifyClose)
 	return err
 }
 

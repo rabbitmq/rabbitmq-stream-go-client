@@ -100,9 +100,11 @@ func NewReliableConsumer(env *stream.Environment, streamName string,
 		return nil, fmt.Errorf("the consumer options is mandatory")
 	}
 	logs.LogDebug("[Reliable] - creating %s", res.getInfo())
+	// Publish initial state before newConsumer starts its close listener.
+	res.setStatus(StatusOpen)
 	err := res.newConsumer()
-	if err == nil {
-		res.setStatus(StatusOpen)
+	if err != nil {
+		res.setStatus(StatusClosed)
 	}
 	logs.LogDebug("[Reliable] - created %s", res.getInfo())
 	return res, err
@@ -164,12 +166,11 @@ func (c *ReliableConsumer) newConsumer() error {
 		return err
 	}
 
-	channelNotifyClose := consumer.NotifyClose()
-	c.handleNotifyClose(channelNotifyClose)
 	// Only lock briefly to publish the new consumer reference.
 	c.mutexConnection.Lock()
 	c.consumer = consumer
 	c.mutexConnection.Unlock()
+	c.handleNotifyClose(consumer.NotifyClose())
 	return nil
 }
 

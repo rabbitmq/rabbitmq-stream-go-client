@@ -47,8 +47,25 @@ type IReliable interface {
 func retry(backoff int, reliable IReliable, streamName string) (error, bool) {
 	waitTime := randomWaitWithBackoff(backoff)
 	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), streamName, waitTime)
-	time.Sleep(time.Duration(waitTime) * time.Millisecond)
+	// Super stream consumers expose a terminal signal so Close can interrupt
+	// backoff and drain pending partition notifications without reopening them.
+	var stopped <-chan struct{}
+	if closer, ok := reliable.(interface{ retryStop() <-chan struct{} }); ok {
+		stopped = closer.retryStop()
+	}
+	timer := time.NewTimer(time.Duration(waitTime) * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-stopped:
+		return stream.AlreadyClosed, false
+	}
 	streamMetaData, errS := reliable.getEnv().StreamMetaData(streamName)
+	select {
+	case <-stopped:
+		return stream.AlreadyClosed, false
+	default:
+	}
 	if errors.Is(errS, stream.StreamDoesNotExist) {
 		logs.LogInfo("[Reliable] - The stream %s does not exist for %s. Stopping it", streamName, reliable.getInfo())
 		return errS, false
@@ -71,6 +88,9 @@ func retry(backoff int, reliable IReliable, streamName string) (error, bool) {
 	if streamMetaData != nil {
 		logs.LogInfo("[Reliable] - The stream %s exists. Reconnecting the %s.", streamName, reliable.getInfo())
 		result = reliable.getNewInstance(streamName)()
+		if errors.Is(result, stream.AlreadyClosed) {
+			return result, false
+		}
 		if result == nil {
 			logs.LogInfo("[Reliable] - The stream %s exists. %s reconnected.", reliable.getInfo(), streamName)
 		} else {
