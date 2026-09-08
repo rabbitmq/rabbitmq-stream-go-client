@@ -65,7 +65,12 @@ func (c *Client) handleWrite(buffer []byte, response *Response) responseError {
 	return c.handleWriteWithResponse(buffer, response, true)
 }
 
-func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, removeResponse bool) responseError {
+func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, removeResponse bool) (resultCode responseError) {
+	defer func() {
+		if resultCode.Err != nil {
+			c.coordinator.discardResponse(response)
+		}
+	}()
 	// Fail fast: an over-sized frame makes the broker close the connection and we
 	// would block until timeout. 0 = no limit.
 	if fm := c.maxFrameSize(); fm > 0 && len(buffer) > fm {
@@ -75,8 +80,17 @@ func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, remo
 				FrameTooLarge, len(buffer), fm, response.commandDescription), false)
 	}
 
+	if err := c.connectionContext().Err(); err != nil {
+		return newResponseError(err, false)
+	}
 	result := c.socket.writeAndFlush(buffer)
-	resultCode := waitCodeWithTimeOut(response, c.socketCallTimeout)
+	if result != nil {
+		return newResponseError(c.connectionError(result), false)
+	}
+	resultCode = c.waitCode(response)
+	if resultCode.Err != nil && c.connectionContext().Err() != nil {
+		return resultCode
+	}
 	/// we need to remove the response before evaluate the
 	// buffer errSocket
 	if removeResponse {

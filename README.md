@@ -182,6 +182,44 @@ This [rabbitmq blog post](https://blog.rabbitmq.com/posts/2021/07/connecting-to-
 
 See also "Using a load balancer" example in the [examples](./examples/) directory
 
+### Environment lifetime cancellation
+
+Use `NewEnvironmentWithContext` when connection setup and ongoing network work
+must stop with an application lifetime:
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+env, err := stream.NewEnvironmentWithContext(ctx,
+    stream.NewEnvironmentOptions().SetUri("rabbitmq-stream://guest:guest@localhost:5552/"))
+if err != nil {
+    // errors.Is(err, context.Canceled) and context.DeadlineExceeded identify
+    // cancellation and deadline expiration during connection setup.
+    return err
+}
+defer env.Close()
+```
+
+The context covers the **entire environment lifetime**, including every producer
+and consumer connection, TLS negotiation, socket reads and writes, protocol
+response waits, and locator/advertised-endpoint retry delays. It is not just a
+connection timeout: do not
+cancel it after construction while continuing to use the environment. A canceled
+environment cannot reconnect; create a new environment with a new context.
+
+For this constructor, `Close` cancels the environment lifetime before releasing
+resources, so it can interrupt blocked network operations. Pending publications
+may already have reached the broker even if cancellation prevents their
+confirmations from arriving; use publication identifiers and deduplication when
+retrying. Cancellation does not interrupt application message-handler code or the separate
+retry timers and send waits owned by the `ha` package. Close HA wrappers explicitly
+before closing their environment.
+Always call `Close`, including after the context is canceled.
+
+`NewEnvironment` remains available with its existing graceful-close behavior and
+configured RPC timeouts. Neither constructor changes the caller's TLS
+configuration when inferring a missing server name from the connection hostname.
+
 ### TLS
 
 To configure TLS you need to set the `IsTLS` parameter:
