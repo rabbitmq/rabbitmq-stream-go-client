@@ -112,16 +112,6 @@ func newEnvironment(options *EnvironmentOptions, cancel context.CancelFunc) (*En
 		return nil, fmt.Errorf("failed to initialise metrics: %w", err)
 	}
 
-	client := newClient(connectionParameters{
-		connectionName:    "go-stream-locator",
-		broker:            nil,
-		tcpParameters:     options.TCPParameters,
-		saslConfiguration: options.SaslConfiguration,
-		rpcTimeout:        options.RPCTimeout,
-		metrics:           metrics,
-	})
-	defer client.Close()
-
 	// we put a limit to the heartbeat.
 	// it doesn't make sense to have a heartbeat less than 3 seconds
 	if options.TCPParameters.RequestedHeartbeat < (3 * time.Second) {
@@ -169,13 +159,27 @@ func newEnvironment(options *EnvironmentOptions, cancel context.CancelFunc) (*En
 	}
 
 	var connectionError error
+	var client *Client
 	for idx, parameter := range options.ConnectionParameters {
-		client.broker = parameter
-
+		// A failed handshake's reader can unwind after the next seed starts.
+		// Isolate each attempt's socket and coordinator from that old reader.
+		client = newClient(connectionParameters{
+			connectionName:    "go-stream-locator",
+			broker:            parameter,
+			tcpParameters:     options.TCPParameters,
+			saslConfiguration: options.SaslConfiguration,
+			rpcTimeout:        options.RPCTimeout,
+			metrics:           metrics,
+		})
 		connectionError = client.connect()
 		if connectionError == nil {
 			break
 		} else {
+			client.Close()
+			if contextErr := client.connectionContext().Err(); contextErr != nil {
+				connectionError = contextErr
+				break
+			}
 			nextIfThereIs := ""
 			if idx < len(options.ConnectionParameters)-1 {
 				nextIfThereIs = "Trying the next broker..."
@@ -185,6 +189,7 @@ func newEnvironment(options *EnvironmentOptions, cancel context.CancelFunc) (*En
 		}
 	}
 
+	defer client.Close()
 	return &Environment{
 		options:   options,
 		producers: newProducersEnvironment(options.MaxProducersPerClient, metrics),

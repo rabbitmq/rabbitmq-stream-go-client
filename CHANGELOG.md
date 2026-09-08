@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
   including dialing, TLS negotiation, socket I/O, RPC waits and reconnect delays.
 
 ### Bug Fixes
+- Isolate bootstrap seed attempts so failed handshake teardown cannot mask or close the next connection.
 - Infer TLS server names from connection hostnames without mutating caller TLS options.
 - Return socket write errors immediately instead of waiting for a response timeout.
 
