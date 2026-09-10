@@ -5,12 +5,12 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 // Hold the old reader's teardown after Close, as can happen when the next seed
@@ -33,50 +33,73 @@ func (c *delayedBootstrapConn) Close() error {
 	return c.Conn.Close()
 }
 
-func TestBootstrapDoesNotReuseFailedHandshakeClient(t *testing.T) {
-	for _, constructor := range []string{"legacy", "context"} {
-		t.Run(constructor, func(t *testing.T) {
+// dialedSeeds records seed dial attempts. The dial runs on whichever goroutine
+// bootstrap happens to use, so the spec reads the addresses through a lock.
+type dialedSeeds struct {
+	mutex     sync.Mutex
+	addresses []string
+}
+
+func (d *dialedSeeds) record(address string) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	d.addresses = append(d.addresses, address)
+}
+
+func (d *dialedSeeds) recorded() []string {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	return append([]string(nil), d.addresses...)
+}
+
+var _ = Describe("Bootstrap seed recovery", func() {
+	DescribeTable("dials the next seed with a fresh client after a failed handshake",
+		func(withContext bool) {
 			local, peer := net.Pipe()
 			release := make(chan struct{})
 			connection := &delayedBootstrapConn{Conn: local, release: release, readDone: make(chan struct{})}
-			t.Cleanup(func() {
+			DeferCleanup(func() {
 				close(release)
 				_ = local.Close()
 				_ = peer.Close()
-				select {
-				case <-connection.readDone:
-				case <-time.After(time.Second):
-					t.Error("failed bootstrap reader did not finish")
-				}
+				Eventually(connection.readDone, time.Second).Should(BeClosed(),
+					"failed bootstrap reader did not finish")
 			})
-			attempted := []string{}
+
+			attempted := &dialedSeeds{}
 			nextFailure := errors.New("second seed was actually dialed")
 			options := NewEnvironmentOptions().SetUris([]string{
 				"rabbitmq-stream://guest:guest@first:5552/",
 				"rabbitmq-stream://guest:guest@second:5552/",
 			})
 			options.TCPParameters.dialContext = func(_ context.Context, _, address string) (net.Conn, error) {
-				attempted = append(attempted, address)
+				attempted.record(address)
 				if address == "first:5552" {
 					return connection, nil
 				}
 				return nil, nextFailure
 			}
+
 			var env *Environment
 			var err error
-			if constructor == "context" {
+			if withContext {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-				defer cancel()
+				DeferCleanup(cancel)
 				env, err = NewEnvironmentWithContext(ctx, options)
 			} else {
 				env, err = NewEnvironment(options)
 			}
 			if env != nil {
-				defer func() { _ = env.Close() }()
+				DeferCleanup(func() { _ = env.Close() })
 			}
-			require.ErrorIs(t, err, nextFailure)
-			assert.Equal(t, []string{"first:5552", "second:5552"}, attempted)
-			assert.Positive(t, connection.closes.Load(), "failed handshake socket was not closed")
-		})
-	}
-}
+
+			Expect(err).To(MatchError(nextFailure))
+			Expect(attempted.recorded()).To(Equal([]string{"first:5552", "second:5552"}))
+			Expect(connection.closes.Load()).To(BeNumerically(">", 0),
+				"failed handshake socket was not closed")
+		},
+
+		Entry("NewEnvironment", false),
+		Entry("NewEnvironmentWithContext", true),
+	)
+})
