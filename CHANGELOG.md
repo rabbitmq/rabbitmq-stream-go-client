@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Bug Fixes
+- Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
+- Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
+- Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
+
 ## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
 
 ## 1.8.3 - 2026-07-23

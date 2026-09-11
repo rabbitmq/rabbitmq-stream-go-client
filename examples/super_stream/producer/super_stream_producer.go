@@ -98,7 +98,7 @@ func main() {
 				}
 			}
 		}
-	}(superStreamProducer.NotifyPublishConfirmation(1))
+	}(superStreamProducer.NotifyPublishConfirmation(0))
 
 	// Publish messages
 loop:

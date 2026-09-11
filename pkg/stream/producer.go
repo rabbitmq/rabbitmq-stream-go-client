@@ -72,13 +72,14 @@ type messageSequence struct {
 }
 
 type Producer struct {
-	client      *Client
-	id          uint8
-	options     *ProducerOptions
-	onClose     func()
-	unConfirmed *unConfirmed
-	sequence    int64
-	mutex       *sync.RWMutex
+	closeStarted atomic.Bool
+	client       *Client
+	id           uint8
+	options      *ProducerOptions
+	onClose      func()
+	unConfirmed  *unConfirmed
+	sequence     int64
+	mutex        *sync.RWMutex
 
 	closeHandler              chan Event
 	status                    int
@@ -235,13 +236,10 @@ func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
 	return ch
 }
 
-// NotifyClose returns a channel that receives the close event of the producer.
+// NotifyClose returns the producer close notification channel, including an event
+// emitted before registration. Repeated calls return the same channel.
 func (producer *Producer) NotifyClose() ChannelClose {
-	ch := make(chan Event, 1)
-	producer.mutex.Lock()
-	producer.closeHandler = ch
-	producer.mutex.Unlock()
-	return ch
+	return producer.closeHandler
 }
 
 func (producer *Producer) GetOptions() *ProducerOptions {
@@ -786,7 +784,7 @@ func (producer *Producer) Close() error {
 	})
 }
 func (producer *Producer) close(reason Event) error {
-	if producer.getStatus() == closed {
+	if !producer.closeStarted.CompareAndSwap(false, true) {
 		return AlreadyClosed
 	}
 
@@ -797,7 +795,6 @@ func (producer *Producer) close(reason Event) error {
 
 	producer.mutex.Lock()
 	ch := producer.closeHandler
-	producer.closeHandler = nil
 	producer.mutex.Unlock()
 	if ch != nil {
 		ch <- reason
