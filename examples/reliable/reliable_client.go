@@ -134,8 +134,8 @@ func main() {
 			SetMaxConsumersPerClient(maxConsumersPerClient).
 			SetUser("guest").
 			SetPassword("guest").
-			//SetHost("localhost").
-			//SetPort(5552))
+			// SetHost("localhost").
+			// SetPort(5552))
 			SetHost(resolver.Host).
 			SetPort(resolver.Port).
 			SetAddressResolver(resolver))
