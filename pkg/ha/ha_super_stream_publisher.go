@@ -1,6 +1,7 @@
 package ha
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -52,9 +53,8 @@ func NewReliableSuperStreamProducer(env *stream.Environment, superStream string,
 	}
 
 	ch := producer.NotifyPartitionClose(1)
+	res.handlePublishConfirm(producer.NotifyPublishConfirmation(1))
 	res.handleNotifyClose(ch)
-	chNotifyPublishConfirm := producer.NotifyPublishConfirmation(1)
-	res.handlePublishConfirm(chNotifyPublishConfirm)
 	res.producer.Store(producer)
 	res.partitionConfirmMessageHandler = partitionConfirmMessageHandler
 	res.setStatus(StatusOpen)
@@ -85,14 +85,17 @@ func (r *ReliableSuperStreamProducer) handleNotifyClose(channelClose chan stream
 				} else {
 					r.setStatus(StatusClosed)
 				}
+				r.reconnectionSignal.L.Lock()
+				r.reconnectionSignal.Broadcast()
+				r.reconnectionSignal.L.Unlock()
 			} else {
 				logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", r.getInfo(), cPartitionClose.Event.Reason)
 				r.setStatus(StatusClosed)
+				r.reconnectionSignal.L.Lock()
+				r.reconnectionSignal.Broadcast()
+				r.reconnectionSignal.L.Unlock()
 				break
 			}
-			r.reconnectionSignal.L.Lock()
-			r.reconnectionSignal.Broadcast()
-			r.reconnectionSignal.L.Unlock()
 		}
 		logs.LogDebug("[ReliableSuperStreamProducer] - closed %s", r.getInfo())
 	}()
@@ -139,14 +142,29 @@ func (r *ReliableSuperStreamProducer) GetStatusAsString() string {
 }
 
 func (r *ReliableSuperStreamProducer) Send(message message.StreamMessage) error {
-	if err := isReadyToSend(r, r.reconnectionSignal); err != nil {
-		return err
-	}
-	r.mutex.Lock()
-	errW := r.producer.Load().Send(message)
-	r.mutex.Unlock()
+	for {
+		if err := isReadyToSend(r, r.reconnectionSignal); err != nil {
+			return err
+		}
+		r.mutex.Lock()
+		errW := r.producer.Load().Send(message)
+		r.mutex.Unlock()
 
-	return checkWriteError(r, errW)
+		if errors.Is(errW, stream.ErrProducerNotFound) {
+			// The partition producer was already removed from the SuperStreamProducer
+			// because its connection just dropped, but this ReliableSuperStreamProducer
+			// hasn't processed the close notification yet (status is still StatusOpen).
+			// Unlike the single-stream Producer, a super stream partition producer that
+			// no longer exists can't record the message as unconfirmed/failed, so it must
+			// not be silently dropped here. Wait for the reconnection to be handled and retry.
+			r.reconnectionSignal.L.Lock()
+			r.reconnectionSignal.Wait()
+			r.reconnectionSignal.L.Unlock()
+			continue
+		}
+
+		return checkWriteError(r, errW)
+	}
 }
 
 func (r *ReliableSuperStreamProducer) Close() error {

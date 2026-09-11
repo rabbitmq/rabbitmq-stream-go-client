@@ -47,6 +47,7 @@ type IReliable interface {
 func retry(backoff int, reliable IReliable, streamName string) (error, bool) {
 	waitTime := randomWaitWithBackoff(backoff)
 	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), streamName, waitTime)
+
 	// Super stream consumers expose a terminal signal so Close can interrupt
 	// backoff and drain pending partition notifications without reopening them.
 	var stopped <-chan struct{}

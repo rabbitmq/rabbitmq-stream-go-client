@@ -101,7 +101,7 @@ func main() {
 	}()
 
 	// Tune the parameters to test the reliability
-	const messagesToSend = 10_000_000
+	const messagesToSend = 20_000_000
 	const numberOfProducers = 2
 	const concurrentProducers = 1
 	const numberOfConsumers = 2
@@ -114,6 +114,7 @@ func main() {
 	const numberOfPartitions = 3
 	const superStreamName = "golang-reliable-super-stream-Test"
 	//
+	streamsName := []string{"golang-reliable-Test", "golang-reliable-Test-1", "golang-reliable-Test-2"}
 
 	reader := bufio.NewReader(os.Stdin)
 	stream.SetLevelInfo(logs.INFO)
@@ -148,7 +149,6 @@ func main() {
 	superConsumers := make([]*ha.ReliableSuperStreamConsumer, 0, numberOfConsumers)
 	isRunning := true
 
-	streamsName := []string{"golang-reliable-Test", "golang-reliable-Test-1", "golang-reliable-Test-2", "golang-reliable-Test-3"}
 	for _, streamName := range streamsName {
 		err = env.DeleteStream(streamName)
 		// If the stream does not exist,
