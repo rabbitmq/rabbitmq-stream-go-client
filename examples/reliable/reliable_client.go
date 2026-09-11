@@ -101,7 +101,7 @@ func main() {
 	}()
 
 	// Tune the parameters to test the reliability
-	const messagesToSend = 3_000_000
+	const messagesToSend = 10_000_000
 	const numberOfProducers = 2
 	const concurrentProducers = 1
 	const numberOfConsumers = 2
@@ -109,6 +109,10 @@ func main() {
 	const delayEachMessages = 500
 	const maxProducersPerClient = 2
 	const maxConsumersPerClient = 5
+	// addSuperStream also exercises a super stream, in addition to the normal streams above
+	const addSuperStream = true
+	const numberOfPartitions = 3
+	const superStreamName = "golang-reliable-super-stream-Test"
 	//
 
 	reader := bufio.NewReader(os.Stdin)
@@ -118,10 +122,10 @@ func main() {
 	fmt.Printf("  Connecting to RabbitMQ streaming...\n\n")
 
 	//  in case of load-balancer you can use the AddressResolver
-	// var resolver = stream.AddressResolver{
-	//	Host: "192.168.1.54",
-	//	Port: 5552,
-	// }
+	var resolver = stream.AddressResolver{
+		Host: "localhost",
+		Port: 5553,
+	}
 
 	env, err := stream.NewEnvironment(
 		stream.NewEnvironmentOptions().
@@ -129,17 +133,19 @@ func main() {
 			SetMaxConsumersPerClient(maxConsumersPerClient).
 			SetUser("guest").
 			SetPassword("guest").
-			SetHost("localhost").
-			SetPort(5552))
-	// SetHost(resolver.Host).
-	// SetPort(resolver.Port).
-	// SetAddressResolver(resolver))
+			//SetHost("localhost").
+			//SetPort(5552))
+			SetHost(resolver.Host).
+			SetPort(resolver.Port).
+			SetAddressResolver(resolver))
 
 	CheckErr(err)
 	fmt.Printf("  %sConnected%s  (max %d producers / %d consumers per client)\n\n",
 		ansiGreen, ansiReset, maxProducersPerClient, maxConsumersPerClient)
 	producers := make([]*ha.ReliableProducer, 0, numberOfProducers)
 	consumers := make([]*ha.ReliableConsumer, 0, numberOfConsumers)
+	superProducers := make([]*ha.ReliableSuperStreamProducer, 0, numberOfProducers)
+	superConsumers := make([]*ha.ReliableSuperStreamConsumer, 0, numberOfConsumers)
 	isRunning := true
 
 	streamsName := []string{"golang-reliable-Test", "golang-reliable-Test-1", "golang-reliable-Test-2", "golang-reliable-Test-3"}
@@ -161,6 +167,9 @@ func main() {
 			for isRunning {
 				totalConfirmed := atomic.LoadInt32(&confirmed) + atomic.LoadInt32(&fail)
 				expectedMessages := int32((messagesToSend * numberOfProducers * concurrentProducers * 2) * len(streamsName))
+				if addSuperStream {
+					expectedMessages += int32(messagesToSend * numberOfProducers * concurrentProducers)
+				}
 				cfmd := atomic.LoadInt32(&confirmed)
 				failed := atomic.LoadInt32(&fail)
 				cons := atomic.LoadInt32(&consumed)
@@ -222,6 +231,18 @@ func main() {
 				sectionTitle(fmt.Sprintf("CONSUMERS (%d)", len(consumers)))
 				for i, consumer := range consumers {
 					fmt.Printf("  [%d] %-40s  %s\n", i+1, consumer.GetInfo(), colorStatus(consumer.GetStatusAsString()))
+				}
+
+				if addSuperStream {
+					sectionTitle(fmt.Sprintf("SUPER STREAM PRODUCERS (%d)", len(superProducers)))
+					for i, producer := range superProducers {
+						fmt.Printf("  [%d] %-40s  %s\n", i+1, producer.GetStreamName(), colorStatus(producer.GetStatusAsString()))
+					}
+
+					sectionTitle(fmt.Sprintf("SUPER STREAM CONSUMERS (%d)", len(superConsumers)))
+					for i, consumer := range superConsumers {
+						fmt.Printf("  [%d] %-40s  %s\n", i+1, consumer.GetStreamName(), colorStatus(consumer.GetStatusAsString()))
+					}
 				}
 
 				fmt.Println()
@@ -304,6 +325,69 @@ func main() {
 		}
 	}
 
+	if addSuperStream {
+		err = env.DeleteSuperStream(superStreamName)
+		if !errors.Is(err, stream.StreamDoesNotExist) {
+			CheckErr(err)
+		}
+		err = env.DeclareSuperStream(superStreamName,
+			stream.NewPartitionsOptions(numberOfPartitions).
+				SetMaxLengthBytes(stream.ByteCapacity{}.GB(10)))
+		CheckErr(err)
+
+		for range numberOfConsumers {
+			superConsumer, err := ha.NewReliableSuperStreamConsumer(env,
+				superStreamName,
+				func(_ stream.ConsumerContext, _ *amqp.Message) {
+					atomic.AddInt32(&consumed, 1)
+				},
+				stream.NewSuperStreamConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()))
+			CheckErr(err)
+			superConsumers = append(superConsumers, superConsumer)
+		}
+
+		for i := 0; i < numberOfProducers; i++ {
+			superProducer, err := ha.NewReliableSuperStreamProducer(env,
+				superStreamName,
+				stream.NewSuperStreamProducerOptions(stream.NewHashRoutingStrategy(func(msg message.StreamMessage) string {
+					return msg.GetMessageProperties().MessageID.(string)
+				})).SetClientProvidedName(fmt.Sprintf("super-producer-%d", i)),
+				func(messageConfirm []*stream.PartitionPublishConfirm) {
+					go func() {
+						for _, partitionConfirm := range messageConfirm {
+							for _, msgStatus := range partitionConfirm.ConfirmationStatus {
+								if msgStatus.IsConfirmed() {
+									atomic.AddInt32(&confirmed, 1)
+								} else {
+									atomic.AddInt32(&fail, 1)
+								}
+							}
+						}
+					}()
+				})
+			CheckErr(err)
+			superProducers = append(superProducers, superProducer)
+			go func() {
+				for i := 0; i < concurrentProducers; i++ {
+					go func() {
+						for i := 0; i < messagesToSend; i++ {
+							msg := amqp.NewMessage([]byte("ha-super-stream"))
+							msg.Properties = &amqp.MessageProperties{
+								MessageID: fmt.Sprintf("super-%d-%d", i, time.Now().UnixNano()),
+							}
+							err := superProducer.Send(msg)
+							if i%delayEachMessages == 0 {
+								time.Sleep(sendDelay)
+							}
+							atomic.AddInt32(&sent, 1)
+							CheckErr(err)
+						}
+					}()
+				}
+			}()
+		}
+	}
+
 	fmt.Printf("\n  %sPress enter to close the connections.%s\n", ansiDim, ansiReset)
 	_, _ = reader.ReadString('\n')
 	for _, producer := range producers {
@@ -317,6 +401,22 @@ func main() {
 		if err != nil {
 			CheckErr(err)
 		}
+	}
+	if addSuperStream {
+		for _, producer := range superProducers {
+			err := producer.Close()
+			if err != nil {
+				CheckErr(err)
+			}
+		}
+		for _, consumer := range superConsumers {
+			err := consumer.Close()
+			if err != nil {
+				CheckErr(err)
+			}
+		}
+		err = env.DeleteSuperStream(superStreamName)
+		CheckErr(err)
 	}
 	isRunning = false
 	fmt.Printf("  %sConnections closed.%s  Press enter to close the environment.\n", ansiGreen, ansiReset)
