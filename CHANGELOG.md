@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Enhancements
+- Add `NewEnvironmentWithContext` for opt-in environment lifetime cancellation,
+  including dialing, TLS negotiation, socket I/O, RPC waits and reconnect delays.
+
+### Bug Fixes
+- Isolate bootstrap seed attempts so failed handshake teardown cannot mask or close the next connection.
+- Infer TLS server names from connection hostnames without mutating caller TLS options.
+- Return socket write errors immediately instead of waiting for a response timeout.
+
 ## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
 
 ## 1.8.3 - 2026-07-23

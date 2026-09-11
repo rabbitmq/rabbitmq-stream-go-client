@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
@@ -29,15 +31,64 @@ func newLocator(client *Client) *locator {
 }
 
 type Environment struct {
-	producers *producersEnvironment
-	consumers *consumersEnvironment
-	options   *EnvironmentOptions
-	locator   *locator
-	closed    bool
-	metrics   *streamMetrics
+	producers    *producersEnvironment
+	consumers    *consumersEnvironment
+	options      *EnvironmentOptions
+	locator      *locator
+	closed       atomic.Bool
+	cancel       context.CancelFunc
+	closeStarted atomic.Bool
+	closeDone    chan struct{}
+	metrics      *streamMetrics
 }
 
+// NewEnvironment creates an environment with the existing graceful-close behavior.
 func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
+	return newEnvironment(options, nil)
+}
+
+// NewEnvironmentWithContext creates an environment whose complete lifetime is
+// bounded by ctx. Canceling ctx interrupts connection setup, socket I/O, RPC waits
+// and reconnect delays for all producers and consumers in this environment.
+// Close also cancels this lifetime before releasing resources; pending publishes
+// can have an unknown outcome. Keep ctx alive for as long as the environment is
+// needed, and call Close to release its resources even after cancellation.
+func NewEnvironmentWithContext(ctx context.Context, options *EnvironmentOptions) (*Environment, error) {
+	if ctx == nil {
+		return nil, errors.New("environment context must not be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if options == nil {
+		options = NewEnvironmentOptions()
+	}
+	// Never install one environment's lifetime into caller-owned options.
+	copyOptions := *options
+	if options.TCPParameters == nil {
+		copyOptions.TCPParameters = newTCPParameterDefault()
+	} else {
+		tcp := *options.TCPParameters
+		copyOptions.TCPParameters = &tcp
+	}
+	copyOptions.ConnectionParameters = make([]*Broker, len(options.ConnectionParameters))
+	for i, broker := range options.ConnectionParameters {
+		if broker != nil {
+			copyBroker := *broker
+			copyOptions.ConnectionParameters[i] = &copyBroker
+		}
+	}
+	lifetime, cancel := context.WithCancel(ctx)
+	copyOptions.TCPParameters.connectionContext = lifetime
+	env, err := newEnvironment(&copyOptions, cancel)
+	if err != nil {
+		cancel()
+		return env, errors.Join(err, ctx.Err())
+	}
+	return env, nil
+}
+
+func newEnvironment(options *EnvironmentOptions, cancel context.CancelFunc) (*Environment, error) {
 	if options == nil {
 		options = NewEnvironmentOptions()
 	}
@@ -60,16 +111,6 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialise metrics: %w", err)
 	}
-
-	client := newClient(connectionParameters{
-		connectionName:    "go-stream-locator",
-		broker:            nil,
-		tcpParameters:     options.TCPParameters,
-		saslConfiguration: options.SaslConfiguration,
-		rpcTimeout:        options.RPCTimeout,
-		metrics:           metrics,
-	})
-	defer client.Close()
 
 	// we put a limit to the heartbeat.
 	// it doesn't make sense to have a heartbeat less than 3 seconds
@@ -118,13 +159,27 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	}
 
 	var connectionError error
+	var client *Client
 	for idx, parameter := range options.ConnectionParameters {
-		client.broker = parameter
-
+		// A failed handshake's reader can unwind after the next seed starts.
+		// Isolate each attempt's socket and coordinator from that old reader.
+		client = newClient(connectionParameters{
+			connectionName:    "go-stream-locator",
+			broker:            parameter,
+			tcpParameters:     options.TCPParameters,
+			saslConfiguration: options.SaslConfiguration,
+			rpcTimeout:        options.RPCTimeout,
+			metrics:           metrics,
+		})
 		connectionError = client.connect()
 		if connectionError == nil {
 			break
 		} else {
+			client.Close()
+			if contextErr := client.connectionContext().Err(); contextErr != nil {
+				connectionError = contextErr
+				break
+			}
 			nextIfThereIs := ""
 			if idx < len(options.ConnectionParameters)-1 {
 				nextIfThereIs = "Trying the next broker..."
@@ -134,17 +189,22 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		}
 	}
 
+	defer client.Close()
 	return &Environment{
 		options:   options,
 		producers: newProducersEnvironment(options.MaxProducersPerClient, metrics),
 		consumers: newConsumersEnvironment(options.MaxConsumersPerClient, metrics),
-		closed:    false,
+		cancel:    cancel,
+		closeDone: make(chan struct{}),
 		locator:   newLocator(client),
 		metrics:   metrics,
 	}, connectionError
 }
 
 func (env *Environment) maybeReconnectLocator() error {
+	if err := env.options.TCPParameters.connectionContextError(); err != nil {
+		return err
+	}
 	env.locator.mutex.Lock()
 	defer env.locator.mutex.Unlock()
 	if env.locator.client != nil && env.locator.client.socket.isOpen() {
@@ -170,7 +230,9 @@ func (env *Environment) maybeReconnectLocator() error {
 		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", c.broker.Scheme, c.broker.User, c.broker.Host, c.broker.Port, c.broker.Vhost)
 		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: %s", err, sleepTime, brokerUri)
 
-		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
+		if err := c.waitDelay(time.Duration(sleepTime) * time.Millisecond); err != nil {
+			return err
+		}
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		n := r.Intn(len(env.options.ConnectionParameters))
 		c1 := newClient(connectionParameters{
@@ -259,7 +321,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	}
 	streamsMetadata := env.locator.client.metaData(streamName)
 	if streamsMetadata == nil {
-		return nil, StreamMetadataFailure
+		return nil, env.locator.client.connectionError(StreamMetadataFailure)
 	}
 	streamMetadata := streamsMetadata.Get(streamName)
 	if streamMetadata.responseCode != responseCodeOk {
@@ -269,9 +331,14 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	tentatives := 0
 	for streamMetadata == nil || streamMetadata.Leader == nil && tentatives < 3 {
 		streamsMetadata = env.locator.client.metaData(streamName)
+		if streamsMetadata == nil {
+			return nil, env.locator.client.connectionError(StreamMetadataFailure)
+		}
 		streamMetadata = streamsMetadata.Get(streamName)
 		tentatives++
-		time.Sleep(100 * time.Millisecond)
+		if err := env.locator.client.waitDelay(100 * time.Millisecond); err != nil {
+			return nil, err
+		}
 	}
 
 	if streamMetadata.Leader == nil {
@@ -301,17 +368,29 @@ func (env *Environment) NewSuperStreamProducer(superStream string, superStreamPr
 }
 
 func (env *Environment) Close() error {
+	if env.cancel != nil {
+		if !env.closeStarted.CompareAndSwap(false, true) {
+			<-env.closeDone
+			return nil
+		}
+		defer close(env.closeDone)
+		env.cancel()
+	}
 	_ = env.producers.close()
 	_ = env.consumers.close()
+	if env.cancel != nil {
+		env.locator.mutex.Lock()
+		defer env.locator.mutex.Unlock()
+	}
 	if env.locator.client != nil {
 		env.locator.client.Close()
 	}
-	env.closed = true
+	env.closed.Store(true)
 	return nil
 }
 
 func (env *Environment) IsClosed() bool {
-	return env.closed
+	return env.closed.Load() || env.options.TCPParameters.connectionContextError() != nil
 }
 
 type EnvironmentOptions struct {
@@ -669,7 +748,9 @@ func (cc *environmentCoordinator) validateBrokerConnection(client *Client, broke
 		if err != nil {
 			return nil, err
 		}
-		time.Sleep(time.Duration(500+rand.Intn(1000)) * time.Millisecond)
+		if err := client.waitDelay(time.Duration(500+rand.Intn(1000)) * time.Millisecond); err != nil {
+			return nil, err
+		}
 	}
 	return client, nil
 }

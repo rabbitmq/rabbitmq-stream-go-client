@@ -867,7 +867,13 @@ func (producer *Producer) waitForInflightMessages() {
 		logs.LogInfo("wait inflight messages - unconfirmed len: %d - retry: %d",
 			producer.unConfirmed.size(), tentatives)
 		producer.flushUnConfirmedMessages()
-		time.Sleep(time.Duration(500) * time.Millisecond)
+		if producer.client != nil {
+			if err := producer.client.waitDelay(500 * time.Millisecond); err != nil {
+				return
+			}
+		} else {
+			time.Sleep(500 * time.Millisecond)
+		}
 		tentatives++
 	}
 }
