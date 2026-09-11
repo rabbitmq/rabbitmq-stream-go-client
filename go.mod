@@ -1,6 +1,6 @@
 module github.com/rabbitmq/rabbitmq-stream-go-client
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/golang/snappy v1.0.0
@@ -14,7 +14,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/metric v1.44.0
-	golang.org/x/text v0.41.0
+	golang.org/x/text v0.42.0
 )
 
 require (
@@ -32,7 +32,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/tools v0.48.0 // indirect
+	golang.org/x/tools v0.49.0 // indirect
 )
