@@ -93,6 +93,24 @@ type Client struct {
 
 	doneTimeoutTicker chan struct{}
 	metrics           *streamMetrics
+
+	// deliverChunk is the payload of the chunk handleDeliver is reading, and
+	// deliverBytes/deliverReader are the readers over it. All three are
+	// reused from chunk to chunk: handleResponse is the only goroutine that
+	// ever touches them, and nothing outlives the call -- decodeMessage
+	// copies every record out of the chunk before it returns. Allocating a
+	// payload buffer and a bufio.Reader per chunk instead was 12% of
+	// everything a consumer-heavy application allocated. What is retained
+	// per connection in exchange is one chunk's worth of payload -- bounded
+	// by the negotiated frame size -- plus one 4 KiB read buffer.
+	deliverChunk  []byte
+	deliverBytes  *bytes.Reader
+	deliverReader *bufio.Reader
+
+	// consumerAttributes memoises otelAttributesForConsumer per stream. The
+	// set cannot change for a given broker and stream, and it was being
+	// rebuilt twice for every chunk delivered.
+	consumerAttributes *sync.Map
 }
 
 func newClient(parameters connectionParameters) *Client {
@@ -128,7 +146,11 @@ func newClient(parameters connectionParameters) *Client {
 		availableFeatures: newAvailableFeatures(),
 		doneTimeoutTicker: make(chan struct{}, 1),
 		metrics:           parameters.metrics,
+
+		deliverBytes:       bytes.NewReader(nil),
+		consumerAttributes: &sync.Map{},
 	}
+	c.deliverReader = bufio.NewReader(c.deliverBytes)
 	c.setConnectionName(parameters.connectionName)
 	return c
 }
@@ -1283,7 +1305,16 @@ func (c *Client) otelAttributesForConfirm() attribute.Set {
 }
 
 func (c *Client) otelAttributesForConsumer(streamName string) attribute.Set {
+	if cached, ok := c.consumerAttributes.Load(streamName); ok {
+		if set, ok := cached.(attribute.Set); ok {
+			return set
+		}
+	}
+
 	attrs := c.otelBaseAttributes()
 	attrs = append(attrs, semconv.MessagingOperationTypeReceive, semconv.MessagingOperationName("deliver"), semconv.MessagingDestinationName(streamName))
-	return attribute.NewSet(attrs...)
+	set := attribute.NewSet(attrs...)
+	c.consumerAttributes.Store(streamName, set)
+
+	return set
 }
