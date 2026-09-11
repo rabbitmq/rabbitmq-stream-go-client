@@ -2,64 +2,64 @@ package stream_test
 
 import (
 	"fmt"
-	"testing"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/amqp"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestCloseNotificationsAfterBrokerOperations(t *testing.T) {
-	env, err := stream.NewEnvironment(stream.NewEnvironmentOptions())
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, env.Close()) })
-	name := fmt.Sprintf("close-notification-%d", time.Now().UnixNano())
-	require.NoError(t, env.DeclareStream(name, stream.NewStreamOptions()))
-	t.Cleanup(func() { assert.NoError(t, env.DeleteStream(name)) })
-	producer, err := env.NewProducer(name, stream.NewProducerOptions())
-	require.NoError(t, err)
-	require.NoError(t, producer.Close())
-	select {
-	case event, ok := <-producer.NotifyClose():
-		require.True(t, ok)
-		assert.Equal(t, stream.DeletePublisher, event.Reason)
-	case <-time.After(5 * time.Second):
-		t.Fatal("producer close before registration was lost")
-	}
-	consumer, err := env.NewConsumer(name, func(stream.ConsumerContext, *amqp.Message) {}, stream.NewConsumerOptions())
-	require.NoError(t, err)
-	require.NoError(t, consumer.Close())
-	select {
-	case event, ok := <-consumer.NotifyClose():
-		require.True(t, ok)
-		assert.Equal(t, stream.UnSubscribe, event.Reason)
-	case <-time.After(5 * time.Second):
-		t.Fatal("consumer close before registration was lost")
-	}
-	superName := name + "-super"
-	require.NoError(t, env.DeclareSuperStream(superName, stream.NewPartitionsOptions(2)))
-	t.Cleanup(func() { assert.NoError(t, env.DeleteSuperStream(superName)) })
-	super, err := env.NewSuperStreamConsumer(superName, func(stream.ConsumerContext, *amqp.Message) {}, stream.NewSuperStreamConsumerOptions())
-	require.NoError(t, err)
-	require.NoError(t, super.Close())
-	events := super.NotifyPartitionClose(1)
-	var partitions []string
-	for range 2 {
-		select {
-		case event, ok := <-events:
-			require.True(t, ok, "partition events were discarded")
+var _ = Describe("Close notifications after broker operations", func() {
+	It("retains close events registered after the entity is closed", func() {
+		env, err := stream.NewEnvironment(stream.NewEnvironmentOptions())
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { Expect(env.Close()).To(Succeed()) })
+
+		name := fmt.Sprintf("close-notification-%d", time.Now().UnixNano())
+		Expect(env.DeclareStream(name, stream.NewStreamOptions())).To(Succeed())
+		DeferCleanup(func() { Expect(env.DeleteStream(name)).To(Succeed()) })
+
+		By("closing a producer before registering for its notifications")
+		producer, err := env.NewProducer(name, stream.NewProducerOptions())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(producer.Close()).To(Succeed())
+
+		var producerEvent stream.Event
+		Eventually(producer.NotifyClose(), 5*time.Second).Should(Receive(&producerEvent),
+			"producer close before registration was lost")
+		Expect(producerEvent.Reason).To(Equal(stream.DeletePublisher))
+
+		By("closing a consumer before registering for its notifications")
+		consumer, err := env.NewConsumer(name, func(stream.ConsumerContext, *amqp.Message) {}, stream.NewConsumerOptions())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(consumer.Close()).To(Succeed())
+
+		var consumerEvent stream.Event
+		Eventually(consumer.NotifyClose(), 5*time.Second).Should(Receive(&consumerEvent),
+			"consumer close before registration was lost")
+		Expect(consumerEvent.Reason).To(Equal(stream.UnSubscribe))
+
+		By("closing a super stream consumer before registering for its partition notifications")
+		superName := name + "-super"
+		Expect(env.DeclareSuperStream(superName, stream.NewPartitionsOptions(2))).To(Succeed())
+		DeferCleanup(func() { Expect(env.DeleteSuperStream(superName)).To(Succeed()) })
+
+		super, err := env.NewSuperStreamConsumer(superName, func(stream.ConsumerContext, *amqp.Message) {}, stream.NewSuperStreamConsumerOptions())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(super.Close()).To(Succeed())
+
+		events := super.NotifyPartitionClose(1)
+		partitions := make([]string, 0, 2)
+		for range 2 {
+			var event stream.CPartitionClose
+			Eventually(events, 5*time.Second).Should(Receive(&event),
+				"partition close before registration was lost")
 			partitions = append(partitions, event.Partition)
-		case <-time.After(5 * time.Second):
-			t.Fatal("partition close before registration was lost")
 		}
-	}
-	assert.ElementsMatch(t, []string{superName + "-0", superName + "-1"}, partitions)
-	select {
-	case _, ok := <-events:
-		assert.False(t, ok)
-	case <-time.After(5 * time.Second):
-		t.Fatal("partition notification channel did not close")
-	}
-}
+		Expect(partitions).To(ConsistOf(superName+"-0", superName+"-1"))
+
+		Eventually(events, 5*time.Second).Should(BeClosed(),
+			"partition notification channel did not close")
+	})
+})

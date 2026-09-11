@@ -2,37 +2,12 @@ package ha
 
 import (
 	"sync"
-	"testing"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/stream"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func TestSuperStreamDrainsTerminalPartitionEvents(t *testing.T) {
-	r := &ReliableSuperStreamConsumer{consumerOptions: stream.NewSuperStreamConsumerOptions(), mutexStatus: &sync.Mutex{}, status: StatusOpen}
-	events := make(chan stream.CPartitionClose, 1)
-	r.handleNotifyClose(events)
-	sent := make(chan struct{})
-	go func() {
-		defer close(sent)
-		defer close(events)
-		// A terminal event followed by unexpected closes must be drained without
-		// starting reconnection against this deliberately absent environment.
-		events <- stream.CPartitionClose{Event: stream.Event{Reason: stream.UnSubscribe}}
-		for range 4 {
-			events <- stream.CPartitionClose{Event: stream.Event{Reason: stream.SocketClosed}}
-		}
-	}()
-	select {
-	case <-sent:
-	case <-time.After(time.Second):
-		t.Fatal("HA listener abandoned pending partition events")
-	}
-	require.Eventually(t, func() bool { return r.GetStatus() == StatusClosed }, time.Second, time.Millisecond)
-	assert.Equal(t, StatusClosed, r.GetStatus())
-}
 
 // Embedding the real reliable consumer retains its shutdown behavior while
 // exposing the exact point at which retry enters backoff, without a broker.
@@ -49,31 +24,65 @@ func (r *retryCloseConsumer) getInfo() string {
 	return "close-during-retry"
 }
 
-func TestSuperStreamCloseInterruptsRetryBackoff(t *testing.T) {
-	r := &ReliableSuperStreamConsumer{consumerOptions: stream.NewSuperStreamConsumerOptions(), mutexStatus: &sync.Mutex{}, status: StatusReconnecting, stopRetry: make(chan struct{})}
-	r.consumer.Store(&stream.SuperStreamConsumer{})
-	observer := &retryCloseConsumer{ReliableSuperStreamConsumer: r, entered: make(chan struct{}, 1)}
-	finished := make(chan error, 1)
-	go func() {
-		err, connected := retry(1, observer, "events-0")
-		if connected {
-			finished <- nil
-		} else {
-			finished <- err
+var _ = Describe("Reliable Super Stream Consumer shutdown", func() {
+	It("drains terminal partition events", func() {
+		r := &ReliableSuperStreamConsumer{
+			consumerOptions: stream.NewSuperStreamConsumerOptions(),
+			mutexStatus:     &sync.Mutex{},
+			status:          StatusOpen,
 		}
-	}()
-	select {
-	case <-observer.entered:
-	case <-time.After(time.Second):
-		t.Fatal("retry did not enter backoff")
-	}
-	require.NoError(t, r.Close())
-	select {
-	case err := <-finished:
-		require.ErrorIs(t, err, stream.AlreadyClosed)
-	case <-time.After(time.Second):
-		t.Fatal("terminal Close did not stop pending retry")
-	}
-	assert.Equal(t, StatusClosed, r.GetStatus())
-	require.NoError(t, r.Close())
-}
+		events := make(chan stream.CPartitionClose, 1)
+		r.handleNotifyClose(events)
+
+		sent := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(sent)
+			defer close(events)
+			// A terminal event followed by unexpected closes must be drained without
+			// starting reconnection against this deliberately absent environment.
+			events <- stream.CPartitionClose{Event: stream.Event{Reason: stream.UnSubscribe}}
+			for range 4 {
+				events <- stream.CPartitionClose{Event: stream.Event{Reason: stream.SocketClosed}}
+			}
+		}()
+
+		Eventually(sent, time.Second).Should(BeClosed(),
+			"HA listener abandoned pending partition events")
+		Eventually(r.GetStatus).WithTimeout(time.Second).WithPolling(time.Millisecond).
+			Should(Equal(StatusClosed))
+	})
+
+	It("interrupts retry backoff on a terminal Close", func() {
+		r := &ReliableSuperStreamConsumer{
+			consumerOptions: stream.NewSuperStreamConsumerOptions(),
+			mutexStatus:     &sync.Mutex{},
+			status:          StatusReconnecting,
+			stopRetry:       make(chan struct{}),
+		}
+		r.consumer.Store(&stream.SuperStreamConsumer{})
+		observer := &retryCloseConsumer{ReliableSuperStreamConsumer: r, entered: make(chan struct{}, 1)}
+
+		finished := make(chan error, 1)
+		go func() {
+			defer GinkgoRecover()
+			err, connected := retry(1, observer, "events-0")
+			if connected {
+				finished <- nil
+			} else {
+				finished <- err
+			}
+		}()
+
+		Eventually(observer.entered, time.Second).Should(Receive(), "retry did not enter backoff")
+		Expect(r.Close()).To(Succeed())
+
+		var err error
+		Eventually(finished, time.Second).Should(Receive(&err),
+			"terminal Close did not stop pending retry")
+		Expect(err).To(MatchError(stream.AlreadyClosed))
+
+		Expect(r.GetStatus()).To(Equal(StatusClosed))
+		Expect(r.Close()).To(Succeed(), "Close must be idempotent")
+	})
+})
