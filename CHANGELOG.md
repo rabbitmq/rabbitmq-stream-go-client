@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Bug Fixes
+- Remove data races on the environment locator client and closed flag, close replaced and failed locator connections, stop locator reconnect retries on `Close`, and return `AlreadyClosed` from environment operations after `Close` instead of opening a new locator connection.
+- Decrement the connections metric only for connections that were counted, so closing a connection whose handshake failed no longer drives it negative.
+
 ## [[1.9.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.9.0)]
 
 ## 1.9.0 - 2026-10-19
