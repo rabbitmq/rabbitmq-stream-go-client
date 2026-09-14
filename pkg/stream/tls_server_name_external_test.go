@@ -42,12 +42,12 @@ var _ = Describe("TLS server name", func() {
 				}
 				defer func() { _ = conn.Close() }()
 				_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
-				tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}})
+				tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
 				handshakes <- tlsConn.Handshake()
 				_, _ = io.Copy(io.Discard, tlsConn)
 			}()
 
-			config := &tls.Config{RootCAs: roots, ServerName: serverName}
+			config := &tls.Config{RootCAs: roots, ServerName: serverName, MinVersion: tls.VersionTLS12}
 			port := listener.Addr().(*net.TCPAddr).Port
 			_, err = stream.NewEnvironment(stream.NewEnvironmentOptions().
 				SetUri(fmt.Sprintf("rabbitmq-stream+tls://guest:guest@localhost:%d/", port)).
