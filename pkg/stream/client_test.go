@@ -342,13 +342,13 @@ var _ = Describe("Frame size enforcement", func() {
 		defer func() { Expect(env.Close()).To(Succeed()) }()
 
 		// Force the locator's connection closed so the next operation reconnects.
-		env.locator.client.socket.shutdown(fmt.Errorf("forced close for reconnect test"))
-		Expect(env.locator.client.socket.isOpen()).To(BeFalse())
+		env.locator.client.Load().socket.shutdown(fmt.Errorf("forced close for reconnect test"))
+		Expect(env.locator.client.Load().socket.isOpen()).To(BeFalse())
 
 		_, err = env.StreamExists(uuid.New().String())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(env.locator.client.socket.isOpen()).To(BeTrue())
-		Expect(env.locator.client.maxFrameSize()).To(Equal(100), "frame max must be re-negotiated on the reconnected client")
+		Expect(env.locator.client.Load().socket.isOpen()).To(BeTrue())
+		Expect(env.locator.client.Load().maxFrameSize()).To(Equal(100), "frame max must be re-negotiated on the reconnected client")
 
 		declErr := make(chan error, 1)
 		go func() {
