@@ -1,9 +1,9 @@
 package stream
 
 import (
+	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"slices"
 
@@ -91,8 +91,13 @@ type SuperStreamConsumer struct {
 	env        *Environment
 	mutex      sync.Mutex
 
-	chSuperStreamPartitionMutex sync.Mutex
-	chSuperStreamPartitionClose chan CPartitionClose
+	chSuperStreamPartitionMutex  sync.Mutex
+	chSuperStreamPartitionClose  chan CPartitionClose
+	pendingPartitionClose        []CPartitionClose
+	partitionNotificationsClosed bool
+	partitionCloseWorkers        sync.WaitGroup
+	stopPartitionForwarding      chan struct{}
+	closed                       bool
 
 	SuperStream                string
 	SuperStreamConsumerOptions *SuperStreamConsumerOptions
@@ -117,6 +122,7 @@ func newSuperStreamConsumer(env *Environment, superStream string, messagesHandle
 
 	return &SuperStreamConsumer{
 		env:                        env,
+		stopPartitionForwarding:    make(chan struct{}),
 		SuperStream:                superStream,
 		SuperStreamConsumerOptions: superStreamConsumerOptions,
 		MessagesHandler:            messagesHandler,
@@ -138,13 +144,47 @@ func (s *SuperStreamConsumer) init() error {
 	return nil
 }
 
-// NotifyPartitionClose returns a channel that will be notified when a partition is closed
-// Event will give the reason of the close
-// size is the size of the channel
+// NotifyPartitionClose returns the partition close notification channel. Events
+// emitted before registration are retained. The buffer holds at least size events
+// and is enlarged to hold one event per partition or retained events. Repeated
+// calls return the same channel. Close does not wait for readers: if the buffer
+// is already full during shutdown, further notifications may be discarded.
 func (s *SuperStreamConsumer) NotifyPartitionClose(size int) chan CPartitionClose {
-	ch := make(chan CPartitionClose, size)
-	s.chSuperStreamPartitionClose = ch
-	return ch
+	s.chSuperStreamPartitionMutex.Lock()
+	defer s.chSuperStreamPartitionMutex.Unlock()
+	if s.chSuperStreamPartitionClose == nil {
+		s.chSuperStreamPartitionClose = make(chan CPartitionClose, max(size, len(s.partitions), len(s.pendingPartitionClose)))
+		for _, event := range s.pendingPartitionClose {
+			s.chSuperStreamPartitionClose <- event
+		}
+		s.pendingPartitionClose = nil
+		if s.partitionNotificationsClosed {
+			close(s.chSuperStreamPartitionClose)
+		}
+	}
+	return s.chSuperStreamPartitionClose
+}
+
+func (s *SuperStreamConsumer) notifyPartitionClose(event CPartitionClose) {
+	s.chSuperStreamPartitionMutex.Lock()
+	if s.chSuperStreamPartitionClose == nil {
+		s.pendingPartitionClose = append(s.pendingPartitionClose, event)
+		s.chSuperStreamPartitionMutex.Unlock()
+		return
+	}
+	ch := s.chSuperStreamPartitionClose
+	s.chSuperStreamPartitionMutex.Unlock()
+	// Prefer retaining the event whenever buffer space exists, including after
+	// Close begins. An abandoned reader must not block shutdown indefinitely.
+	select {
+	case ch <- event:
+		return
+	default:
+	}
+	select {
+	case ch <- event:
+	case <-s.stopPartitionForwarding:
+	}
 }
 
 func (s *SuperStreamConsumer) getConsumers() []*Consumer {
@@ -156,6 +196,10 @@ func (s *SuperStreamConsumer) getConsumers() []*Consumer {
 func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSpecification) error {
 	logs.LogDebug("[SuperStreamConsumer] ConnectPartition for partition: %s", partition)
 	s.mutex.Lock()
+	if s.closed {
+		s.mutex.Unlock()
+		return AlreadyClosed
+	}
 	found := slices.Contains(s.partitions, partition)
 	if !found {
 		s.mutex.Unlock()
@@ -211,11 +255,18 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 		return err
 	}
 	s.mutex.Lock()
+	if s.closed {
+		s.mutex.Unlock()
+		_ = consumer.Close()
+		return AlreadyClosed
+	}
 	s.activeConsumers = append(s.activeConsumers, consumer)
+	s.partitionCloseWorkers.Add(1)
 	closedEvent := consumer.NotifyClose()
 	s.mutex.Unlock()
 
 	go func(gpartion string, _closedEvent <-chan Event) {
+		defer s.partitionCloseWorkers.Done()
 		logs.LogDebug("[SuperStreamConsumer] chSuperStreamPartitionClose started for partition: %s", gpartion)
 		// one shot event
 		event := <-_closedEvent
@@ -227,15 +278,7 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 			}
 		}
 		s.mutex.Unlock()
-		s.chSuperStreamPartitionMutex.Lock()
-		if s.chSuperStreamPartitionClose != nil {
-			s.chSuperStreamPartitionClose <- CPartitionClose{
-				Partition: gpartion,
-				Event:     event,
-				Context:   s,
-			}
-		}
-		s.chSuperStreamPartitionMutex.Unlock()
+		s.notifyPartitionClose(CPartitionClose{Partition: gpartion, Event: event, Context: s})
 		logs.LogDebug("[SuperStreamConsumer] chSuperStreamPartitionClose for partition: %s", gpartion)
 	}(partition, closedEvent)
 
@@ -245,25 +288,34 @@ func (s *SuperStreamConsumer) ConnectPartition(partition string, offset OffsetSp
 func (s *SuperStreamConsumer) Close() error {
 	logs.LogDebug("[SuperStreamConsumer] Closing SuperStreamConsumer for: %s", s.SuperStream)
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	for len(s.activeConsumers) > 0 {
-		err := s.activeConsumers[0].Close()
-		if err != nil {
-			return err
-		}
-		s.activeConsumers = s.activeConsumers[1:]
+	if s.closed {
+		s.mutex.Unlock()
+		return nil
 	}
-
-	// give the time to raise the close event
+	s.closed = true
+	if s.stopPartitionForwarding != nil {
+		close(s.stopPartitionForwarding)
+	}
+	consumers := s.activeConsumers
+	s.activeConsumers = nil
+	s.mutex.Unlock()
+	var result error
+	for _, consumer := range consumers {
+		if err := consumer.Close(); err != nil && !errors.Is(err, AlreadyClosed) {
+			result = errors.Join(result, err)
+		}
+	}
+	// Each registered partition worker finishes before the notification channel
+	// is closed. No timer or caller registration is needed.
 	go func() {
-		time.Sleep(2 * time.Second)
+		s.partitionCloseWorkers.Wait()
 		s.chSuperStreamPartitionMutex.Lock()
+		defer s.chSuperStreamPartitionMutex.Unlock()
+		s.partitionNotificationsClosed = true
 		if s.chSuperStreamPartitionClose != nil {
 			close(s.chSuperStreamPartitionClose)
 		}
-		s.chSuperStreamPartitionMutex.Unlock()
 	}()
-
 	logs.LogDebug("[SuperStreamConsumer] Closed SuperStreamConsumer for: %s", s.SuperStream)
-	return nil
+	return result
 }

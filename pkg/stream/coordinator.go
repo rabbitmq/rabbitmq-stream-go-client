@@ -67,6 +67,7 @@ func (coordinator *Coordinator) NewProducer(
 		return nil, err
 	}
 	var producer = &Producer{
+		closeHandler:              make(chan Event, 1),
 		options:                   parameters,
 		mutex:                     &sync.RWMutex{},
 		unConfirmed:               newUnConfirmed(queueSize),
@@ -192,6 +193,7 @@ func (coordinator *Coordinator) NewConsumer(
 		return nil, err
 	}
 	var consumer = &Consumer{
+		closeHandler:         make(chan Event, 1),
 		options:              parameters,
 		response:             newResponse(lookUpCommand(commandSubscribe)),
 		status:               open,
