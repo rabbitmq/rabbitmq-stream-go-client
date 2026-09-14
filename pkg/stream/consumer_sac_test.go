@@ -68,12 +68,12 @@ var _ = Describe("Streaming Single Active Consumer", func() {
 		// does not support SAC .
 		// so we can validate it
 		// This method is not thread safe and should be used only for testing purposes
-		testEnvironment.locator.client.availableFeatures.brokerSingleActiveConsumerEnabled = false
+		testEnvironment.locator.client.Load().availableFeatures.brokerSingleActiveConsumerEnabled = false
 		handleMessages := func(_ ConsumerContext, _ *amqp.Message) {
 
 		}
 
-		_, err = testEnvironment.locator.client.DeclareSubscriber(streamName, handleMessages, NewConsumerOptions().SetSingleActiveConsumer(
+		_, err = testEnvironment.locator.client.Load().DeclareSubscriber(streamName, handleMessages, NewConsumerOptions().SetSingleActiveConsumer(
 			NewSingleActiveConsumer(func(_ string, _ bool) OffsetSpecification {
 				return OffsetSpecification{}.Last()
 			}),
