@@ -121,6 +121,19 @@ func (coordinator *Coordinator) RemoveResponseById(id any) error {
 	return nil
 }
 
+// discardResponse detaches an abandoned RPC without closing its channels: a
+// frame reader may already hold the response and finish sending buffered values.
+func (coordinator *Coordinator) discardResponse(response *Response) {
+	coordinator.mutex.Lock()
+	defer coordinator.mutex.Unlock()
+	for key, registered := range coordinator.responses {
+		if registered == response {
+			delete(coordinator.responses, key)
+			return
+		}
+	}
+}
+
 func (coordinator *Coordinator) ProducersCount() int {
 	return coordinator.countSyncMap(coordinator.producers)
 }
