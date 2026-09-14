@@ -17,16 +17,70 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
+const (
+	locatorIdle int32 = iota
+	locatorReconnecting
+	locatorClosed
+)
+
+// locator owns the connection used by the environment's stream operations.
+//
+// Only the reconnecting goroutine (holding mutex) stores client, and only while
+// state is locatorReconnecting; Close never takes mutex and loads client only
+// when it moves state from locatorIdle to locatorClosed. So whatever the
+// interleaving, the last locator client is closed exactly once:
+//   - Close wins before a reconnect starts: the reconnect cannot leave
+//     locatorIdle, creates nothing and Close closes the current client.
+//   - Close runs during a reconnect: it moves locatorReconnecting to
+//     locatorClosed without loading, the reconnect fails to move back to
+//     locatorIdle and closes the client it published.
+//   - Close runs after a reconnect: it closes the client that was published.
+//
+// Replaced clients and failed attempts are closed by the reconnect itself.
 type locator struct {
 	// client is replaced under mutex and read without it by every operation.
 	client atomic.Pointer[Client]
-	mutex  sync.Mutex
+	// mutex serializes reconnects; Close never takes it.
+	mutex sync.Mutex
+	// state decides who closes the last client, see above.
+	state atomic.Int32
+	// closing is closed by the Close that moves state to locatorClosed and
+	// interrupts the reconnect backoff.
+	closing chan struct{}
+	// backoff returns the delay before the given reconnect attempt;
+	// nil uses the default random delay.
+	backoff func(attempt int) time.Duration
 }
 
 func newLocator(client *Client) *locator {
-	l := &locator{}
+	l := &locator{closing: make(chan struct{})}
 	l.client.Store(client)
 	return l
+}
+
+// close marks the locator closed and returns the client the caller must close,
+// or nil when the locator was already closed or a running reconnect closes it.
+func (l *locator) close() *Client {
+	for {
+		state := l.state.Load()
+		if state == locatorClosed {
+			return nil
+		}
+		if l.state.CompareAndSwap(state, locatorClosed) {
+			close(l.closing)
+			if state == locatorIdle {
+				return l.client.Load()
+			}
+			return nil
+		}
+	}
+}
+
+func (l *locator) retryDelay(attempt int) time.Duration {
+	if l.backoff != nil {
+		return l.backoff(attempt)
+	}
+	return time.Duration(rand.Intn(5000)+attempt*1000) * time.Millisecond
 }
 
 type Environment struct {
@@ -145,48 +199,72 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 }
 
 func (env *Environment) maybeReconnectLocator() error {
-	env.locator.mutex.Lock()
-	defer env.locator.mutex.Unlock()
-	if c := env.locator.client.Load(); c != nil && c.socket.isOpen() {
+	l := env.locator
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	if l.state.Load() == locatorClosed {
+		return AlreadyClosed
+	}
+	if c := l.client.Load(); c != nil && c.socket.isOpen() {
 		return nil
 	}
+	if !l.state.CompareAndSwap(locatorIdle, locatorReconnecting) {
+		return AlreadyClosed
+	}
 
+	c := env.dialLocator()
+	if c != nil {
+		// publish before leaving locatorReconnecting, see locator
+		if old := l.client.Swap(c); old != nil {
+			old.Close()
+		}
+	}
+	if !l.state.CompareAndSwap(locatorReconnecting, locatorIdle) {
+		// Close ran during the reconnect and left the last client to us
+		if c != nil {
+			c.Close()
+		}
+		return AlreadyClosed
+	}
+	return nil
+}
+
+// dialLocator connects a new locator client, retrying until it succeeds.
+// It returns nil when the locator is closed while waiting to retry. An attempt
+// blocked inside connect (dial, or a handshake wait without timeout) is only
+// abandoned once connect returns.
+func (env *Environment) dialLocator() *Client {
+	l := env.locator
 	broker := env.options.ConnectionParameters[0]
-	c := newClient(connectionParameters{
-		connectionName:    "go-stream-locator",
-		broker:            broker,
-		tcpParameters:     env.options.TCPParameters,
-		saslConfiguration: env.options.SaslConfiguration,
-		rpcTimeout:        env.options.RPCTimeout,
-		metrics:           env.metrics,
-	})
-
-	env.locator.client.Store(c)
-	err := c.connect()
-	tentatives := 1
-	for err != nil {
-		sleepTime := rand.Intn(5000) + (tentatives * 1000)
-
-		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", c.broker.Scheme, c.broker.User, c.broker.Host, c.broker.Port, c.broker.Vhost)
-		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: %s", err, sleepTime, brokerUri)
-
-		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		n := r.Intn(len(env.options.ConnectionParameters))
-		c1 := newClient(connectionParameters{
+	for attempt := 1; ; attempt++ {
+		c := newClient(connectionParameters{
 			connectionName:    "go-stream-locator",
-			broker:            env.options.ConnectionParameters[n],
+			broker:            broker,
 			tcpParameters:     env.options.TCPParameters,
 			saslConfiguration: env.options.SaslConfiguration,
 			rpcTimeout:        env.options.RPCTimeout,
 			metrics:           env.metrics,
 		})
-		tentatives++
-		env.locator.client.Store(c1)
-		err = c1.connect()
-	}
+		err := c.connect()
+		if err == nil {
+			return c
+		}
+		// connect opens the socket and starts the reader before the handshake
+		c.Close()
 
-	return env.locator.client.Load().connect()
+		delay := l.retryDelay(attempt)
+		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", c.broker.Scheme, c.broker.User, c.broker.Host, c.broker.Port, c.broker.Vhost)
+		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: %s", err, delay.Milliseconds(), brokerUri)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-l.closing:
+			timer.Stop()
+			return nil
+		case <-timer.C:
+		}
+		broker = env.options.ConnectionParameters[rand.Intn(len(env.options.ConnectionParameters))]
+	}
 }
 
 func (env *Environment) DeclareStream(streamName string, options *StreamOptions) error {
@@ -302,9 +380,12 @@ func (env *Environment) NewSuperStreamProducer(superStream string, superStreamPr
 }
 
 func (env *Environment) Close() error {
+	// close the locator first so operations started while producers and
+	// consumers close (e.g. reliable reconnects) fail fast with AlreadyClosed
+	client := env.locator.close()
 	_ = env.producers.close()
 	_ = env.consumers.close()
-	if client := env.locator.client.Load(); client != nil {
+	if client != nil {
 		client.Close()
 	}
 	env.closed.Store(true)
