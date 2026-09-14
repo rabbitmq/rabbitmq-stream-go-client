@@ -2,7 +2,10 @@ package stream
 
 import (
 	"context"
+	"io"
+	"net"
 	"sync"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -270,6 +273,32 @@ var _ = Describe("Metrics Unit Tests", func() {
 			counter := mockProvider.meter.getUpDownCounter("rabbitmq.stream.connections")
 			Expect(counter.getTotalValue()).To(Equal(int64(1)))
 			Expect(counter.getRecords()).To(HaveLen(3))
+		})
+
+		It("should not count down a connection whose handshake failed", func() {
+			l, err := net.Listen("tcp", "127.0.0.1:0")
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(l.Close)
+			// the fake broker reads the handshake but never answers it
+			go func() {
+				conn, err := l.Accept()
+				if err != nil {
+					return
+				}
+				_, _ = io.Copy(io.Discard, conn)
+				_ = conn.Close()
+			}()
+
+			broker := newBrokerDefault()
+			broker.Host, broker.Port, err = net.SplitHostPort(l.Addr().String())
+			Expect(err).NotTo(HaveOccurred())
+			client := newClient(connectionParameters{broker: broker, rpcTimeout: 50 * time.Millisecond, metrics: metrics})
+			Expect(client.connect()).To(HaveOccurred())
+			client.Close()
+			client.Close()
+
+			counter := mockProvider.meter.getUpDownCounter("rabbitmq.stream.connections")
+			Expect(counter.getRecords()).To(BeEmpty())
 		})
 	})
 
