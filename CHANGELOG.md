@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
 - Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
+- Use a fresh connection for each bootstrap seed, so a seed that fails the handshake no longer masks the next seed, reports success without a usable broker, or tears down the next connection.
 
 ## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
 
