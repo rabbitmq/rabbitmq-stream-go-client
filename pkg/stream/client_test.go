@@ -125,8 +125,13 @@ var _ = Describe("Streaming testEnvironment", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(stats).NotTo(BeNil())
 
+		streamName := testStreamName
 		DeferCleanup(func() {
-			Expect(testEnvironment.DeleteStream(testStreamName)).NotTo(HaveOccurred())
+			// runs after AfterEach has closed testEnvironment
+			env, err := NewEnvironment(nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(env.DeleteStream(streamName)).NotTo(HaveOccurred())
+			Expect(env.Close()).To(Succeed())
 		})
 
 		_, err = stats.FirstOffset()
