@@ -157,12 +157,10 @@ func (consumer *Consumer) GetCloseHandler() chan Event {
 	return consumer.closeHandler
 }
 
+// NotifyClose returns the consumer close notification channel, including an event
+// emitted before registration. Repeated calls return the same channel.
 func (consumer *Consumer) NotifyClose() ChannelClose {
-	consumer.mutex.Lock()
-	defer consumer.mutex.Unlock()
-	ch := make(chan Event, 1)
-	consumer.closeHandler = ch
-	return ch
+	return consumer.closeHandler
 }
 
 func (consumer *Consumer) Credit(credits int16) error {
@@ -447,7 +445,6 @@ func (consumer *Consumer) close(reason Event) {
 		if closeHandler := consumer.GetCloseHandler(); closeHandler != nil {
 			closeHandler <- reason
 			close(consumer.closeHandler)
-			consumer.closeHandler = nil
 		}
 
 		if consumer.response.data != nil {
