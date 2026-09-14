@@ -103,7 +103,8 @@ var _ = Describe("Streaming Consumers", func() {
 			func(_ ConsumerContext, _ *amqp.Message) {}, nil)
 
 		Expect(errors.Cause(err)).To(Equal(StreamDoesNotExist))
-		Expect(env.Close()).NotTo(HaveOccurred())
+		// close after AfterEach has deleted the stream
+		DeferCleanup(env.Close)
 	})
 
 	It("Consumer close handler unSubscribe", func() {
