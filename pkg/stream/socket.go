@@ -82,13 +82,19 @@ func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, remo
 				FrameTooLarge, len(buffer), fm, response.commandDescription), false)
 	}
 
+	if err := c.connectionContext().Err(); err != nil {
+		return newResponseError(err, false)
+	}
 	result := c.socket.writeAndFlush(buffer)
 	if result != nil {
-		logs.LogWarn("Error handleWrite %s", result)
+		// A write interrupted by lifetime cancellation is expected, not a failure.
+		if c.connectionContext().Err() == nil {
+			logs.LogWarn("Error handleWrite %s", result)
+		}
 		return newResponseError(result, false)
 	}
 
-	resultCode = waitCodeWithTimeOut(response, c.socketCallTimeout)
+	resultCode = c.waitCode(response)
 	if resultCode.Err != nil {
 		// After a timeout or error code a frame reader may still hold this
 		// response, so leave its channels open for the deferred discard.
