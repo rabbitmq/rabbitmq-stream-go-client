@@ -26,7 +26,9 @@ type ReliableSuperStreamConsumer struct {
 
 	//bootstrap: if true the consumer will start from the user offset.
 	// If false it will start from the last offset consumed (currentPosition)
-	bootstrap bool
+	bootstrap    bool
+	stopRetry    chan struct{}
+	retryStopped bool
 }
 
 func NewReliableSuperStreamConsumer(env *stream.Environment, superStream string, messagesHandler stream.MessagesHandler, consumerOptions *stream.SuperStreamConsumerOptions) (*ReliableSuperStreamConsumer, error) {
@@ -46,6 +48,7 @@ func NewReliableSuperStreamConsumer(env *stream.Environment, superStream string,
 		mutexStatus:     &sync.Mutex{},
 		messagesHandler: messagesHandler,
 		status:          StatusClosed,
+		stopRetry:       make(chan struct{}),
 	}
 	consumer, err := env.NewSuperStreamConsumer(superStream, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		res.streamPositionMap.Store(consumerContext.Consumer.GetStreamName(), consumerContext.Consumer.GetOffset())
@@ -54,10 +57,10 @@ func NewReliableSuperStreamConsumer(env *stream.Environment, superStream string,
 	if err != nil {
 		return nil, fmt.Errorf("error creating super stream consumer: %w", err)
 	}
-	ch := consumer.NotifyPartitionClose(1)
-	res.handleNotifyClose(ch)
 	res.consumer.Store(consumer)
 	res.setStatus(StatusOpen)
+	ch := consumer.NotifyPartitionClose(1)
+	res.handleNotifyClose(ch)
 	logs.LogDebug("[Reliable] - creating %s", res.getInfo())
 	return res, err
 }
@@ -66,8 +69,19 @@ func (r *ReliableSuperStreamConsumer) handleNotifyClose(channelClose chan stream
 	go func() {
 		// for channelClose until closed
 		for cPartitionClose := range channelClose {
-			if strings.EqualFold(cPartitionClose.Event.Reason, stream.SocketClosed) || strings.EqualFold(cPartitionClose.Event.Reason, stream.MetaDataUpdate) || strings.EqualFold(cPartitionClose.Event.Reason, stream.ZombieConsumer) {
-				r.setStatus(StatusReconnecting)
+			// Close and the decision to reconnect share the status lock, so a
+			// queued event cannot reopen a consumer after terminal shutdown.
+			r.mutexStatus.Lock()
+			if r.status == StatusClosed {
+				r.mutexStatus.Unlock()
+				continue
+			}
+			unexpected := strings.EqualFold(cPartitionClose.Event.Reason, stream.SocketClosed) || strings.EqualFold(cPartitionClose.Event.Reason, stream.MetaDataUpdate) || strings.EqualFold(cPartitionClose.Event.Reason, stream.ZombieConsumer)
+			if unexpected {
+				r.status = StatusReconnecting
+			}
+			r.mutexStatus.Unlock()
+			if unexpected {
 				logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", r.getInfo(), cPartitionClose.Event.Reason)
 				r.bootstrap = false
 				err, reconnected := retry(1, r, cPartitionClose.Partition)
@@ -76,14 +90,22 @@ func (r *ReliableSuperStreamConsumer) handleNotifyClose(channelClose chan stream
 						"[Reliable] - %s won't be reconnected. Error: %s", r.getInfo(), err)
 				}
 				if reconnected {
-					r.setStatus(StatusOpen)
+					r.mutexStatus.Lock()
+					alreadyClosed := r.status == StatusClosed
+					if !alreadyClosed {
+						r.status = StatusOpen
+					}
+					r.mutexStatus.Unlock()
+					if alreadyClosed {
+						_ = r.consumer.Load().Close()
+					}
 				} else {
 					r.setStatus(StatusClosed)
 				}
 			} else {
 				logs.LogInfo("[Reliable] - %s closed normally. Reason: %s", r.getInfo(), cPartitionClose.Event.Reason)
 				r.setStatus(StatusClosed)
-				break
+				continue
 			}
 		}
 		logs.LogDebug("[ReliableSuperStreamConsumer] - cPartitionClose closed %s", r.getInfo())
@@ -94,7 +116,13 @@ func (r *ReliableSuperStreamConsumer) setStatus(value int) {
 	r.mutexStatus.Lock()
 	defer r.mutexStatus.Unlock()
 	r.status = value
+	if value == StatusClosed && r.stopRetry != nil && !r.retryStopped {
+		r.retryStopped = true
+		close(r.stopRetry)
+	}
 }
+
+func (r *ReliableSuperStreamConsumer) retryStop() <-chan struct{} { return r.stopRetry }
 
 func (r *ReliableSuperStreamConsumer) getInfo() string {
 	return fmt.Sprintf("consumer %s for super stream %s",
@@ -107,6 +135,9 @@ func (r *ReliableSuperStreamConsumer) getEnv() *stream.Environment {
 
 func (r *ReliableSuperStreamConsumer) getNewInstance(partition string) newEntityInstance {
 	return func() error {
+		if r.GetStatus() == StatusClosed {
+			return stream.AlreadyClosed
+		}
 		c := r.consumer.Load()
 		// by default the consumer will start from the consumerOptions.Offset
 		off := r.consumerOptions.Offset

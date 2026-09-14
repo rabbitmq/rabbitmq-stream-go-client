@@ -38,3 +38,4 @@ compose/ha_tls/data*
 go.work
 go.work.sum
 pkg/stream/coverage.txt.*
+.mcp.json
