@@ -1,8 +1,10 @@
 package stream
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +17,9 @@ type AddressResolver struct {
 }
 
 type TCPParameters struct {
+	connectionContext     context.Context
+	dialContext           func(context.Context, string, string) (net.Conn, error)
+	lookupIPAddr          func(context.Context, string) ([]net.IPAddr, error)
 	tlsConfig             *tls.Config
 	RequestedHeartbeat    time.Duration
 	RequestedMaxFrameSize int
