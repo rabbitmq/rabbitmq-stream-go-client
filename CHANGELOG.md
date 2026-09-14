@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
 - Remove data races on the environment locator client and closed flag, close replaced and failed locator connections, stop locator reconnect retries on `Close`, and return `AlreadyClosed` from environment operations after `Close` instead of opening a new locator connection.
 - Decrement the connections metric only for connections that were counted, so closing a connection whose handshake failed no longer drives it negative.
+- Stop reliable producer and consumer reconnection when their environment is closed instead of reporting that the stream does not exist.
 
 ## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
 

@@ -67,6 +67,11 @@ func retry(backoff int, reliable IReliable, streamName string) (error, bool) {
 		return stream.AlreadyClosed, false
 	default:
 	}
+	// A closed environment cannot recreate the entity: stop retrying.
+	if errors.Is(errS, stream.AlreadyClosed) {
+		logs.LogInfo("[Reliable] - The environment for %s is closed. Stopping it", reliable.getInfo())
+		return errS, false
+	}
 	if errors.Is(errS, stream.StreamDoesNotExist) {
 		logs.LogInfo("[Reliable] - The stream %s does not exist for %s. Stopping it", streamName, reliable.getInfo())
 		return errS, false
