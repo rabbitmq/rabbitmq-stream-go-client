@@ -341,7 +341,7 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 		return nil, StreamMetadataFailure
 	}
 	streamMetadata := streamsMetadata.Get(streamName)
-	if streamMetadata.responseCode != responseCodeOk {
+	if streamMetadata != nil && streamMetadata.responseCode != responseCodeOk {
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 
