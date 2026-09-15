@@ -93,6 +93,9 @@ type Client struct {
 
 	doneTimeoutTicker chan struct{}
 	metrics           *streamMetrics
+	// connectionCounted pairs the connections metric: connect sets it with the
+	// increment and the first Close that claims it decrements.
+	connectionCounted atomic.Bool
 }
 
 func newClient(parameters connectionParameters) *Client {
@@ -241,6 +244,7 @@ func (c *Client) connect() error {
 		}
 
 		// Increase the connection counter
+		c.connectionCounted.Store(true)
 		c.metrics.connectionOpened(context.Background(), c.otelAttributesForClient())
 
 		err = c.availableFeatures.SetVersion(serverProperties["version"])
@@ -548,7 +552,10 @@ func (c *Client) Close() {
 			logs.LogWarn("error during Send client close %s", errW)
 		}
 		_ = c.coordinator.RemoveResponseById(res.correlationid)
-		// Decrease connection counter
+	}
+	// Decrease connection counter, only for a connection that was counted:
+	// a failed connect leaves the socket open without recording it.
+	if c.connectionCounted.CompareAndSwap(true, false) {
 		c.metrics.connectionClosed(context.Background(), c.otelAttributesForClient())
 	}
 	c.getSocket().shutdown(nil)

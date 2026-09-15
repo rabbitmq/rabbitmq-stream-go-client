@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
@@ -16,16 +17,70 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
+const (
+	locatorIdle int32 = iota
+	locatorReconnecting
+	locatorClosed
+)
+
+// locator owns the connection used by the environment's stream operations.
+//
+// Only the reconnecting goroutine (holding mutex) stores client, and only while
+// state is locatorReconnecting; Close never takes mutex and loads client only
+// when it moves state from locatorIdle to locatorClosed. So whatever the
+// interleaving, the last locator client is closed exactly once:
+//   - Close wins before a reconnect starts: the reconnect cannot leave
+//     locatorIdle, creates nothing and Close closes the current client.
+//   - Close runs during a reconnect: it moves locatorReconnecting to
+//     locatorClosed without loading, the reconnect fails to move back to
+//     locatorIdle and closes the client it published.
+//   - Close runs after a reconnect: it closes the client that was published.
+//
+// Replaced clients and failed attempts are closed by the reconnect itself.
 type locator struct {
-	client *Client
-	mutex  sync.Mutex
+	// client is replaced under mutex and read without it by every operation.
+	client atomic.Pointer[Client]
+	// mutex serializes reconnects; Close never takes it.
+	mutex sync.Mutex
+	// state decides who closes the last client, see above.
+	state atomic.Int32
+	// closing is closed by the Close that moves state to locatorClosed and
+	// interrupts the reconnect backoff.
+	closing chan struct{}
+	// backoff returns the delay before the given reconnect attempt;
+	// nil uses the default random delay.
+	backoff func(attempt int) time.Duration
 }
 
 func newLocator(client *Client) *locator {
-	return &locator{
-		client: client,
-		mutex:  sync.Mutex{},
+	l := &locator{closing: make(chan struct{})}
+	l.client.Store(client)
+	return l
+}
+
+// close marks the locator closed and returns the client the caller must close,
+// or nil when the locator was already closed or a running reconnect closes it.
+func (l *locator) close() *Client {
+	for {
+		state := l.state.Load()
+		if state == locatorClosed {
+			return nil
+		}
+		if l.state.CompareAndSwap(state, locatorClosed) {
+			close(l.closing)
+			if state == locatorIdle {
+				return l.client.Load()
+			}
+			return nil
+		}
 	}
+}
+
+func (l *locator) retryDelay(attempt int) time.Duration {
+	if l.backoff != nil {
+		return l.backoff(attempt)
+	}
+	return time.Duration(rand.Intn(5000)+attempt*1000) * time.Millisecond
 }
 
 type Environment struct {
@@ -33,7 +88,7 @@ type Environment struct {
 	consumers *consumersEnvironment
 	options   *EnvironmentOptions
 	locator   *locator
-	closed    bool
+	closed    atomic.Bool
 	metrics   *streamMetrics
 }
 
@@ -138,55 +193,78 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		options:   options,
 		producers: newProducersEnvironment(options.MaxProducersPerClient, metrics),
 		consumers: newConsumersEnvironment(options.MaxConsumersPerClient, metrics),
-		closed:    false,
 		locator:   newLocator(client),
 		metrics:   metrics,
 	}, connectionError
 }
 
 func (env *Environment) maybeReconnectLocator() error {
-	env.locator.mutex.Lock()
-	defer env.locator.mutex.Unlock()
-	if env.locator.client != nil && env.locator.client.socket.isOpen() {
+	l := env.locator
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	if l.state.Load() == locatorClosed {
+		return AlreadyClosed
+	}
+	if c := l.client.Load(); c != nil && c.socket.isOpen() {
 		return nil
 	}
+	if !l.state.CompareAndSwap(locatorIdle, locatorReconnecting) {
+		return AlreadyClosed
+	}
 
+	c := env.dialLocator()
+	if c != nil {
+		// publish before leaving locatorReconnecting, see locator
+		if old := l.client.Swap(c); old != nil {
+			old.Close()
+		}
+	}
+	if !l.state.CompareAndSwap(locatorReconnecting, locatorIdle) {
+		// Close ran during the reconnect and left the last client to us
+		if c != nil {
+			c.Close()
+		}
+		return AlreadyClosed
+	}
+	return nil
+}
+
+// dialLocator connects a new locator client, retrying until it succeeds.
+// It returns nil when the locator is closed while waiting to retry. An attempt
+// blocked inside connect (dial, or a handshake wait without timeout) is only
+// abandoned once connect returns.
+func (env *Environment) dialLocator() *Client {
+	l := env.locator
 	broker := env.options.ConnectionParameters[0]
-	c := newClient(connectionParameters{
-		connectionName:    "go-stream-locator",
-		broker:            broker,
-		tcpParameters:     env.options.TCPParameters,
-		saslConfiguration: env.options.SaslConfiguration,
-		rpcTimeout:        env.options.RPCTimeout,
-		metrics:           env.metrics,
-	})
-
-	env.locator.client = c
-	err := c.connect()
-	tentatives := 1
-	for err != nil {
-		sleepTime := rand.Intn(5000) + (tentatives * 1000)
-
-		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", c.broker.Scheme, c.broker.User, c.broker.Host, c.broker.Port, c.broker.Vhost)
-		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: %s", err, sleepTime, brokerUri)
-
-		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		n := r.Intn(len(env.options.ConnectionParameters))
-		c1 := newClient(connectionParameters{
+	for attempt := 1; ; attempt++ {
+		c := newClient(connectionParameters{
 			connectionName:    "go-stream-locator",
-			broker:            env.options.ConnectionParameters[n],
+			broker:            broker,
 			tcpParameters:     env.options.TCPParameters,
 			saslConfiguration: env.options.SaslConfiguration,
 			rpcTimeout:        env.options.RPCTimeout,
 			metrics:           env.metrics,
 		})
-		tentatives++
-		env.locator.client = c1
-		err = c1.connect()
-	}
+		err := c.connect()
+		if err == nil {
+			return c
+		}
+		// connect opens the socket and starts the reader before the handshake
+		c.Close()
 
-	return env.locator.client.connect()
+		delay := l.retryDelay(attempt)
+		brokerUri := fmt.Sprintf("%s://%s:***@%s:%s/%s", c.broker.Scheme, c.broker.User, c.broker.Host, c.broker.Port, c.broker.Vhost)
+		logs.LogError("Can't connect the locator client, error:%s, retry in %d milliseconds, broker: %s", err, delay.Milliseconds(), brokerUri)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-l.closing:
+			timer.Stop()
+			return nil
+		case <-timer.C:
+		}
+		broker = env.options.ConnectionParameters[rand.Intn(len(env.options.ConnectionParameters))]
+	}
 }
 
 func (env *Environment) DeclareStream(streamName string, options *StreamOptions) error {
@@ -194,7 +272,7 @@ func (env *Environment) DeclareStream(streamName string, options *StreamOptions)
 	if err != nil {
 		return err
 	}
-	if err := env.locator.client.DeclareStream(streamName, options); err != nil && err != StreamAlreadyExists {
+	if err := env.locator.client.Load().DeclareStream(streamName, options); err != nil && err != StreamAlreadyExists {
 		return err
 	}
 	return nil
@@ -205,7 +283,7 @@ func (env *Environment) DeleteStream(streamName string) error {
 	if err != nil {
 		return err
 	}
-	return env.locator.client.DeleteStream(streamName)
+	return env.locator.client.Load().DeleteStream(streamName)
 }
 
 func (env *Environment) NewProducer(streamName string, producerOptions *ProducerOptions) (*Producer, error) {
@@ -215,7 +293,7 @@ func (env *Environment) NewProducer(streamName string, producerOptions *Producer
 		return nil, err
 	}
 
-	return env.producers.newProducer(env.locator.client, streamName, producerOptions, env.options.AddressResolver, env.options.RPCTimeout)
+	return env.producers.newProducer(env.locator.client.Load(), streamName, producerOptions, env.options.AddressResolver, env.options.RPCTimeout)
 }
 
 func (env *Environment) StreamExists(streamName string) (bool, error) {
@@ -223,7 +301,7 @@ func (env *Environment) StreamExists(streamName string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return env.locator.client.StreamExists(streamName), nil
+	return env.locator.client.Load().StreamExists(streamName), nil
 }
 
 func (env *Environment) QueryOffset(consumerName string, streamName string) (int64, error) {
@@ -231,7 +309,7 @@ func (env *Environment) QueryOffset(consumerName string, streamName string) (int
 	if err != nil {
 		return 0, err
 	}
-	return env.locator.client.queryOffset(consumerName, streamName)
+	return env.locator.client.Load().queryOffset(consumerName, streamName)
 }
 
 // QuerySequence gets the last id stored for a producer
@@ -241,7 +319,7 @@ func (env *Environment) QuerySequence(publisherReference string, streamName stri
 	if err != nil {
 		return 0, err
 	}
-	return env.locator.client.queryPublisherSequence(publisherReference, streamName)
+	return env.locator.client.Load().queryPublisherSequence(publisherReference, streamName)
 }
 
 func (env *Environment) StreamStats(streamName string) (*StreamStats, error) {
@@ -249,7 +327,7 @@ func (env *Environment) StreamStats(streamName string) (*StreamStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	return env.locator.client.StreamStats(streamName)
+	return env.locator.client.Load().StreamStats(streamName)
 }
 
 func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, error) {
@@ -257,18 +335,19 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	if err != nil {
 		return nil, err
 	}
-	streamsMetadata := env.locator.client.metaData(streamName)
+	client := env.locator.client.Load()
+	streamsMetadata := client.metaData(streamName)
 	if streamsMetadata == nil {
 		return nil, StreamMetadataFailure
 	}
 	streamMetadata := streamsMetadata.Get(streamName)
-	if streamMetadata.responseCode != responseCodeOk {
+	if streamMetadata != nil && streamMetadata.responseCode != responseCodeOk {
 		return nil, lookErrorCode(streamMetadata.responseCode)
 	}
 
 	tentatives := 0
 	for streamMetadata == nil || streamMetadata.Leader == nil && tentatives < 3 {
-		streamsMetadata = env.locator.client.metaData(streamName)
+		streamsMetadata = client.metaData(streamName)
 		streamMetadata = streamsMetadata.Get(streamName)
 		tentatives++
 		time.Sleep(100 * time.Millisecond)
@@ -289,7 +368,7 @@ func (env *Environment) NewConsumer(streamName string,
 		return nil, err
 	}
 
-	return env.consumers.NewSubscriber(env.locator.client, streamName, messagesHandler, options, env.options.AddressResolver, env.options.RPCTimeout)
+	return env.consumers.NewSubscriber(env.locator.client.Load(), streamName, messagesHandler, options, env.options.AddressResolver, env.options.RPCTimeout)
 }
 
 func (env *Environment) NewSuperStreamProducer(superStream string, superStreamProducerOptions *SuperStreamProducerOptions) (*SuperStreamProducer, error) {
@@ -301,17 +380,20 @@ func (env *Environment) NewSuperStreamProducer(superStream string, superStreamPr
 }
 
 func (env *Environment) Close() error {
+	// close the locator first so operations started while producers and
+	// consumers close (e.g. reliable reconnects) fail fast with AlreadyClosed
+	client := env.locator.close()
 	_ = env.producers.close()
 	_ = env.consumers.close()
-	if env.locator.client != nil {
-		env.locator.client.Close()
+	if client != nil {
+		client.Close()
 	}
-	env.closed = true
+	env.closed.Store(true)
 	return nil
 }
 
 func (env *Environment) IsClosed() bool {
-	return env.closed
+	return env.closed.Load()
 }
 
 type EnvironmentOptions struct {
@@ -857,7 +939,7 @@ func (env *Environment) DeclareSuperStream(superStreamName string, options Super
 	if err != nil {
 		return err
 	}
-	if err := env.locator.client.DeclareSuperStream(superStreamName, options); err != nil && !errors.Is(err, StreamAlreadyExists) {
+	if err := env.locator.client.Load().DeclareSuperStream(superStreamName, options); err != nil && !errors.Is(err, StreamAlreadyExists) {
 		return err
 	}
 	return nil
@@ -868,7 +950,7 @@ func (env *Environment) DeleteSuperStream(superStreamName string) error {
 	if err != nil {
 		return err
 	}
-	return env.locator.client.DeleteSuperStream(superStreamName)
+	return env.locator.client.Load().DeleteSuperStream(superStreamName)
 }
 
 func (env *Environment) QueryPartitions(superStreamName string) ([]string, error) {
@@ -876,7 +958,7 @@ func (env *Environment) QueryPartitions(superStreamName string) ([]string, error
 	if err != nil {
 		return nil, err
 	}
-	return env.locator.client.QueryPartitions(superStreamName)
+	return env.locator.client.Load().QueryPartitions(superStreamName)
 }
 
 // StoreOffset stores the offset for a consumer for a stream
@@ -891,7 +973,7 @@ func (env *Environment) StoreOffset(consumerName string, streamName string, offs
 	if err != nil {
 		return err
 	}
-	return env.locator.client.StoreOffset(consumerName, streamName, offset)
+	return env.locator.client.Load().StoreOffset(consumerName, streamName, offset)
 }
 
 func (env *Environment) QueryRoute(superStream string, routingKey string) ([]string, error) {
@@ -899,7 +981,7 @@ func (env *Environment) QueryRoute(superStream string, routingKey string) ([]str
 	if err != nil {
 		return nil, err
 	}
-	return env.locator.client.queryRoute(superStream, routingKey)
+	return env.locator.client.Load().queryRoute(superStream, routingKey)
 }
 
 func (env *Environment) NewSuperStreamConsumer(superStream string, messagesHandler MessagesHandler, options *SuperStreamConsumerOptions) (*SuperStreamConsumer, error) {
