@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
 - Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
 - Return RPC socket write failures immediately, and discard responses abandoned by a failed write or timeout without closing their channels, so a late broker response no longer panics with "send on closed channel".
+- Use a fresh connection for each bootstrap seed, so a seed that fails the handshake no longer masks the next seed, reports success without a usable broker, or tears down the next connection.
 
 ## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
 

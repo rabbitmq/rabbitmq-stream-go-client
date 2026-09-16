@@ -101,7 +101,7 @@ func main() {
 	}()
 
 	// Tune the parameters to test the reliability
-	const messagesToSend = 20_000_000
+	const messagesToSend = 1_000_000
 	const numberOfProducers = 2
 	const concurrentProducers = 1
 	const numberOfConsumers = 2
@@ -415,8 +415,6 @@ func main() {
 				CheckErr(err)
 			}
 		}
-		err = env.DeleteSuperStream(superStreamName)
-		CheckErr(err)
 	}
 	isRunning = false
 	fmt.Printf("  %sConnections closed.%s  Press enter to close the environment.\n", ansiGreen, ansiReset)
