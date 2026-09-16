@@ -1,0 +1,30 @@
+#!/bin/bash
+
+total_iterations=500
+sleep_duration=70
+
+countdown() {
+    local remaining=$1
+    while [ $remaining -gt 0 ]; do
+        echo -ne "\rNext execution in: $remaining seconds"
+        sleep 2
+        remaining=$((remaining - 2))
+    done
+    echo -ne "\r\033[K"  # Clear the countdown line
+}
+
+for i in {1..500}
+do
+    current_time=$(date +"%Y-%m-%d %H:%M:%S")
+    next_time=$(date -d "+$sleep_duration seconds" +"%Y-%m-%d %H:%M:%S")
+    
+    echo "Current time: $current_time"
+    echo "ID: $i"
+    python3 close_all_connections.py localhost 15673 guest guest
+    echo "Next execution will be at: $next_time"
+    echo "-----------------------------------"
+    
+    countdown $sleep_duration
+done
+
+echo "Script completed."
