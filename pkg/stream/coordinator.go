@@ -335,11 +335,13 @@ func (coordinator *Coordinator) Close() {
 		return true
 	})
 
+	// Detach the pending responses instead of closing them. The frame reader is
+	// not stopped here: environmentCoordinator.Close only calls this method, so
+	// the socket can still be open and a handler that already looked a response
+	// up (GetResponseById releases the lock before the send) would panic with
+	// "send on closed channel". The channels are buffered and become unreachable
+	// once dropped, so the garbage collector reclaims them.
 	coordinator.mutex.Lock()
-	for _, v := range coordinator.responses {
-		close(v.code)
-		close(v.data)
-	}
 	coordinator.responses = make(map[any]*Response)
 	coordinator.mutex.Unlock()
 }

@@ -69,4 +69,36 @@ var _ = Describe("Abandoned RPC responses", func() {
 		Entry("when the response is removed by the write", true),
 		Entry("when the caller removes the response later", false),
 	)
+
+	It("discards a response the broker answered with an error code", func() {
+		client, peer := newPipeClient(time.Hour)
+		go func() { _, _ = io.Copy(io.Discard, peer) }()
+		response := client.coordinator.NewResponse(commandMetadata)
+
+		// A handler sends the code before its data payload, so the RPC returns on
+		// the error code while the data send is still pending.
+		response.code <- Code{id: responseCodeStreamDoesNotExist}
+
+		err := client.handleWriteWithResponse([]byte("request"), response, false)
+
+		Expect(err.Err).To(MatchError(StreamDoesNotExist))
+		expectDiscarded(client, response)
+	})
+
+	It("leaves a looked-up response usable after the coordinator is closed", func() {
+		coordinator := NewCoordinator()
+		response := coordinator.NewResponse(commandMetadata)
+
+		// GetResponseById releases the coordinator lock before the handler sends,
+		// and Coordinator.Close does not stop the frame reader.
+		held, err := coordinator.GetResponseById(uint32(response.correlationid))
+		Expect(err).NotTo(HaveOccurred())
+
+		coordinator.Close()
+
+		Expect(func() {
+			held.code <- Code{id: responseCodeOk}
+			held.data <- "late response"
+		}).NotTo(Panic())
+	})
 })

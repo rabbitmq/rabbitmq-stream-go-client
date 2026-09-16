@@ -75,7 +75,8 @@ func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, remo
 	// Fail fast: an over-sized frame makes the broker close the connection and we
 	// would block until timeout. 0 = no limit.
 	if fm := c.maxFrameSize(); fm > 0 && len(buffer) > fm {
-		_ = c.coordinator.RemoveResponseById(response.correlationid)
+		// The deferred discard removes the response; nothing was written, so no
+		// reply can arrive for it.
 		return newResponseError(
 			fmt.Errorf("%w: frame size %d exceeds the maximum %d negotiated with the server, operation: %s",
 				FrameTooLarge, len(buffer), fm, response.commandDescription), false)
