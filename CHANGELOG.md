@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Bug Fixes
+- Stop sending the stream status response code twice, so a stream status frame whose RPC already timed out no longer blocks the connection's frame reader forever.
+- Ignore a TUNE frame that has no registered response instead of dereferencing a nil response and panicking the frame reader.
 - Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
 - Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
