@@ -312,7 +312,13 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 
 	var offsetLimit int64 = -1
 
-	var bytesBuffer = make([]byte, int(dataLength))
+	// The payload buffer is the client's, reused from chunk to chunk: see
+	// Client.deliverChunk. Every record is copied out of it before this
+	// function returns, so nothing holds a window into it afterwards.
+	if cap(c.deliverChunk) < int(dataLength) {
+		c.deliverChunk = make([]byte, int(dataLength))
+	}
+	bytesBuffer := c.deliverChunk[:int(dataLength)]
 	_, err = io.ReadFull(r, bytesBuffer)
 	logErrorCommand(err, "handleDeliver")
 
@@ -359,8 +365,9 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 		}
 	}
 
-	bufferReader := bytes.NewReader(bytesBuffer)
-	dataReader := bufio.NewReader(bufferReader)
+	c.deliverBytes.Reset(bytesBuffer)
+	c.deliverReader.Reset(c.deliverBytes)
+	dataReader := c.deliverReader
 
 	remainingRecords := numRecords
 	for remainingRecords != 0 {
@@ -417,8 +424,9 @@ func (c *Client) handleDeliver(r *bufio.Reader) {
 			"Messages won't be dispatched", consumer.GetName(), consumer.GetStreamName())
 		return
 	}
-	c.metrics.consumed(context.Background(), int64(numRecords), c.otelAttributesForConsumer(consumer.GetStreamName()))
-	c.metrics.chunkReceived(context.Background(), int64(numRecords), c.otelAttributesForConsumer(consumer.GetStreamName()))
+	consumerAttributes := c.otelAttributesForConsumer(consumer.GetStreamName())
+	c.metrics.consumed(context.Background(), int64(numRecords), consumerAttributes)
+	c.metrics.chunkReceived(context.Background(), int64(numRecords), consumerAttributes)
 }
 
 func (c *Client) decodeMessage(r *bufio.Reader, filter bool, offset int64, offsetLimit int64, batchConsumingMessages offsetMessages) offsetMessages {
