@@ -1,9 +1,9 @@
 package stream
 
 import (
+	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"slices"
 
@@ -174,10 +174,15 @@ type SuperStreamProducer struct {
 
 	env   *Environment
 	mutex sync.Mutex
+	// closed is guarded by mutex. Once set, no partition can be connected again.
+	closed bool
+	// partitionForwarders counts the per-partition notification forwarders.
+	// The notification channels are closed only after all of them finish.
+	partitionForwarders sync.WaitGroup
 
-	chNotifyPublishConfirmation chan PartitionPublishConfirm
-
+	// chSuperStreamPartitionMutex guards both notification channels.
 	chSuperStreamPartitionMutex sync.Mutex
+	chNotifyPublishConfirmation chan PartitionPublishConfirm
 	chSuperStreamPartitionClose chan PPartitionClose
 
 	// public
@@ -246,6 +251,10 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 	logs.LogDebug("[SuperStreamProducer] ConnectPartition for partition: %s", partition)
 
 	s.mutex.Lock()
+	if s.closed {
+		s.mutex.Unlock()
+		return AlreadyClosed
+	}
 	found := false
 	for _, p := range s.partitions {
 		if p == partition {
@@ -284,12 +293,30 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 
 	// Re-acquire mutex to safely update activeProducers slice
 	s.mutex.Lock()
+	// Close may have run while NewProducer() was connecting.
+	if s.closed {
+		s.mutex.Unlock()
+		_ = producer.Close()
+		return AlreadyClosed
+	}
 	s.activeProducers = append(s.activeProducers, producer)
-	chSingleStreamPublishConfirmation := producer.NotifyPublishConfirmation()
-	closedEvent := producer.NotifyClose()
+	s.startPartitionForwarders(partition, producer)
 	s.mutex.Unlock()
 
+	return nil
+}
+
+// startPartitionForwarders forwards the partition producer close event and
+// confirmations to the super stream notification channels.
+// It must be called with s.mutex held after checking that s is not closed, so
+// every forwarder is registered before Close waits for them.
+func (s *SuperStreamProducer) startPartitionForwarders(partition string, producer *Producer) {
+	chSingleStreamPublishConfirmation := producer.NotifyPublishConfirmation()
+	closedEvent := producer.NotifyClose()
+	s.partitionForwarders.Add(2)
+
 	go func(gpartion string, _closedEvent <-chan Event) {
+		defer s.partitionForwarders.Done()
 		logs.LogDebug("[SuperStreamProducer] chSuperStreamPartitionClose started for partition: %s", gpartion)
 		event := <-_closedEvent
 
@@ -303,22 +330,29 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		s.mutex.Unlock()
 
 		s.chSuperStreamPartitionMutex.Lock()
-		if s.chSuperStreamPartitionClose != nil {
-			s.chSuperStreamPartitionClose <- PPartitionClose{
+		ch := s.chSuperStreamPartitionClose
+		s.chSuperStreamPartitionMutex.Unlock()
+		// Send without the lock: a slow reader must not block registration or Close.
+		if ch != nil {
+			ch <- PPartitionClose{
 				Partition: gpartion,
 				Event:     event,
 				Context:   s,
 			}
 		}
-		s.chSuperStreamPartitionMutex.Unlock()
 		logs.LogDebug("[SuperStreamProducer] chSuperStreamPartitionClose for partition: %s", gpartion)
 	}(partition, closedEvent)
 
-	go func(gpartion string, ch <-chan []*ConfirmationStatus) {
+	go func(gpartion string, confirmations <-chan []*ConfirmationStatus) {
+		defer s.partitionForwarders.Done()
 		logs.LogDebug("[SuperStreamProducer] chNotifyPublishConfirmation started - partition: %s", gpartion)
-		for confirmed := range ch {
-			if s.chNotifyPublishConfirmation != nil {
-				s.chNotifyPublishConfirmation <- PartitionPublishConfirm{
+		// Deliver every confirmation until the partition producer closes its channel.
+		for confirmed := range confirmations {
+			s.chSuperStreamPartitionMutex.Lock()
+			ch := s.chNotifyPublishConfirmation
+			s.chSuperStreamPartitionMutex.Unlock()
+			if ch != nil {
+				ch <- PartitionPublishConfirm{
 					Partition:          gpartion,
 					ConfirmationStatus: confirmed,
 				}
@@ -326,13 +360,16 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 		}
 		logs.LogDebug("[SuperStreamProducer] chNotifyPublishConfirmation closed - partition: %s", gpartion)
 	}(partition, chSingleStreamPublishConfirmation)
-
-	return nil
 }
 
 // NotifyPublishConfirmation returns a channel that will be notified when a message is confirmed or not per partition
 // size is the size of the channel
+// No notification is dropped: after Close, the channel is closed once all pending
+// confirmations are delivered, so readers must drain it until it is closed.
 func (s *SuperStreamProducer) NotifyPublishConfirmation(size int) chan PartitionPublishConfirm {
+	s.chSuperStreamPartitionMutex.Lock()
+	defer s.chSuperStreamPartitionMutex.Unlock()
+
 	ch := make(chan PartitionPublishConfirm, size)
 	s.chNotifyPublishConfirmation = ch
 	return ch
@@ -341,9 +378,11 @@ func (s *SuperStreamProducer) NotifyPublishConfirmation(size int) chan Partition
 // NotifyPartitionClose returns a channel that will be notified when a partition is closed
 // Event will give the reason of the close
 // size is the size of the channel
+// No notification is dropped: after Close, the channel is closed once all pending
+// partition close events are delivered, so readers must drain it until it is closed.
 func (s *SuperStreamProducer) NotifyPartitionClose(size int) chan PPartitionClose {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	s.chSuperStreamPartitionMutex.Lock()
+	defer s.chSuperStreamPartitionMutex.Unlock()
 
 	ch := make(chan PPartitionClose, size)
 	s.chSuperStreamPartitionClose = ch
@@ -407,32 +446,40 @@ func (s *SuperStreamProducer) Send(message message.StreamMessage) error {
 func (s *SuperStreamProducer) Close() error {
 	logs.LogDebug("[SuperStreamProducer] Closing a SuperStreamProducer for: %s", s.SuperStream)
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	for len(s.activeProducers) > 0 {
-		err := s.activeProducers[0].Close()
-		if err != nil {
-			return err
+	if s.closed {
+		s.mutex.Unlock()
+		return nil
+	}
+	s.closed = true
+	producers := s.activeProducers
+	s.activeProducers = nil
+	s.mutex.Unlock()
+	// A partition producer can already be closed by a dropped connection.
+	// Close every remaining partition and always release the notification channels.
+	var result error
+	for _, producer := range producers {
+		if err := producer.Close(); err != nil && !errors.Is(err, AlreadyClosed) {
+			result = errors.Join(result, err)
 		}
-		s.activeProducers = s.activeProducers[1:]
 	}
 
-	// give the time to raise the close event
+	// Each partition forwarder delivers its pending notifications before the
+	// notification channels are closed, so nothing can send on a closed channel.
+	// Close does not wait for the readers: an abandoned reader leaves this
+	// goroutine and the forwarders blocked.
 	go func() {
-		time.Sleep(2 * time.Second)
-		s.mutex.Lock()
+		s.partitionForwarders.Wait()
+		s.chSuperStreamPartitionMutex.Lock()
+		defer s.chSuperStreamPartitionMutex.Unlock()
 		if s.chNotifyPublishConfirmation != nil {
 			close(s.chNotifyPublishConfirmation)
 			s.chNotifyPublishConfirmation = nil
 		}
-		s.mutex.Unlock()
-
-		s.chSuperStreamPartitionMutex.Lock()
 		if s.chSuperStreamPartitionClose != nil {
 			close(s.chSuperStreamPartitionClose)
 			s.chSuperStreamPartitionClose = nil
 		}
-		s.chSuperStreamPartitionMutex.Unlock()
 	}()
 	logs.LogDebug("[SuperStreamProducer] Closed SuperStreamProducer for: %s", s.SuperStream)
-	return nil
+	return result
 }

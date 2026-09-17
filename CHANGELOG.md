@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
 - Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
 - Use a fresh connection for each bootstrap seed, so a seed that fails the handshake no longer masks the next seed, reports success without a usable broker, or tears down the next connection.
+- Closing a reliable producer, consumer, or super stream producer while it is reconnecting now returns nil and stops the reconnection, instead of returning `AlreadyClosed` and reopening the entity; repeated Close calls return nil. Super stream producer Close closes every partition and rejects later partition reconnections. It no longer closes the confirmation and partition close channels after a two-second timer: they are closed once every pending notification has been delivered, so no notification is lost or sent on a closed channel. Readers must drain these channels until they are closed.
 
 ## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
 
