@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Enhancements
+- Add `NewEnvironmentWithContext` for opt-in environment lifetime cancellation,
+  including dialing, TLS negotiation, socket I/O, RPC waits and reconnect delays.
+
 ### Bug Fixes
 - Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
