@@ -149,4 +149,17 @@ var _ = Describe("Reliable Super Stream Producer", func() {
 		Expect(superProducer.GetStatus()).To(Equal(StatusClosed))
 
 	})
+
+	It("stays closed when closed while reconnecting", func() {
+		clientProvidedName := uuid.New().String()
+		superProducer, err := NewReliableSuperStreamProducer(envForSuperStreamProducer,
+			streamForSuperStreamProducer, &SuperStreamProducerOptions{
+				RoutingStrategy: NewHashRoutingStrategy(func(message message.StreamMessage) string {
+					return message.GetApplicationProperties()["routingKey"].(string)
+				}),
+				ClientProvidedName: clientProvidedName,
+			}, func(_ []*PartitionPublishConfirm) {})
+		Expect(err).NotTo(HaveOccurred())
+		closeWhileReconnecting(clientProvidedName, superProducer.GetStatus, superProducer.Close)
+	})
 })
