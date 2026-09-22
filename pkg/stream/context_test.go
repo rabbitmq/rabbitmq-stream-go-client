@@ -1,6 +1,8 @@
 package stream
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -298,6 +300,55 @@ var _ = Describe("Metadata lookup cancellation", func() {
 		Expect(connection.requests.Load()).To(BeEquivalentTo(2))
 	})
 
+	// A canceled metadata request yields no metadata, which is indistinguishable
+	// from a stream the broker does not know about.
+	It("reports cancellation instead of a missing stream", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		DeferCleanup(cancel)
+
+		client := newClient(connectionParameters{
+			tcpParameters: &TCPParameters{connectionContext: ctx},
+			rpcTimeout:    time.Hour,
+		})
+		local, peer := net.Pipe()
+		DeferCleanup(func() { _ = local.Close(); _ = peer.Close() })
+		go func() {
+			defer GinkgoRecover()
+			_, _ = io.Copy(io.Discard, peer)
+		}()
+
+		writes := make(chan struct{})
+		client.setSocketConnection(&observedContextConn{Conn: local, writes: writes})
+		client.socket.setOpen()
+		DeferCleanup(client.coordinator.Close)
+
+		env := &Environment{
+			options: &EnvironmentOptions{TCPParameters: client.tcpParameters},
+			locator: newLocator(client),
+		}
+
+		type lookup struct {
+			exists bool
+			err    error
+		}
+		done := make(chan lookup, 1)
+		go func() {
+			defer GinkgoRecover()
+			exists, err := env.StreamExists("context-metadata")
+			done <- lookup{exists: exists, err: err}
+		}()
+
+		// Cancel only once the metadata request is on the wire, so the result
+		// cannot come from the early check in maybeReconnectLocator.
+		Eventually(writes, time.Second).Should(BeClosed(), "metadata request was not sent")
+		cancel()
+
+		var got lookup
+		Eventually(done, time.Second).Should(Receive(&got), "StreamExists ignored cancellation")
+		Expect(got.exists).To(BeFalse())
+		Expect(got.err).To(MatchError(context.Canceled), "cancellation reported as a missing stream")
+	})
+
 	Describe("advertised-host DNS lookup", func() {
 		const advertisedHost = "advertised.invalid"
 
@@ -432,6 +483,19 @@ var _ = Describe("Abandoned response discarding", func() {
 		cancel()
 		Expect(client.sendSaslAuthenticate("PLAIN", nil)).To(MatchError(context.Canceled))
 		expectDiscarded()
+	})
+
+	// The frame reader can still be dispatching the broker's TUNE frame when the
+	// abandoned handshake removes the response it would be handed to.
+	It("ignores a TUNE frame that arrives after its response was discarded", func() {
+		respTune := client.coordinator.NewResponseWithName("tune")
+		client.coordinator.discardResponse(respTune)
+
+		var body bytes.Buffer
+		writeUInt(&body, 1048576) // broker frame max advertised in the TUNE frame
+		writeUInt(&body, 60)      // broker heartbeat
+
+		Expect(client.handleTune(bufio.NewReader(&body))).To(BeNil(), "late TUNE frame was not dropped")
 	})
 
 	// A timeout does not cancel the lifetime, so a frame reader can still be

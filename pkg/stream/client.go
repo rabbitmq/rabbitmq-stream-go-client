@@ -121,8 +121,9 @@ func newClient(parameters connectionParameters) *Client {
 			value: time.Now(),
 		},
 		socket: socket{
-			mutex:      &sync.Mutex{},
-			destructor: &sync.Once{},
+			mutex:       &sync.Mutex{},
+			destructor:  &sync.Once{},
+			lifetimeErr: parameters.tcpParameters.connectionContextError,
 		},
 		socketCallTimeout: parameters.rpcTimeout,
 		availableFeatures: newAvailableFeatures(),
@@ -570,18 +571,25 @@ func (c *Client) Close() {
 	})
 
 	if c.getSocket().isOpen() {
-		res := c.coordinator.NewResponse(CommandClose)
-		length := 2 + 2 + 4 + 2 + 2 + len("OK")
-		var b = bytes.NewBuffer(make([]byte, 0, length+4))
-		writeProtocolHeader(b, length, CommandClose, res.correlationid)
-		writeUShort(b, responseCodeOk)
-		writeString(b, "OK")
+		// A canceled lifetime has already closed the connection, so the graceful
+		// close frame cannot be written. Skip it rather than warn on the expected
+		// "use of closed network connection".
+		if c.connectionContext().Err() == nil {
+			res := c.coordinator.NewResponse(CommandClose)
+			length := 2 + 2 + 4 + 2 + 2 + len("OK")
+			var b = bytes.NewBuffer(make([]byte, 0, length+4))
+			writeProtocolHeader(b, length, CommandClose, res.correlationid)
+			writeUShort(b, responseCodeOk)
+			writeString(b, "OK")
 
-		errW := c.socket.writeAndFlush(b.Bytes())
-		if errW != nil {
-			logs.LogWarn("error during Send client close %s", errW)
+			errW := c.socket.writeAndFlush(b.Bytes())
+			if errW != nil {
+				logs.LogWarn("error during Send client close %s", errW)
+			}
+			_ = c.coordinator.RemoveResponseById(res.correlationid)
+		} else {
+			logs.LogDebug("lifetime canceled, skipping the client close frame")
 		}
-		_ = c.coordinator.RemoveResponseById(res.correlationid)
 		// Decrease connection counter
 		c.metrics.connectionClosed(context.Background(), c.otelAttributesForClient())
 	}

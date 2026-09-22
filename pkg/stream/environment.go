@@ -289,7 +289,16 @@ func (env *Environment) StreamExists(streamName string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return env.locator.client.StreamExists(streamName), nil
+	exists := env.locator.client.StreamExists(streamName)
+	if !exists {
+		// A canceled lifetime makes the metadata request return nothing, which is
+		// indistinguishable from a missing stream. Report the cancellation instead
+		// of claiming the stream does not exist.
+		if ctxErr := env.options.TCPParameters.connectionContextError(); ctxErr != nil {
+			return false, ctxErr
+		}
+	}
+	return exists, nil
 }
 
 func (env *Environment) QueryOffset(consumerName string, streamName string) (int64, error) {
