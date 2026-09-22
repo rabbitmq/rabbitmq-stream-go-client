@@ -195,7 +195,12 @@ func (c *Client) handleTune(r *bufio.Reader) any {
 	writeUInt(b, uint32(maxFrameSize))
 	writeUInt(b, uint32(heartbeat))
 	res, err := c.coordinator.GetResponseByName("tune")
-	logErrorCommand(err, "handleTune")
+	if err != nil {
+		// The handshake was abandoned (for example by lifetime cancellation) and
+		// discarded its response, so there is nobody left to hand the frame to.
+		logErrorCommand(err, "handleTune")
+		return nil
+	}
 	resp := tuneResponse{frame: b.Bytes(), maxFrameSize: maxFrameSize, heartbeat: heartbeat}
 	res.data <- resp
 	return resp
