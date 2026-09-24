@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- Add a `Dockerfile` for the `examples/reliable` client and make its parameters (connection settings, stream names, super stream/partitions, load/concurrency) configurable via environment variables.
+
 ### Bug Fixes
 - Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
