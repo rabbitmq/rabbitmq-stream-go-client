@@ -4,12 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- Add a `Dockerfile` for the `examples/reliable` client and make its parameters (connection settings, stream names, super stream/partitions, load/concurrency) configurable via environment variables.
+
 ### Bug Fixes
 - Stop sending the stream status response code twice, so a stream status frame whose RPC already timed out no longer blocks the connection's frame reader forever.
 - Ignore a TUNE frame that has no registered response instead of dereferencing a nil response and panicking the frame reader.
 - Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
 - Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
+- Infer TLS server names from connection hostnames without mutating caller TLS options.
+- Return RPC socket write failures immediately, and discard responses abandoned by a failed write or timeout without closing their channels, so a late broker response no longer panics with "send on closed channel".
+- Detach pending responses on coordinator shutdown instead of closing their channels, so closing an environment while the frame reader is still running no longer panics with "send on closed channel".
 - Use a fresh connection for each bootstrap seed, so a seed that fails the handshake no longer masks the next seed, reports success without a usable broker, or tears down the next connection.
 
 ## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
