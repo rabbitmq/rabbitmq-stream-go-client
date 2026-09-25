@@ -61,16 +61,6 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 		return nil, fmt.Errorf("failed to initialise metrics: %w", err)
 	}
 
-	client := newClient(connectionParameters{
-		connectionName:    "go-stream-locator",
-		broker:            nil,
-		tcpParameters:     options.TCPParameters,
-		saslConfiguration: options.SaslConfiguration,
-		rpcTimeout:        options.RPCTimeout,
-		metrics:           metrics,
-	})
-	defer client.Close()
-
 	// we put a limit to the heartbeat.
 	// it doesn't make sense to have a heartbeat less than 3 seconds
 	if options.TCPParameters.RequestedHeartbeat < (3 * time.Second) {
@@ -118,10 +108,24 @@ func NewEnvironment(options *EnvironmentOptions) (*Environment, error) {
 	}
 
 	var connectionError error
+	var client *Client
 	for idx, parameter := range options.ConnectionParameters {
-		client.broker = parameter
+		// A failed handshake's reader can unwind after the next seed starts.
+		// Isolate each attempt's socket and coordinator from that old reader.
+		client = newClient(connectionParameters{
+			connectionName:    "go-stream-locator",
+			broker:            parameter,
+			tcpParameters:     options.TCPParameters,
+			saslConfiguration: options.SaslConfiguration,
+			rpcTimeout:        options.RPCTimeout,
+			metrics:           metrics,
+		})
 
 		connectionError = client.connect()
+		// The bootstrap connection only validates a seed; the locator reconnects
+		// lazily in maybeReconnectLocator. Close each attempt exactly once,
+		// before the next seed is tried.
+		client.Close()
 		if connectionError == nil {
 			break
 		} else {
@@ -269,6 +273,9 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	tentatives := 0
 	for streamMetadata == nil || streamMetadata.Leader == nil && tentatives < 3 {
 		streamsMetadata = env.locator.client.metaData(streamName)
+		if streamsMetadata == nil {
+			return nil, StreamMetadataFailure
+		}
 		streamMetadata = streamsMetadata.Get(streamName)
 		tentatives++
 		time.Sleep(100 * time.Millisecond)
