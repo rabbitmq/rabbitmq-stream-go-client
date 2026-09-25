@@ -117,6 +117,15 @@ var _ = Describe("Reliable Consumer", func() {
 		Expect(consumer.GetStatusAsString()).To(Equal("Closed"))
 	})
 
+	It("stays closed when closed while reconnecting", func() {
+		clientProvidedName := uuid.New().String()
+		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer,
+			NewConsumerOptions().SetClientProvidedName(clientProvidedName),
+			func(_ ConsumerContext, _ *amqp.Message) {})
+		Expect(err).NotTo(HaveOccurred())
+		closeWhileReconnecting(clientProvidedName, consumer.GetStatus, consumer.Close)
+	})
+
 	It("Delete the stream should close the consumer", func() {
 		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer,
 			NewConsumerOptions(),

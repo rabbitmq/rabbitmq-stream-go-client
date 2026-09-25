@@ -24,6 +24,8 @@ type ReliableSuperStreamProducer struct {
 	mutexStatus                    *sync.Mutex
 	status                         int
 	reconnectionSignal             *sync.Cond
+	stopRetry                      chan struct{}
+	retryStopped                   bool
 }
 
 type PartitionConfirmMessageHandler func(messageConfirm []*stream.PartitionPublishConfirm)
@@ -45,6 +47,7 @@ func NewReliableSuperStreamProducer(env *stream.Environment, superStream string,
 		mutexStatus:        &sync.Mutex{},
 		mutex:              &sync.Mutex{},
 		reconnectionSignal: sync.NewCond(&sync.Mutex{}),
+		stopRetry:          make(chan struct{}),
 	}
 
 	producer, err := env.NewSuperStreamProducer(superStream, superStreamProducerOptions)
@@ -72,8 +75,22 @@ func (r *ReliableSuperStreamProducer) handlePublishConfirm(confirm chan stream.P
 func (r *ReliableSuperStreamProducer) handleNotifyClose(channelClose chan stream.PPartitionClose) {
 	go func() {
 		for cPartitionClose := range channelClose {
-			if strings.EqualFold(cPartitionClose.Event.Reason, stream.SocketClosed) || strings.EqualFold(cPartitionClose.Event.Reason, stream.MetaDataUpdate) || strings.EqualFold(cPartitionClose.Event.Reason, stream.ZombieConsumer) {
-				r.setStatus(StatusReconnecting)
+			// Close and the decision to reconnect share the status lock, so a
+			// queued event cannot reopen a producer after terminal shutdown.
+			r.mutexStatus.Lock()
+			if r.status == StatusClosed {
+				r.mutexStatus.Unlock()
+				r.reconnectionSignal.L.Lock()
+				r.reconnectionSignal.Broadcast()
+				r.reconnectionSignal.L.Unlock()
+				continue
+			}
+			unexpected := strings.EqualFold(cPartitionClose.Event.Reason, stream.SocketClosed) || strings.EqualFold(cPartitionClose.Event.Reason, stream.MetaDataUpdate) || strings.EqualFold(cPartitionClose.Event.Reason, stream.ZombieConsumer)
+			if unexpected {
+				r.status = StatusReconnecting
+			}
+			r.mutexStatus.Unlock()
+			if unexpected {
 				logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", r.getInfo(), cPartitionClose.Event.Reason)
 				err, reconnected := retry(1, r, cPartitionClose.Partition)
 				if err != nil {
@@ -81,7 +98,15 @@ func (r *ReliableSuperStreamProducer) handleNotifyClose(channelClose chan stream
 						"[Reliable] - %s won't be reconnected. Error: %s", r.getInfo(), err)
 				}
 				if reconnected {
-					r.setStatus(StatusOpen)
+					r.mutexStatus.Lock()
+					alreadyClosed := r.status == StatusClosed
+					if !alreadyClosed {
+						r.status = StatusOpen
+					}
+					r.mutexStatus.Unlock()
+					if alreadyClosed {
+						_ = r.producer.Load().Close()
+					}
 				} else {
 					r.setStatus(StatusClosed)
 				}
@@ -94,7 +119,8 @@ func (r *ReliableSuperStreamProducer) handleNotifyClose(channelClose chan stream
 				r.reconnectionSignal.L.Lock()
 				r.reconnectionSignal.Broadcast()
 				r.reconnectionSignal.L.Unlock()
-				break
+				// Keep draining: the remaining partitions report their close too.
+				continue
 			}
 		}
 		logs.LogDebug("[ReliableSuperStreamProducer] - closed %s", r.getInfo())
@@ -105,7 +131,13 @@ func (r *ReliableSuperStreamProducer) setStatus(value int) {
 	r.mutexStatus.Lock()
 	defer r.mutexStatus.Unlock()
 	r.status = value
+	if value == StatusClosed && r.stopRetry != nil && !r.retryStopped {
+		r.retryStopped = true
+		close(r.stopRetry)
+	}
 }
+
+func (r *ReliableSuperStreamProducer) retryStop() <-chan struct{} { return r.stopRetry }
 
 func (r *ReliableSuperStreamProducer) getInfo() string {
 	return fmt.Sprintf("producer %s for super stream %s",
@@ -118,6 +150,9 @@ func (r *ReliableSuperStreamProducer) getEnv() *stream.Environment {
 
 func (r *ReliableSuperStreamProducer) getNewInstance(streamName string) newEntityInstance {
 	return func() error {
+		if r.GetStatus() == StatusClosed {
+			return stream.AlreadyClosed
+		}
 		p := r.producer.Load()
 		return p.ConnectPartition(streamName)
 	}
@@ -168,9 +203,11 @@ func (r *ReliableSuperStreamProducer) Send(message message.StreamMessage) error 
 }
 
 func (r *ReliableSuperStreamProducer) Close() error {
+	// StatusClosed also stops a pending reconnection.
 	r.setStatus(StatusClosed)
-	err := r.producer.Load().Close()
-	if err != nil {
+	// Partition producers of a reconnecting super stream producer were already
+	// closed by the dropped connection.
+	if err := r.producer.Load().Close(); err != nil && !errors.Is(err, stream.AlreadyClosed) {
 		return err
 	}
 	return nil
