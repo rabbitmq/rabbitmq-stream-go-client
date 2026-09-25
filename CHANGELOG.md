@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
 - Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
+- Return `StreamMetadataFailure` instead of panicking when a `StreamMetaData` leader retry fails to fetch metadata.
 - Infer TLS server names from connection hostnames without mutating caller TLS options.
 - Return RPC socket write failures immediately, and discard responses abandoned by a failed write or timeout without closing their channels, so a late broker response no longer panics with "send on closed channel".
 - Detach pending responses on coordinator shutdown instead of closing their channels, so closing an environment while the frame reader is still running no longer panics with "send on closed channel".
