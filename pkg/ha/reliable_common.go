@@ -18,6 +18,40 @@ const (
 	StatusReconnecting       = 4
 )
 
+type BackOffConfiguration struct {
+	MinInterval   int
+	MaxInterval   int
+	MaxTentatives int
+	EnableRandom  bool
+}
+
+func NewBackOffConfiguration() *BackOffConfiguration {
+	return &BackOffConfiguration{
+		MinInterval:   3,
+		MaxInterval:   8,
+		MaxTentatives: 100,
+		EnableRandom:  true,
+	}
+}
+
+// Validate checks the BackOffConfiguration values.
+// MinInterval can't be less than 1 and MaxInterval can't be more than 100 (seconds).
+func (b *BackOffConfiguration) Validate() error {
+	if b == nil {
+		return fmt.Errorf("the back off configuration is mandatory")
+	}
+	if b.MinInterval < 1 {
+		return fmt.Errorf("invalid back off configuration: MinInterval can't be less than 1, got %d", b.MinInterval)
+	}
+	if b.MaxInterval > 100 {
+		return fmt.Errorf("invalid back off configuration: MaxInterval can't be more than 100, got %d", b.MaxInterval)
+	}
+	if b.MaxInterval < b.MinInterval {
+		return fmt.Errorf("invalid back off configuration: MaxInterval (%d) can't be less than MinInterval (%d)", b.MaxInterval, b.MinInterval)
+	}
+	return nil
+}
+
 type newEntityInstance func() error
 
 type IReliable interface {
@@ -26,6 +60,7 @@ type IReliable interface {
 	getEnv() *stream.Environment
 	getNewInstance(streamName string) newEntityInstance
 	getTimeOut() time.Duration
+	getBackOffConfiguration() *BackOffConfiguration
 	GetStatus() int
 	GetStreamName() string
 	GetStatusAsString() string
@@ -45,7 +80,7 @@ type IReliable interface {
 // In both cases it retries the reconnection
 
 func retry(backoff int, reliable IReliable, streamName string) (error, bool) {
-	waitTime := randomWaitWithBackoff(backoff)
+	waitTime := randomWaitWithBackoff(backoff, reliable.getBackOffConfiguration())
 	logs.LogInfo("[Reliable] - The %s for the stream %s is in reconnection in %d milliseconds", reliable.getInfo(), streamName, waitTime)
 
 	// Super stream consumers expose a terminal signal so Close can interrupt
@@ -93,7 +128,7 @@ func retry(backoff int, reliable IReliable, streamName string) (error, bool) {
 			return result, false
 		}
 		if result == nil {
-			logs.LogInfo("[Reliable] - The stream %s exists. %s reconnected.", reliable.getInfo(), streamName)
+			logs.LogInfo("[Reliable] - The stream %s exists. %s reconnected.", streamName, reliable.getInfo())
 		} else {
 			logs.LogInfo("[Reliable] - error %s creating %s for the stream %s. Trying to reconnect", result, reliable.getInfo(), streamName)
 			return retry(backoff+1, reliable, streamName)
@@ -106,12 +141,18 @@ func retry(backoff int, reliable IReliable, streamName string) (error, bool) {
 	return result, true
 }
 
-func randomWaitWithBackoff(attempt int) int {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	baseWait := 3_000 + r.Intn(8_000)
+func randomWaitWithBackoff(attempt int, cfg *BackOffConfiguration) int {
+	if cfg == nil {
+		cfg = NewBackOffConfiguration()
+	}
+	baseWait := cfg.MinInterval * 1_000
+	if cfg.EnableRandom {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		baseWait += r.Intn(cfg.MaxInterval * 1_000)
+	}
 
 	// Calculate the wait time considering the number of attempts
-	waitTime := min(baseWait*(1<<(attempt-1)), 15_000)
+	waitTime := min(baseWait*(1<<(attempt-1)), cfg.MaxInterval*1_000)
 
 	return waitTime
 }
