@@ -326,19 +326,30 @@ func (producer *Producer) processPendingSequencesQueue() {
 		const baseFrame = 4 + initBufferPublishSize // length prefix + publish header
 		sequenceToSend := make([]*messageSequence, 0, batchSize)
 		frameSize := baseFrame
+		// Registering the batch as unconfirmed (a map insert per message) and
+		// writing it to the socket are independent costs; running them in
+		// separate goroutines lets them overlap.
+		toWrite := make(chan []*messageSequence, 2)
+		writerDone := make(chan struct{})
+		go func() {
+			defer close(writerDone)
+			for batch := range toWrite {
+				if err := producer.internalBatchSend(batch); err != nil {
+					if errors.Is(err, FrameTooLarge) {
+						producer.reportFrameTooLarge(batch) // off-lock
+					} else {
+						logs.LogError("error during sending messages: %s", err)
+					}
+				}
+			}
+		}()
 		flush := func() {
 			if len(sequenceToSend) == 0 {
 				return
 			}
 			batch := sequenceToSend
 			producer.unConfirmed.addFromSequences(batch, producer.GetID())
-			if err := producer.internalBatchSend(batch); err != nil {
-				if errors.Is(err, FrameTooLarge) {
-					producer.reportFrameTooLarge(batch) // off-lock
-				} else {
-					logs.LogError("error during sending messages: %s", err)
-				}
-			}
+			toWrite <- batch
 			sequenceToSend = make([]*messageSequence, 0, batchSize)
 			frameSize = baseFrame
 		}
@@ -369,6 +380,9 @@ func (producer *Producer) processPendingSequencesQueue() {
 			// the queue was drained: don't hold messages back
 			flush()
 		}
+
+		close(toWrite)
+		<-writerDone
 
 		// whatever is left was never sent; time it out
 		if len(sequenceToSend) > 0 {
