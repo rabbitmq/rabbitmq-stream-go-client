@@ -137,9 +137,13 @@ func (c *Client) getSocket() *socket {
 	return &c.socket
 }
 
+const socketWriteBufferSize = 128 * 1024
+
 func (c *Client) setSocketConnection(connection net.Conn) {
 	c.socket.connection = connection
-	c.socket.writer = bufio.NewWriter(connection)
+	// A publish frame of a full batch is far larger than bufio's 4KB default,
+	// which would turn every frame into several small write syscalls.
+	c.socket.writer = bufio.NewWriterSize(connection, socketWriteBufferSize)
 }
 
 // maxFrameSize returns the negotiated frame size, or 0 ("no limit") before TUNE.
