@@ -37,14 +37,25 @@ func main() {
 		return
 	}
 
+	// custom back off configuration used when the producer/consumer need to reconnect.
+	// The intervals are in seconds: the wait time is between MinInterval and MaxInterval.
+	// EnableRandom adds a random jitter to avoid all the clients reconnecting at the same time.
+	// The defaults (see ha.NewBackOffConfiguration()) are Min 3, Max 8, random enabled.
+	backOffConfiguration := &ha.BackOffConfiguration{
+		MinInterval:  2,
+		MaxInterval:  10,
+		EnableRandom: true,
+	}
+
 	// declare the reliable consumer using the package ha
-	consumer, err := ha.NewReliableSuperStreamConsumer(env, streamName,
+	consumer, err := ha.NewReliableSuperStreamConsumerWithBackOffConfiguration(env, streamName,
 		// handler where the messages will be processed
 		func(_ stream.ConsumerContext, message *amqp.Message) {
 			fmt.Printf("Message received: %s\n", message.GetData())
 		},
 		// start from the beginning of the stream
 		stream.NewSuperStreamConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()),
+		backOffConfiguration,
 	)
 
 	if err != nil {
@@ -53,7 +64,7 @@ func main() {
 	}
 
 	// Create the reliable producer using the package ha
-	producer, err := ha.NewReliableSuperStreamProducer(env, streamName,
+	producer, err := ha.NewReliableSuperStreamProducerWithBackOffConfiguration(env, streamName,
 		// we leave the default options
 		stream.NewSuperStreamProducerOptions(stream.NewHashRoutingStrategy(func(message message.StreamMessage) string {
 			return message.GetMessageProperties().MessageID.(string)
@@ -69,7 +80,8 @@ func main() {
 					}
 				}
 			}
-		})
+		},
+		backOffConfiguration)
 
 	if err != nil {
 		fmt.Printf("Error creating producer: %v\n", err)
