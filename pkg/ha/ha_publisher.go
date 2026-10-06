@@ -26,7 +26,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 		event := <-channelClose
 		if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) {
 			p.setStatus(StatusReconnecting)
-			waitTime := randomWaitWithBackoff(1)
+			waitTime := randomWaitWithBackoff(1, p.getBackOffConfiguration())
 			logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting in %d milliseconds waiting pending messages", p.getInfo(), waitTime)
 			time.Sleep(time.Duration(waitTime) * time.Millisecond)
 			err, reconnected := retry(1, p, p.GetStreamName())
@@ -66,6 +66,8 @@ type ReliableProducer struct {
 	mutexStatus           *sync.Mutex
 	status                int
 	reconnectionSignal    *sync.Cond
+
+	backOffConfiguration *BackOffConfiguration
 }
 
 type ConfirmMessageHandler func(messageConfirm []*stream.ConfirmationStatus)
@@ -73,6 +75,15 @@ type ConfirmMessageHandler func(messageConfirm []*stream.ConfirmationStatus)
 func NewReliableProducer(env *stream.Environment, streamName string,
 	producerOptions *stream.ProducerOptions,
 	confirmMessageHandler ConfirmMessageHandler) (*ReliableProducer, error) {
+	return NewReliableProducerWithBackOffConfiguration(env, streamName, producerOptions, confirmMessageHandler, NewBackOffConfiguration())
+}
+
+func NewReliableProducerWithBackOffConfiguration(env *stream.Environment, streamName string,
+	producerOptions *stream.ProducerOptions,
+	confirmMessageHandler ConfirmMessageHandler, backOffConfiguration *BackOffConfiguration) (*ReliableProducer, error) {
+	if err := backOffConfiguration.Validate(); err != nil {
+		return nil, err
+	}
 	res := &ReliableProducer{
 		env:                   env,
 		producer:              nil,
@@ -83,6 +94,7 @@ func NewReliableProducer(env *stream.Environment, streamName string,
 		mutexStatus:           &sync.Mutex{},
 		confirmMessageHandler: confirmMessageHandler,
 		reconnectionSignal:    sync.NewCond(&sync.Mutex{}),
+		backOffConfiguration:  backOffConfiguration,
 	}
 	if confirmMessageHandler == nil {
 		return nil, fmt.Errorf("the confirmation message handler is mandatory")
@@ -171,6 +183,10 @@ func (p *ReliableProducer) getEnv() *stream.Environment {
 
 func (p *ReliableProducer) getNewInstance(_ string) newEntityInstance {
 	return p.newProducer
+}
+
+func (p *ReliableProducer) getBackOffConfiguration() *BackOffConfiguration {
+	return p.backOffConfiguration
 }
 
 func (p *ReliableProducer) getTimeOut() time.Duration {
