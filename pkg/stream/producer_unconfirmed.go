@@ -39,15 +39,21 @@ func (u *unConfirmed) addFromSequences(messages []*messageSequence, producerID u
 		u.blockSignal.L.Unlock()
 	}
 
-	u.mutexMessageMap.Lock()
-	for _, msgSeq := range messages {
-		u.messages[msgSeq.publishingId] = &ConfirmationStatus{
-			inserted:     time.Now(),
+	// One allocation and one clock read for the whole batch.
+	now := time.Now()
+	statuses := make([]ConfirmationStatus, len(messages))
+	for i, msgSeq := range messages {
+		statuses[i] = ConfirmationStatus{
+			inserted:     now,
 			message:      msgSeq.sourceMsg,
 			producerID:   producerID,
 			publishingId: msgSeq.publishingId,
-			confirmed:    false,
 		}
+	}
+
+	u.mutexMessageMap.Lock()
+	for i := range statuses {
+		u.messages[statuses[i].publishingId] = &statuses[i]
 	}
 	u.mutexMessageMap.Unlock()
 }

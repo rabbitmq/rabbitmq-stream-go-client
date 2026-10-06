@@ -326,40 +326,63 @@ func (producer *Producer) processPendingSequencesQueue() {
 		const baseFrame = 4 + initBufferPublishSize // length prefix + publish header
 		sequenceToSend := make([]*messageSequence, 0, batchSize)
 		frameSize := baseFrame
+		// Registering the batch as unconfirmed (a map insert per message) and
+		// writing it to the socket are independent costs; running them in
+		// separate goroutines lets them overlap.
+		toWrite := make(chan []*messageSequence, 2)
+		writerDone := make(chan struct{})
+		go func() {
+			defer close(writerDone)
+			for batch := range toWrite {
+				if err := producer.internalBatchSend(batch); err != nil {
+					if errors.Is(err, FrameTooLarge) {
+						producer.reportFrameTooLarge(batch) // off-lock
+					} else {
+						logs.LogError("error during sending messages: %s", err)
+					}
+				}
+			}
+		}()
 		flush := func() {
 			if len(sequenceToSend) == 0 {
 				return
 			}
 			batch := sequenceToSend
 			producer.unConfirmed.addFromSequences(batch, producer.GetID())
-			if err := producer.internalBatchSend(batch); err != nil {
-				if errors.Is(err, FrameTooLarge) {
-					producer.reportFrameTooLarge(batch) // off-lock
-				} else {
-					logs.LogError("error during sending messages: %s", err)
-				}
-			}
+			toWrite <- batch
 			sequenceToSend = make([]*messageSequence, 0, batchSize)
 			frameSize = baseFrame
 		}
-		for msg := range producer.pendingSequencesQueue.GetChannel() {
-			if producer.pendingSequencesQueue.IsStopped() {
-				// add also the last message to sequenceToSend otherwise it will be lost
-				sequenceToSend = append(sequenceToSend, msg)
+		pulled := make([]*messageSequence, 0, batchSize)
+		for {
+			pulled = producer.pendingSequencesQueue.DequeueBatch(pulled, batchSize)
+			if pulled == nil {
 				break
 			}
-			// Flush the pending batch before a message would push the frame over the max.
-			c := frameOverhead(msg)
-			if maxFrame > 0 && len(sequenceToSend) > 0 && frameSize+c > maxFrame {
-				flush()
+			if producer.pendingSequencesQueue.IsStopped() {
+				// add also the last messages to sequenceToSend otherwise they will be lost
+				sequenceToSend = append(sequenceToSend, pulled...)
+				break
 			}
-			sequenceToSend = append(sequenceToSend, msg)
-			frameSize += c
+			for _, msg := range pulled {
+				// Flush the pending batch before a message would push the frame over the max.
+				c := frameOverhead(msg)
+				if maxFrame > 0 && len(sequenceToSend) > 0 && frameSize+c > maxFrame {
+					flush()
+				}
+				sequenceToSend = append(sequenceToSend, msg)
+				frameSize += c
 
-			if producer.pendingSequencesQueue.IsEmpty() || len(sequenceToSend) >= producer.options.BatchSize {
-				flush()
+				if len(sequenceToSend) >= batchSize {
+					flush()
+				}
 			}
+			// the queue was drained: don't hold messages back
+			flush()
 		}
+
+		close(toWrite)
+		<-writerDone
 
 		// whatever is left was never sent; time it out
 		if len(sequenceToSend) > 0 {
