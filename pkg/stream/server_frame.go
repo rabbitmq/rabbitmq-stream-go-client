@@ -194,9 +194,13 @@ func (c *Client) handleTune(r *bufio.Reader) any {
 	writeShort(b, version1)
 	writeUInt(b, uint32(maxFrameSize))
 	writeUInt(b, uint32(heartbeat))
-	res, err := c.coordinator.GetResponseByName("tune")
-	logErrorCommand(err, "handleTune")
 	resp := tuneResponse{frame: b.Bytes(), maxFrameSize: maxFrameSize, heartbeat: heartbeat}
+	res, err := c.coordinator.GetResponseByName("tune")
+	if err != nil {
+		logErrorCommand(err, "handleTune")
+		return resp
+	}
+
 	res.data <- resp
 	return resp
 }
@@ -523,7 +527,8 @@ func (c *Client) streamStatusFrameHandler(readProtocol *ReaderProtocol,
 		return
 	}
 
-	res.code <- Code{id: readProtocol.ResponseCode}
+	// handleGenericResponse already sent the code. Sending it again blocks this
+	// reader forever when the RPC timed out and nobody drains the size-1 buffer.
 	res.data <- streamStatus
 }
 
