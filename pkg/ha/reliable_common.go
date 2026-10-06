@@ -18,19 +18,32 @@ const (
 	StatusReconnecting       = 4
 )
 
+// BackOffConfiguration defines the configuration for the backoff strategy used during retries.
+// It includes the minimum and maximum intervals for the backoff,
+// as well as a flag to enable or disable randomization of the wait time.
+// Note: The intervals are specified in seconds and low values can lead to a high number of retries in a short period,
+// potentially overwhelming the system.
 type BackOffConfiguration struct {
-	MinInterval   int
-	MaxInterval   int
-	MaxTentatives int
-	EnableRandom  bool
+	// MinInterval is the minimum interval (in seconds) to wait before retrying.
+	// It must be at least 1 second.
+	MinInterval int
+
+	// MaxInterval is the maximum interval (in seconds) to wait before retrying.
+	// It must not exceed 100 seconds and should be greater than or equal to MinInterval.
+	MaxInterval int
+
+	// EnableRandom determines whether to add a random jitter to the wait time.
+	// If true, a random value between MinInterval and MaxInterval will be added to the wait time.
+	// By default, it is true, which helps to avoid thundering herd problems during retries.
+	// see NewBackOffConfiguration() for default values.
+	EnableRandom bool
 }
 
 func NewBackOffConfiguration() *BackOffConfiguration {
 	return &BackOffConfiguration{
-		MinInterval:   3,
-		MaxInterval:   8,
-		MaxTentatives: 100,
-		EnableRandom:  true,
+		MinInterval:  3,
+		MaxInterval:  8,
+		EnableRandom: true,
 	}
 }
 
