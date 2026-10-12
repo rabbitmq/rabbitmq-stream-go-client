@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- Add a `Dockerfile` for the `examples/reliable` client and make its parameters (connection settings, stream names, super stream/partitions, load/concurrency) configurable via environment variables.
+
 ### Bug Fixes
 - Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
@@ -11,6 +14,11 @@ All notable changes to this project will be documented in this file.
 - Remove data races on the environment locator client and closed flag, close replaced and failed locator connections, stop locator reconnect retries on `Close`, and return `AlreadyClosed` from environment operations after `Close` instead of opening a new locator connection.
 - Decrement the connections metric only for connections that were counted, so closing a connection whose handshake failed no longer drives it negative.
 - Stop reliable producer and consumer reconnection when their environment is closed instead of reporting that the stream does not exist.
+- Return `StreamMetadataFailure` instead of panicking when a `StreamMetaData` leader retry fails to fetch metadata.
+- Infer TLS server names from connection hostnames without mutating caller TLS options.
+- Return RPC socket write failures immediately, and discard responses abandoned by a failed write or timeout without closing their channels, so a late broker response no longer panics with "send on closed channel".
+- Detach pending responses on coordinator shutdown instead of closing their channels, so closing an environment while the frame reader is still running no longer panics with "send on closed channel".
+- Use a fresh connection for each bootstrap seed, so a seed that fails the handshake no longer masks the next seed, reports success without a usable broker, or tears down the next connection.
 
 ## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
 

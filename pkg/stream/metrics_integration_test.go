@@ -380,9 +380,15 @@ var _ = Describe("Metrics Integration Tests", func() {
 			Expect(testEnvironment.DeleteStream(testStream)).NotTo(HaveOccurred())
 			testStream = "" // Prevent AfterEach from trying to delete
 
-			// Try to send more messages - these should eventually error
+			// Try to send more messages - these should eventually error.
+			// The broker answers the delete with a metadata update that closes the
+			// producer asynchronously. Depending on scheduling, that close can complete
+			// before these sends run; Send then fails synchronously and no confirmation
+			// is emitted, so a Send error counts as an observed error as well.
 			for i := 0; i < 20; i++ {
-				_ = producer.Send(amqp.NewMessage([]byte("error test")))
+				if err := producer.Send(amqp.NewMessage([]byte("error test"))); err != nil {
+					atomic.AddInt32(&errorCount, 1)
+				}
 			}
 
 			// Wait for errors to be reported

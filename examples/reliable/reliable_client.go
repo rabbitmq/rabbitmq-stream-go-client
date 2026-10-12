@@ -2,16 +2,20 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/rabbitmq/rabbitmq-stream-go-client/pkg/logs"
@@ -23,6 +27,9 @@ import (
 )
 
 // The ha producer and consumer provide a way to auto-reconnect in case of connection problems
+//
+// All the parameters below can be overridden with environment variables so this example
+// can be run as-is inside a container (see the Dockerfile in this directory).
 
 const (
 	ansiReset   = "\033[0m"
@@ -49,7 +56,54 @@ var consumed int32 = 0
 var sent int32
 var reSent int32
 
-const enableResend = false
+func getEnv(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		return v
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return fallback
+	}
+	return b
+}
+
+func getEnvInt(key string, fallback int) int {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return i
+}
+
+func getEnvStringSlice(key string, fallback []string) []string {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback
+	}
+	parts := strings.Split(v, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			result = append(result, p)
+		}
+	}
+	if len(result) == 0 {
+		return fallback
+	}
+	return result
+}
 
 func formatCommas(num int32) string {
 	str := fmt.Sprintf("%d", num)
@@ -95,26 +149,49 @@ func sectionTitle(title string) {
 }
 
 func main() {
-	go func() {
-		//nolint:gosec
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	// Connection parameters
+	rabbitmqHost := getEnv("RABBITMQ_HOST", "localhost")
+	rabbitmqPort := getEnvInt("RABBITMQ_PORT", 5552)
+	rabbitmqUser := getEnv("RABBITMQ_USER", "guest")
+	rabbitmqPassword := getEnv("RABBITMQ_PASSWORD", "guest")
+	rabbitmqVHost := getEnv("RABBITMQ_VHOST", "/")
+	rabbitmqTLS := getEnvBool("RABBITMQ_TLS", false)
+	rabbitmqTLSSkipVerify := getEnvBool("RABBITMQ_TLS_SKIP_VERIFY", true)
+
+	// pprof, useful to check the resources used by the application in case of reconnection
+	pprofEnabled := getEnvBool("PPROF_ENABLED", true)
+	pprofAddr := getEnv("PPROF_ADDR", "localhost:6060")
 
 	// Tune the parameters to test the reliability
-	const messagesToSend = 20_000_000
-	const numberOfProducers = 2
-	const concurrentProducers = 1
-	const numberOfConsumers = 2
-	const sendDelay = 100 * time.Microsecond
-	const delayEachMessages = 500
-	const maxProducersPerClient = 2
-	const maxConsumersPerClient = 5
+	messagesToSend := getEnvInt("MESSAGES_TO_SEND", 1_000_000)
+	numberOfProducers := getEnvInt("NUMBER_OF_PRODUCERS", 2)
+	concurrentProducers := getEnvInt("CONCURRENT_PRODUCERS", 1)
+	numberOfConsumers := getEnvInt("NUMBER_OF_CONSUMERS", 2)
+	sendDelay := time.Duration(getEnvInt("SEND_DELAY_MICROS", 100)) * time.Microsecond
+	delayEachMessages := getEnvInt("DELAY_EACH_MESSAGES", 500)
+	maxProducersPerClient := getEnvInt("MAX_PRODUCERS_PER_CLIENT", 2)
+	maxConsumersPerClient := getEnvInt("MAX_CONSUMERS_PER_CLIENT", 5)
+	maxLengthBytesGB := int64(getEnvInt("MAX_STREAM_LENGTH_GB", 10))
+	statsIntervalSeconds := getEnvInt("STATS_INTERVAL_SECONDS", 5)
+	enableResend := getEnvBool("ENABLE_RESEND", false)
+	// runs without waiting on stdin, and shuts down on SIGINT/SIGTERM - useful when running in a container
+	silentMode := getEnvBool("IS_SILENT", false)
+
 	// addSuperStream also exercises a super stream, in addition to the normal streams above
-	const addSuperStream = true
-	const numberOfPartitions = 3
-	const superStreamName = "golang-reliable-super-stream-Test"
-	//
-	streamsName := []string{"golang-reliable-Test", "golang-reliable-Test-1", "golang-reliable-Test-2"}
+	addSuperStream := getEnvBool("ADD_SUPER_STREAM", true)
+	numberOfPartitions := getEnvInt("NUMBER_OF_PARTITIONS", 3)
+	superStreamName := getEnv("SUPER_STREAM_NAME", "golang-reliable-super-stream-Test")
+
+	streamsName := getEnvStringSlice("STREAM_NAMES",
+		[]string{"golang-reliable-Test", "golang-reliable-Test-1", "golang-reliable-Test-2"})
+
+	go func() {
+		if !pprofEnabled {
+			return
+		}
+		//nolint:gosec
+		log.Println(http.ListenAndServe(pprofAddr, nil))
+	}()
 
 	reader := bufio.NewReader(os.Stdin)
 	stream.SetLevelInfo(logs.INFO)
@@ -124,21 +201,25 @@ func main() {
 
 	//  in case of load-balancer you can use the AddressResolver
 	var resolver = stream.AddressResolver{
-		Host: "localhost",
-		Port: 5553,
+		Host: rabbitmqHost,
+		Port: rabbitmqPort,
 	}
 
-	env, err := stream.NewEnvironment(
-		stream.NewEnvironmentOptions().
-			SetMaxProducersPerClient(maxProducersPerClient).
-			SetMaxConsumersPerClient(maxConsumersPerClient).
-			SetUser("guest").
-			SetPassword("guest").
-			// SetHost("localhost").
-			// SetPort(5552))
-			SetHost(resolver.Host).
-			SetPort(resolver.Port).
-			SetAddressResolver(resolver))
+	envOptions := stream.NewEnvironmentOptions().
+		SetMaxProducersPerClient(maxProducersPerClient).
+		SetMaxConsumersPerClient(maxConsumersPerClient).
+		SetUser(rabbitmqUser).
+		SetPassword(rabbitmqPassword).
+		SetVHost(rabbitmqVHost).
+		SetHost(resolver.Host).
+		SetPort(resolver.Port).
+		SetAddressResolver(resolver)
+
+	if rabbitmqTLS {
+		envOptions.IsTLS(true).SetTLSConfig(&tls.Config{InsecureSkipVerify: rabbitmqTLSSkipVerify}) //nolint:gosec
+	}
+
+	env, err := stream.NewEnvironment(envOptions)
 
 	CheckErr(err)
 	fmt.Printf("  %sConnected%s  (max %d producers / %d consumers per client)\n\n",
@@ -158,7 +239,7 @@ func main() {
 		}
 		err = env.DeclareStream(streamName,
 			&stream.StreamOptions{
-				MaxLengthBytes: stream.ByteCapacity{}.GB(10),
+				MaxLengthBytes: stream.ByteCapacity{}.GB(maxLengthBytesGB),
 			},
 		)
 		CheckErr(err)
@@ -181,7 +262,7 @@ func main() {
 
 				perConsumer := int32(0)
 				if numberOfConsumers > 0 {
-					perConsumer = cons / numberOfConsumers
+					perConsumer = cons / int32(numberOfConsumers)
 				}
 
 				fmt.Print(clearScreen)
@@ -248,11 +329,11 @@ func main() {
 				fmt.Println()
 				sep()
 
-				time.Sleep(5 * time.Second)
+				time.Sleep(time.Duration(statsIntervalSeconds) * time.Second)
 			}
 		}()
 
-		for range numberOfConsumers {
+		for i := 0; i < numberOfConsumers; i++ {
 			consumer, err := ha.NewReliableConsumer(env,
 				streamName,
 				stream.NewConsumerOptions().SetOffset(stream.OffsetSpecification{}.First()),
@@ -332,10 +413,10 @@ func main() {
 		}
 		err = env.DeclareSuperStream(superStreamName,
 			stream.NewPartitionsOptions(numberOfPartitions).
-				SetMaxLengthBytes(stream.ByteCapacity{}.GB(10)))
+				SetMaxLengthBytes(stream.ByteCapacity{}.GB(maxLengthBytesGB)))
 		CheckErr(err)
 
-		for range numberOfConsumers {
+		for i := 0; i < numberOfConsumers; i++ {
 			superConsumer, err := ha.NewReliableSuperStreamConsumer(env,
 				superStreamName,
 				func(_ stream.ConsumerContext, _ *amqp.Message) {
@@ -388,8 +469,15 @@ func main() {
 		}
 	}
 
-	fmt.Printf("\n  %sPress enter to close the connections.%s\n", ansiDim, ansiReset)
-	_, _ = reader.ReadString('\n')
+	if silentMode {
+		fmt.Printf("\n  %sRunning in silent mode.%s  Send SIGINT/SIGTERM to close the connections.\n", ansiDim, ansiReset)
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+	} else {
+		fmt.Printf("\n  %sPress enter to close the connections.%s\n", ansiDim, ansiReset)
+		_, _ = reader.ReadString('\n')
+	}
 	for _, producer := range producers {
 		err := producer.Close()
 		if err != nil {
@@ -415,12 +503,12 @@ func main() {
 				CheckErr(err)
 			}
 		}
-		err = env.DeleteSuperStream(superStreamName)
-		CheckErr(err)
 	}
 	isRunning = false
-	fmt.Printf("  %sConnections closed.%s  Press enter to close the environment.\n", ansiGreen, ansiReset)
-	_, _ = reader.ReadString('\n')
+	if !silentMode {
+		fmt.Printf("  %sConnections closed.%s  Press enter to close the environment.\n", ansiGreen, ansiReset)
+		_, _ = reader.ReadString('\n')
+	}
 
 	err = env.Close()
 	CheckErr(err)

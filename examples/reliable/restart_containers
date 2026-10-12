@@ -1,0 +1,79 @@
+## declare an array variable
+#!/bin/bash
+
+declare -a arr=$(docker ps -q)
+
+for i in {1..500}
+do 
+   echo "Iteration $i of 500"
+   for image in $(docker ps -q); do
+      echo "Processing container: $image"
+      echo "Stopping container $image..."
+      docker restart $image
+      
+      echo "Waiting 30 seconds for $image to stabilize..."
+      for sec in {30..1}; do
+         echo -ne "\rTime remaining: $sec seconds"
+         sleep 1
+      done
+      echo -e "\nFirst wait period complete."
+      
+      echo "Waiting 10 seconds for $image..."
+      for sec in {10..1}; do
+         echo -ne "\rTime remaining: $sec seconds"
+         sleep 1
+      done
+      echo -e "\nSecond wait period complete."
+      
+      # Uncomment the following line if needed:
+      # docker exec -it $image /bin/bash -c "rabbitmq-streams list_stream_consumers | grep "invoices-0" | wc -l"
+      
+      echo "Final 10-second wait for $image..."
+      for sec in {10..1}; do
+         echo -ne "\rTime remaining: $sec seconds"
+         sleep 1
+      done
+      echo -e "\nFinal wait period complete."
+      
+      echo "Finished processing container $image"
+      echo "----------------------------------------"
+   done 
+   echo "Completed iteration $i"
+   echo "========================================"
+done
+
+
+
+
+
+
+
+
+
+
+# declare -a arr=$(docker ps -q)
+
+# for i in {1..500}
+# do 
+#    for image in $(docker ps -q); do
+#       echo Stopping ..$image
+#       docker restart $image
+#       echo Waiting 20s ..$image 
+#       sleep 20
+#       echo Waiting 10s ..$image
+#       # docker exec -it $image /bin/bash -c "rabbitmq-streams list_stream_consumers | grep "invoices-0" | wc -l"
+#       sleep 10
+#       echo Waiting 10s ..$image
+#       sleep 10
+#    done 
+# done
+
+## now loop through the above array
+# for i in "${arr[@]}"
+# do
+#    echo Stopping ..$i
+#    # docker restart $i 
+#    # echo Waiting .."$i"
+#    sleep 15
+#    # or do whatever with individual element of the array
+# done

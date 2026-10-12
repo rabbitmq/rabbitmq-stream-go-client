@@ -21,9 +21,12 @@ func (r *closedEnvReliable) setStatus(value int)         { r.status.Store(int32(
 func (r *closedEnvReliable) getInfo() string             { return "closed-environment-reliable" }
 func (r *closedEnvReliable) getEnv() *stream.Environment { return r.env }
 func (r *closedEnvReliable) getTimeOut() time.Duration   { return time.Second }
-func (r *closedEnvReliable) GetStatus() int              { return int(r.status.Load()) }
-func (r *closedEnvReliable) GetStreamName() string       { return "" }
-func (r *closedEnvReliable) GetStatusAsString() string   { return getStatusAsString(r) }
+func (r *closedEnvReliable) getBackOffConfiguration() *BackOffConfiguration {
+	return NewBackOffConfiguration()
+}
+func (r *closedEnvReliable) GetStatus() int            { return int(r.status.Load()) }
+func (r *closedEnvReliable) GetStreamName() string     { return "" }
+func (r *closedEnvReliable) GetStatusAsString() string { return getStatusAsString(r) }
 func (r *closedEnvReliable) getNewInstance(string) newEntityInstance {
 	return func() error {
 		r.instances.Add(1)
