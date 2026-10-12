@@ -209,6 +209,12 @@ func (c *Client) connect() error {
 			if c.tcpParameters.tlsConfig != nil {
 				conf = c.tcpParameters.tlsConfig
 			}
+			if conf.ServerName == "" {
+				// verify the certificate against the dialed host; clone so the
+				// caller's config, possibly shared, is never mutated
+				conf = conf.Clone()
+				conf.ServerName = host
+			}
 			c.setSocketConnection(tls.Client(connection, conf))
 		} else {
 			c.setSocketConnection(connection)

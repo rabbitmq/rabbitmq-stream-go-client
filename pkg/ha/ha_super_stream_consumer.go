@@ -29,9 +29,18 @@ type ReliableSuperStreamConsumer struct {
 	bootstrap    bool
 	stopRetry    chan struct{}
 	retryStopped bool
+
+	backOffConfiguration *BackOffConfiguration
 }
 
 func NewReliableSuperStreamConsumer(env *stream.Environment, superStream string, messagesHandler stream.MessagesHandler, consumerOptions *stream.SuperStreamConsumerOptions) (*ReliableSuperStreamConsumer, error) {
+	return NewReliableSuperStreamConsumerWithBackOffConfiguration(env, superStream, messagesHandler, consumerOptions, NewBackOffConfiguration())
+}
+
+func NewReliableSuperStreamConsumerWithBackOffConfiguration(env *stream.Environment, superStream string, messagesHandler stream.MessagesHandler, consumerOptions *stream.SuperStreamConsumerOptions, backOffConfiguration *BackOffConfiguration) (*ReliableSuperStreamConsumer, error) {
+	if err := backOffConfiguration.Validate(); err != nil {
+		return nil, err
+	}
 	if consumerOptions == nil {
 		return nil, fmt.Errorf("the consumer options is mandatory")
 	}
@@ -49,6 +58,8 @@ func NewReliableSuperStreamConsumer(env *stream.Environment, superStream string,
 		messagesHandler: messagesHandler,
 		status:          StatusClosed,
 		stopRetry:       make(chan struct{}),
+
+		backOffConfiguration: backOffConfiguration,
 	}
 	consumer, err := env.NewSuperStreamConsumer(superStream, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
 		res.streamPositionMap.Store(consumerContext.Consumer.GetStreamName(), consumerContext.Consumer.GetOffset())
@@ -152,6 +163,10 @@ func (r *ReliableSuperStreamConsumer) getNewInstance(partition string) newEntity
 
 		return c.ConnectPartition(partition, off)
 	}
+}
+
+func (r *ReliableSuperStreamConsumer) getBackOffConfiguration() *BackOffConfiguration {
+	return r.backOffConfiguration
 }
 
 func (r *ReliableSuperStreamConsumer) getTimeOut() time.Duration {

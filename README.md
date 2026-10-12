@@ -199,6 +199,7 @@ stream.NewEnvironmentOptions().
 ```
 
 The `tls.Config` is the standard golang tls library https://pkg.go.dev/crypto/tls </br>
+When `ServerName` is not set, the broker host of the connection is used to verify the certificate; the `tls.Config` you pass is not modified. </br>
 See also "Getting started TLS" example in the [examples](./examples/) directory. </br>
 
 It is also possible to configure TLS using the Schema URI like:

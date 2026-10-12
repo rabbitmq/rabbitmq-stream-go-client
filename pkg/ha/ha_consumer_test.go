@@ -66,11 +66,15 @@ var _ = Describe("Reliable Consumer", func() {
 
 		signal = make(chan struct{})
 		var consumed int32
-		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()), func(_ ConsumerContext, _ *amqp.Message) {
+		consumer, err := NewReliableConsumerWithBackOffConfiguration(envForRConsumer, streamForRConsumer, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()), func(_ ConsumerContext, _ *amqp.Message) {
 			atomic.AddInt32(&consumed, 1)
 			if atomic.LoadInt32(&consumed) == 10 {
 				signal <- struct{}{}
 			}
+		}, &BackOffConfiguration{
+			MinInterval:  1,
+			MaxInterval:  2,
+			EnableRandom: false,
 		})
 
 		Expect(err).NotTo(HaveOccurred())
@@ -82,8 +86,12 @@ var _ = Describe("Reliable Consumer", func() {
 	It("restart Reliable Consumer in case of killing connection", func() {
 
 		clientProvidedName := uuid.New().String()
-		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetClientProvidedName(clientProvidedName),
-			func(_ ConsumerContext, _ *amqp.Message) {})
+		consumer, err := NewReliableConsumerWithBackOffConfiguration(envForRConsumer, streamForRConsumer, NewConsumerOptions().SetOffset(OffsetSpecification{}.First()).SetClientProvidedName(clientProvidedName),
+			func(_ ConsumerContext, _ *amqp.Message) {}, &BackOffConfiguration{
+				MinInterval:  1,
+				MaxInterval:  2,
+				EnableRandom: false,
+			})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumer).NotTo(BeNil())
 		time.Sleep(1 * time.Second)
@@ -127,9 +135,13 @@ var _ = Describe("Reliable Consumer", func() {
 	})
 
 	It("Delete the stream should close the consumer", func() {
-		consumer, err := NewReliableConsumer(envForRConsumer, streamForRConsumer,
+		consumer, err := NewReliableConsumerWithBackOffConfiguration(envForRConsumer, streamForRConsumer,
 			NewConsumerOptions(),
 			func(_ ConsumerContext, _ *amqp.Message) {
+			}, &BackOffConfiguration{
+				MinInterval:  1,
+				MaxInterval:  2,
+				EnableRandom: false,
 			})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumer).NotTo(BeNil())
@@ -166,7 +178,7 @@ var _ = Describe("Reliable Consumer", func() {
 
 		dropSignal := make(chan struct{})
 		clientProvidedName := uuid.New().String()
-		consumer, err := NewReliableConsumer(
+		consumer, err := NewReliableConsumerWithBackOffConfiguration(
 			envForRConsumer,
 			streamForRConsumer,
 			NewConsumerOptions().
@@ -184,8 +196,11 @@ var _ = Describe("Reliable Consumer", func() {
 				if offset == messageToSend/2 {
 					<-dropSignal
 				}
-			},
-		)
+			}, &BackOffConfiguration{
+				MinInterval:  1,
+				MaxInterval:  2,
+				EnableRandom: false,
+			})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(consumer).NotTo(BeNil())
 

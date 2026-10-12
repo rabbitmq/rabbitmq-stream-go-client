@@ -35,7 +35,7 @@ func (p *ReliableProducer) handleNotifyClose(channelClose stream.ChannelClose) {
 		}
 		p.mutexStatus.Unlock()
 		if unexpected && !alreadyClosed {
-			waitTime := randomWaitWithBackoff(1)
+			waitTime := randomWaitWithBackoff(1, p.getBackOffConfiguration())
 			logs.LogWarn("[Reliable] - %s closed unexpectedly.. Reconnecting in %d milliseconds waiting pending messages", p.getInfo(), waitTime)
 			var err error
 			reconnected := false
@@ -98,6 +98,8 @@ type ReliableProducer struct {
 	reconnectionSignal    *sync.Cond
 	stopRetry             chan struct{}
 	retryStopped          bool
+
+	backOffConfiguration *BackOffConfiguration
 }
 
 type ConfirmMessageHandler func(messageConfirm []*stream.ConfirmationStatus)
@@ -105,6 +107,15 @@ type ConfirmMessageHandler func(messageConfirm []*stream.ConfirmationStatus)
 func NewReliableProducer(env *stream.Environment, streamName string,
 	producerOptions *stream.ProducerOptions,
 	confirmMessageHandler ConfirmMessageHandler) (*ReliableProducer, error) {
+	return NewReliableProducerWithBackOffConfiguration(env, streamName, producerOptions, confirmMessageHandler, NewBackOffConfiguration())
+}
+
+func NewReliableProducerWithBackOffConfiguration(env *stream.Environment, streamName string,
+	producerOptions *stream.ProducerOptions,
+	confirmMessageHandler ConfirmMessageHandler, backOffConfiguration *BackOffConfiguration) (*ReliableProducer, error) {
+	if err := backOffConfiguration.Validate(); err != nil {
+		return nil, err
+	}
 	res := &ReliableProducer{
 		env:                   env,
 		status:                StatusClosed,
@@ -115,6 +126,7 @@ func NewReliableProducer(env *stream.Environment, streamName string,
 		confirmMessageHandler: confirmMessageHandler,
 		reconnectionSignal:    sync.NewCond(&sync.Mutex{}),
 		stopRetry:             make(chan struct{}),
+		backOffConfiguration:  backOffConfiguration,
 	}
 	if confirmMessageHandler == nil {
 		return nil, fmt.Errorf("the confirmation message handler is mandatory")
@@ -212,6 +224,10 @@ func (p *ReliableProducer) getEnv() *stream.Environment {
 
 func (p *ReliableProducer) getNewInstance(_ string) newEntityInstance {
 	return p.newProducer
+}
+
+func (p *ReliableProducer) getBackOffConfiguration() *BackOffConfiguration {
+	return p.backOffConfiguration
 }
 
 func (p *ReliableProducer) getTimeOut() time.Duration {
