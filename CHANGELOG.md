@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 - Add a `Dockerfile` for the `examples/reliable` client and make its parameters (connection settings, stream names, super stream/partitions, load/concurrency) configurable via environment variables.
 
 ### Bug Fixes
+- Report messages rejected by a stopping producer queue as unconfirmed, so senders blocked on a full queue during a close are not lost.
+- Finish pending publish workers before closing confirmations, so producer reconnects report every accepted message, including batches waiting for backpressure or socket writes.
 - Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
 - Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.

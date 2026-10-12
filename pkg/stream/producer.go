@@ -90,6 +90,7 @@ type Producer struct {
 	publishConfirmation chan []*ConfirmationStatus
 
 	pendingSequencesQueue *BlockingQueue[*messageSequence]
+	pendingSequencesDone  chan struct{}
 }
 
 type FilterValue func(message message.StreamMessage) string
@@ -304,6 +305,15 @@ func (producer *Producer) closeConfirmationStatus() {
 // processPendingSequencesQueue aggregates the messages sequence in the queue and sends them to the server
 // messages coming from the Send method through the pendingSequencesQueue
 func (producer *Producer) processPendingSequencesQueue() {
+	producer.mutex.Lock()
+	if producer.status == closed {
+		producer.mutex.Unlock()
+		return
+	}
+	done := make(chan struct{})
+	producer.pendingSequencesDone = done
+	producer.mutex.Unlock()
+
 	maxFrame := producer.client.maxFrameSize()
 	batchSize := producer.options.BatchSize
 	if batchSize <= 0 {
@@ -323,6 +333,7 @@ func (producer *Producer) processPendingSequencesQueue() {
 		return c
 	}
 	go func() {
+		defer close(done)
 		const baseFrame = 4 + initBufferPublishSize // length prefix + publish header
 		sequenceToSend := make([]*messageSequence, 0, batchSize)
 		frameSize := baseFrame
@@ -498,6 +509,9 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	// se the processPendingSequencesQueue function
 	err = producer.pendingSequencesQueue.Enqueue(messageSeq)
 	if err != nil {
+		// The queue was stopped while the producer was closing: report the message
+		// like the closed case above, callers such as the HA producer rely on it.
+		producer.markUnsentAsUnconfirmed([]*messageSequence{messageSeq})
 		return fmt.Errorf("error during enqueue message: %s pending queue closed. Producer id: %d ", err, producer.id)
 	}
 	return nil
@@ -869,10 +883,15 @@ func (producer *Producer) stopAndWaitPendingSequencesQueue() {
 	producer.doneTimeoutTicker <- struct{}{}
 	close(producer.doneTimeoutTicker)
 
+	// A dequeued batch can still be waiting for registration or a socket write.
+	producer.unConfirmed.stopWaiting()
+	producer.pendingSequencesQueue.Close()
+	if producer.pendingSequencesDone != nil {
+		<-producer.pendingSequencesDone
+	}
+
 	// Wait for the inflight messages
 	producer.waitForInflightMessages()
-	// Close the pendingSequencesQueue. It closes the channel
-	producer.pendingSequencesQueue.Close()
 }
 
 func (producer *Producer) waitForInflightMessages() {
