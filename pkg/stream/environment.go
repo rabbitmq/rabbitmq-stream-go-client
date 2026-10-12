@@ -344,6 +344,9 @@ func (env *Environment) StreamMetaData(streamName string) (*StreamMetadata, erro
 	tentatives := 0
 	for streamMetadata == nil || streamMetadata.Leader == nil && tentatives < 3 {
 		streamsMetadata = env.locator.client.metaData(streamName)
+		if streamsMetadata == nil {
+			return nil, env.locator.client.connectionError(StreamMetadataFailure)
+		}
 		streamMetadata = streamsMetadata.Get(streamName)
 		tentatives++
 		if err := env.locator.client.waitDelay(100 * time.Millisecond); err != nil {

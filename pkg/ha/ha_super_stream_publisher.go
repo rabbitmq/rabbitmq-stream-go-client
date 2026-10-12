@@ -24,12 +24,21 @@ type ReliableSuperStreamProducer struct {
 	mutexStatus                    *sync.Mutex
 	status                         int
 	reconnectionSignal             *sync.Cond
+	backOffConfiguration           *BackOffConfiguration
 }
 
 type PartitionConfirmMessageHandler func(messageConfirm []*stream.PartitionPublishConfirm)
 
 func NewReliableSuperStreamProducer(env *stream.Environment, superStream string,
 	superStreamProducerOptions *stream.SuperStreamProducerOptions, partitionConfirmMessageHandler PartitionConfirmMessageHandler) (*ReliableSuperStreamProducer, error) {
+	return NewReliableSuperStreamProducerWithBackOffConfiguration(env, superStream, superStreamProducerOptions, partitionConfirmMessageHandler, NewBackOffConfiguration())
+}
+
+func NewReliableSuperStreamProducerWithBackOffConfiguration(env *stream.Environment, superStream string,
+	superStreamProducerOptions *stream.SuperStreamProducerOptions, partitionConfirmMessageHandler PartitionConfirmMessageHandler, backOffConfiguration *BackOffConfiguration) (*ReliableSuperStreamProducer, error) {
+	if err := backOffConfiguration.Validate(); err != nil {
+		return nil, err
+	}
 	if superStreamProducerOptions == nil {
 		return nil, fmt.Errorf("the super stream producer options is mandatory")
 	}
@@ -39,12 +48,13 @@ func NewReliableSuperStreamProducer(env *stream.Environment, superStream string,
 	}
 
 	res := &ReliableSuperStreamProducer{
-		env:                env,
-		superStreamName:    superStream,
-		producerOptions:    superStreamProducerOptions,
-		mutexStatus:        &sync.Mutex{},
-		mutex:              &sync.Mutex{},
-		reconnectionSignal: sync.NewCond(&sync.Mutex{}),
+		env:                  env,
+		superStreamName:      superStream,
+		producerOptions:      superStreamProducerOptions,
+		mutexStatus:          &sync.Mutex{},
+		mutex:                &sync.Mutex{},
+		reconnectionSignal:   sync.NewCond(&sync.Mutex{}),
+		backOffConfiguration: backOffConfiguration,
 	}
 
 	producer, err := env.NewSuperStreamProducer(superStream, superStreamProducerOptions)
@@ -121,6 +131,10 @@ func (r *ReliableSuperStreamProducer) getNewInstance(streamName string) newEntit
 		p := r.producer.Load()
 		return p.ConnectPartition(streamName)
 	}
+}
+
+func (r *ReliableSuperStreamProducer) getBackOffConfiguration() *BackOffConfiguration {
+	return r.backOffConfiguration
 }
 
 func (r *ReliableSuperStreamProducer) getTimeOut() time.Duration {
