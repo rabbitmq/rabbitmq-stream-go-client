@@ -33,6 +33,8 @@ type ReliableConsumer struct {
 	//bootstrap: if true the consumer will start from the user offset.
 	// If false it will start from the last offset consumed (currentPosition)
 	bootstrap bool
+
+	backOffConfiguration *BackOffConfiguration
 }
 
 func (c *ReliableConsumer) GetStatusAsString() string {
@@ -82,16 +84,20 @@ func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 	}()
 }
 
-func NewReliableConsumer(env *stream.Environment, streamName string,
-	consumerOptions *stream.ConsumerOptions, messagesHandler stream.MessagesHandler) (*ReliableConsumer, error) {
+func NewReliableConsumerWithBackOffConfiguration(env *stream.Environment, streamName string,
+	consumerOptions *stream.ConsumerOptions, messagesHandler stream.MessagesHandler, backOffConfiguration *BackOffConfiguration) (*ReliableConsumer, error) {
 	res := &ReliableConsumer{
-		env:             env,
-		streamName:      streamName,
-		consumerOptions: consumerOptions,
-		mutexStatus:     &sync.Mutex{},
-		mutexConnection: &sync.Mutex{},
-		messagesHandler: messagesHandler,
-		bootstrap:       true,
+		env:                  env,
+		streamName:           streamName,
+		consumerOptions:      consumerOptions,
+		mutexStatus:          &sync.Mutex{},
+		mutexConnection:      &sync.Mutex{},
+		messagesHandler:      messagesHandler,
+		bootstrap:            true,
+		backOffConfiguration: backOffConfiguration,
+	}
+	if err := backOffConfiguration.Validate(); err != nil {
+		return nil, err
 	}
 	if messagesHandler == nil {
 		return nil, fmt.Errorf("the messages handler is mandatory")
@@ -108,6 +114,11 @@ func NewReliableConsumer(env *stream.Environment, streamName string,
 	}
 	logs.LogDebug("[Reliable] - created %s", res.getInfo())
 	return res, err
+}
+
+func NewReliableConsumer(env *stream.Environment, streamName string,
+	consumerOptions *stream.ConsumerOptions, messagesHandler stream.MessagesHandler) (*ReliableConsumer, error) {
+	return NewReliableConsumerWithBackOffConfiguration(env, streamName, consumerOptions, messagesHandler, NewBackOffConfiguration())
 }
 
 func (c *ReliableConsumer) setStatus(value int) {
@@ -137,6 +148,10 @@ func (c *ReliableConsumer) getNewInstance(_ string) newEntityInstance {
 func (c *ReliableConsumer) getInfo() string {
 	return fmt.Sprintf("consumer %s for stream %s",
 		c.consumerOptions.ClientProvidedName, c.streamName)
+}
+
+func (c *ReliableConsumer) getBackOffConfiguration() *BackOffConfiguration {
+	return c.backOffConfiguration
 }
 
 func (c *ReliableConsumer) getTimeOut() time.Duration {
