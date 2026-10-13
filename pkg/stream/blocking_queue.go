@@ -43,6 +43,15 @@ func (bq *BlockingQueue[T]) Enqueue(item T) error {
 		bq.mu.Unlock()
 		return ErrBlockingQueueStopped
 	}
+	// head only resets when the queue fully drains. If it never does, the
+	// consumed prefix would make append reallocate forever: reclaim it
+	// instead of growing once the backing array is full.
+	if bq.head > 0 && len(bq.items) == cap(bq.items) {
+		n := copy(bq.items, bq.items[bq.head:])
+		clear(bq.items[n:])
+		bq.items = bq.items[:n]
+		bq.head = 0
+	}
 	bq.items = append(bq.items, item)
 	bq.mu.Unlock()
 	bq.notEmpty.Signal()
