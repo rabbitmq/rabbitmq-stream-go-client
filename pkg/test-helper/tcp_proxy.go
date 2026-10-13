@@ -1,6 +1,7 @@
 package test_helper
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -34,7 +35,7 @@ type proxyPair struct {
 
 // NewTCPProxy starts a proxy on a random local port forwarding to target (host:port).
 func NewTCPProxy(target string) (*TCPProxy, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +88,7 @@ func (p *TCPProxy) Restore() {
 	if p.closed || p.listener != nil {
 		return
 	}
-	l, err := net.Listen("tcp", p.addr)
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", p.addr)
 	if err != nil {
 		return
 	}
@@ -136,7 +137,7 @@ func (p *TCPProxy) acceptLoop(l net.Listener) {
 		if err != nil {
 			return
 		}
-		server, err := net.Dial("tcp", p.target)
+		server, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", p.target)
 		if err != nil {
 			_ = client.Close()
 			continue
