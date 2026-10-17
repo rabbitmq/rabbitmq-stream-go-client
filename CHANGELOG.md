@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Enhancements
+- Add `NewEnvironmentWithContext` for opt-in environment lifetime cancellation,
+  including dialing, TLS negotiation, socket I/O, RPC waits and reconnect delays.
+
 ### Added
 - Add a `Dockerfile` for the `examples/reliable` client and make its parameters (connection settings, stream names, super stream/partitions, load/concurrency) configurable via environment variables.
 
