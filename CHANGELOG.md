@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
 - Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
 - Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
 - Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
+- Remove data races on the environment locator client and closed flag, close replaced and failed locator connections, stop locator reconnect retries on `Close`, and return `AlreadyClosed` from environment operations after `Close` instead of opening a new locator connection.
+- Decrement the connections metric only for connections that were counted, so closing a connection whose handshake failed no longer drives it negative.
+- Stop reliable producer and consumer reconnection when their environment is closed instead of reporting that the stream does not exist.
 - Return `StreamMetadataFailure` instead of panicking when a `StreamMetaData` leader retry fails to fetch metadata.
 - Infer TLS server names from connection hostnames without mutating caller TLS options.
 - Return RPC socket write failures immediately, and discard responses abandoned by a failed write or timeout without closing their channels, so a late broker response no longer panics with "send on closed channel".
