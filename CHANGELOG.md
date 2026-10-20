@@ -4,18 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-### Added
+## [[1.9.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.9.0)]
+
+## 1.9.0 - 2026-10-19
+- [Release 1.9.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.9.0)
+
+### Enhancements
+- Keep early close notifications and make lifecycle shutdown race-safe by @djgilcrease in [#522](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/522)
+- Remove perf_test from Pivotal Docker Hub by @Gsantomaggio in [#525](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/525)
+- Use a fresh client for each bootstrap seed by @djgilcrease in [#529](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/529)
+- Return RPC write errors immediately and discard abandoned responses without closing their channels by @djgilcrease in [#527](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/527)
+- Add configurable `BackOffConfiguration` to reliable entities by @Gsantomaggio in [#538](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/538)
 - Add a `Dockerfile` for the `examples/reliable` client and make its parameters (connection settings, stream names, super stream/partitions, load/concurrency) configurable via environment variables.
 
 ### Bug Fixes
-- Retain producer, consumer, and super stream partition close events emitted before notification registration; repeated registration returns the same channel.
-- Publish HA client state before processing retained notifications, and drain terminal super stream notifications without reconnecting.
-- Prevent concurrent producer closes from running teardown more than once, and finish or cancel pending partition forwarders before closing super stream consumer notifications.
-- Return `StreamMetadataFailure` instead of panicking when a `StreamMetaData` leader retry fails to fetch metadata.
-- Infer TLS server names from connection hostnames without mutating caller TLS options.
-- Return RPC socket write failures immediately, and discard responses abandoned by a failed write or timeout without closing their channels, so a late broker response no longer panics with "send on closed channel".
-- Detach pending responses on coordinator shutdown instead of closing their channels, so closing an environment while the frame reader is still running no longer panics with "send on closed channel".
-- Use a fresh connection for each bootstrap seed, so a seed that fails the handshake no longer masks the next seed, reports success without a usable broker, or tears down the next connection.
+- Infer the TLS server name from the connection host by @djgilcrease in [#528](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/528)
+- Return `StreamMetadataFailure` when a `StreamMetaData` leader retry fails by @djgilcrease in [#531](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/531)
+
+### Documentation
+- Add scripts to test `reliable_client.go` by @Gsantomaggio in [#533](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/533)
+
+### Dependency Updates
+- Bump golang.org/x/text from 0.40.0 to 0.41.0 by @dependabot[bot] in [#516](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/516)
+- Bump github.com/klauspost/compress from 1.19.1 to 1.20.0 by @dependabot[bot] in [#520](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/520)
+- Bump go.opentelemetry.io/otel/metric from 1.44.0 to 1.46.0 by @dependabot[bot] in [#518](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/518)
+- Bump go.opentelemetry.io/otel/sdk from 1.43.0 to 1.45.0 in `/examples/metrics` by @dependabot[bot] in [#536](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/536)
+
+### New Contributors
+- @djgilcrease made their first contribution in [#522](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/522)
 
 ## [[1.8.3](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.8.3)]
 

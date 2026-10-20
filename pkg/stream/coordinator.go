@@ -53,11 +53,9 @@ func (coordinator *Coordinator) NewProducer(
 	parameters *ProducerOptions, cleanUp func()) (*Producer, error) {
 	coordinator.mutex.Lock()
 	defer coordinator.mutex.Unlock()
-	dynSize := 10000
 	queueSize := defaultQueuePublisherSize
 	tickerTime := defaultConfirmationTimeOut
 	if parameters != nil {
-		dynSize = parameters.BatchSize
 		tickerTime = parameters.ConfirmationTimeOut
 		queueSize = parameters.QueueSize
 	}
@@ -73,7 +71,7 @@ func (coordinator *Coordinator) NewProducer(
 		unConfirmed:               newUnConfirmed(queueSize),
 		confirmationTimeoutTicker: time.NewTicker(tickerTime),
 		doneTimeoutTicker:         make(chan struct{}, 1),
-		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](dynSize),
+		pendingSequencesQueue:     NewBlockingQueue[*messageSequence](queueSize),
 		confirmMutex:              &sync.Mutex{},
 		status:                    open,
 		onClose:                   cleanUp,
