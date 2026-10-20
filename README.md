@@ -1,10 +1,8 @@
 <h1 align="center">RabbitMQ Stream GO Client</h1>
 
 ---
-[![Go Report Card][ReportCard-Image]][ReportCard-Url] [![Build Status][Build-Status-Image]][Build-Status-Url] 
+[![Build Status][Build-Status-Image]][Build-Status-Url] 
 
-[ReportCard-Url]: https://goreportcard.com/report/github.com/rabbitmq/rabbitmq-stream-go-client
-[ReportCard-Image]: https://goreportcard.com/badge/github.com/rabbitmq/rabbitmq-stream-go-client
 [Build-Status-Url]: https://github.com/rabbitmq/rabbitmq-stream-go-client/actions
 [Build-Status-Image]: https://github.com/rabbitmq/rabbitmq-stream-go-client/actions/workflows/build_and_test.yml/badge.svg?branch=main
 
