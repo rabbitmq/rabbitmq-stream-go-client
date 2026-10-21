@@ -183,3 +183,208 @@ var _ = Describe("Super stream partition notifications", func() {
 		Eventually(events, time.Second).Should(BeClosed())
 	})
 })
+
+var _ = Describe("Super stream producer shutdown", func() {
+	// connectPartition registers a broker-free partition producer exactly as
+	// ConnectPartition does once NewProducer has succeeded.
+	connectPartition := func(superProducer *SuperStreamProducer, partition string) *Producer {
+		producer, err := NewCoordinator().NewProducer(nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		superProducer.mutex.Lock()
+		defer superProducer.mutex.Unlock()
+		superProducer.partitions = append(superProducer.partitions, partition)
+		superProducer.activeProducers = append(superProducer.activeProducers, producer)
+		superProducer.startPartitionForwarders(partition, producer)
+		return producer
+	}
+
+	// notificationsClosed reports whether Close released both registered channels.
+	notificationsClosed := func(superProducer *SuperStreamProducer) func() bool {
+		return func() bool {
+			superProducer.chSuperStreamPartitionMutex.Lock()
+			defer superProducer.chSuperStreamPartitionMutex.Unlock()
+			return superProducer.chNotifyPublishConfirmation == nil && superProducer.chSuperStreamPartitionClose == nil
+		}
+	}
+
+	// drainConfirmations reads every confirmation until the channel is closed and
+	// returns the publishing ids, after sleeping delay before each read.
+	drainConfirmations := func(confirmations <-chan PartitionPublishConfirm, delay time.Duration) <-chan []int64 {
+		result := make(chan []int64, 1)
+		go func() {
+			ids := make([]int64, 0)
+			for {
+				time.Sleep(delay)
+				confirm, ok := <-confirmations
+				if !ok {
+					break
+				}
+				for _, status := range confirm.ConfirmationStatus {
+					ids = append(ids, status.GetPublishingId())
+				}
+			}
+			result <- ids
+		}()
+		return result
+	}
+
+	// drainPartitionEvents reads every partition close event until the channel is closed.
+	drainPartitionEvents := func(events <-chan PPartitionClose) <-chan []string {
+		result := make(chan []string, 1)
+		go func() {
+			partitions := make([]string, 0)
+			for event := range events {
+				partitions = append(partitions, event.Partition)
+			}
+			result <- partitions
+		}()
+		return result
+	}
+
+	confirmation := func(publishingId int64) []*ConfirmationStatus {
+		return []*ConfirmationStatus{{publishingId: publishingId}}
+	}
+
+	It("closes every partition, even after an already closed one, and cannot reconnect", func() {
+		// A partition producer closed by a dropped connection must not abort Close.
+		dead, err := NewCoordinator().NewProducer(nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(dead.Close()).To(Succeed())
+		live, err := NewCoordinator().NewProducer(nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		superProducer := &SuperStreamProducer{
+			activeProducers: []*Producer{dead, live},
+			partitions:      []string{"events-0", "events-1"},
+		}
+		confirmations := superProducer.NotifyPublishConfirmation(1)
+
+		Expect(superProducer.Close()).To(Succeed())
+		Expect(live.Close()).To(MatchError(AlreadyClosed), "remaining partitions must be closed")
+		Eventually(confirmations, time.Second).Should(BeClosed(),
+			"publish confirmation channel was not released")
+
+		Expect(superProducer.ConnectPartition("events-0")).To(MatchError(AlreadyClosed))
+		Expect(superProducer.Close()).To(Succeed(), "Close must be idempotent")
+	})
+
+	It("returns from Close with unread notifications and delivers all of them once drained", func() {
+		superProducer := &SuperStreamProducer{}
+		confirmations := superProducer.NotifyPublishConfirmation(1)
+		partitionEvents := superProducer.NotifyPartitionClose(1)
+		producer := connectPartition(superProducer, "events-0")
+		connectPartition(superProducer, "events-1")
+
+		// Nobody reads yet: the first confirmation fills the buffer, the forwarder
+		// blocks on the second and the third waits in the partition producer.
+		for publishingId := range int64(3) {
+			producer.sendConfirmationStatus(confirmation(publishingId))
+		}
+
+		closed := make(chan error, 1)
+		go func() {
+			defer GinkgoRecover()
+			closed <- superProducer.Close()
+		}()
+		var err error
+		Eventually(closed, time.Second).Should(Receive(&err), "Close waited for the readers")
+		Expect(err).NotTo(HaveOccurred())
+		Consistently(notificationsClosed(superProducer)).WithTimeout(200*time.Millisecond).WithPolling(time.Millisecond).
+			Should(BeFalse(), "notification channels closed before pending notifications were delivered")
+
+		confirmed := drainConfirmations(confirmations, 0)
+		closedPartitions := drainPartitionEvents(partitionEvents)
+		var ids []int64
+		Eventually(confirmed, time.Second).Should(Receive(&ids), "confirmation channel was not closed")
+		Expect(ids).To(Equal([]int64{0, 1, 2}), "a confirmation was lost")
+		var partitions []string
+		Eventually(closedPartitions, time.Second).Should(Receive(&partitions), "partition close channel was not closed")
+		Expect(partitions).To(ConsistOf("events-0", "events-1"), "a partition close event was lost")
+		Expect(notificationsClosed(superProducer)()).To(BeTrue())
+	})
+
+	It("delivers every confirmation to a slow reader of an unbuffered channel before closing it", func() {
+		superProducer := &SuperStreamProducer{}
+		confirmations := superProducer.NotifyPublishConfirmation(0)
+		producer := connectPartition(superProducer, "events-0")
+		// Messages never sent are reported as unconfirmed by Close itself.
+		for _, publishingId := range []int64{100, 101} {
+			Expect(producer.pendingSequencesQueue.Enqueue(&messageSequence{publishingId: publishingId})).To(Succeed())
+		}
+
+		confirmed := drainConfirmations(confirmations, 20*time.Millisecond)
+		sent := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(sent)
+			for publishingId := range int64(3) {
+				producer.sendConfirmationStatus(confirmation(publishingId))
+			}
+		}()
+		// The confirmations are still being delivered to the slow reader.
+		Eventually(sent, time.Second).Should(BeClosed())
+
+		closed := make(chan error, 1)
+		go func() {
+			defer GinkgoRecover()
+			closed <- superProducer.Close()
+		}()
+		var err error
+		Eventually(closed, 2*time.Second).Should(Receive(&err))
+		Expect(err).NotTo(HaveOccurred())
+
+		var ids []int64
+		Eventually(confirmed, 2*time.Second).Should(Receive(&ids), "confirmation channel was not closed")
+		Expect(ids).To(Equal([]int64{0, 1, 2, 100, 101}), "a confirmation was lost")
+	})
+
+	It("finishes partition forwarders before closing the notification channels", func() {
+		// A send on a closed channel panics the process; -race also reports
+		// unsynchronized access to the channel fields.
+		for range 50 {
+			superProducer := &SuperStreamProducer{}
+			confirmations := superProducer.NotifyPublishConfirmation(1)
+			partitionEvents := superProducer.NotifyPartitionClose(1)
+			producers := []*Producer{
+				connectPartition(superProducer, "events-0"),
+				connectPartition(superProducer, "events-1"),
+				connectPartition(superProducer, "events-2"),
+			}
+
+			confirmed := drainConfirmations(confirmations, 0)
+			closedPartitions := drainPartitionEvents(partitionEvents)
+
+			// Confirmations race with Close.
+			var senders sync.WaitGroup
+			for _, producer := range producers {
+				senders.Go(func() {
+					for publishingId := range int64(20) {
+						producer.sendConfirmationStatus(confirmation(publishingId))
+					}
+				})
+			}
+			Expect(superProducer.Close()).To(Succeed())
+			senders.Wait()
+
+			Eventually(confirmed, time.Second).Should(Receive(), "confirmation channel was not closed")
+			var partitions []string
+			Eventually(closedPartitions, time.Second).Should(Receive(&partitions), "partition close channel was not closed")
+			Expect(partitions).To(ConsistOf("events-0", "events-1", "events-2"), "a partition close event was lost")
+		}
+	})
+
+	It("closes the notification channels promptly for an active reader", func() {
+		superProducer := &SuperStreamProducer{}
+		confirmed := drainConfirmations(superProducer.NotifyPublishConfirmation(1), 0)
+		closedPartitions := drainPartitionEvents(superProducer.NotifyPartitionClose(1))
+		connectPartition(superProducer, "events-0")
+
+		Expect(superProducer.Close()).To(Succeed())
+		// The previous implementation closed them after a two second timer.
+		Eventually(confirmed, 500*time.Millisecond).Should(Receive())
+		var partitions []string
+		Eventually(closedPartitions, 500*time.Millisecond).Should(Receive(&partitions))
+		Expect(partitions).To(Equal([]string{"events-0"}))
+		Expect(notificationsClosed(superProducer)()).To(BeTrue())
+	})
+})

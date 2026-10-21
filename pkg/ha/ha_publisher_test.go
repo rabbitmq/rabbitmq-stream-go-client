@@ -14,6 +14,32 @@ import (
 	test_helper "github.com/rabbitmq/rabbitmq-stream-go-client/pkg/test-helper"
 )
 
+// closeWhileReconnecting drops the connection named clientProvidedName, closes
+// the reliable entity once it is reconnecting, and verifies that it stays closed
+// and never opens a new connection. The observation outlasts the longest first
+// retry backoff (11 seconds), after which an unstopped reconnection would reopen.
+func closeWhileReconnecting(clientProvidedName string, getStatus func() int, closeReliable func() error) {
+	Eventually(func() (bool, error) { return test_helper.IsConnectionAlive(clientProvidedName, "15672") }, 10*time.Second).
+		WithPolling(500*time.Millisecond).Should(BeTrue(), "check if the connection is alive")
+	Expect(test_helper.DropConnectionClientProvidedName(clientProvidedName, "15672")).To(Succeed())
+
+	Eventually(getStatus).WithTimeout(10 * time.Second).WithPolling(10 * time.Millisecond).
+		Should(Equal(StatusReconnecting))
+	Expect(closeReliable()).To(Succeed(), "Close while reconnecting must succeed")
+	Expect(getStatus()).To(Equal(StatusClosed))
+
+	Eventually(func() (bool, error) { return test_helper.IsConnectionAlive(clientProvidedName, "15672") }, 5*time.Second).
+		WithPolling(250*time.Millisecond).Should(BeFalse(), "the dropped connection is still listed")
+	Consistently(func(g Gomega) {
+		g.Expect(getStatus()).To(Equal(StatusClosed))
+		alive, err := test_helper.IsConnectionAlive(clientProvidedName, "15672")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(alive).To(BeFalse(), "a connection was reopened after Close")
+	}).WithTimeout(12 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+
+	Expect(closeReliable()).To(Succeed(), "Close must be idempotent")
+}
+
 var _ = Describe("Reliable Producer", func() {
 
 	var (
@@ -192,6 +218,15 @@ var _ = Describe("Reliable Producer", func() {
 
 		<-signal
 		Expect(producer.Close()).NotTo(HaveOccurred())
+	})
+
+	It("stays closed when closed while reconnecting", func() {
+		clientProvidedName := uuid.New().String()
+		producer, err := NewReliableProducer(envForRProducer,
+			streamForRProducer, NewProducerOptions().SetClientProvidedName(clientProvidedName), func(_ []*ConfirmationStatus) {
+			})
+		Expect(err).NotTo(HaveOccurred())
+		closeWhileReconnecting(clientProvidedName, producer.GetStatus, producer.Close)
 	})
 
 	It("Delete the stream should close the producer", func() {
