@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Bug Fixes
+- Stop sending the stream status response code twice, so a stream status frame whose RPC already timed out no longer blocks the connection's frame reader forever.
+- Ignore a TUNE frame that has no registered response instead of dereferencing a nil response and panicking the frame reader.
+
 ## [[1.9.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.9.0)]
 
 ## 1.9.0 - 2026-10-19
