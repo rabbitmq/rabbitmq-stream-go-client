@@ -20,6 +20,7 @@ type unConfirmed struct {
 	mutexMessageMap sync.RWMutex
 	maxSize         int
 	blockSignal     *sync.Cond
+	stopped         bool
 }
 
 func newUnConfirmed(maxSize int) *unConfirmed {
@@ -27,28 +28,38 @@ func newUnConfirmed(maxSize int) *unConfirmed {
 		messages:        make(map[int64]*ConfirmationStatus, maxSize),
 		mutexMessageMap: sync.RWMutex{},
 		maxSize:         maxSize,
-		blockSignal:     sync.NewCond(&sync.Mutex{}),
 	}
+	r.blockSignal = sync.NewCond(&r.mutexMessageMap)
 	return r
 }
 
 func (u *unConfirmed) addFromSequences(messages []*messageSequence, producerID uint8) {
-	if u.size() > u.maxSize {
-		u.blockSignal.L.Lock()
-		u.blockSignal.Wait()
-		u.blockSignal.L.Unlock()
-	}
-
-	u.mutexMessageMap.Lock()
-	for _, msgSeq := range messages {
-		u.messages[msgSeq.publishingId] = &ConfirmationStatus{
-			inserted:     time.Now(),
+	// One allocation and one clock read for the whole batch.
+	statuses := make([]ConfirmationStatus, len(messages))
+	for i, msgSeq := range messages {
+		statuses[i] = ConfirmationStatus{
 			message:      msgSeq.sourceMsg,
 			producerID:   producerID,
 			publishingId: msgSeq.publishingId,
-			confirmed:    false,
 		}
 	}
+
+	u.mutexMessageMap.Lock()
+	for len(u.messages) > u.maxSize && !u.stopped {
+		u.blockSignal.Wait()
+	}
+	now := time.Now()
+	for i := range statuses {
+		statuses[i].inserted = now
+		u.messages[statuses[i].publishingId] = &statuses[i]
+	}
+	u.mutexMessageMap.Unlock()
+}
+
+func (u *unConfirmed) stopWaiting() {
+	u.mutexMessageMap.Lock()
+	u.stopped = true
+	u.blockSignal.Broadcast()
 	u.mutexMessageMap.Unlock()
 }
 
@@ -149,8 +160,6 @@ func (u *unConfirmed) size() int {
 func (u *unConfirmed) maybeUnLock() {
 	if len(u.messages) < u.maxSize {
 		logs.LogDebug("unConfirmed size: %d back to normal, producer unblocked", u.maxSize)
-		u.blockSignal.L.Lock()
 		u.blockSignal.Broadcast()
-		u.blockSignal.L.Unlock()
 	}
 }
