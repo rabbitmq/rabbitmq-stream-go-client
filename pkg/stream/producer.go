@@ -90,6 +90,7 @@ type Producer struct {
 	publishConfirmation chan []*ConfirmationStatus
 
 	pendingSequencesQueue *BlockingQueue[*messageSequence]
+	pendingSequencesDone  chan struct{}
 }
 
 type FilterValue func(message message.StreamMessage) string
@@ -304,6 +305,15 @@ func (producer *Producer) closeConfirmationStatus() {
 // processPendingSequencesQueue aggregates the messages sequence in the queue and sends them to the server
 // messages coming from the Send method through the pendingSequencesQueue
 func (producer *Producer) processPendingSequencesQueue() {
+	producer.mutex.Lock()
+	if producer.status == closed {
+		producer.mutex.Unlock()
+		return
+	}
+	done := make(chan struct{})
+	producer.pendingSequencesDone = done
+	producer.mutex.Unlock()
+
 	maxFrame := producer.client.maxFrameSize()
 	batchSize := producer.options.BatchSize
 	if batchSize <= 0 {
@@ -323,43 +333,67 @@ func (producer *Producer) processPendingSequencesQueue() {
 		return c
 	}
 	go func() {
+		defer close(done)
 		const baseFrame = 4 + initBufferPublishSize // length prefix + publish header
 		sequenceToSend := make([]*messageSequence, 0, batchSize)
 		frameSize := baseFrame
+		// Registering the batch as unconfirmed (a map insert per message) and
+		// writing it to the socket are independent costs; running them in
+		// separate goroutines lets them overlap.
+		toWrite := make(chan []*messageSequence, 2)
+		writerDone := make(chan struct{})
+		go func() {
+			defer close(writerDone)
+			for batch := range toWrite {
+				if err := producer.internalBatchSend(batch); err != nil {
+					if errors.Is(err, FrameTooLarge) {
+						producer.reportFrameTooLarge(batch) // off-lock
+					} else {
+						logs.LogError("error during sending messages: %s", err)
+					}
+				}
+			}
+		}()
 		flush := func() {
 			if len(sequenceToSend) == 0 {
 				return
 			}
 			batch := sequenceToSend
 			producer.unConfirmed.addFromSequences(batch, producer.GetID())
-			if err := producer.internalBatchSend(batch); err != nil {
-				if errors.Is(err, FrameTooLarge) {
-					producer.reportFrameTooLarge(batch) // off-lock
-				} else {
-					logs.LogError("error during sending messages: %s", err)
-				}
-			}
+			toWrite <- batch
 			sequenceToSend = make([]*messageSequence, 0, batchSize)
 			frameSize = baseFrame
 		}
-		for msg := range producer.pendingSequencesQueue.GetChannel() {
-			if producer.pendingSequencesQueue.IsStopped() {
-				// add also the last message to sequenceToSend otherwise it will be lost
-				sequenceToSend = append(sequenceToSend, msg)
+		pulled := make([]*messageSequence, 0, batchSize)
+		for {
+			pulled = producer.pendingSequencesQueue.DequeueBatch(pulled, batchSize)
+			if pulled == nil {
 				break
 			}
-			// Flush the pending batch before a message would push the frame over the max.
-			c := frameOverhead(msg)
-			if maxFrame > 0 && len(sequenceToSend) > 0 && frameSize+c > maxFrame {
-				flush()
+			if producer.pendingSequencesQueue.IsStopped() {
+				// add also the last messages to sequenceToSend otherwise they will be lost
+				sequenceToSend = append(sequenceToSend, pulled...)
+				break
 			}
-			sequenceToSend = append(sequenceToSend, msg)
-			frameSize += c
+			for _, msg := range pulled {
+				// Flush the pending batch before a message would push the frame over the max.
+				c := frameOverhead(msg)
+				if maxFrame > 0 && len(sequenceToSend) > 0 && frameSize+c > maxFrame {
+					flush()
+				}
+				sequenceToSend = append(sequenceToSend, msg)
+				frameSize += c
 
-			if producer.pendingSequencesQueue.IsEmpty() || len(sequenceToSend) >= producer.options.BatchSize {
-				flush()
+				if len(sequenceToSend) >= batchSize {
+					flush()
+				}
 			}
+			// the queue was drained: don't hold messages back
+			flush()
 		}
+
+		close(toWrite)
+		<-writerDone
 
 		// whatever is left was never sent; time it out
 		if len(sequenceToSend) > 0 {
@@ -475,6 +509,9 @@ func (producer *Producer) Send(streamMessage message.StreamMessage) error {
 	// se the processPendingSequencesQueue function
 	err = producer.pendingSequencesQueue.Enqueue(messageSeq)
 	if err != nil {
+		// The queue was stopped while the producer was closing: report the message
+		// like the closed case above, callers such as the HA producer rely on it.
+		producer.markUnsentAsUnconfirmed([]*messageSequence{messageSeq})
 		return fmt.Errorf("error during enqueue message: %s pending queue closed. Producer id: %d ", err, producer.id)
 	}
 	return nil
@@ -846,10 +883,15 @@ func (producer *Producer) stopAndWaitPendingSequencesQueue() {
 	producer.doneTimeoutTicker <- struct{}{}
 	close(producer.doneTimeoutTicker)
 
+	// A dequeued batch can still be waiting for registration or a socket write.
+	producer.unConfirmed.stopWaiting()
+	producer.pendingSequencesQueue.Close()
+	if producer.pendingSequencesDone != nil {
+		<-producer.pendingSequencesDone
+	}
+
 	// Wait for the inflight messages
 	producer.waitForInflightMessages()
-	// Close the pendingSequencesQueue. It closes the channel
-	producer.pendingSequencesQueue.Close()
 }
 
 func (producer *Producer) waitForInflightMessages() {
