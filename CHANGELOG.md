@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Bug Fixes
+- Synchronize publisher confirmation channel registration, delivery and closure
+  using the same mutex. Repeated registration returns the same channel, preserving
+  pending confirmations; registration after shutdown returns a closed channel.
+
 ## [[1.9.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.9.0)]
 
 ## 1.9.0 - 2026-10-19

@@ -88,6 +88,7 @@ type Producer struct {
 
 	confirmMutex        *sync.Mutex
 	publishConfirmation chan []*ConfirmationStatus
+	confirmationsClosed bool
 
 	pendingSequencesQueue *BlockingQueue[*messageSequence]
 	pendingSequencesDone  chan struct{}
@@ -232,9 +233,15 @@ func (po *ProducerOptions) isSubEntriesBatching() bool {
 
 // NotifyPublishConfirmation returns a channel that receives the confirmation status of the messages sent by the producer.
 func (producer *Producer) NotifyPublishConfirmation() ChannelPublishConfirm {
-	ch := make(chan []*ConfirmationStatus, 1)
-	producer.publishConfirmation = ch
-	return ch
+	producer.confirmMutex.Lock()
+	defer producer.confirmMutex.Unlock()
+	if producer.publishConfirmation == nil {
+		producer.publishConfirmation = make(chan []*ConfirmationStatus, 1)
+		if producer.confirmationsClosed {
+			close(producer.publishConfirmation)
+		}
+	}
+	return producer.publishConfirmation
 }
 
 // NotifyClose returns the producer close notification channel, including an event
@@ -288,7 +295,7 @@ func (producer *Producer) startUnconfirmedMessagesTimeOutTask() {
 func (producer *Producer) sendConfirmationStatus(status []*ConfirmationStatus) {
 	producer.confirmMutex.Lock()
 	defer producer.confirmMutex.Unlock()
-	if producer.publishConfirmation != nil {
+	if !producer.confirmationsClosed && producer.publishConfirmation != nil {
 		producer.publishConfirmation <- status
 	}
 }
@@ -296,9 +303,12 @@ func (producer *Producer) sendConfirmationStatus(status []*ConfirmationStatus) {
 func (producer *Producer) closeConfirmationStatus() {
 	producer.confirmMutex.Lock()
 	defer producer.confirmMutex.Unlock()
+	if producer.confirmationsClosed {
+		return
+	}
+	producer.confirmationsClosed = true
 	if producer.publishConfirmation != nil {
 		close(producer.publishConfirmation)
-		producer.publishConfirmation = nil
 	}
 }
 
