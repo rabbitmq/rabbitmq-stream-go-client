@@ -164,10 +164,16 @@ func randomWaitWithBackoff(attempt int, cfg *BackOffConfiguration) int {
 		baseWait += r.Intn(cfg.MaxInterval * 1_000)
 	}
 
-	// Calculate the wait time considering the number of attempts
-	waitTime := min(baseWait*(1<<(attempt-1)), cfg.MaxInterval*1_000)
+	// Double the wait for each attempt, stopping once it reaches MaxInterval.
+	// Shifting by attempt-1 directly overflows int after a few dozen attempts
+	// and returns a zero or negative wait.
+	maxWait := cfg.MaxInterval * 1_000
+	waitTime := baseWait
+	for i := 1; i < attempt && waitTime < maxWait; i++ {
+		waitTime *= 2
+	}
 
-	return waitTime
+	return min(waitTime, maxWait)
 }
 func getStatusAsString(c IReliable) string {
 	switch c.GetStatus() {
