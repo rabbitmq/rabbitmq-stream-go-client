@@ -1,6 +1,7 @@
 package ha
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -32,7 +33,9 @@ type ReliableConsumer struct {
 
 	//bootstrap: if true the consumer will start from the user offset.
 	// If false it will start from the last offset consumed (currentPosition)
-	bootstrap bool
+	bootstrap    bool
+	stopRetry    chan struct{}
+	retryStopped bool
 
 	backOffConfiguration *BackOffConfiguration
 }
@@ -44,8 +47,16 @@ func (c *ReliableConsumer) GetStatusAsString() string {
 func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		event := <-channelClose
-		if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) || strings.EqualFold(event.Reason, stream.ZombieConsumer) {
-			c.setStatus(StatusReconnecting)
+		unexpected := strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) || strings.EqualFold(event.Reason, stream.ZombieConsumer)
+		// Close and the decision to reconnect share the status lock, so a
+		// close event cannot restart a consumer after a terminal Close.
+		c.mutexStatus.Lock()
+		alreadyClosed := c.status == StatusClosed
+		if unexpected && !alreadyClosed {
+			c.status = StatusReconnecting
+		}
+		c.mutexStatus.Unlock()
+		if unexpected && !alreadyClosed {
 			logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", c.getInfo(), event.Reason)
 			c.bootstrap = false
 			err, reconnected := retry(1, c, c.GetStreamName())
@@ -59,7 +70,7 @@ func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 				// if the user already closed us, keep StatusClosed and clean up
 				// the new consumer that newConsumer() just created.
 				c.mutexStatus.Lock()
-				alreadyClosed := c.status == StatusClosed
+				alreadyClosed = c.status == StatusClosed
 				if !alreadyClosed {
 					c.status = StatusOpen
 				}
@@ -95,6 +106,7 @@ func NewReliableConsumerWithBackOffConfiguration(env *stream.Environment, stream
 		messagesHandler:      messagesHandler,
 		bootstrap:            true,
 		backOffConfiguration: backOffConfiguration,
+		stopRetry:            make(chan struct{}),
 	}
 	if err := backOffConfiguration.Validate(); err != nil {
 		return nil, err
@@ -125,7 +137,13 @@ func (c *ReliableConsumer) setStatus(value int) {
 	c.mutexStatus.Lock()
 	defer c.mutexStatus.Unlock()
 	c.status = value
+	if value == StatusClosed && c.stopRetry != nil && !c.retryStopped {
+		c.retryStopped = true
+		close(c.stopRetry)
+	}
 }
+
+func (c *ReliableConsumer) retryStop() <-chan struct{} { return c.stopRetry }
 
 func (c *ReliableConsumer) GetStatus() int {
 	c.mutexStatus.Lock()
@@ -159,6 +177,9 @@ func (c *ReliableConsumer) getTimeOut() time.Duration {
 }
 
 func (c *ReliableConsumer) newConsumer() error {
+	if c.GetStatus() == StatusClosed {
+		return stream.AlreadyClosed
+	}
 	// Read the current position atomically before the blocking subscribe call.
 	// mutexConnection is NOT held here: env.NewConsumer() is a blocking network
 	// operation (subscribe frame + server ack), and the message handler closure
@@ -190,6 +211,7 @@ func (c *ReliableConsumer) newConsumer() error {
 }
 
 func (c *ReliableConsumer) Close() error {
+	// StatusClosed also stops a pending reconnection.
 	c.setStatus(StatusClosed)
 	// Snapshot the pointer under the lock to avoid a data race with newConsumer(),
 	// which writes c.consumer under mutexConnection. The Close() call itself is
@@ -200,7 +222,12 @@ func (c *ReliableConsumer) Close() error {
 	if consumer == nil {
 		return nil
 	}
-	return consumer.Close()
+	// A reconnecting consumer was already closed by the dropped connection,
+	// and a repeated Close finds the consumer already closed.
+	if err := consumer.Close(); err != nil && !errors.Is(err, stream.AlreadyClosed) {
+		return err
+	}
+	return nil
 }
 
 func (c *ReliableConsumer) GetInfo() string {
