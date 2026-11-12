@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Enhancements
+- Add `NewEnvironmentWithContext` for opt-in environment lifetime cancellation,
+  including dialing, TLS negotiation, socket I/O, RPC waits and reconnect delays.
+
 ## [[1.9.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.9.0)]
 
 ## 1.9.0 - 2026-10-19

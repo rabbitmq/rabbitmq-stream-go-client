@@ -121,8 +121,9 @@ func newClient(parameters connectionParameters) *Client {
 			value: time.Now(),
 		},
 		socket: socket{
-			mutex:      &sync.Mutex{},
-			destructor: &sync.Once{},
+			mutex:       &sync.Mutex{},
+			destructor:  &sync.Once{},
+			lifetimeErr: parameters.tcpParameters.connectionContextError,
 		},
 		socketCallTimeout: parameters.rpcTimeout,
 		availableFeatures: newAvailableFeatures(),
@@ -166,6 +167,9 @@ func (c *Client) setLastHeartBeat(value time.Time) {
 func (c *Client) connect() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	if err := c.connectionContext().Err(); err != nil {
+		return err
+	}
 	if !c.socket.isOpen() {
 		u, err := url.Parse(c.broker.GetUri())
 		if err != nil {
@@ -176,35 +180,49 @@ func (c *Client) connect() error {
 		c.tuneState.requestedHeartbeat = int(c.tcpParameters.RequestedHeartbeat.Seconds())
 
 		servAddr := net.JoinHostPort(host, port)
-		tcpAddr, errorResolve := net.ResolveTCPAddr("tcp", servAddr)
-		if errorResolve != nil {
-			logs.LogDebug("Resolve error %s", errorResolve)
-			return errorResolve
+		dial := c.tcpParameters.dialContext
+		if dial == nil {
+			dial = (&net.Dialer{}).DialContext
 		}
-		connection, errorConnection := net.DialTCP("tcp", nil, tcpAddr)
+		connection, errorConnection := dial(c.connectionContext(), "tcp", servAddr)
 		if errorConnection != nil {
-			logs.LogDebug("%s", errorConnection)
+			// A dial interrupted by lifetime cancellation is expected, not a failure.
+			if c.connectionContext().Err() == nil {
+				logs.LogDebug("%s", errorConnection)
+			}
 			return errorConnection
 		}
-
-		if c.tcpParameters.WriteBuffer > 0 {
-			if err = connection.SetWriteBuffer(c.tcpParameters.WriteBuffer); err != nil {
-				logs.LogError("Failed to SetWriteBuffer to %d due to %v", c.tcpParameters.WriteBuffer, err)
+		keepConnection := false
+		defer func() {
+			if !keepConnection {
+				_ = connection.Close()
+			}
+		}()
+		if tcp, ok := connection.(*net.TCPConn); ok {
+			if c.tcpParameters.WriteBuffer > 0 {
+				if err = tcp.SetWriteBuffer(c.tcpParameters.WriteBuffer); err != nil {
+					logs.LogError("Failed to SetWriteBuffer to %d due to %v", c.tcpParameters.WriteBuffer, err)
+					return err
+				}
+			}
+			if c.tcpParameters.ReadBuffer > 0 {
+				if err = tcp.SetReadBuffer(c.tcpParameters.ReadBuffer); err != nil {
+					logs.LogError("Failed to SetReadBuffer to %d due to %v", c.tcpParameters.ReadBuffer, err)
+					return err
+				}
+			}
+			if err = tcp.SetNoDelay(c.tcpParameters.NoDelay); err != nil {
+				logs.LogError("Failed to SetNoDelay to %v due to %v", c.tcpParameters.NoDelay, err)
 				return err
 			}
 		}
-
-		if c.tcpParameters.ReadBuffer > 0 {
-			if err = connection.SetReadBuffer(c.tcpParameters.ReadBuffer); err != nil {
-				logs.LogError("Failed to SetReadBuffer to %d due to %v", c.tcpParameters.ReadBuffer, err)
-				return err
+		stopConnection := context.AfterFunc(c.connectionContext(), func() { _ = connection.Close() })
+		owned := &ownedConnection{Conn: connection, stop: stopConnection}
+		defer func() {
+			if !keepConnection {
+				stopConnection()
 			}
-		}
-
-		if err = connection.SetNoDelay(c.tcpParameters.NoDelay); err != nil {
-			logs.LogError("Failed to SetNoDelay to %v due to %v", c.tcpParameters.NoDelay, err)
-			return err
-		}
+		}()
 
 		if c.broker.isTLS() {
 			conf := &tls.Config{
@@ -219,9 +237,9 @@ func (c *Client) connect() error {
 				conf = conf.Clone()
 				conf.ServerName = host
 			}
-			c.setSocketConnection(tls.Client(connection, conf))
+			c.setSocketConnection(tls.Client(owned, conf))
 		} else {
-			c.setSocketConnection(connection)
+			c.setSocketConnection(owned)
 		}
 
 		c.socket.setOpen()
@@ -269,6 +287,7 @@ func (c *Client) connect() error {
 			logs.LogDebug("available features: %s", c.availableFeatures)
 		}
 
+		keepConnection = true
 		c.heartBeat()
 		logs.LogDebug("User %s, connected to: %s, vhost:%s", u.User.Username(),
 			net.JoinHostPort(host, port),
@@ -311,7 +330,10 @@ func (c *Client) peerProperties() (map[string]string, error) {
 		return nil, err.Err
 	}
 
-	serverProperties := <-resp.data
+	serverProperties, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return nil, dataErr
+	}
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return serverProperties.(map[string]string), nil
 }
@@ -346,10 +368,13 @@ func (c *Client) getSaslMechanisms() ([]string, error) {
 		correlationId)
 
 	if errWrite := c.socket.writeAndFlush(b.Bytes()); errWrite != nil {
-		_ = c.coordinator.RemoveResponseById(correlationId)
-		return nil, errWrite
+		c.coordinator.discardResponse(resp)
+		return nil, c.connectionError(errWrite)
 	}
-	data := <-resp.data
+	data, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return nil, dataErr
+	}
 	if err := c.coordinator.RemoveResponseById(correlationId); err != nil {
 		return nil, err
 	}
@@ -360,6 +385,7 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 	length := 2 + 2 + 4 + 2 + len(saslMechanism) + 4 + len(challengeResponse)
 	resp := c.coordinator.NewResponse(commandSaslAuthenticate)
 	respTune := c.coordinator.NewResponseWithName("tune")
+	defer c.coordinator.discardResponse(respTune)
 	correlationId := resp.correlationid
 	var b = bytes.NewBuffer(make([]byte, 0, length+4))
 	writeProtocolHeader(b, length, commandSaslAuthenticate,
@@ -373,7 +399,10 @@ func (c *Client) sendSaslAuthenticate(saslMechanism string, challengeResponse []
 		return err.Err
 	}
 	// double read for TUNE
-	tuneData := <-respTune.data
+	tuneData, dataErr := c.waitData(respTune)
+	if dataErr != nil {
+		return dataErr
+	}
 	errR := c.coordinator.RemoveResponseByName("tune")
 	if errR != nil {
 		return errR
@@ -415,7 +444,10 @@ func (c *Client) exchangeVersion(serverVersion string) error {
 		return err.Err
 	}
 
-	commandsResponse := <-resp.data
+	commandsResponse, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return dataErr
+	}
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	c.availableFeatures.ParseCommandVersions(commandsResponse.([]commandVersion))
 	return nil
@@ -434,7 +466,10 @@ func (c *Client) open(virtualHost string) error {
 		return err.Err
 	}
 
-	advHostPort := <-resp.data
+	advHostPort, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return dataErr
+	}
 	c.connectionProperties.host = advHostPort.(ConnectionProperties).host
 	c.connectionProperties.port = advHostPort.(ConnectionProperties).port
 
@@ -546,18 +581,25 @@ func (c *Client) Close() {
 	})
 
 	if c.getSocket().isOpen() {
-		res := c.coordinator.NewResponse(CommandClose)
-		length := 2 + 2 + 4 + 2 + 2 + len("OK")
-		var b = bytes.NewBuffer(make([]byte, 0, length+4))
-		writeProtocolHeader(b, length, CommandClose, res.correlationid)
-		writeUShort(b, responseCodeOk)
-		writeString(b, "OK")
+		// A canceled lifetime has already closed the connection, so the graceful
+		// close frame cannot be written. Skip it rather than warn on the expected
+		// "use of closed network connection".
+		if c.connectionContext().Err() == nil {
+			res := c.coordinator.NewResponse(CommandClose)
+			length := 2 + 2 + 4 + 2 + 2 + len("OK")
+			var b = bytes.NewBuffer(make([]byte, 0, length+4))
+			writeProtocolHeader(b, length, CommandClose, res.correlationid)
+			writeUShort(b, responseCodeOk)
+			writeString(b, "OK")
 
-		errW := c.socket.writeAndFlush(b.Bytes())
-		if errW != nil {
-			logs.LogWarn("error during Send client close %s", errW)
+			errW := c.socket.writeAndFlush(b.Bytes())
+			if errW != nil {
+				logs.LogWarn("error during Send client close %s", errW)
+			}
+			_ = c.coordinator.RemoveResponseById(res.correlationid)
+		} else {
+			logs.LogDebug("lifetime canceled, skipping the client close frame")
 		}
-		_ = c.coordinator.RemoveResponseById(res.correlationid)
 		// Decrease connection counter
 		c.metrics.connectionClosed(context.Background(), c.otelAttributesForClient())
 	}
@@ -698,7 +740,10 @@ func (c *Client) metaData(streams ...string) *StreamsMetadata {
 		return nil
 	}
 
-	data := <-resp.data
+	data, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return nil
+	}
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return data.(*StreamsMetadata)
 }
@@ -717,7 +762,10 @@ func (c *Client) queryPublisherSequence(publisherReference string, stream string
 		return 0, err.Err
 	}
 
-	sequence := <-resp.data
+	sequence, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return 0, dataErr
+	}
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return sequence.(int64), nil
 }
@@ -729,7 +777,7 @@ func (c *Client) BrokerLeader(stream string) (*Broker, error) {
 func (c *Client) BrokerLeaderWithResolver(stream string, resolver *AddressResolver) (*Broker, error) {
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
-		return nil, fmt.Errorf("leader error for stream for stream: %s", stream)
+		return nil, c.connectionError(fmt.Errorf("leader error for stream for stream: %s", stream))
 	}
 
 	streamMetadata := streamsMetadata.Get(stream)
@@ -750,12 +798,20 @@ func (c *Client) BrokerLeaderWithResolver(stream string, resolver *AddressResolv
 		return streamMetadata.Leader, nil
 	}
 
-	res := net.Resolver{}
+	lookup := c.tcpParameters.lookupIPAddr
+	if lookup == nil {
+		lookup = (&net.Resolver{}).LookupIPAddr
+	}
 	// see: https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/317
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.connectionContext(), 30*time.Second)
 	defer cancel()
-	_, err := res.LookupIPAddr(ctx, streamMetadata.Leader.Host)
+	_, err := lookup(ctx, streamMetadata.Leader.Host)
 	if err != nil {
+		// A closing environment fails the lookup; report the cancellation
+		// together with the lookup error instead of falling back.
+		if c.connectionContext().Err() != nil {
+			return nil, c.connectionError(err)
+		}
 		var dnsError *net.DNSError
 		if errors.As(err, &dnsError) {
 			if strings.EqualFold(c.broker.Host, "localhost") {
@@ -782,7 +838,7 @@ func (c *Client) StreamExists(stream string) bool {
 func (c *Client) BrokerForConsumer(stream string) (*Broker, error) {
 	streamsMetadata := c.metaData(stream)
 	if streamsMetadata == nil {
-		return nil, fmt.Errorf("leader error for stream: %s", stream)
+		return nil, c.connectionError(fmt.Errorf("leader error for stream: %s", stream))
 	}
 
 	streamMetadata := streamsMetadata.Get(stream)
@@ -875,7 +931,10 @@ func (c *Client) queryOffset(consumerName string, streamName string) (int64, err
 		return 0, err.Err
 	}
 
-	offset := <-resp.data
+	offset, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return 0, dataErr
+	}
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return offset.(int64), nil
 }
@@ -1154,7 +1213,10 @@ func (c *Client) StreamStats(streamName string) (*StreamStats, error) {
 		return nil, err.Err
 	}
 
-	offset := <-resp.data
+	offset, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return nil, dataErr
+	}
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	m, ok := offset.(map[string]int64)
 	if !ok {
@@ -1242,7 +1304,10 @@ func (c *Client) QueryPartitions(superStream string) ([]string, error) {
 		return nil, err.Err
 	}
 
-	data := <-resp.data
+	data, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return nil, dataErr
+	}
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return data.([]string), nil
 }
@@ -1261,7 +1326,10 @@ func (c *Client) queryRoute(superStream string, routingKey string) ([]string, er
 		return nil, err.Err
 	}
 
-	data := <-resp.data
+	data, dataErr := c.waitData(resp)
+	if dataErr != nil {
+		return nil, dataErr
+	}
 	_ = c.coordinator.RemoveResponseById(resp.correlationid)
 	return data.([]string), nil
 }
