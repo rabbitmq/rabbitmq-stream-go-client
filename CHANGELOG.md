@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Bug Fixes
+- Close super stream confirmation and partition-event channels independently, finish confirmation registration after producer teardown, and reject reliable consumer replacements and new callback admissions after terminal Close.
 - Closing a reliable producer, consumer, or super stream producer while it is reconnecting now returns nil and stops the reconnection, instead of returning `AlreadyClosed` and reopening the entity; repeated Close calls return nil. Super stream producer Close closes every partition and rejects later partition reconnections. It no longer closes the confirmation and partition close channels after a two-second timer: they are closed once every pending notification has been delivered, so no notification is lost or sent on a closed channel. Readers must drain these channels until they are closed.
 - Synchronize publisher confirmation channel registration, delivery and closure
   using the same mutex. Repeated registration returns the same channel, preserving

@@ -198,6 +198,79 @@ var _ = Describe("Super stream producer shutdown", func() {
 		return producer
 	}
 
+	It("finishes forwarding when a partition closes before registration", func() {
+		p, err := NewCoordinator().NewProducer(nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p.Close()).To(Succeed())
+		s := &SuperStreamProducer{}
+		confirms := s.NotifyPublishConfirmation(1)
+		events := s.NotifyPartitionClose(1)
+		s.mutex.Lock()
+		s.startPartitionForwarders("closed", p)
+		s.mutex.Unlock()
+		Expect(s.Close()).To(Succeed())
+		Eventually(events, time.Second).Should(Receive())
+		Eventually(confirms, time.Second).Should(BeClosed())
+		Eventually(events, time.Second).Should(BeClosed())
+	})
+
+	It("closes confirmations before partition events are drained", func() {
+		s := &SuperStreamProducer{}
+		confirms := s.NotifyPublishConfirmation(1)
+		events := s.NotifyPartitionClose(1)
+		connectPartition(s, "a")
+		connectPartition(s, "b")
+		Expect(s.Close()).To(Succeed())
+		// Ensure cleanup even if the assertion fails on the old implementation.
+		DeferCleanup(func() {
+			for range events {
+			}
+		})
+		Eventually(confirms, time.Second).Should(BeClosed())
+		var partitions []string
+		for event := range events {
+			partitions = append(partitions, event.Partition)
+		}
+		Expect(partitions).To(ConsistOf("a", "b"))
+	})
+
+	It("closes partition events before confirmations are drained", func() {
+		s := &SuperStreamProducer{}
+		confirms := s.NotifyPublishConfirmation(1)
+		events := s.NotifyPartitionClose(1)
+		p := connectPartition(s, "a")
+		for id := range int64(3) {
+			p.sendConfirmationStatus([]*ConfirmationStatus{{publishingId: id}})
+		}
+		Expect(s.Close()).To(Succeed())
+		DeferCleanup(func() {
+			for range confirms {
+			}
+		})
+		Eventually(events, time.Second).Should(Receive())
+		Eventually(events, time.Second).Should(BeClosed())
+		var ids []int64
+		for batch := range confirms {
+			for _, status := range batch.ConfirmationStatus {
+				ids = append(ids, status.GetPublishingId())
+			}
+		}
+		Expect(ids).To(Equal([]int64{0, 1, 2}))
+	})
+
+	It("closes confirmation registration racing producer teardown", func() {
+		for range 100 {
+			p, err := NewCoordinator().NewProducer(nil, nil)
+			Expect(err).NotTo(HaveOccurred())
+			registered := make(chan ChannelPublishConfirm, 1)
+			go func() { registered <- p.NotifyPublishConfirmation() }()
+			Expect(p.Close()).To(Succeed())
+			var ch ChannelPublishConfirm
+			Eventually(registered, time.Second).Should(Receive(&ch))
+			Eventually(ch, time.Second).Should(BeClosed())
+		}
+	})
+
 	// notificationsClosed reports whether Close released both registered channels.
 	notificationsClosed := func(superProducer *SuperStreamProducer) func() bool {
 		return func() bool {

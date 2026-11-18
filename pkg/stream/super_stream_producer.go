@@ -176,9 +176,10 @@ type SuperStreamProducer struct {
 	mutex sync.Mutex
 	// closed is guarded by mutex. Once set, no partition can be connected again.
 	closed bool
-	// partitionForwarders counts the per-partition notification forwarders.
-	// The notification channels are closed only after all of them finish.
-	partitionForwarders sync.WaitGroup
+	// Each notification stream finishes independently: a blocked reader of one
+	// must not prevent the other channel from closing.
+	confirmationForwarders sync.WaitGroup
+	closeForwarders        sync.WaitGroup
 
 	// chSuperStreamPartitionMutex guards both notification channels.
 	chSuperStreamPartitionMutex sync.Mutex
@@ -313,10 +314,11 @@ func (s *SuperStreamProducer) ConnectPartition(partition string) error {
 func (s *SuperStreamProducer) startPartitionForwarders(partition string, producer *Producer) {
 	chSingleStreamPublishConfirmation := producer.NotifyPublishConfirmation()
 	closedEvent := producer.NotifyClose()
-	s.partitionForwarders.Add(2)
+	s.confirmationForwarders.Add(1)
+	s.closeForwarders.Add(1)
 
 	go func(gpartion string, _closedEvent <-chan Event) {
-		defer s.partitionForwarders.Done()
+		defer s.closeForwarders.Done()
 		logs.LogDebug("[SuperStreamProducer] chSuperStreamPartitionClose started for partition: %s", gpartion)
 		event := <-_closedEvent
 
@@ -344,7 +346,7 @@ func (s *SuperStreamProducer) startPartitionForwarders(partition string, produce
 	}(partition, closedEvent)
 
 	go func(gpartion string, confirmations <-chan []*ConfirmationStatus) {
-		defer s.partitionForwarders.Done()
+		defer s.confirmationForwarders.Done()
 		logs.LogDebug("[SuperStreamProducer] chNotifyPublishConfirmation started - partition: %s", gpartion)
 		// Deliver every confirmation until the partition producer closes its channel.
 		for confirmed := range confirmations {
@@ -468,13 +470,18 @@ func (s *SuperStreamProducer) Close() error {
 	// Close does not wait for the readers: an abandoned reader leaves this
 	// goroutine and the forwarders blocked.
 	go func() {
-		s.partitionForwarders.Wait()
+		s.confirmationForwarders.Wait()
 		s.chSuperStreamPartitionMutex.Lock()
 		defer s.chSuperStreamPartitionMutex.Unlock()
 		if s.chNotifyPublishConfirmation != nil {
 			close(s.chNotifyPublishConfirmation)
 			s.chNotifyPublishConfirmation = nil
 		}
+	}()
+	go func() {
+		s.closeForwarders.Wait()
+		s.chSuperStreamPartitionMutex.Lock()
+		defer s.chSuperStreamPartitionMutex.Unlock()
 		if s.chSuperStreamPartitionClose != nil {
 			close(s.chSuperStreamPartitionClose)
 			s.chSuperStreamPartitionClose = nil

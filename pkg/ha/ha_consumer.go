@@ -177,6 +177,12 @@ func (c *ReliableConsumer) getTimeOut() time.Duration {
 }
 
 func (c *ReliableConsumer) newConsumer() error {
+	return c.newConsumerWith(c.env.NewConsumer)
+}
+
+// newConsumerWith keeps subscription outside the state locks. The factory also
+// lets tests pause subscription completion while exercising terminal Close.
+func (c *ReliableConsumer) newConsumerWith(subscribe func(string, stream.MessagesHandler, *stream.ConsumerOptions) (*stream.Consumer, error)) error {
 	if c.GetStatus() == StatusClosed {
 		return stream.AlreadyClosed
 	}
@@ -193,8 +199,13 @@ func (c *ReliableConsumer) newConsumer() error {
 	}
 	logs.LogDebug("[Reliable] - creating %s. Boot: %s. StartOffset: %s", c.getInfo(),
 		c.bootstrap, offset)
-	consumer, err := c.env.NewConsumer(c.streamName, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		// currentPosition is an atomic.Int64; no mutex required here.
+	consumer, err := subscribe(c.streamName, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		// Admit delivery against terminal shutdown, then release the status lock
+		// before user code (which may itself call Close). An already admitted
+		// callback may finish; a replacement must not admit delivery after Close.
+		if c.GetStatus() == StatusClosed {
+			return
+		}
 		c.currentPosition.Store(consumerContext.Consumer.GetOffset())
 		c.messagesHandler(consumerContext, message)
 	}, c.consumerOptions.SetOffset(offset))
@@ -202,14 +213,23 @@ func (c *ReliableConsumer) newConsumer() error {
 		return err
 	}
 
-	// Only lock briefly to publish the new consumer reference.
+	// Serialize publication with terminal Close. Never hold either lock while
+	// subscribing, closing the rejected replacement, or running user callbacks.
+	c.mutexStatus.Lock()
+	if c.status == StatusClosed {
+		c.mutexStatus.Unlock()
+		_ = consumer.Close()
+		return stream.AlreadyClosed
+	}
 	c.mutexConnection.Lock()
 	c.consumer = consumer
 	c.mutexConnection.Unlock()
+	c.mutexStatus.Unlock()
 	c.handleNotifyClose(consumer.NotifyClose())
 	return nil
 }
 
+// Close stops new callback admissions; callbacks admitted before shutdown may finish.
 func (c *ReliableConsumer) Close() error {
 	// StatusClosed also stops a pending reconnection.
 	c.setStatus(StatusClosed)

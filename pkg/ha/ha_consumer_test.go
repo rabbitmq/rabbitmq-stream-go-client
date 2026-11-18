@@ -1,6 +1,7 @@
 package ha
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,75 @@ var _ = Describe("Reliable Consumer", func() {
 		if exists {
 			Expect(envForRConsumer.DeleteStream(streamForRConsumer)).NotTo(HaveOccurred())
 		}
+	})
+
+	It("rejects delivery and cleans up a subscription completing after Close", func() {
+		var delivered atomic.Int32
+		c := &ReliableConsumer{
+			env: envForRConsumer, streamName: streamForRConsumer,
+			consumerOptions: NewConsumerOptions(), status: StatusReconnecting,
+			mutexStatus: &sync.Mutex{}, mutexConnection: &sync.Mutex{},
+			stopRetry:       make(chan struct{}),
+			messagesHandler: func(_ ConsumerContext, _ *amqp.Message) { delivered.Add(1) },
+		}
+		entered := make(chan struct{})
+		deliver := make(chan struct{})
+		deliveryDone := make(chan struct{})
+		release := make(chan struct{})
+		var releaseOnce, deliverOnce sync.Once
+		DeferCleanup(func() { deliverOnce.Do(func() { close(deliver) }); releaseOnce.Do(func() { close(release) }) })
+		result := make(chan error, 1)
+		var replacement *Consumer
+		go func() {
+			defer GinkgoRecover()
+			result <- c.newConsumerWith(func(name string, handler MessagesHandler, opts *ConsumerOptions) (*Consumer, error) {
+				var err error
+				replacement, err = envForRConsumer.NewConsumer(name, handler, opts)
+				if err != nil {
+					return nil, err
+				}
+				close(entered)
+				// The factory has not returned: replacement publication is still blocked.
+				<-deliver
+				handler(ConsumerContext{Consumer: replacement}, &amqp.Message{})
+				close(deliveryDone)
+				<-release
+				return replacement, nil
+			})
+		}()
+		Eventually(entered, 5*time.Second).Should(BeClosed())
+		DeferCleanup(func() { _ = replacement.Close() })
+		Expect(c.Close()).To(Succeed())
+		deliverOnce.Do(func() { close(deliver) })
+		Eventually(deliveryDone, time.Second).Should(BeClosed())
+		Expect(delivered.Load()).To(BeZero(), "replacement delivered after Close returned")
+		releaseOnce.Do(func() { close(release) })
+		Eventually(result, 5*time.Second).Should(Receive(MatchError(AlreadyClosed)))
+		Expect(replacement.Close()).To(MatchError(AlreadyClosed), "replacement was not cleaned up")
+		Expect(c.consumer).To(BeNil(), "closed consumer published a replacement")
+	})
+
+	It("allows an admitted callback to Close without holding lifecycle locks", func() {
+		c := &ReliableConsumer{
+			env: envForRConsumer, streamName: streamForRConsumer,
+			consumerOptions: NewConsumerOptions(), status: StatusReconnecting,
+			mutexStatus: &sync.Mutex{}, mutexConnection: &sync.Mutex{}, stopRetry: make(chan struct{}),
+		}
+		c.messagesHandler = func(_ ConsumerContext, _ *amqp.Message) { Expect(c.Close()).To(Succeed()) }
+		var handler MessagesHandler
+		Expect(c.newConsumerWith(func(name string, h MessagesHandler, opts *ConsumerOptions) (*Consumer, error) {
+			handler = h
+			return envForRConsumer.NewConsumer(name, h, opts)
+		})).To(Succeed())
+		DeferCleanup(func() { _ = c.Close() })
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			handler(ConsumerContext{Consumer: c.consumer}, &amqp.Message{})
+			close(done)
+		}()
+		Eventually(done, 5*time.Second).Should(BeClosed())
+		Expect(c.GetStatus()).To(Equal(StatusClosed))
 	})
 
 	It("Validate mandatory fields", func() {
