@@ -4,21 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-## [[1.10.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.10.0)]
-
-## 1.10.0 - 2026-11-16
-- [Release 1.10.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.10.0)
-
-### Enhancements
-- Bump github/codeql-action to v4 by @Gsantomaggio in [#543](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/543)
-- Bump actions/setup-go to v6.5.0 (Node.js 24) by @Gsantomaggio in [#544](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/544)
-- Publishing opts by @mkuratczyk in [#539](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/539)
-
-### Dependency Updates
-- Bump github.com/klauspost/compress from 1.20.0 to 1.20.3 by @dependabot[bot] in [#542](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/542)
-
-### New Contributors
-- @mkuratczyk made their first contribution in [#539](https://github.com/rabbitmq/rabbitmq-stream-go-client/pull/539)
+### Bug Fixes
+- Synchronize publisher confirmation channel registration, delivery and closure
+  using the same mutex. Repeated registration returns the same channel, preserving
+  pending confirmations; registration after shutdown returns a closed channel.
 
 ## [[1.9.0](https://github.com/rabbitmq/rabbitmq-stream-go-client/releases/tag/v1.9.0)]
 
