@@ -1,6 +1,8 @@
 package ha
 
 import (
+	"math"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -50,6 +52,13 @@ var _ = Describe("BackOffConfiguration", func() {
 
 		It("falls back to the defaults when the configuration is nil", func() {
 			Expect(randomWaitWithBackoff(1, nil)).To(And(BeNumerically(">=", 3_000), BeNumerically("<", 11_000)))
+		})
+
+		It("caps the wait at MaxInterval however many attempts have failed", func() {
+			cfg := &BackOffConfiguration{MinInterval: 3, MaxInterval: 8}
+			for _, attempt := range []int{3, 10, 53, 54, 60, 63, 64, 65, 100, 1_000, math.MaxInt} {
+				Expect(randomWaitWithBackoff(attempt, cfg)).To(Equal(8_000), "attempt %d", attempt)
+			}
 		})
 	})
 })
