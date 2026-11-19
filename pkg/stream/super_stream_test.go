@@ -55,45 +55,45 @@ var _ = Describe("Super Stream Client", Label("super-stream"), func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// empty name
-		err = testEnvironment.locator.client.DeclareSuperStream("", nil)
+		err = testEnvironment.locator.client.Load().DeclareSuperStream("", nil)
 		Expect(err).To(HaveOccurred())
 
 		// empty name with spaces
-		err = testEnvironment.locator.client.DeclareSuperStream("  ", nil)
+		err = testEnvironment.locator.client.Load().DeclareSuperStream("  ", nil)
 		Expect(err).To(HaveOccurred())
 
 		// partition nil and empty
-		err = testEnvironment.locator.client.DeclareSuperStream("valid name", nil)
+		err = testEnvironment.locator.client.Load().DeclareSuperStream("valid name", nil)
 		Expect(err).To(HaveOccurred())
 
 		// bindingskeys nil and empty
-		err = testEnvironment.locator.client.DeclareSuperStream("valid name",
+		err = testEnvironment.locator.client.Load().DeclareSuperStream("valid name",
 			newTestSuperStreamOption([]string{"some name"}, nil, nil))
 		Expect(err).To(HaveOccurred())
 
 		// partition  empty
-		err = testEnvironment.locator.client.DeclareSuperStream("valid name", newTestSuperStreamOption([]string{""}, []string{"some key"}, nil))
+		err = testEnvironment.locator.client.Load().DeclareSuperStream("valid name", newTestSuperStreamOption([]string{""}, []string{"some key"}, nil))
 		Expect(err).To(HaveOccurred())
 
 		// partition  key empty
-		err = testEnvironment.locator.client.DeclareSuperStream("valid name", newTestSuperStreamOption([]string{" "}, []string{"some key"}, nil))
+		err = testEnvironment.locator.client.Load().DeclareSuperStream("valid name", newTestSuperStreamOption([]string{" "}, []string{"some key"}, nil))
 		Expect(err).To(HaveOccurred())
 
 		// bindigs  key empty
-		err = testEnvironment.locator.client.DeclareSuperStream("valid name", newTestSuperStreamOption([]string{"valid "}, []string{""}, nil))
+		err = testEnvironment.locator.client.Load().DeclareSuperStream("valid name", newTestSuperStreamOption([]string{"valid "}, []string{""}, nil))
 		Expect(err).To(HaveOccurred())
 
-		testEnvironment.locator.client.Close()
+		testEnvironment.locator.client.Load().Close()
 	})
 
 	It("Create Super stream two times and delete it with client", Label("super-stream"), func() {
 		err := testEnvironment.maybeReconnectLocator()
 		Expect(err).NotTo(HaveOccurred())
 
-		err = testEnvironment.locator.client.DeclareSuperStream("go-my_super_stream_with_2_partitions", newTestSuperStreamOption([]string{"go-partition_0", "go-partition_1"}, []string{"0", "1"}, map[string]string{"queue-leader-locator": "least-leaders"}))
+		err = testEnvironment.locator.client.Load().DeclareSuperStream("go-my_super_stream_with_2_partitions", newTestSuperStreamOption([]string{"go-partition_0", "go-partition_1"}, []string{"0", "1"}, map[string]string{"queue-leader-locator": "least-leaders"}))
 		Expect(err).NotTo(HaveOccurred())
 
-		err2 := testEnvironment.locator.client.DeclareSuperStream("go-my_super_stream_with_2_partitions",
+		err2 := testEnvironment.locator.client.Load().DeclareSuperStream("go-my_super_stream_with_2_partitions",
 			newTestSuperStreamOption([]string{"go-partition_0", "go-partition_1"}, []string{"0", "1"}, map[string]string{"queue-leader-locator": "least-leaders"}))
 
 		Expect(err2).To(Equal(StreamAlreadyExists))

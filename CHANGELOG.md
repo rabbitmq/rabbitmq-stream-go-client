@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Bug Fixes
+- Stop reliable producer and consumer reconnection when their environment is closed instead of reporting that the stream does not exist.
+- Remove data races on the environment locator client and closed flag, close replaced and failed locator connections, stop locator reconnect retries on `Close`, and return `AlreadyClosed` from environment operations after `Close` instead of opening a new locator connection.
+- Decrement the connections metric only for connections that were counted, so closing a connection whose handshake failed no longer drives it negative.
 - Synchronize publisher confirmation channel registration, delivery and closure
   using the same mutex. Repeated registration returns the same channel, preserving
   pending confirmations; registration after shutdown returns a closed channel.
