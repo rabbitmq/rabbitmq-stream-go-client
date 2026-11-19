@@ -2,6 +2,7 @@ package stream
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -15,6 +16,9 @@ type socket struct {
 	mutex      *sync.Mutex
 	closed     int32
 	destructor *sync.Once
+	// lifetimeErr reports whether an environment lifetime was canceled. It is nil
+	// for NewEnvironment clients, which have no lifetime.
+	lifetimeErr func() error
 }
 
 func (sck *socket) setOpen() {
@@ -40,9 +44,17 @@ func (sck *socket) shutdown(_ error) {
 		sck.mutex.Lock()
 		defer sck.mutex.Unlock()
 		err := sck.connection.Close()
-		if err != nil {
-			logs.LogWarn("error during close socket: %s", err)
+		if err == nil {
+			return
 		}
+		// Cancellation closes the connection first, so a second close reporting
+		// ErrClosed is expected here. Every other case still warrants a warning,
+		// because ErrClosed can also mean an unexpected disconnect.
+		if errors.Is(err, net.ErrClosed) && sck.lifetimeErr != nil && sck.lifetimeErr() != nil {
+			logs.LogDebug("socket already closed by lifetime cancellation: %s", err)
+			return
+		}
+		logs.LogWarn("error during close socket: %s", err)
 	})
 }
 
@@ -82,13 +94,19 @@ func (c *Client) handleWriteWithResponse(buffer []byte, response *Response, remo
 				FrameTooLarge, len(buffer), fm, response.commandDescription), false)
 	}
 
+	if err := c.connectionContext().Err(); err != nil {
+		return newResponseError(err, false)
+	}
 	result := c.socket.writeAndFlush(buffer)
 	if result != nil {
-		logs.LogWarn("Error handleWrite %s", result)
+		// A write interrupted by lifetime cancellation is expected, not a failure.
+		if c.connectionContext().Err() == nil {
+			logs.LogWarn("Error handleWrite %s", result)
+		}
 		return newResponseError(result, false)
 	}
 
-	resultCode = waitCodeWithTimeOut(response, c.socketCallTimeout)
+	resultCode = c.waitCode(response)
 	if resultCode.Err != nil {
 		// After a timeout or error code a frame reader may still hold this
 		// response, so leave its channels open for the deferred discard.

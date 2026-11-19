@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Enhancements
+- Add `NewEnvironmentWithContext` for opt-in environment lifetime cancellation,
+  including dialing, TLS negotiation, socket I/O, RPC waits and reconnect delays.
+
 ### Bug Fixes
 - Synchronize publisher confirmation channel registration, delivery and closure
   using the same mutex. Repeated registration returns the same channel, preserving
