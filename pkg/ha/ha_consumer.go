@@ -1,6 +1,7 @@
 package ha
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -32,7 +33,9 @@ type ReliableConsumer struct {
 
 	//bootstrap: if true the consumer will start from the user offset.
 	// If false it will start from the last offset consumed (currentPosition)
-	bootstrap bool
+	bootstrap    bool
+	stopRetry    chan struct{}
+	retryStopped bool
 
 	backOffConfiguration *BackOffConfiguration
 }
@@ -44,8 +47,16 @@ func (c *ReliableConsumer) GetStatusAsString() string {
 func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 	go func() {
 		event := <-channelClose
-		if strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) || strings.EqualFold(event.Reason, stream.ZombieConsumer) {
-			c.setStatus(StatusReconnecting)
+		unexpected := strings.EqualFold(event.Reason, stream.SocketClosed) || strings.EqualFold(event.Reason, stream.MetaDataUpdate) || strings.EqualFold(event.Reason, stream.ZombieConsumer)
+		// Close and the decision to reconnect share the status lock, so a
+		// close event cannot restart a consumer after a terminal Close.
+		c.mutexStatus.Lock()
+		alreadyClosed := c.status == StatusClosed
+		if unexpected && !alreadyClosed {
+			c.status = StatusReconnecting
+		}
+		c.mutexStatus.Unlock()
+		if unexpected && !alreadyClosed {
 			logs.LogWarn("[Reliable] - %s closed unexpectedly %s.. Reconnecting..", c.getInfo(), event.Reason)
 			c.bootstrap = false
 			err, reconnected := retry(1, c, c.GetStreamName())
@@ -59,7 +70,7 @@ func (c *ReliableConsumer) handleNotifyClose(channelClose stream.ChannelClose) {
 				// if the user already closed us, keep StatusClosed and clean up
 				// the new consumer that newConsumer() just created.
 				c.mutexStatus.Lock()
-				alreadyClosed := c.status == StatusClosed
+				alreadyClosed = c.status == StatusClosed
 				if !alreadyClosed {
 					c.status = StatusOpen
 				}
@@ -95,6 +106,7 @@ func NewReliableConsumerWithBackOffConfiguration(env *stream.Environment, stream
 		messagesHandler:      messagesHandler,
 		bootstrap:            true,
 		backOffConfiguration: backOffConfiguration,
+		stopRetry:            make(chan struct{}),
 	}
 	if err := backOffConfiguration.Validate(); err != nil {
 		return nil, err
@@ -125,7 +137,13 @@ func (c *ReliableConsumer) setStatus(value int) {
 	c.mutexStatus.Lock()
 	defer c.mutexStatus.Unlock()
 	c.status = value
+	if value == StatusClosed && c.stopRetry != nil && !c.retryStopped {
+		c.retryStopped = true
+		close(c.stopRetry)
+	}
 }
+
+func (c *ReliableConsumer) retryStop() <-chan struct{} { return c.stopRetry }
 
 func (c *ReliableConsumer) GetStatus() int {
 	c.mutexStatus.Lock()
@@ -159,6 +177,15 @@ func (c *ReliableConsumer) getTimeOut() time.Duration {
 }
 
 func (c *ReliableConsumer) newConsumer() error {
+	return c.newConsumerWith(c.env.NewConsumer)
+}
+
+// newConsumerWith keeps subscription outside the state locks. The factory also
+// lets tests pause subscription completion while exercising terminal Close.
+func (c *ReliableConsumer) newConsumerWith(subscribe func(string, stream.MessagesHandler, *stream.ConsumerOptions) (*stream.Consumer, error)) error {
+	if c.GetStatus() == StatusClosed {
+		return stream.AlreadyClosed
+	}
 	// Read the current position atomically before the blocking subscribe call.
 	// mutexConnection is NOT held here: env.NewConsumer() is a blocking network
 	// operation (subscribe frame + server ack), and the message handler closure
@@ -172,8 +199,13 @@ func (c *ReliableConsumer) newConsumer() error {
 	}
 	logs.LogDebug("[Reliable] - creating %s. Boot: %s. StartOffset: %s", c.getInfo(),
 		c.bootstrap, offset)
-	consumer, err := c.env.NewConsumer(c.streamName, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
-		// currentPosition is an atomic.Int64; no mutex required here.
+	consumer, err := subscribe(c.streamName, func(consumerContext stream.ConsumerContext, message *amqp.Message) {
+		// Admit delivery against terminal shutdown, then release the status lock
+		// before user code (which may itself call Close). An already admitted
+		// callback may finish; a replacement must not admit delivery after Close.
+		if c.GetStatus() == StatusClosed {
+			return
+		}
 		c.currentPosition.Store(consumerContext.Consumer.GetOffset())
 		c.messagesHandler(consumerContext, message)
 	}, c.consumerOptions.SetOffset(offset))
@@ -181,15 +213,25 @@ func (c *ReliableConsumer) newConsumer() error {
 		return err
 	}
 
-	// Only lock briefly to publish the new consumer reference.
+	// Serialize publication with terminal Close. Never hold either lock while
+	// subscribing, closing the rejected replacement, or running user callbacks.
+	c.mutexStatus.Lock()
+	if c.status == StatusClosed {
+		c.mutexStatus.Unlock()
+		_ = consumer.Close()
+		return stream.AlreadyClosed
+	}
 	c.mutexConnection.Lock()
 	c.consumer = consumer
 	c.mutexConnection.Unlock()
+	c.mutexStatus.Unlock()
 	c.handleNotifyClose(consumer.NotifyClose())
 	return nil
 }
 
+// Close stops new callback admissions; callbacks admitted before shutdown may finish.
 func (c *ReliableConsumer) Close() error {
+	// StatusClosed also stops a pending reconnection.
 	c.setStatus(StatusClosed)
 	// Snapshot the pointer under the lock to avoid a data race with newConsumer(),
 	// which writes c.consumer under mutexConnection. The Close() call itself is
@@ -200,7 +242,12 @@ func (c *ReliableConsumer) Close() error {
 	if consumer == nil {
 		return nil
 	}
-	return consumer.Close()
+	// A reconnecting consumer was already closed by the dropped connection,
+	// and a repeated Close finds the consumer already closed.
+	if err := consumer.Close(); err != nil && !errors.Is(err, stream.AlreadyClosed) {
+		return err
+	}
+	return nil
 }
 
 func (c *ReliableConsumer) GetInfo() string {
