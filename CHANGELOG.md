@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Bug Fixes
+- Stop sending the stream status response code twice, so a stream status frame whose RPC already timed out no longer blocks the connection's frame reader forever.
+- Ignore a TUNE frame that has no registered response instead of dereferencing a nil response and panicking the frame reader.
 - Synchronize publisher confirmation channel registration, delivery and closure
   using the same mutex. Repeated registration returns the same channel, preserving
   pending confirmations; registration after shutdown returns a closed channel.
